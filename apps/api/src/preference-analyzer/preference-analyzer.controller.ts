@@ -1,0 +1,60 @@
+import {
+  Controller,
+  Post,
+  Body,
+  UseGuards,
+  UseInterceptors,
+  UploadedFiles,
+  ParseFilePipe,
+  MaxFileSizeValidator,
+  FileTypeValidator,
+} from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { UserEntity } from '../users/user.entity';
+import { VisionAnalyzer } from './vision.analyzer';
+import { EmbeddingService } from './embedding.service';
+import { PreferencesService } from '../preferences/preferences.service';
+
+@ApiTags('PreferenceAnalyzer')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Controller('preference-analyzer')
+export class PreferenceAnalyzerController {
+  constructor(
+    private readonly visionAnalyzer: VisionAnalyzer,
+    private readonly embeddingService: EmbeddingService,
+    private readonly preferencesService: PreferencesService,
+  ) {}
+
+  @Post('upload')
+  @ApiOperation({ summary: '취향 이미지 업로드 → 분석 → 임베딩 저장 (온보딩)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FilesInterceptor('images', 10))
+  async uploadImages(
+    @CurrentUser() user: UserEntity,
+    @UploadedFiles(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }), // 10MB
+          new FileTypeValidator({ fileType: /image\/(jpeg|png|webp)/ }),
+        ],
+      }),
+    )
+    files: Express.Multer.File[],
+  ) {
+    // TODO: MinIO/R2에 이미지 업로드 후 URL 획득
+    const imageUrls = files.map((f) => `data:${f.mimetype};base64,${f.buffer.toString('base64')}`);
+
+    const tasteTags = await this.visionAnalyzer.analyzeMultiple(imageUrls);
+    const embeddingId = await this.embeddingService.embedTasteTags(tasteTags);
+
+    const preference = await this.preferencesService.upsert(user.id, { tasteTags });
+    // embeddingId 연결
+    await this.preferencesService.upsert(user.id, { tasteTags });
+
+    return { tasteTags, embeddingId, preferenceId: preference.id };
+  }
+}

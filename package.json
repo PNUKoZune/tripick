@@ -1,0 +1,26 @@
+{
+  "name": "tripick",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "start": "pnpm db:up && turbo run dev",
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "db:up": "docker compose up -d --wait postgres redis minio",
+    "db:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@turbo/gen": "^2.3.3",
+    "prettier": "^3.3.3",
+    "turbo": "^2.3.3",
+    "typescript": "^6.0.0"
+  },
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}
