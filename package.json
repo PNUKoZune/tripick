@@ -13,9 +13,9 @@
     "db:down": "docker compose down"
   },
   "devDependencies": {
-    "@turbo/gen": "^2.3.3",
-    "prettier": "^3.3.3",
-    "turbo": "^2.3.3",
+    "@turbo/gen": "^2.9.9",
+    "prettier": "^3.8.3",
+    "turbo": "^2.9.9",
     "typescript": "^6.0.0"
   },
   "packageManager": "pnpm@9.12.0",

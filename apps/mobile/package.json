@@ -11,25 +11,25 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@react-native-firebase/app": "^21.0.0",
-    "@react-native-firebase/messaging": "^21.0.0",
+    "@react-native-firebase/app": "^24.0.0",
+    "@react-native-firebase/messaging": "^24.0.0",
     "@tripick/types": "workspace:*",
-    "@notifee/react-native": "^9.1.7",
-    "react": "18.3.1",
-    "react-native": "0.75.4",
+    "@notifee/react-native": "^9.1.8",
+    "react": "19.2.5",
+    "react-native": "0.85.2",
     "react-native-geolocation-service": "^5.3.1",
-    "react-native-webview": "^13.12.2",
-    "socket.io-client": "^4.8.0"
+    "react-native-webview": "^13.16.1",
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
-    "@babel/core": "^7.25.2",
-    "@babel/preset-env": "^7.25.4",
-    "@babel/runtime": "^7.25.6",
-    "@react-native/babel-preset": "0.75.4",
-    "@react-native/eslint-config": "0.75.4",
-    "@react-native/metro-config": "0.75.4",
-    "@react-native/typescript-config": "0.75.4",
-    "@types/react": "^18.3.11",
+    "@babel/core": "^7.29.0",
+    "@babel/preset-env": "^7.29.0",
+    "@babel/runtime": "^7.29.0",
+    "@react-native/babel-preset": "0.85.2",
+    "@react-native/eslint-config": "0.85.2",
+    "@react-native/metro-config": "0.85.2",
+    "@react-native/typescript-config": "0.85.2",
+    "@types/react": "^19.2.14",
     "typescript": "^6.0.0"
   }
 }
