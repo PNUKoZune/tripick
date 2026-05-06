@@ -3,12 +3,17 @@
  * REST API → NestJS API Gateway
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1';
 
 async function fetcher<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  if (!headers.has('Content-Type') && init?.body) {
+    headers.set('Content-Type', 'application/json');
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
     ...init,
+    headers,
   });
 
   if (!res.ok) {
@@ -30,6 +35,13 @@ export const api = {
   post: <T>(path: string, body: unknown, token?: string) =>
     fetcher<T>(path, {
       method: 'POST',
+      body: JSON.stringify(body),
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }),
+
+  put: <T>(path: string, body: unknown, token?: string) =>
+    fetcher<T>(path, {
+      method: 'PUT',
       body: JSON.stringify(body),
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     }),

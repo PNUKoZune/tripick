@@ -1,7 +1,34 @@
 @import "tailwindcss";
 
-@theme {
-  --color-brand: #FF6B35;
-  --color-brand-light: #FF9A6C;
-  --color-brand-dark: #E54E1A;
+:root {
+  color-scheme: light;
+  --background: #F7F8FA;
+  --surface: #FFFFFF;
+  --text-primary: #191F28;
+  --text-secondary: #6B7684;
+  --border: #E5E8EB;
+  --primary: #3182F6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Pretendard", sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
 }

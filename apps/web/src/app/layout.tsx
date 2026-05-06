@@ -6,15 +6,19 @@ export const metadata: Metadata = {
   description: '취향으로 골라주는 AI 여행 플래너',
 };
 
+const kakaoMapKey = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko">
       <head>
-        <script
-          type="text/javascript"
-          src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_MAP_KEY}&libraries=services`}
-          async
-        />
+        {kakaoMapKey ? (
+          <script
+            type="text/javascript"
+            src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${kakaoMapKey}&libraries=services`}
+            async
+          />
+        ) : null}
       </head>
       <body>{children}</body>
     </html>

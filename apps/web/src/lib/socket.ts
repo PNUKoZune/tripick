@@ -9,29 +9,41 @@
 import { io, Socket } from 'socket.io-client';
 import type { ReplanResultDto } from '@tripick/types';
 
+const WS_BASE: string = process.env.NEXT_PUBLIC_WS_URL ?? '';
+
 let socket: Socket | null = null;
 
-export function getSocket(): Socket {
+export function getSocket(): Socket | null {
+  if (!WS_BASE) {
+    return null;
+  }
   if (!socket) {
-    socket = io(`${process.env.NEXT_PUBLIC_WS_URL}/realtime`, {
+    socket = io(`${WS_BASE}/realtime`, {
       autoConnect: false,
     });
   }
   return socket;
 }
 
-export function joinTrip(tripId: string) {
+export function joinTrip(tripId: string): void {
   const s = getSocket();
+  if (!s) {
+    return;
+  }
   if (!s.connected) s.connect();
   s.emit('join-trip', { tripId });
 }
 
-export function onReplanResult(handler: (result: ReplanResultDto) => void) {
-  getSocket().on('replan_result', handler);
-  return () => getSocket().off('replan_result', handler);
+export function onReplanResult(handler: (result: ReplanResultDto) => void): () => void {
+  const s = getSocket();
+  if (!s) {
+    return () => undefined;
+  }
+  s.on('replan_result', handler);
+  return () => s.off('replan_result', handler);
 }
 
-export function disconnect() {
+export function disconnect(): void {
   socket?.disconnect();
   socket = null;
 }
