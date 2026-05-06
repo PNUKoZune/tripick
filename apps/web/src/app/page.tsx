@@ -1,22 +1,22 @@
-"use client";
+'use client';
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { Dispatch, ReactNode, SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type {
   ItineraryItemDto,
   LoginResponseDto,
   ReplanJobDto,
   ReplanResultDto,
   TripDto,
-} from "@tripick/types";
+} from '@tripick/types';
 
-import { api } from "../lib/api";
-import { disconnect, joinTrip, onReplanResult } from "../lib/socket";
+import { api } from '../lib/api';
+import { disconnect, joinTrip, onReplanResult } from '../lib/socket';
 
-type Step = "landing" | "taste" | "trip" | "result";
-type TransportMode = "walk" | "transit" | "car";
-type ReplanMode = "manual" | "waiting";
-type RetryAction = "demo-start" | "save-taste" | "create-trip" | "replan" | null;
+type Step = 'landing' | 'taste' | 'trip' | 'result';
+type TransportMode = 'walk' | 'transit' | 'car';
+type ReplanMode = 'manual' | 'waiting';
+type RetryAction = 'demo-start' | 'save-taste' | 'create-trip' | 'replan' | null;
 
 type TasteState = {
   food: string[];
@@ -46,65 +46,73 @@ type ChangedItem = {
 };
 
 const FOOD_OPTIONS = [
-  { value: "korean", label: "한식 중심" },
-  { value: "japanese", label: "일식 취향" },
-  { value: "western", label: "양식도 좋아요" },
-  { value: "cafe", label: "카페는 꼭" },
-  { value: "vegan", label: "가벼운 식사 선호" },
-  { value: "chinese", label: "중식도 괜찮아요" },
+  { value: 'korean', label: '한식 중심' },
+  { value: 'japanese', label: '일식 취향' },
+  { value: 'western', label: '양식도 좋아요' },
+  { value: 'cafe', label: '카페는 꼭' },
+  { value: 'vegan', label: '가벼운 식사 선호' },
+  { value: 'chinese', label: '중식도 괜찮아요' },
 ] as const;
 
 const MOOD_OPTIONS = [
-  { value: "healing", label: "천천히 힐링" },
-  { value: "adventure", label: "움직임 많은 일정" },
-  { value: "romantic", label: "감도 있는 데이트" },
-  { value: "family", label: "부담 적은 동선" },
-  { value: "cultural", label: "전시·로컬 탐방" },
+  { value: 'healing', label: '천천히 힐링' },
+  { value: 'adventure', label: '움직임 많은 일정' },
+  { value: 'romantic', label: '감도 있는 데이트' },
+  { value: 'family', label: '부담 적은 동선' },
+  { value: 'cultural', label: '전시·로컬 탐방' },
 ] as const;
 
 const ENVIRONMENT_OPTIONS = [
-  { value: "city", label: "도시 중심" },
-  { value: "nature", label: "자연 위주" },
-  { value: "beach", label: "바다 가까이" },
-  { value: "mountain", label: "산·숲 선호" },
-  { value: "village", label: "골목과 로컬" },
+  { value: 'city', label: '도시 중심' },
+  { value: 'nature', label: '자연 위주' },
+  { value: 'beach', label: '바다 가까이' },
+  { value: 'mountain', label: '산·숲 선호' },
+  { value: 'village', label: '골목과 로컬' },
 ] as const;
 
 const TRANSPORT_OPTIONS: Array<{ value: TransportMode; label: string; helper: string }> = [
-  { value: "transit", label: "대중교통", helper: "도시 이동을 무난하게 연결해요" },
-  { value: "walk", label: "도보 중심", helper: "가까운 동선 위주로 짜드려요" },
-  { value: "car", label: "차량 이동", helper: "넓게 이동하는 일정에 맞춰요" },
+  { value: 'transit', label: '대중교통', helper: '도심 이동이 자연스럽게 이어지도록 맞춥니다' },
+  { value: 'walk', label: '도보 중심', helper: '가까운 동선 위주로 여유 있게 묶어드립니다' },
+  { value: 'car', label: '차량 이동', helper: '넓은 반경도 끊김 없이 연결합니다' },
 ];
 
 const REPLAN_OPTIONS: Array<{ value: ReplanMode; label: string; helper: string }> = [
-  { value: "manual", label: "분위기만 다시 조정", helper: "지금 톤을 유지하면서 동선을 새로 정리해요" },
-  { value: "waiting", label: "웨이팅이 길어요", helper: "대기 시간을 반영해서 앞 순서를 다시 바꿔요" },
+  {
+    value: 'manual',
+    label: '분위기만 다시 조정',
+    helper: '지금 취향을 유지한 채 다른 흐름으로 다시 추천합니다',
+  },
+  {
+    value: 'waiting',
+    label: '웨이팅이 길어요',
+    helper: '대기 시간을 반영해 앞뒤 순서를 다시 맞춥니다',
+  },
 ];
 
 const INITIAL_TASTE: TasteState = {
-  food: ["korean", "cafe"],
-  mood: ["healing"],
-  environment: ["city"],
+  food: ['korean', 'cafe'],
+  mood: ['healing'],
+  environment: ['city'],
 };
 
 const INITIAL_TRIP: TripFormState = {
-  title: "부산 1박 2일 감도 여행",
-  destination: "부산",
-  startDate: "2026-05-10",
-  endDate: "2026-05-11",
-  wakeTime: "08:30",
-  sleepTime: "22:30",
-  transportMode: "transit",
+  title: '부산 1박 2일 감도 여행',
+  destination: '부산',
+  startDate: '2026-05-10',
+  endDate: '2026-05-11',
+  wakeTime: '08:30',
+  sleepTime: '22:30',
+  transportMode: 'transit',
 };
 
 const INITIAL_REPLAN: ReplanState = {
-  trigger: "waiting",
-  waitingMinutes: "20",
-  note: "카페 웨이팅이 길어져서 주변 일정부터 보고 싶어요.",
+  trigger: 'waiting',
+  waitingMinutes: '20',
+  note: '카페 웨이팅이 길어져서 주변 일정부터 보고 싶어요.',
 };
 
 export default function HomePage() {
-  const [step, setStep] = useState<Step>("landing");
+  const [step, setStep] = useState<Step>('landing');
   const [session, setSession] = useState<LoginResponseDto | null>(null);
   const [taste, setTaste] = useState<TasteState>(INITIAL_TASTE);
   const [tripForm, setTripForm] = useState<TripFormState>(INITIAL_TRIP);
@@ -127,7 +135,8 @@ export default function HomePage() {
     };
   }, []);
 
-  const canSubmitTaste = taste.food.length > 0 && taste.mood.length > 0 && taste.environment.length > 0;
+  const canSubmitTaste =
+    taste.food.length > 0 && taste.mood.length > 0 && taste.environment.length > 0;
   const canSubmitTrip =
     tripForm.title.trim().length > 0 &&
     tripForm.destination.trim().length > 0 &&
@@ -135,8 +144,16 @@ export default function HomePage() {
     tripForm.endDate.length > 0 &&
     tripForm.wakeTime < tripForm.sleepTime &&
     tripForm.startDate <= tripForm.endDate;
-  const canSubmitReplan = replan.trigger === "manual" || Number(replan.waitingMinutes) > 0;
-  const selectedTasteSummary = [taste.food[0], taste.mood[0], taste.environment[0]].filter(Boolean).join(" · ");
+  const canSubmitReplan = replan.trigger === 'manual' || Number(replan.waitingMinutes) > 0;
+
+  const selectedTasteSummary = [taste.food[0], taste.mood[0], taste.environment[0]]
+    .filter(Boolean)
+    .join(' · ');
+  const selectedTasteLabels = [
+    optionLabel(FOOD_OPTIONS, taste.food[0]),
+    optionLabel(MOOD_OPTIONS, taste.mood[0]),
+    optionLabel(ENVIRONMENT_OPTIONS, taste.environment[0]),
+  ].filter(Boolean) as string[];
 
   const groupedDays = useMemo(() => {
     const map = new Map<number, ItineraryItemDto[]>();
@@ -160,7 +177,11 @@ export default function HomePage() {
         if (!before) {
           return { after: item };
         }
-        if (before.name !== item.name || before.scheduledAt !== item.scheduledAt || before.memo !== item.memo) {
+        if (
+          before.name !== item.name ||
+          before.scheduledAt !== item.scheduledAt ||
+          before.memo !== item.memo
+        ) {
           return { before, after: item };
         }
         return null;
@@ -168,22 +189,41 @@ export default function HomePage() {
       .filter((item): item is ChangedItem => item !== null);
   }, [itinerary, previousItinerary]);
 
+  const heroChips = useMemo(
+    () => [
+      {
+        label: '흐름',
+        value:
+          step === 'landing'
+            ? '데모 진입'
+            : step === 'taste'
+              ? '취향 입력'
+              : step === 'trip'
+                ? '여행 조건'
+                : '일정 결과',
+      },
+      { label: '기준', value: selectedTasteLabels[0] ?? '한식 중심' },
+      { label: '이동', value: transportLabel(tripForm.transportMode) },
+    ],
+    [selectedTasteLabels, step, tripForm.transportMode],
+  );
+
   async function handleDemoStart() {
-    setRetryAction("demo-start");
-    setLoadingLabel("데모 세션을 준비하고 있어요");
+    setRetryAction('demo-start');
+    setLoadingLabel('데모 세션을 준비하고 있어요');
     setErrorMessage(null);
     setStatusMessage(null);
 
     try {
-      const sessionResponse = await api.post<LoginResponseDto>("/auth/demo", {
-        nickname: "tripick-demo",
+      const sessionResponse = await api.post<LoginResponseDto>('/auth/demo', {
+        nickname: 'tripick-demo',
       });
       setSession(sessionResponse);
-      setStep("taste");
-      setStatusMessage("데모 세션이 준비됐어요. 취향만 고르면 바로 일정 생성까지 이어집니다.");
+      setStep('taste');
+      setStatusMessage('데모 세션이 준비됐어요. 취향만 고르면 일정 생성까지 바로 이어집니다.');
       setRetryAction(null);
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "데모 세션을 준비하지 못했습니다."));
+      setErrorMessage(getErrorMessage(error, '데모 세션을 준비하지 못했습니다.'));
     } finally {
       setLoadingLabel(null);
     }
@@ -194,25 +234,29 @@ export default function HomePage() {
       return;
     }
 
-    setRetryAction("save-taste");
-    setLoadingLabel("취향을 저장하고 있어요");
+    setRetryAction('save-taste');
+    setLoadingLabel('취향을 저장하고 있어요');
     setErrorMessage(null);
     setStatusMessage(null);
 
     try {
-      await api.put("/preferences", {
-        tasteTags: {
-          food: taste.food,
-          mood: taste.mood,
-          environment: taste.environment,
-          confidence: 0.92,
+      await api.put(
+        '/preferences',
+        {
+          tasteTags: {
+            food: taste.food,
+            mood: taste.mood,
+            environment: taste.environment,
+            confidence: 0.92,
+          },
         },
-      }, session.tokens.accessToken);
-      setStep("trip");
-      setStatusMessage("취향이 저장됐어요. 이제 여행 조건만 입력하면 일정을 만들 수 있습니다.");
+        session.tokens.accessToken,
+      );
+      setStep('trip');
+      setStatusMessage('취향을 저장했어요. 이제 여행 조건만 입력하면 바로 일정을 만듭니다.');
       setRetryAction(null);
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "취향 저장에 실패했습니다."));
+      setErrorMessage(getErrorMessage(error, '취향 저장에 실패했습니다.'));
     } finally {
       setLoadingLabel(null);
     }
@@ -223,25 +267,28 @@ export default function HomePage() {
       return;
     }
 
-    setRetryAction("create-trip");
-    setLoadingLabel("취향을 반영해 일정을 정리하고 있어요");
+    setRetryAction('create-trip');
+    setLoadingLabel('취향을 반영해 일정 초안을 만들고 있어요');
     setErrorMessage(null);
     setStatusMessage(null);
 
     try {
-      const createdTrip = await api.post<TripDto>("/trips", tripForm, session.tokens.accessToken);
-      const items = await api.get<ItineraryItemDto[]>(`/trips/${createdTrip.id}/itinerary`, session.tokens.accessToken);
+      const createdTrip = await api.post<TripDto>('/trips', tripForm, session.tokens.accessToken);
+      const items = await api.get<ItineraryItemDto[]>(
+        `/trips/${createdTrip.id}/itinerary`,
+        session.tokens.accessToken,
+      );
       attachRealtime(createdTrip.id);
       setTrip(createdTrip);
       setItinerary(items);
       setPreviousItinerary([]);
       setReplanResult(null);
       setReplanCount(0);
-      setStep("result");
-      setStatusMessage("일정이 준비됐어요. 결과를 확인하고 바로 재계획도 테스트할 수 있습니다.");
+      setStep('result');
+      setStatusMessage('일정이 준비됐어요. 결과를 확인하고 바로 재계획도 테스트할 수 있습니다.');
       setRetryAction(null);
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "일정 생성에 실패했습니다."));
+      setErrorMessage(getErrorMessage(error, '일정 생성에 실패했습니다.'));
     } finally {
       setLoadingLabel(null);
     }
@@ -252,8 +299,12 @@ export default function HomePage() {
       return;
     }
 
-    setRetryAction("replan");
-    setLoadingLabel(replan.trigger === "waiting" ? "웨이팅을 반영해 다시 짜고 있어요" : "일정 톤을 다시 정리하고 있어요");
+    setRetryAction('replan');
+    setLoadingLabel(
+      replan.trigger === 'waiting'
+        ? '웨이팅을 반영해 순서를 다시 조정하고 있어요'
+        : '현재 취향 기준으로 다른 흐름을 제안하고 있어요',
+    );
     setErrorMessage(null);
     setStatusMessage(null);
     setPreviousItinerary(itinerary);
@@ -263,14 +314,18 @@ export default function HomePage() {
       const body = {
         tripId: trip.id,
         trigger: replan.trigger,
-        waitingMinutes: replan.trigger === "waiting" ? Number(replan.waitingMinutes) : undefined,
+        waitingMinutes: replan.trigger === 'waiting' ? Number(replan.waitingMinutes) : undefined,
         context: replan.note.trim() ? { note: replan.note.trim() } : undefined,
       };
 
-      if (replan.trigger === "waiting") {
-        await api.post("/alternative/waiting", body, session.tokens.accessToken);
+      if (replan.trigger === 'waiting') {
+        await api.post('/alternative/waiting', body, session.tokens.accessToken);
       } else {
-        await api.post<ReplanResultDto | ReplanJobDto>("/replanning", body, session.tokens.accessToken);
+        await api.post<ReplanResultDto | ReplanJobDto>(
+          '/replanning',
+          body,
+          session.tokens.accessToken,
+        );
       }
 
       const refreshed = await waitForUpdatedItinerary({
@@ -281,10 +336,14 @@ export default function HomePage() {
 
       setItinerary(refreshed);
       setReplanCount((count) => count + 1);
-      setStatusMessage(replan.trigger === "waiting" ? "웨이팅 기준으로 새 동선을 반영했어요." : "새로운 일정 톤으로 다시 정리했어요.");
+      setStatusMessage(
+        replan.trigger === 'waiting'
+          ? '대기 시간을 반영해 더 자연스러운 순서로 다시 정리했어요.'
+          : '현재 여행 톤을 유지하면서 새로운 구성으로 다시 정리했어요.',
+      );
       setRetryAction(null);
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "재계획 요청에 실패했습니다."));
+      setErrorMessage(getErrorMessage(error, '재계획 요청에 실패했습니다.'));
     } finally {
       setLoadingLabel(null);
     }
@@ -303,7 +362,7 @@ export default function HomePage() {
         setItinerary(result.updatedItems);
         setReplanCount((count) => count + 1);
       }
-      setStatusMessage(result.explanation ?? "실시간 재계획 결과가 도착했어요.");
+      setStatusMessage(result.explanation ?? '실시간 재계획 결과가 도착했어요.');
       setLoadingLabel(null);
       setRetryAction(null);
     });
@@ -311,16 +370,16 @@ export default function HomePage() {
 
   function handleRetry() {
     switch (retryAction) {
-      case "demo-start":
+      case 'demo-start':
         void handleDemoStart();
         break;
-      case "save-taste":
+      case 'save-taste':
         void handleSaveTaste();
         break;
-      case "create-trip":
+      case 'create-trip':
         void handleCreateTrip();
         break;
-      case "replan":
+      case 'replan':
         void handleReplan();
         break;
       default:
@@ -329,359 +388,513 @@ export default function HomePage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F7F8FA] text-[#191F28]">
-      <div className="mx-auto flex min-h-screen max-w-[480px] flex-col px-5 pb-8 pt-6">
-        <Header step={step} session={session} />
+    <main className="min-h-screen bg-transparent text-[color:var(--text-primary)]">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1200px] flex-col px-4 pb-10 pt-4 sm:px-6 sm:pb-12 sm:pt-6 lg:px-8">
+        <HeroShell
+          chips={heroChips}
+          sessionLabel={
+            session
+              ? `${session.user.nickname} 님 데모 세션으로 진행 중`
+              : '로그인 없이 바로 데모 플로우를 확인할 수 있어요'
+          }
+          step={step}
+        />
 
-        <div className="mt-6 flex flex-1 flex-col gap-6">
-          {step === "landing" ? (
-            <LandingSection onStart={handleDemoStart} loading={loadingLabel !== null} />
-          ) : null}
+        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(312px,0.95fr)] xl:items-start">
+          <div className="space-y-4 sm:space-y-5">
+            {step === 'landing' ? (
+              <LandingSection loading={loadingLabel !== null} onStart={handleDemoStart} />
+            ) : null}
 
-          {step === "taste" ? (
-            <>
-              <TopContext
-                eyebrow="1/3 취향 입력"
-                title="질문 몇 개로 여행 톤을 먼저 맞춰볼게요"
-                description="음식, 분위기, 환경 세 축만 고르면 일정 추천의 방향이 바로 정리됩니다."
-              />
-              <ProgressBar current={1} total={3} />
-              <SelectionSummaryCard title="현재 선택한 여행 톤" description={selectedTasteSummary || "아직 선택 전"} />
-              <QuestionCard
-                title="음식 취향"
-                description="가장 기대하는 식사 톤을 골라주세요"
-                options={FOOD_OPTIONS}
-                selected={taste.food}
-                onToggle={(value) => toggleSelection(setTaste, "food", value)}
-              />
-              <QuestionCard
-                title="여행 분위기"
-                description="일정을 어떤 리듬으로 보내고 싶은지 선택해주세요"
-                options={MOOD_OPTIONS}
-                selected={taste.mood}
-                onToggle={(value) => toggleSelection(setTaste, "mood", value)}
-              />
-              <QuestionCard
-                title="선호 환경"
-                description="주로 머무르고 싶은 공간을 고르면 돼요"
-                options={ENVIRONMENT_OPTIONS}
-                selected={taste.environment}
-                onToggle={(value) => toggleSelection(setTaste, "environment", value)}
-              />
-              <StickyCta
-                helper={canSubmitTaste ? "세 축이 모두 선택돼서 다음 단계로 넘어갈 수 있어요." : "음식·분위기·환경을 각각 하나 이상 선택해주세요."}
-                disabled={!canSubmitTaste || loadingLabel !== null}
-                label="여행 조건 입력으로 이동"
-                onClick={handleSaveTaste}
-              />
-            </>
-          ) : null}
+            {step === 'taste' ? (
+              <>
+                <SectionHero
+                  eyebrow="1/3 취향 입력"
+                  title="질문 몇 개로 여행 톤을 먼저 맞춰볼게요"
+                  description="음식, 분위기, 환경 세 축만 고르면 일정 추천 방향이 빠르게 정리됩니다."
+                />
+                <ProgressCard current={1} total={3} />
+                <CompactSummaryCard
+                  title="현재 선택한 여행 톤"
+                  description={selectedTasteLabels.join(' · ') || '아직 선택 전'}
+                />
+                <QuestionCard
+                  title="음식 취향"
+                  description="가장 기대하는 식사 톤을 골라주세요"
+                  options={FOOD_OPTIONS}
+                  selected={taste.food}
+                  onToggle={(value) => toggleSelection(setTaste, 'food', value)}
+                />
+                <QuestionCard
+                  title="여행 분위기"
+                  description="일정의 리듬을 결정하는 선택입니다"
+                  options={MOOD_OPTIONS}
+                  selected={taste.mood}
+                  onToggle={(value) => toggleSelection(setTaste, 'mood', value)}
+                />
+                <QuestionCard
+                  title="선호 환경"
+                  description="자주 머무르고 싶은 공간을 고르면 돼요"
+                  options={ENVIRONMENT_OPTIONS}
+                  selected={taste.environment}
+                  onToggle={(value) => toggleSelection(setTaste, 'environment', value)}
+                />
+                <PrimaryActionBar
+                  helper={
+                    canSubmitTaste
+                      ? '세 축이 모두 선택돼서 다음 단계로 넘어갈 수 있어요.'
+                      : '음식·분위기·환경을 각각 하나 이상 선택해주세요.'
+                  }
+                  disabled={!canSubmitTaste || loadingLabel !== null}
+                  label="여행 조건 입력으로 이동"
+                  onClick={handleSaveTaste}
+                />
+              </>
+            ) : null}
 
-          {step === "trip" ? (
-            <>
-              <TopContext
-                eyebrow="2/3 여행 조건 입력"
-                title="일정에 필요한 핵심 조건만 입력해주세요"
-                description="목적지, 날짜, 생활 리듬, 이동 방식만 정하면 바로 day 카드 결과를 만듭니다."
-              />
-              <ProgressBar current={2} total={3} />
-              <SelectionSummaryCard
-                title="이번 추천 기준"
-                description={`${selectedTasteSummary || "기본 취향"} · ${transportLabel(tripForm.transportMode)}`}
-              />
-              <Card>
-                <div className="space-y-4">
-                  <InputField
-                    label="여행 이름"
-                    value={tripForm.title}
-                    onChange={(value) => setTripForm((current) => ({ ...current, title: value }))}
-                    placeholder="예: 부산 1박 2일 감도 여행"
+            {step === 'trip' ? (
+              <>
+                <SectionHero
+                  eyebrow="2/3 여행 조건 입력"
+                  title="일정에 꼭 필요한 조건만 빠르게 입력해주세요"
+                  description="목적지, 날짜, 생활 리듬, 이동 방식 네 가지만 정리하면 바로 결과를 만듭니다."
+                />
+                <ProgressCard current={2} total={3} />
+                <CompactSummaryCard
+                  title="이번 추천 기준"
+                  description={`${selectedTasteLabels.join(' · ') || '기본 취향'} · ${transportLabel(tripForm.transportMode)}`}
+                />
+                <SurfaceCard>
+                  <SectionTitle
+                    title="기본 정보"
+                    description="줄바꿈이 어색하지 않도록 핵심 입력만 한 화면에 정리했습니다."
                   />
-                  <InputField
-                    label="목적지"
-                    value={tripForm.destination}
-                    onChange={(value) => setTripForm((current) => ({ ...current, destination: value }))}
-                    placeholder="예: 부산"
-                  />
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                      <InputField
+                        label="여행 이름"
+                        value={tripForm.title}
+                        onChange={(value) =>
+                          setTripForm((current) => ({ ...current, title: value }))
+                        }
+                        placeholder="예: 부산 1박 2일 감도 여행"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <InputField
+                        label="목적지"
+                        value={tripForm.destination}
+                        onChange={(value) =>
+                          setTripForm((current) => ({ ...current, destination: value }))
+                        }
+                        placeholder="예: 부산"
+                      />
+                    </div>
                     <InputField
                       label="시작일"
                       type="date"
                       value={tripForm.startDate}
-                      onChange={(value) => setTripForm((current) => ({ ...current, startDate: value }))}
+                      onChange={(value) =>
+                        setTripForm((current) => ({ ...current, startDate: value }))
+                      }
                     />
                     <InputField
                       label="종료일"
                       type="date"
                       value={tripForm.endDate}
-                      onChange={(value) => setTripForm((current) => ({ ...current, endDate: value }))}
+                      onChange={(value) =>
+                        setTripForm((current) => ({ ...current, endDate: value }))
+                      }
                     />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
                     <InputField
                       label="기상 시간"
                       type="time"
                       value={tripForm.wakeTime}
-                      onChange={(value) => setTripForm((current) => ({ ...current, wakeTime: value }))}
+                      onChange={(value) =>
+                        setTripForm((current) => ({ ...current, wakeTime: value }))
+                      }
                     />
                     <InputField
                       label="취침 시간"
                       type="time"
                       value={tripForm.sleepTime}
-                      onChange={(value) => setTripForm((current) => ({ ...current, sleepTime: value }))}
+                      onChange={(value) =>
+                        setTripForm((current) => ({ ...current, sleepTime: value }))
+                      }
                     />
                   </div>
-                </div>
-              </Card>
+                </SurfaceCard>
 
-              <Card>
-                <SectionTitle title="이동 방식" description="v1에서는 한 가지 이동 수단만 기준으로 잡습니다." />
-                <div className="mt-4 grid gap-3">
-                  {TRANSPORT_OPTIONS.map((option) => {
-                    const active = tripForm.transportMode === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setTripForm((current) => ({ ...current, transportMode: option.value }))}
-                        className={`rounded-2xl border px-4 py-3 text-left transition ${
-                          active
-                            ? "border-[#3182F6] bg-[#EAF2FF] text-[#1B64DA]"
-                            : "border-[#E5E8EB] bg-white text-[#4E5968]"
-                        }`}
-                      >
-                        <div className="text-[15px] font-semibold leading-[22px]">{option.label}</div>
-                        <div className="mt-1 text-[13px] leading-[18px] text-[#6B7684]">{option.helper}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </Card>
+                <SurfaceCard>
+                  <SectionTitle
+                    title="이동 방식"
+                    description="v1에서는 한 가지 기준 이동 수단만 우선 반영합니다."
+                  />
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    {TRANSPORT_OPTIONS.map((option) => {
+                      const active = tripForm.transportMode === option.value;
+                      return (
+                        <SelectablePanel
+                          key={option.value}
+                          active={active}
+                          label={option.label}
+                          helper={option.helper}
+                          onClick={() =>
+                            setTripForm((current) => ({ ...current, transportMode: option.value }))
+                          }
+                        />
+                      );
+                    })}
+                  </div>
+                </SurfaceCard>
 
-              <StickyCta
-                helper={
-                  canSubmitTrip
-                    ? "목적지와 날짜, 생활 리듬이 모두 정리됐어요."
-                    : "여행 이름/목적지/날짜를 입력하고 기상 시간이 취침 시간보다 이르게 맞춰주세요."
-                }
-                disabled={!canSubmitTrip || loadingLabel !== null}
-                label="일정 만들기"
-                onClick={handleCreateTrip}
-              />
-            </>
-          ) : null}
+                <PrimaryActionBar
+                  helper={
+                    canSubmitTrip
+                      ? '목적지와 날짜, 생활 리듬이 모두 정리됐어요.'
+                      : '여행 이름, 목적지, 날짜를 입력하고 기상 시간이 취침 시간보다 이르게 맞춰주세요.'
+                  }
+                  disabled={!canSubmitTrip || loadingLabel !== null}
+                  label="일정 만들기"
+                  onClick={handleCreateTrip}
+                />
+              </>
+            ) : null}
 
-          {step === "result" ? (
-            <>
-              <TopContext
-                eyebrow="3/3 결과 확인"
-                title={trip?.title ?? "생성된 일정"}
-                description={trip ? `${trip.destination} · ${formatDateRange(trip.startDate, trip.endDate)} · ${transportLabel(tripForm.transportMode)}` : "일정을 불러오고 있어요"}
-              />
+            {step === 'result' ? (
+              <>
+                <ResultHero
+                  trip={trip}
+                  tasteLabels={selectedTasteLabels}
+                  transportMode={tripForm.transportMode}
+                  replanCount={replanCount}
+                />
 
-              {trip ? (
-                <SummaryCard trip={trip} taste={taste} replanCount={replanCount} />
-              ) : null}
-
-              <SelectionSummaryCard
-                title="현재 재계획 포인트"
-                description={
-                  replan.trigger === "waiting"
-                    ? `웨이팅 ${replan.waitingMinutes || "0"}분 기준으로 순서를 다시 정리합니다.`
-                    : "현재 여행 톤을 유지하면서 다른 구성을 다시 제안합니다."
-                }
-              />
-
-              {groupedDays.length > 0 ? (
-                groupedDays.map(([day, items]) => (
-                  <Card key={day}>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-[20px] font-bold leading-[28px] text-[#191F28]">Day {day}</div>
-                        <div className="mt-1 text-[13px] leading-[18px] text-[#6B7684]">장소 · 시간 · 이동 정보 순서로 읽기 쉽게 정리했어요</div>
-                      </div>
-                      <div className="rounded-full bg-[#F2F4F6] px-3 py-1 text-[12px] font-semibold leading-[16px] text-[#4E5968]">
-                        {items.length}개 일정
-                      </div>
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.85fr)]">
+                  <SurfaceCard className="overflow-hidden">
+                    <SectionTitle
+                      title="여행 요약"
+                      description="이번 일정에서 먼저 보면 좋은 정보만 추려두었습니다."
+                    />
+                    <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                      <MetricTile
+                        label="여행 기간"
+                        value={trip ? formatDateRange(trip.startDate, trip.endDate) : '-'}
+                      />
+                      <MetricTile
+                        label="이동 기준"
+                        value={transportLabel(tripForm.transportMode)}
+                      />
+                      <MetricTile
+                        label="추천 톤"
+                        value={selectedTasteLabels.join(' · ') || '기본 세팅'}
+                      />
                     </div>
+                  </SurfaceCard>
+                  <SurfaceCard>
+                    <SectionTitle
+                      title="재계획 준비 상태"
+                      description="현재 설정된 기준으로 언제든 다시 조정할 수 있습니다."
+                    />
                     <div className="mt-4 space-y-3">
-                      {items.map((item) => (
-                        <TimelineItem key={item.id} item={item} changed={changedItems.some((changed) => changed.after.id === item.id)} />
+                      <InfoRow
+                        label="현재 모드"
+                        value={
+                          replan.trigger === 'waiting' ? '웨이팅 기준 재정렬' : '분위기 재조정'
+                        }
+                      />
+                      <InfoRow
+                        label="대기 시간"
+                        value={
+                          replan.trigger === 'waiting'
+                            ? `${replan.waitingMinutes || '0'}분`
+                            : '해당 없음'
+                        }
+                      />
+                      <InfoRow label="추가 메모" value={replan.note.trim() || '메모 없음'} />
+                    </div>
+                  </SurfaceCard>
+                </div>
+
+                {groupedDays.length > 0 ? (
+                  groupedDays.map(([day, items]) => (
+                    <DaySectionCard key={day} day={day} items={items} changedItems={changedItems} />
+                  ))
+                ) : (
+                  <EmptyState
+                    title="아직 불러온 일정이 없어요"
+                    description="일정 생성이 끝나면 day 카드와 타임라인이 이 영역에 표시됩니다."
+                  />
+                )}
+
+                <SurfaceCard>
+                  <SectionTitle
+                    title="재계획 요청"
+                    description="Internal Server Error 원문 대신 제품 톤의 상태 메시지와 재시도 UX로 마감합니다."
+                  />
+                  <div className="mt-5 grid gap-3 lg:grid-cols-2">
+                    {REPLAN_OPTIONS.map((option) => {
+                      const active = replan.trigger === option.value;
+                      return (
+                        <SelectablePanel
+                          key={option.value}
+                          active={active}
+                          label={option.label}
+                          helper={option.helper}
+                          onClick={() =>
+                            setReplan((current) => ({ ...current, trigger: option.value }))
+                          }
+                        />
+                      );
+                    })}
+                  </div>
+                  <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                    {replan.trigger === 'waiting' ? (
+                      <InputField
+                        label="예상 대기 시간(분)"
+                        type="number"
+                        value={replan.waitingMinutes}
+                        onChange={(value) =>
+                          setReplan((current) => ({ ...current, waitingMinutes: value }))
+                        }
+                        placeholder="20"
+                      />
+                    ) : (
+                      <CalloutBox
+                        title="분위기 재조정"
+                        description="대기 시간 입력 없이 현재 일정 톤만 유지한 채 다른 흐름을 제안합니다."
+                      />
+                    )}
+                    <InputField
+                      label="추가 메모"
+                      value={replan.note}
+                      onChange={(value) => setReplan((current) => ({ ...current, note: value }))}
+                      placeholder="예: 웨이팅이 길어져서 산책 가능한 장소를 먼저 가고 싶어요"
+                    />
+                  </div>
+                  <div className="mt-5 grid gap-3 rounded-[22px] border border-[color:var(--line)] bg-[color:var(--surface-muted)] p-4 sm:grid-cols-3">
+                    <MetricTile label="다음 결과" value="변경 포인트 비교" compact />
+                    <MetricTile label="표시 방식" value="Day 카드 유지" compact />
+                    <MetricTile label="실패 시 UX" value="친화적 에러 안내" compact />
+                  </div>
+                </SurfaceCard>
+
+                <PrimaryActionBar
+                  helper={
+                    canSubmitReplan
+                      ? replan.trigger === 'waiting'
+                        ? '웨이팅 시간을 반영해 일정 순서를 다시 계산합니다.'
+                        : '현재 일정의 톤을 유지하며 새 구성을 요청합니다.'
+                      : '웨이팅 재계획은 대기 시간을 1분 이상 입력해야 합니다.'
+                  }
+                  disabled={!canSubmitReplan || loadingLabel !== null}
+                  label={
+                    replan.trigger === 'waiting'
+                      ? '웨이팅 기준으로 다시 짜기'
+                      : '지금 일정 다시 정리하기'
+                  }
+                  onClick={handleReplan}
+                />
+
+                {changedItems.length > 0 ? (
+                  <SurfaceCard>
+                    <SectionTitle
+                      title="재계획 후 달라진 일정"
+                      description="무엇이 바뀌었는지 즉시 읽히도록 전후 비교만 남겼습니다."
+                    />
+                    <div className="mt-5 space-y-3">
+                      {changedItems.map((changed) => (
+                        <div
+                          key={changed.after.id}
+                          className="rounded-[22px] border border-[color:var(--line)] bg-[color:var(--surface-muted)] p-4 sm:p-5"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <StatusChip tone="brand">Day {changed.after.day}</StatusChip>
+                            <div className="text-[13px] font-semibold leading-[18px] text-[color:var(--text-secondary)]">
+                              {formatTime(changed.after.scheduledAt)}
+                            </div>
+                          </div>
+                          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                            <ComparisonBlock
+                              title="이전"
+                              item={changed.before}
+                              tone="muted"
+                              emptyLabel="기존 항목 없음"
+                            />
+                            <ComparisonBlock
+                              title="변경 후"
+                              item={changed.after}
+                              tone="active"
+                              emptyLabel="변경 항목 없음"
+                            />
+                          </div>
+                        </div>
                       ))}
                     </div>
-                  </Card>
-                ))
-              ) : (
-                <EmptyState
-                  title="아직 불러온 일정이 없어요"
-                  description="일정 생성이 끝나면 day 카드와 타임라인이 이 영역에 표시됩니다."
-                />
-              )}
-
-              <Card>
-                <SectionTitle title="재계획 요청" description="manual 또는 waiting 기준으로 데모 재계획 흐름을 바로 확인할 수 있어요." />
-                <div className="mt-4 grid gap-3">
-                  {REPLAN_OPTIONS.map((option) => {
-                    const active = replan.trigger === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setReplan((current) => ({ ...current, trigger: option.value }))}
-                        className={`rounded-2xl border px-4 py-3 text-left transition ${
-                          active
-                            ? "border-[#3182F6] bg-[#EAF2FF] text-[#1B64DA]"
-                            : "border-[#E5E8EB] bg-white text-[#4E5968]"
-                        }`}
-                      >
-                        <div className="text-[15px] font-semibold leading-[22px]">{option.label}</div>
-                        <div className="mt-1 text-[13px] leading-[18px] text-[#6B7684]">{option.helper}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {replan.trigger === "waiting" ? (
-                  <div className="mt-4">
-                    <InputField
-                      label="예상 대기 시간(분)"
-                      type="number"
-                      value={replan.waitingMinutes}
-                      onChange={(value) => setReplan((current) => ({ ...current, waitingMinutes: value }))}
-                      placeholder="20"
-                    />
-                  </div>
+                  </SurfaceCard>
                 ) : null}
+              </>
+            ) : null}
 
-                <div className="mt-4">
-                  <InputField
-                    label="추가 메모"
-                    value={replan.note}
-                    onChange={(value) => setReplan((current) => ({ ...current, note: value }))}
-                    placeholder="예: 웨이팅이 길어져서 산책 가능한 장소를 먼저 가고 싶어요"
-                  />
-                </div>
-
-                <div className="mt-4 rounded-2xl border border-[#E5E8EB] bg-[#FAFBFC] p-4">
-                  <div className="text-[13px] font-semibold leading-[18px] text-[#4E5968]">재계획 후 기대되는 변화</div>
-                  <div className="mt-2 text-[15px] leading-[22px] text-[#6B7684]">
-                    기존 일정과 달라진 항목을 별도 카드로 보여주고, 다시 보기 CTA 없이도 바로 비교할 수 있게 유지합니다.
-                  </div>
-                </div>
-              </Card>
-
-              <StickyCta
-                helper={
-                  canSubmitReplan
-                    ? replan.trigger === "waiting"
-                      ? "웨이팅 시간을 반영해 일정 순서를 다시 계산합니다."
-                      : "현재 일정의 톤을 유지하며 새 구성을 요청합니다."
-                    : "웨이팅 재계획은 대기 시간을 1분 이상 입력해야 합니다."
-                }
-                disabled={!canSubmitReplan || loadingLabel !== null}
-                label={replan.trigger === "waiting" ? "웨이팅 기준으로 다시 짜기" : "지금 일정 다시 정리하기"}
-                onClick={handleReplan}
+            {loadingLabel ? <LoadingCard label={loadingLabel} /> : null}
+            {statusMessage ? (
+              <StatusCard tone="success" title="진행 상태" description={statusMessage} />
+            ) : null}
+            {replanResult?.explanation ? (
+              <StatusCard tone="info" title="재계획 설명" description={replanResult.explanation} />
+            ) : null}
+            {errorMessage ? (
+              <StatusCard
+                {...(retryAction
+                  ? { actionLabel: '같은 조건으로 다시 시도', onAction: handleRetry }
+                  : {})}
+                tone="error"
+                title="다시 확인이 필요해요"
+                description={errorMessage}
               />
+            ) : null}
+          </div>
 
-              {changedItems.length > 0 ? (
-                <Card>
-                  <SectionTitle title="재계획 후 달라진 일정" description="무엇이 바뀌었는지 바로 읽히도록 이전 일정과 나란히 정리했습니다." />
-                  <div className="mt-4 space-y-3">
-                    {changedItems.map((changed) => (
-                      <div key={changed.after.id} className="rounded-2xl border border-[#E5E8EB] bg-[#FAFBFC] p-4">
-                        <div className="text-[12px] font-semibold leading-[16px] text-[#3182F6]">Day {changed.after.day} · {formatTime(changed.after.scheduledAt)}</div>
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                          <ComparisonBlock title="이전" item={changed.before} tone="muted" emptyLabel="기존 항목 없음" />
-                          <ComparisonBlock title="변경 후" item={changed.after} tone="active" emptyLabel="변경 항목 없음" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              ) : null}
-            </>
-          ) : null}
-
-          {loadingLabel ? <LoadingCard label={loadingLabel} /> : null}
-          {statusMessage ? <StatusCard tone="success" title="진행 상태" description={statusMessage} /> : null}
-          {replanResult?.explanation ? <StatusCard tone="info" title="재계획 설명" description={replanResult.explanation} /> : null}
-          {errorMessage ? (
-            <StatusCard
-              {...(retryAction ? { actionLabel: "같은 조건으로 다시 시도", onAction: handleRetry } : {})}
-              description={errorMessage}
-              tone="error"
-              title="다시 확인이 필요해요"
+          <aside className="space-y-4 xl:sticky xl:top-6">
+            <QuickGuide
+              step={step}
+              tasteLabels={selectedTasteLabels}
+              transportMode={tripForm.transportMode}
             />
-          ) : null}
+            <SurfaceCard>
+              <SectionTitle
+                title="이번 정리 기준"
+                description="전 구간이 하나의 제품처럼 보이도록 공통 규칙을 유지합니다."
+              />
+              <div className="mt-4 grid gap-3">
+                {[
+                  '주 CTA는 매 단계 하나만 노출',
+                  '헤드라인·섹션 타이틀·배지 크기를 clamp로 맞춤',
+                  '카드 보더/패딩/상태 컬러 규칙을 통일',
+                  '실패 시 원문 노출 대신 재시도 가능한 제품형 문구 사용',
+                ].map((item) => (
+                  <BulletRow key={item}>{item}</BulletRow>
+                ))}
+              </div>
+            </SurfaceCard>
+          </aside>
         </div>
       </div>
     </main>
   );
 }
 
-function Header({ step, session }: { step: Step; session: LoginResponseDto | null }) {
+function HeroShell({
+  step,
+  sessionLabel,
+  chips,
+}: {
+  step: Step;
+  sessionLabel: string;
+  chips: Array<{ label: string; value: string }>;
+}) {
   return (
-    <header className="rounded-[20px] border border-[#E5E8EB] bg-white px-5 py-4 shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="text-[12px] font-semibold leading-[16px] tracking-[0.02em] text-[#3182F6]">TriPick v1 demo</div>
-          <h1 className="mt-2 text-[24px] font-bold leading-[32px] text-[#191F28]">취향으로 골라주는 여행 플래너</h1>
+    <section className="overflow-hidden rounded-[32px] border border-white/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(244,248,255,0.94))] px-5 py-5 shadow-[var(--shadow-lg)] sm:px-7 sm:py-6 lg:px-8 lg:py-7">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-[700px]">
+          <div className="inline-flex items-center rounded-full border border-[color:var(--line)] bg-white/80 px-3 py-1 text-[12px] font-semibold leading-[16px] tracking-[0.02em] text-[color:var(--primary)]">
+            TriPick v1 demo · {labelForStep(step)}
+          </div>
+          <h1 className="mt-3 max-w-[14ch] text-[clamp(2rem,4.7vw,3.7rem)] font-[800] leading-[1.05] tracking-[-0.04em] text-[color:var(--text-primary)]">
+            취향으로 골라주는 여행 플래너
+          </h1>
+          <p className="mt-3 max-w-[40rem] text-[clamp(0.98rem,1.6vw,1.15rem)] leading-[1.62] text-[color:var(--text-secondary)]">
+            랜딩부터 취향 입력, 여행 조건, 결과, 재계획까지 하나의 제품 흐름처럼 연결되도록 화면
+            위계와 타이포를 다시 정리했습니다.
+          </p>
+          <p className="mt-3 text-[14px] leading-[22px] text-[color:var(--text-tertiary)]">
+            {sessionLabel}
+          </p>
         </div>
-        <div className="rounded-full bg-[#F2F4F6] px-3 py-1 text-[12px] font-semibold leading-[16px] text-[#4E5968]">{labelForStep(step)}</div>
+        <div className="grid gap-3 sm:grid-cols-3 lg:w-[420px]">
+          {chips.map((chip) => (
+            <div
+              key={chip.label}
+              className="rounded-[22px] border border-[color:var(--line)] bg-white/88 px-4 py-4 shadow-[var(--shadow-md)]"
+            >
+              <div className="text-[12px] font-semibold leading-[16px] text-[color:var(--text-tertiary)]">
+                {chip.label}
+              </div>
+              <div className="mt-2 whitespace-nowrap text-[clamp(0.95rem,1.4vw,1.05rem)] font-semibold leading-[1.35] text-[color:var(--text-primary)]">
+                {chip.value}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="mt-3 text-[15px] leading-[22px] text-[#6B7684]">
-        {session ? `${session.user.nickname} 님 데모 세션으로 진행 중` : "로그인 없이 바로 데모 플로우를 확인할 수 있어요"}
-      </div>
-    </header>
+    </section>
   );
 }
 
 function LandingSection({ loading, onStart }: { loading: boolean; onStart: () => void }) {
   return (
     <>
-      <TopContext
+      <SectionHero
         eyebrow="로그인 없이 바로 체험"
-        title="취향만 고르면 여행 계획이 쉬워져요"
-        description="질문 몇 개에 답하면 일정 초안을 만들고, 마음에 안 들면 바로 다시 추천받을 수 있어요."
+        title="질문 몇 개만 답하면 여행 계획이 쉬워져요"
+        description="복잡한 메뉴 대신 실제 제품 흐름과 비슷한 4단계만 남겨서 빠르게 데모를 확인할 수 있습니다."
       />
-      <Card>
-        <SectionTitle title="데모에서 바로 확인되는 핵심" description="복잡한 설명 대신 실제 제품 흐름에 가까운 4단계만 보여줍니다." />
-        <div className="mt-4 flex flex-wrap gap-[10px]">
-          {["취향 입력", "여행 조건", "day 카드 결과", "재계획 요청"].map((item) => (
-            <span key={item} className="min-h-11 rounded-[14px] border border-[#D6DBE1] bg-white px-[14px] py-3 text-[15px] font-medium leading-[22px] text-[#4E5968]">
-              {item}
-            </span>
-          ))}
-        </div>
-        <div className="mt-5 grid grid-cols-2 gap-3">
-          <Metric label="진입 방식" value="데모 세션" />
-          <Metric label="완료 흐름" value="입력→결과→재계획" />
-        </div>
-      </Card>
-      <Card>
-        <SectionTitle title="결과 미리보기" description="실제 결과 화면은 지도보다 읽기 쉬운 일정 카드 위계에 집중합니다." />
-        <div className="mt-4 rounded-2xl border border-[#E5E8EB] bg-[#FAFBFC] p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-[12px] font-semibold leading-[16px] text-[#3182F6]">Day 1 부산 감도 코스</div>
-              <div className="mt-2 text-[18px] font-semibold leading-[26px] text-[#191F28]">광안리 산책부터 저녁 식사까지</div>
-            </div>
-            <div className="rounded-full bg-white px-3 py-1 text-[12px] font-semibold leading-[16px] text-[#4E5968]">3개 일정</div>
-          </div>
-          <div className="mt-4 space-y-3">
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+        <SurfaceCard>
+          <SectionTitle
+            title="데모에서 바로 확인되는 핵심"
+            description="정보 위계를 단순하게 유지하면서 결과까지 한 번에 이어집니다."
+          />
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {[
-              "10:00 광안리 산책 · 이동 부담 낮은 시작",
-              "12:30 로컬 식당 · 취향 태그 반영",
-              "15:00 카페 휴식 · 웨이팅 시 재계획 가능",
+              { title: '취향 입력', description: '음식·분위기·환경 세 축으로 여행 톤을 잡습니다.' },
+              { title: '여행 조건', description: '목적지, 날짜, 생활 리듬만 빠르게 입력합니다.' },
+              {
+                title: '결과 카드',
+                description: 'Day 중심 카드로 장소, 시간, 이동 정보를 스캔합니다.',
+              },
+              { title: '재계획 요청', description: '웨이팅과 분위기 변경을 바로 확인합니다.' },
             ].map((item) => (
-              <div key={item} className="rounded-2xl border border-[#E5E8EB] bg-white p-4 text-[15px] leading-[22px] text-[#4E5968]">
-                {item}
-              </div>
+              <FeatureTile key={item.title} title={item.title} description={item.description} />
             ))}
           </div>
-        </div>
-      </Card>
-      <StickyCta
+        </SurfaceCard>
+
+        <SurfaceCard>
+          <SectionTitle
+            title="결과 미리보기"
+            description="텍스트가 좁은 화면에서도 어색하게 끊기지 않도록 line-height와 폭을 맞췄습니다."
+          />
+          <div className="mt-5 rounded-[26px] border border-[color:var(--line)] bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_100%)] p-4 shadow-[var(--shadow-md)] sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <StatusChip tone="brand">Day 1 부산 감도 코스</StatusChip>
+                <div className="mt-3 max-w-[15ch] text-[clamp(1.15rem,2vw,1.45rem)] font-bold leading-[1.25] tracking-[-0.03em] text-[color:var(--text-primary)]">
+                  광안리 산책부터 저녁 식사까지
+                </div>
+              </div>
+              <StatusChip tone="muted">3개 일정</StatusChip>
+            </div>
+            <div className="mt-4 space-y-3">
+              {[
+                '10:00 광안리 산책 · 이동 부담 낮은 시작',
+                '12:30 로컬 식당 · 취향 태그 반영',
+                '15:00 카페 휴식 · 웨이팅 시 재계획 가능',
+              ].map((item) => (
+                <div
+                  key={item}
+                  className="rounded-[20px] border border-[color:var(--line)] bg-white px-4 py-3 text-[15px] leading-[22px] text-[color:var(--text-secondary)]"
+                >
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+        </SurfaceCard>
+      </div>
+
+      <PrimaryActionBar
         helper="지금은 로그인 없이 데모 세션으로 바로 체험할 수 있어요."
         disabled={loading}
         label="취향 입력하고 시작하기"
@@ -692,36 +905,101 @@ function LandingSection({ loading, onStart }: { loading: boolean; onStart: () =>
   );
 }
 
-function TopContext({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
+function SectionHero({
+  eyebrow,
+  title,
+  description,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+}) {
   return (
-    <section>
-      <div className="text-[12px] font-semibold leading-[16px] tracking-[0.02em] text-[#3182F6]">{eyebrow}</div>
-      <h2 className="mt-2 text-[28px] font-bold leading-[34px] text-[#191F28]">{title}</h2>
-      <p className="mt-2 text-[15px] leading-[22px] text-[#6B7684]">{description}</p>
+    <section className="rounded-[28px] border border-[color:var(--line)] bg-white/90 px-5 py-5 shadow-[var(--shadow-md)] sm:px-6 sm:py-6">
+      <div className="text-[12px] font-semibold leading-[16px] tracking-[0.02em] text-[color:var(--primary)]">
+        {eyebrow}
+      </div>
+      <h2 className="mt-3 max-w-[16ch] text-[clamp(1.65rem,3vw,2.55rem)] font-[780] leading-[1.14] tracking-[-0.035em] text-[color:var(--text-primary)]">
+        {title}
+      </h2>
+      <p className="mt-3 max-w-[44rem] text-[clamp(0.97rem,1.45vw,1.08rem)] leading-[1.68] text-[color:var(--text-secondary)]">
+        {description}
+      </p>
     </section>
   );
 }
 
-function SelectionSummaryCard({ title, description }: { title: string; description: string }) {
+function ResultHero({
+  trip,
+  tasteLabels,
+  transportMode,
+  replanCount,
+}: {
+  trip: TripDto | null;
+  tasteLabels: string[];
+  transportMode: TransportMode;
+  replanCount: number;
+}) {
   return (
-    <div className="rounded-[20px] border border-[#E5E8EB] bg-white p-5 shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
-      <div className="text-[12px] font-semibold leading-[16px] tracking-[0.02em] text-[#3182F6]">{title}</div>
-      <div className="mt-2 text-[16px] font-semibold leading-[24px] text-[#191F28]">{description}</div>
-    </div>
+    <section className="overflow-hidden rounded-[30px] border border-[color:var(--line)] bg-[linear-gradient(145deg,#0f172a_0%,#14284d_42%,#1b64da_100%)] px-5 py-5 text-white shadow-[var(--shadow-lg)] sm:px-6 sm:py-6 lg:px-7 lg:py-7">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-[700px]">
+          <div className="text-[12px] font-semibold leading-[16px] tracking-[0.02em] text-white/72">
+            3/3 결과 확인
+          </div>
+          <h2 className="mt-3 max-w-[14ch] text-[clamp(1.9rem,3.6vw,3rem)] font-[820] leading-[1.08] tracking-[-0.04em] text-white">
+            {trip?.destination
+              ? `${trip.destination} 일정이 준비됐어요`
+              : '생성된 일정을 불러오고 있어요'}
+          </h2>
+          <p className="mt-3 max-w-[44rem] text-[clamp(0.98rem,1.55vw,1.1rem)] leading-[1.66] text-white/78">
+            {trip
+              ? `${tasteLabels.join(' · ') || '기본 취향'} 기준으로 읽기 쉬운 day 카드 구조를 만들었습니다. 이제 결과를 확인하고 필요하면 바로 재계획할 수 있습니다.`
+              : '일정 정보를 정리하는 중입니다.'}
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3 lg:w-[430px]">
+          <HeroStat
+            label="여행 기간"
+            value={trip ? formatDateRange(trip.startDate, trip.endDate) : '-'}
+          />
+          <HeroStat label="이동 방식" value={transportLabel(transportMode)} />
+          <HeroStat label="재계획" value={`${replanCount}회`} />
+        </div>
+      </div>
+    </section>
   );
 }
 
-function ProgressBar({ current, total }: { current: number; total: number }) {
+function ProgressCard({ current, total }: { current: number; total: number }) {
   return (
-    <div className="rounded-[20px] border border-[#E5E8EB] bg-white p-5 shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
-      <div className="flex items-center justify-between text-[13px] leading-[18px] text-[#6B7684]">
+    <SurfaceCard>
+      <div className="flex items-center justify-between text-[13px] leading-[18px] text-[color:var(--text-secondary)]">
         <span>진행 단계</span>
-        <span>{current}/{total}</span>
+        <span>
+          {current}/{total}
+        </span>
       </div>
-      <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-[#E5E8EB]">
-        <div className="h-full rounded-full bg-[#3182F6] transition-all" style={{ width: `${(current / total) * 100}%` }} />
+      <div className="mt-4 h-2 overflow-hidden rounded-full bg-[rgba(15,23,42,0.08)]">
+        <div
+          className="h-full rounded-full bg-[color:var(--primary)] transition-all"
+          style={{ width: `${(current / total) * 100}%` }}
+        />
       </div>
-    </div>
+    </SurfaceCard>
+  );
+}
+
+function CompactSummaryCard({ title, description }: { title: string; description: string }) {
+  return (
+    <SurfaceCard>
+      <div className="text-[12px] font-semibold leading-[16px] tracking-[0.02em] text-[color:var(--primary)]">
+        {title}
+      </div>
+      <div className="mt-2 max-w-[24ch] text-[clamp(1.02rem,1.7vw,1.2rem)] font-semibold leading-[1.42] tracking-[-0.02em] text-[color:var(--text-primary)]">
+        {description}
+      </div>
+    </SurfaceCard>
   );
 }
 
@@ -739,9 +1017,9 @@ function QuestionCard({
   onToggle: (value: string) => void;
 }) {
   return (
-    <Card>
-      <SectionTitle title={title} description={description} />
-      <div className="mt-4 flex flex-wrap gap-[10px]">
+    <SurfaceCard>
+      <SectionTitle title={title} {...(description ? { description } : {})} />
+      <div className="mt-5 flex flex-wrap gap-2.5 sm:gap-3">
         {options.map((option) => {
           const active = selected.includes(option.value);
           return (
@@ -749,10 +1027,10 @@ function QuestionCard({
               key={option.value}
               type="button"
               onClick={() => onToggle(option.value)}
-              className={`min-h-11 rounded-[14px] border px-[14px] py-3 text-[15px] font-medium leading-[22px] transition ${
+              className={`min-h-11 rounded-full border px-4 py-3 text-[clamp(0.92rem,1.4vw,0.98rem)] font-semibold leading-[1.2] transition ${
                 active
-                  ? "border-[#3182F6] bg-[#EAF2FF] text-[#1B64DA]"
-                  : "border-[#D6DBE1] bg-white text-[#4E5968]"
+                  ? 'border-[color:var(--line-strong)] bg-[color:var(--surface-blue)] text-[color:var(--primary-strong)] shadow-[0_10px_24px_rgba(49,130,246,0.12)]'
+                  : 'border-[color:var(--line)] bg-white text-[color:var(--text-secondary)] hover:border-[color:var(--line-strong)] hover:bg-[color:var(--surface-muted)]'
               }`}
             >
               {option.label}
@@ -760,48 +1038,78 @@ function QuestionCard({
           );
         })}
       </div>
-    </Card>
+    </SurfaceCard>
   );
 }
 
-function SummaryCard({ trip, taste, replanCount }: { trip: TripDto; taste: TasteState; replanCount: number }) {
-  const tone = [taste.food[0], taste.mood[0], taste.environment[0]].filter(Boolean).join(" · ");
-
+function DaySectionCard({
+  day,
+  items,
+  changedItems,
+}: {
+  day: number;
+  items: ItineraryItemDto[];
+  changedItems: ChangedItem[];
+}) {
   return (
-    <Card>
-      <div className="flex items-start justify-between gap-3">
+    <SurfaceCard>
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-[12px] font-semibold leading-[16px] tracking-[0.02em] text-[#3182F6]">생성 완료</div>
-          <div className="mt-2 text-[20px] font-bold leading-[28px] text-[#191F28]">{trip.destination} 일정이 준비됐어요</div>
-          <div className="mt-2 text-[15px] leading-[22px] text-[#6B7684]">{tone || "기본 취향 세팅"} 기준으로 읽기 쉬운 day 카드 구조를 만들었습니다.</div>
+          <StatusChip tone="brand">Day {day}</StatusChip>
+          <div className="mt-3 max-w-[16ch] text-[clamp(1.3rem,2.5vw,1.7rem)] font-bold leading-[1.22] tracking-[-0.03em] text-[color:var(--text-primary)]">
+            장소 · 시간 · 이동 정보를 한눈에 읽는 일정 카드
+          </div>
+          <p className="mt-2 max-w-[36rem] text-[15px] leading-[24px] text-[color:var(--text-secondary)]">
+            긴 설명 대신 핵심 요약을 먼저 보여주고, 세부 메모는 보조 정보로 내려 스캔 속도를
+            높였습니다.
+          </p>
         </div>
-        <div className="rounded-2xl bg-[#F2F4F6] px-3 py-2 text-right text-[12px] font-semibold leading-[16px] text-[#4E5968]">
-          재계획 {replanCount}회
-        </div>
+        <StatusChip tone="muted">{items.length}개 일정</StatusChip>
       </div>
-      <div className="mt-4 grid grid-cols-3 gap-3">
-        <Metric label="기간" value={formatDateRange(trip.startDate, trip.endDate)} />
-        <Metric label="상태" value={trip.status} />
-        <Metric label="도착지" value={trip.destination} />
+
+      <div className="mt-5 grid gap-3 lg:grid-cols-2">
+        {items.map((item) => (
+          <TimelineItem
+            key={item.id}
+            item={item}
+            changed={changedItems.some((changed) => changed.after.id === item.id)}
+          />
+        ))}
       </div>
-    </Card>
+    </SurfaceCard>
   );
 }
 
 function TimelineItem({ item, changed }: { item: ItineraryItemDto; changed: boolean }) {
   return (
-    <div className={`rounded-2xl border p-4 ${changed ? "border-[#3182F6] bg-[#EAF2FF]" : "border-[#E5E8EB] bg-[#FAFBFC]"}`}>
+    <div
+      className={`rounded-[24px] border px-4 py-4 shadow-[var(--shadow-md)] sm:px-5 sm:py-5 ${
+        changed
+          ? 'border-[color:var(--line-strong)] bg-[linear-gradient(180deg,rgba(238,245,255,0.96),rgba(255,255,255,0.98))]'
+          : 'border-[color:var(--line)] bg-[linear-gradient(180deg,#ffffff_0%,#fbfcfe_100%)]'
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-[12px] font-semibold leading-[16px] text-[#4E5968]">{formatTime(item.scheduledAt)} · {typeLabel(item.type)}</div>
-          <div className="mt-1 text-[18px] font-semibold leading-[26px] text-[#191F28]">{item.name}</div>
+        <div className="min-w-0">
+          <div className="text-[12px] font-semibold leading-[16px] tracking-[0.02em] text-[color:var(--text-secondary)]">
+            {formatTime(item.scheduledAt)} · {typeLabel(item.type)}
+          </div>
+          <div className="mt-2 max-w-[18ch] text-[clamp(1.05rem,1.7vw,1.2rem)] font-semibold leading-[1.35] tracking-[-0.02em] text-[color:var(--text-primary)]">
+            {item.name}
+          </div>
         </div>
-        {changed ? <span className="rounded-full bg-white px-3 py-1 text-[12px] font-semibold leading-[16px] text-[#1B64DA]">변경됨</span> : null}
+        {changed ? <StatusChip tone="brand">변경됨</StatusChip> : null}
       </div>
-      <div className="mt-3 space-y-2 text-[15px] leading-[22px] text-[#4E5968]">
-        <p>{item.address}</p>
-        <p>예상 체류 {item.durationMin}분{item.travelTimeMin ? ` · 다음 장소 이동 ${item.travelTimeMin}분` : ""}</p>
-        {item.memo ? <p className="text-[#6B7684]">{item.memo}</p> : null}
+
+      <div className="mt-4 grid gap-2 text-[14px] leading-[22px] text-[color:var(--text-secondary)]">
+        <p className="rounded-[16px] bg-white/72 px-3 py-2">{item.address}</p>
+        <p>
+          예상 체류 {item.durationMin}분
+          {item.travelTimeMin ? ` · 다음 장소 이동 ${item.travelTimeMin}분` : ''}
+        </p>
+        {item.memo ? (
+          <p className="text-[color:var(--text-tertiary)]">{normalizeMemo(item.memo)}</p>
+        ) : null}
       </div>
     </div>
   );
@@ -815,22 +1123,37 @@ function ComparisonBlock({
 }: {
   title: string;
   item: ItineraryItemDto | undefined;
-  tone: "muted" | "active";
+  tone: 'muted' | 'active';
   emptyLabel: string;
 }) {
-  const toneClass = tone === "active" ? "border-[#3182F6] bg-white" : "border-[#E5E8EB] bg-[#F7F8FA]";
+  const toneClass =
+    tone === 'active'
+      ? 'border-[color:var(--line-strong)] bg-white'
+      : 'border-[color:var(--line)] bg-[color:var(--surface-muted)]';
 
   return (
-    <div className={`rounded-2xl border p-4 ${toneClass}`}>
-      <div className="text-[12px] font-semibold leading-[16px] text-[#6B7684]">{title}</div>
+    <div className={`rounded-[20px] border p-4 ${toneClass}`}>
+      <div className="text-[12px] font-semibold leading-[16px] text-[color:var(--text-tertiary)]">
+        {title}
+      </div>
       {item ? (
         <>
-          <div className="mt-2 text-[16px] font-semibold leading-[24px] text-[#191F28]">{item.name}</div>
-          <div className="mt-1 text-[13px] leading-[18px] text-[#6B7684]">{formatTime(item.scheduledAt)} · {item.address}</div>
-          {item.memo ? <div className="mt-2 text-[13px] leading-[18px] text-[#8B95A1]">{item.memo}</div> : null}
+          <div className="mt-3 text-[17px] font-semibold leading-[24px] text-[color:var(--text-primary)]">
+            {item.name}
+          </div>
+          <div className="mt-1 text-[13px] leading-[18px] text-[color:var(--text-secondary)]">
+            {formatTime(item.scheduledAt)} · {item.address}
+          </div>
+          {item.memo ? (
+            <div className="mt-2 text-[13px] leading-[19px] text-[color:var(--text-tertiary)]">
+              {normalizeMemo(item.memo)}
+            </div>
+          ) : null}
         </>
       ) : (
-        <div className="mt-2 text-[13px] leading-[18px] text-[#8B95A1]">{emptyLabel}</div>
+        <div className="mt-3 text-[13px] leading-[18px] text-[color:var(--text-tertiary)]">
+          {emptyLabel}
+        </div>
       )}
     </div>
   );
@@ -841,38 +1164,46 @@ function InputField({
   value,
   onChange,
   placeholder,
-  type = "text",
+  type = 'text',
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
-  type?: "text" | "date" | "time" | "number";
+  type?: 'text' | 'date' | 'time' | 'number';
 }) {
   return (
     <label className="block">
-      <div className="mb-2 text-[13px] font-semibold leading-[18px] text-[#4E5968]">{label}</div>
+      <div className="mb-2 text-[13px] font-semibold leading-[18px] text-[color:var(--text-secondary)]">
+        {label}
+      </div>
       <input
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="h-14 w-full rounded-2xl border border-[#D6DBE1] bg-white px-4 text-[16px] font-medium leading-[24px] text-[#191F28] outline-none transition placeholder:text-[#8B95A1] focus:border-[#3182F6] focus:shadow-[0_0_0_4px_rgba(49,130,246,0.12)]"
+        className="h-14 w-full rounded-[18px] border border-[color:var(--line)] bg-white px-4 text-[16px] font-medium leading-[24px] text-[color:var(--text-primary)] outline-none transition placeholder:text-[color:var(--text-quaternary)] focus:border-[color:var(--line-strong)] focus:shadow-[0_0_0_4px_rgba(49,130,246,0.12)]"
       />
     </label>
   );
 }
 
-function SectionTitle({ title, description }: { title: string; description: string | undefined }) {
+function SectionTitle({ title, description }: { title: string; description?: string }) {
   return (
     <div>
-      <h3 className="text-[18px] font-semibold leading-[26px] text-[#191F28]">{title}</h3>
-      {description ? <p className="mt-1 text-[15px] leading-[22px] text-[#6B7684]">{description}</p> : null}
+      <h3 className="max-w-[20ch] text-[clamp(1.1rem,1.8vw,1.3rem)] font-semibold leading-[1.35] tracking-[-0.02em] text-[color:var(--text-primary)]">
+        {title}
+      </h3>
+      {description ? (
+        <p className="mt-2 max-w-[38rem] text-[15px] leading-[24px] text-[color:var(--text-secondary)]">
+          {description}
+        </p>
+      ) : null}
     </div>
   );
 }
 
-function StickyCta({
+function PrimaryActionBar({
   helper,
   disabled,
   label,
@@ -886,34 +1217,44 @@ function StickyCta({
   secondaryLabel?: string;
 }) {
   return (
-    <div className="sticky bottom-0 z-10 -mx-5 mt-auto border-t border-[#E5E8EB] bg-[#F7F8FA]/95 px-5 pb-2 pt-4 backdrop-blur-sm">
-      <div className="mb-3 text-[13px] leading-[18px] text-[#6B7684]">{helper}</div>
+    <div className="sticky bottom-0 z-20 -mx-4 border-t border-white/65 bg-[rgba(244,246,251,0.88)] px-4 pb-3 pt-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:bottom-4 lg:mx-0 lg:rounded-[26px] lg:border lg:border-[color:var(--line)] lg:bg-white/88 lg:px-5 lg:shadow-[var(--shadow-lg)]">
+      <div className="text-[13px] leading-[19px] text-[color:var(--text-secondary)]">{helper}</div>
       <button
         type="button"
         disabled={disabled}
         onClick={onClick}
-        className={`h-14 w-full rounded-[18px] px-5 text-[16px] font-semibold leading-[24px] transition ${
-          disabled ? "bg-[#E5E8EB] text-[#B0B8C1]" : "bg-[#3182F6] text-white hover:bg-[#1B64DA]"
+        className={`mt-3 h-14 w-full rounded-[18px] px-5 text-[clamp(0.98rem,1.4vw,1.05rem)] font-semibold leading-[24px] transition ${
+          disabled
+            ? 'bg-[rgba(148,163,184,0.24)] text-[rgba(100,116,139,0.72)]'
+            : 'bg-[linear-gradient(135deg,#3182f6_0%,#1d4ed8_100%)] text-white shadow-[0_18px_36px_rgba(29,78,216,0.28)] hover:translate-y-[-1px]'
         }`}
       >
         {label}
       </button>
-      {secondaryLabel ? <div className="mt-3 text-center text-[13px] leading-[18px] text-[#8B95A1]">{secondaryLabel}</div> : null}
+      {secondaryLabel ? (
+        <div className="mt-3 text-center text-[13px] leading-[18px] text-[color:var(--text-tertiary)]">
+          {secondaryLabel}
+        </div>
+      ) : null}
     </div>
   );
 }
 
 function LoadingCard({ label }: { label: string }) {
   return (
-    <Card>
+    <SurfaceCard>
       <div className="flex items-center gap-3">
-        <div className="size-10 rounded-full border-4 border-[#EAF2FF] border-t-[#3182F6] animate-spin" />
+        <div className="size-10 animate-spin rounded-full border-4 border-[rgba(49,130,246,0.12)] border-t-[color:var(--primary)]" />
         <div>
-          <div className="text-[18px] font-semibold leading-[26px] text-[#191F28]">로딩 중</div>
-          <div className="mt-1 text-[15px] leading-[22px] text-[#6B7684]">{label}</div>
+          <div className="text-[18px] font-semibold leading-[26px] text-[color:var(--text-primary)]">
+            로딩 중
+          </div>
+          <div className="mt-1 text-[15px] leading-[22px] text-[color:var(--text-secondary)]">
+            {label}
+          </div>
         </div>
       </div>
-    </Card>
+    </SurfaceCard>
   );
 }
 
@@ -925,26 +1266,28 @@ function StatusCard({
   onAction,
 }: {
   actionLabel?: string;
-  tone: "success" | "error" | "info";
+  tone: 'success' | 'error' | 'info';
   title: string;
   description: string;
   onAction?: () => void;
 }) {
   const toneClass = {
-    success: "border-[#BCE9D6] bg-[#F1FBF6] text-[#0B6B45]",
-    error: "border-[#FFD3D8] bg-[#FFF5F6] text-[#C53D4A]",
-    info: "border-[#D7E7FF] bg-[#F5F9FF] text-[#1B64DA]",
+    success:
+      'border-[color:var(--success-line)] bg-[color:var(--success-bg)] text-[color:var(--success-text)]',
+    error:
+      'border-[color:var(--danger-line)] bg-[color:var(--danger-bg)] text-[color:var(--danger-text)]',
+    info: 'border-[color:var(--info-line)] bg-[color:var(--info-bg)] text-[color:var(--info-text)]',
   }[tone];
 
   return (
-    <div className={`rounded-[20px] border p-5 ${toneClass}`}>
+    <div className={`rounded-[24px] border p-5 ${toneClass}`}>
       <div className="text-[18px] font-semibold leading-[26px]">{title}</div>
-      <div className="mt-2 text-[15px] leading-[22px]">{description}</div>
+      <div className="mt-2 text-[15px] leading-[24px]">{description}</div>
       {actionLabel && onAction ? (
         <button
           type="button"
           onClick={onAction}
-          className="mt-4 inline-flex min-h-11 items-center rounded-[14px] border border-current px-4 py-2 text-[14px] font-semibold leading-[20px]"
+          className="mt-4 inline-flex min-h-11 items-center rounded-full border border-current px-4 py-2 text-[14px] font-semibold leading-[20px]"
         >
           {actionLabel}
         </button>
@@ -955,24 +1298,183 @@ function StatusCard({
 
 function EmptyState({ title, description }: { title: string; description: string }) {
   return (
-    <Card>
-      <div className="text-[18px] font-semibold leading-[26px] text-[#191F28]">{title}</div>
-      <div className="mt-2 text-[15px] leading-[22px] text-[#6B7684]">{description}</div>
-    </Card>
+    <SurfaceCard>
+      <div className="text-[18px] font-semibold leading-[26px] text-[color:var(--text-primary)]">
+        {title}
+      </div>
+      <div className="mt-2 text-[15px] leading-[22px] text-[color:var(--text-secondary)]">
+        {description}
+      </div>
+    </SurfaceCard>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function QuickGuide({
+  step,
+  tasteLabels,
+  transportMode,
+}: {
+  step: Step;
+  tasteLabels: string[];
+  transportMode: TransportMode;
+}) {
+  const stepCopy = {
+    landing: '데모 플로우를 빠르게 소개하는 랜딩 구간입니다.',
+    taste: '취향 선택은 칩 스타일로 맞추고 주요 텍스트 줄바꿈을 안정화했습니다.',
+    trip: '입력 필드는 한 화면에 읽히도록 배치하고 CTA 우선순위를 고정했습니다.',
+    result: '결과와 재계획은 같은 제품 문법으로 이어지도록 카드 위계를 통일했습니다.',
+  }[step];
+
   return (
-    <div className="rounded-2xl border border-[#E5E8EB] bg-[#FAFBFC] p-4">
-      <div className="text-[12px] font-semibold leading-[16px] text-[#6B7684]">{label}</div>
-      <div className="mt-2 text-[15px] font-semibold leading-[22px] text-[#191F28]">{value}</div>
+    <SurfaceCard>
+      <SectionTitle title="화면 가이드" description={stepCopy} />
+      <div className="mt-4 grid gap-3">
+        <MetricTile label="현재 단계" value={labelForStep(step)} compact />
+        <MetricTile label="선택한 취향" value={tasteLabels.join(' · ') || '기본 취향'} compact />
+        <MetricTile label="이동 방식" value={transportLabel(transportMode)} compact />
+      </div>
+    </SurfaceCard>
+  );
+}
+
+function SelectablePanel({
+  active,
+  label,
+  helper,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  helper: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-[22px] border px-4 py-4 text-left transition ${
+        active
+          ? 'border-[color:var(--line-strong)] bg-[linear-gradient(180deg,#eef5ff_0%,#ffffff_100%)] text-[color:var(--primary-strong)] shadow-[0_14px_32px_rgba(49,130,246,0.14)]'
+          : 'border-[color:var(--line)] bg-white text-[color:var(--text-secondary)] hover:border-[color:var(--line-strong)] hover:bg-[color:var(--surface-muted)]'
+      }`}
+    >
+      <div className="text-[16px] font-semibold leading-[24px]">{label}</div>
+      <div className="mt-1 text-[14px] leading-[21px] text-[color:var(--text-secondary)]">
+        {helper}
+      </div>
+    </button>
+  );
+}
+
+function SurfaceCard({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <section
+      className={`rounded-[28px] border border-[color:var(--line)] bg-[color:var(--surface)] p-5 shadow-[var(--shadow-md)] backdrop-blur-sm sm:p-6 ${className ?? ''}`}
+    >
+      {children}
+    </section>
+  );
+}
+
+function FeatureTile({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="rounded-[22px] border border-[color:var(--line)] bg-[color:var(--surface-muted)] p-4">
+      <div className="text-[16px] font-semibold leading-[22px] text-[color:var(--text-primary)]">
+        {title}
+      </div>
+      <div className="mt-2 text-[14px] leading-[22px] text-[color:var(--text-secondary)]">
+        {description}
+      </div>
     </div>
   );
 }
 
-function Card({ children }: { children: ReactNode }) {
-  return <section className="rounded-[20px] border border-[#E5E8EB] bg-white p-5 shadow-[0_8px_24px_rgba(0,0,0,0.04)]">{children}</section>;
+function MetricTile({
+  label,
+  value,
+  compact = false,
+}: {
+  label: string;
+  value: string;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-[20px] border border-[color:var(--line)] bg-white ${compact ? 'p-4' : 'p-4 sm:p-5'}`}
+    >
+      <div className="text-[12px] font-semibold leading-[16px] text-[color:var(--text-tertiary)]">
+        {label}
+      </div>
+      <div className="mt-2 text-[15px] font-semibold leading-[22px] text-[color:var(--text-primary)]">
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function HeroStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[22px] border border-white/16 bg-white/10 px-4 py-4 backdrop-blur-sm">
+      <div className="text-[12px] font-semibold leading-[16px] text-white/64">{label}</div>
+      <div className="mt-2 text-[16px] font-semibold leading-[24px] text-white">{value}</div>
+    </div>
+  );
+}
+
+function StatusChip({ children, tone }: { children: ReactNode; tone: 'brand' | 'muted' }) {
+  const toneClass =
+    tone === 'brand'
+      ? 'border-[color:var(--line-strong)] bg-[color:var(--surface-blue)] text-[color:var(--primary-strong)]'
+      : 'border-[color:var(--line)] bg-white text-[color:var(--text-secondary)]';
+
+  return (
+    <span
+      className={`inline-flex min-h-8 items-center rounded-full border px-3 py-1 text-[12px] font-semibold leading-[16px] ${toneClass}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[18px] border border-[color:var(--line)] bg-white px-4 py-3">
+      <div className="text-[12px] font-semibold leading-[16px] text-[color:var(--text-tertiary)]">
+        {label}
+      </div>
+      <div className="mt-1 text-[15px] font-medium leading-[22px] text-[color:var(--text-primary)]">
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function CalloutBox({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="rounded-[18px] border border-[color:var(--line)] bg-[color:var(--surface-muted)] px-4 py-4">
+      <div className="text-[13px] font-semibold leading-[18px] text-[color:var(--text-primary)]">
+        {title}
+      </div>
+      <div className="mt-2 text-[14px] leading-[22px] text-[color:var(--text-secondary)]">
+        {description}
+      </div>
+    </div>
+  );
+}
+
+function BulletRow({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-start gap-3 rounded-[18px] border border-[color:var(--line)] bg-[color:var(--surface-muted)] px-4 py-3">
+      <span className="mt-[7px] size-2 rounded-full bg-[color:var(--primary)]" />
+      <div className="text-[14px] leading-[22px] text-[color:var(--text-secondary)]">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function optionLabel(options: ReadonlyArray<{ value: string; label: string }>, value?: string) {
+  return options.find((option) => option.value === value)?.label;
 }
 
 function slotKey(item: ItineraryItemDto) {
@@ -1002,52 +1504,65 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 function labelForStep(step: Step) {
   switch (step) {
-    case "landing":
-      return "소개";
-    case "taste":
-      return "취향";
-    case "trip":
-      return "조건";
-    case "result":
-      return "결과";
+    case 'landing':
+      return '소개';
+    case 'taste':
+      return '취향';
+    case 'trip':
+      return '조건';
+    case 'result':
+      return '결과';
   }
 }
 
 function transportLabel(mode: TransportMode) {
   switch (mode) {
-    case "walk":
-      return "도보 중심";
-    case "transit":
-      return "대중교통";
-    case "car":
-      return "차량 이동";
+    case 'walk':
+      return '도보 중심';
+    case 'transit':
+      return '대중교통';
+    case 'car':
+      return '차량 이동';
   }
 }
 
-function typeLabel(type: ItineraryItemDto["type"]) {
+function typeLabel(type: ItineraryItemDto['type']) {
   switch (type) {
-    case "attraction":
-      return "장소";
-    case "restaurant":
-      return "식사";
-    case "cafe":
-      return "카페";
-    case "accommodation":
-      return "숙소";
-    case "transport":
-      return "이동";
+    case 'attraction':
+      return '장소';
+    case 'restaurant':
+      return '식사';
+    case 'cafe':
+      return '카페';
+    case 'accommodation':
+      return '숙소';
+    case 'transport':
+      return '이동';
   }
+}
+
+function normalizeMemo(memo: string) {
+  return memo.replace(/waiting/gi, '대기 대응').replace(/manual/gi, '재조정');
 }
 
 function formatTime(iso: string) {
   const date = new Date(iso);
-  return date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Seoul" });
+  return date.toLocaleTimeString('ko-KR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Seoul',
+  });
 }
 
 function formatDateRange(startDate: string, endDate: string) {
   const start = new Date(startDate);
   const end = new Date(endDate);
-  const formatter = new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", timeZone: "Asia/Seoul" });
+  const formatter = new Intl.DateTimeFormat('ko-KR', {
+    month: 'numeric',
+    day: 'numeric',
+    timeZone: 'Asia/Seoul',
+  });
   return `${formatter.format(start)} - ${formatter.format(end)}`;
 }
 
