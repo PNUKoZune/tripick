@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { PlannerService } from './planner.service';
 import { WeatherHelper } from './helpers/weather.helper';
 import { RouteHelper } from './helpers/route.helper';
@@ -7,9 +8,10 @@ import { ScheduleConstraint } from './helpers/schedule.constraint';
 import { ConstraintEngine } from './constraint/constraint.engine';
 import { ItineraryModule } from '../itinerary/itinerary.module';
 import { PreferencesModule } from '../preferences/preferences.module';
+import { TripEntity } from '../trips/trip.entity';
 
 @Module({
-  imports: [ItineraryModule, PreferencesModule],
+  imports: [TypeOrmModule.forFeature([TripEntity]), ItineraryModule, PreferencesModule],
   providers: [
     PlannerService,
     WeatherHelper,

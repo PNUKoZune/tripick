@@ -1,7 +1,6 @@
 import {
   Controller,
   Post,
-  Body,
   UseGuards,
   UseInterceptors,
   UploadedFiles,
@@ -17,6 +16,11 @@ import { UserEntity } from '../users/user.entity';
 import { VisionAnalyzer } from './vision.analyzer';
 import { EmbeddingService } from './embedding.service';
 import { PreferencesService } from '../preferences/preferences.service';
+
+type UploadedImageFile = {
+  mimetype: string;
+  buffer: Buffer;
+};
 
 @ApiTags('PreferenceAnalyzer')
 @ApiBearerAuth()
@@ -38,22 +42,17 @@ export class PreferenceAnalyzerController {
     @UploadedFiles(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }), // 10MB
+          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }),
           new FileTypeValidator({ fileType: /image\/(jpeg|png|webp)/ }),
         ],
       }),
     )
-    files: Express.Multer.File[],
+    files: UploadedImageFile[],
   ) {
-    // TODO: MinIO/R2에 이미지 업로드 후 URL 획득
-    const imageUrls = files.map((f) => `data:${f.mimetype};base64,${f.buffer.toString('base64')}`);
-
+    const imageUrls = files.map((file) => `data:${file.mimetype};base64,${file.buffer.toString('base64')}`);
     const tasteTags = await this.visionAnalyzer.analyzeMultiple(imageUrls);
     const embeddingId = await this.embeddingService.embedTasteTags(tasteTags);
-
-    const preference = await this.preferencesService.upsert(user.id, { tasteTags });
-    // embeddingId 연결
-    await this.preferencesService.upsert(user.id, { tasteTags });
+    const preference = await this.preferencesService.upsert(user.id, { tasteTags }, embeddingId);
 
     return { tasteTags, embeddingId, preferenceId: preference.id };
   }

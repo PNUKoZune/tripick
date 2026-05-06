@@ -14,6 +14,9 @@ export class UserEntity {
   @Column({ unique: true })
   kakaoId: string;
 
+  @Column({ default: false })
+  isDemo: boolean;
+
   @Column()
   nickname: string;
 

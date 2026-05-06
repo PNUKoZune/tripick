@@ -22,8 +22,33 @@ export class UsersService {
     const user = this.repo.create({
       kakaoId: profile.id,
       nickname: profile.nickname,
-      profileImageUrl: profile.profileImageUrl,
-      email: profile.email,
+    });
+
+    if (profile.profileImageUrl !== undefined) {
+      user.profileImageUrl = profile.profileImageUrl;
+    }
+    if (profile.email !== undefined) {
+      user.email = profile.email;
+    }
+
+    return this.repo.save(user);
+  }
+
+  async findOrCreateDemoUser(nickname = '데모 여행자'): Promise<UserEntity> {
+    const kakaoId = 'demo-user';
+    const existing = await this.repo.findOneBy({ kakaoId });
+    if (existing) {
+      if (existing.nickname !== nickname) {
+        existing.nickname = nickname;
+        return this.repo.save(existing);
+      }
+      return existing;
+    }
+
+    const user = this.repo.create({
+      kakaoId,
+      nickname,
+      isDemo: true,
     });
     return this.repo.save(user);
   }

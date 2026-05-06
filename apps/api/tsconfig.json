@@ -6,6 +6,7 @@
     "ignoreDeprecations": "6.0",
     "outDir": "./dist",
     "rootDir": "./src",
+    "types": ["node"],
     "paths": {
       "@tripick/types": ["../../packages/types/dist"],
       "@tripick/utils": ["../../packages/utils/dist"]

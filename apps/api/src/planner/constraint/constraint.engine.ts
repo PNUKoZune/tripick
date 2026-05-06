@@ -9,15 +9,8 @@ interface ValidationResult {
   items: ItineraryItemDto[];
 }
 
-/**
- * Constraint Engine
- *
- * 검증 항목:
- * 1. 영업시간 (Opening Hours)
- * 2. 이동시간 (Travel Time) — TMAP / ODsay ETA 기반
- * 3. 경로 실현 가능성 (Route Feasibility)
- * 4. 취침·기상 시간 제약 (ScheduleConstraint)
- */
+const KST_OFFSET_MINUTES = 9 * 60;
+
 @Injectable()
 export class ConstraintEngine {
   private readonly logger = new Logger(ConstraintEngine.name);
@@ -33,38 +26,35 @@ export class ConstraintEngine {
   ): Promise<ValidationResult> {
     const issues: string[] = [];
 
-    // 1. 취침·기상 제약 적용
     const bounded = this.scheduleConstraint.apply(items, {
       wakeTime: options.wakeTime ?? '07:00',
       sleepTime: options.sleepTime ?? '23:00',
     });
 
-    // 2. 영업시간 검증
     for (const item of bounded) {
       if (!this.checkOpeningHours(item)) {
         issues.push(`"${item.name}" 영업시간 외 방문 시간 (${item.scheduledAt})`);
       }
     }
 
-    // 3. 이동시간 검증 (연속된 장소 간 ETA)
-    for (let i = 0; i < bounded.length - 1; i++) {
-      const curr = bounded[i]!;
-      const next = bounded[i + 1]!;
+    for (let index = 0; index < bounded.length - 1; index += 1) {
+      const current = bounded[index]!;
+      const next = bounded[index + 1]!;
 
-      if (curr.tripId !== next.tripId || curr.day !== next.day) continue;
+      if (current.tripId !== next.tripId || current.day !== next.day) continue;
 
       const eta = options.transportMode === 'car'
-        ? await this.routeHelper.getDrivingEta(curr.coordinates, next.coordinates)
-        : await this.routeHelper.getTransitEta(curr.coordinates, next.coordinates);
+        ? await this.routeHelper.getDrivingEta(current.coordinates, next.coordinates)
+        : await this.routeHelper.getTransitEta(current.coordinates, next.coordinates);
 
       const etaMin = Math.ceil(eta.durationSec / 60);
-      const currEnd = new Date(curr.scheduledAt).getTime() + curr.durationMin * 60000;
+      const currentEnd = new Date(current.scheduledAt).getTime() + current.durationMin * 60000;
       const nextStart = new Date(next.scheduledAt).getTime();
-      const bufferMs = nextStart - currEnd;
+      const bufferMs = nextStart - currentEnd;
 
       if (bufferMs < etaMin * 60000) {
         issues.push(
-          `"${curr.name}" → "${next.name}" 이동 시간 부족 (필요: ${etaMin}분, 여유: ${Math.floor(bufferMs / 60000)}분)`,
+          `"${current.name}" → "${next.name}" 이동 시간 부족 (필요: ${etaMin}분, 여유: ${Math.floor(bufferMs / 60000)}분)`,
         );
       }
     }
@@ -77,9 +67,19 @@ export class ConstraintEngine {
   }
 
   private checkOpeningHours(item: ItineraryItemDto): boolean {
-    if (!item.openingHours) return true; // 정보 없으면 통과
+    if (!item.openingHours) return true;
+    const match = item.openingHours.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
+    if (!match) return true;
 
-    // TODO: 영업시간 파싱 로직 구현 (한국관광공사 API 형식 파싱)
-    return true;
+    const [, startHour, startMinute, endHour, endMinute] = match;
+    const start = Number(startHour) * 60 + Number(startMinute);
+    const end = Number(endHour) * 60 + Number(endMinute);
+    const visitStart = this.getKstMinutes(new Date(item.scheduledAt));
+    const visitEnd = visitStart + item.durationMin;
+    return visitStart >= start && visitEnd <= end;
+  }
+
+  private getKstMinutes(date: Date): number {
+    return ((date.getUTCHours() * 60 + date.getUTCMinutes()) + KST_OFFSET_MINUTES) % (24 * 60);
   }
 }
