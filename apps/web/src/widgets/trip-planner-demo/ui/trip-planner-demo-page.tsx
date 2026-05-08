@@ -620,7 +620,7 @@ export default function HomePage() {
               <SurfaceCard>
                 <SectionTitle
                   title="재계획 요청"
-                  description="Internal Server Error 원문 대신 제품 톤의 상태 메시지와 재시도 UX로 마감합니다."
+                  description="대기 상황이나 지금 분위기에 맞춰 다음 흐름을 다시 추천해드려요."
                 />
                 <div className="mt-5 grid gap-3">
                   {REPLAN_OPTIONS.map((option) => {
@@ -745,27 +745,13 @@ export default function HomePage() {
             />
           ) : null}
 
-          <QuickGuide
-            step={step}
-            tasteLabels={selectedTasteLabels}
-            transportMode={tripForm.transportMode}
-          />
-          <SurfaceCard>
-            <SectionTitle
-              title="이번 정리 기준"
-              description="모바일 320~430px에서 한 단계씩 빠르게 읽히는 흐름을 우선으로 맞췄습니다."
+          {step !== 'result' ? (
+            <QuickGuide
+              step={step}
+              tasteLabels={selectedTasteLabels}
+              transportMode={tripForm.transportMode}
             />
-            <div className="mt-4 grid gap-3">
-              {[
-                '기본 본문 폭을 520px 이하로 고정해 모바일 리듬을 유지',
-                '헤드라인·카드·CTA를 Pretendard 기준 위계로 재정렬',
-                '결과 화면 CTA는 sticky 대신 본문 맥락 안에서만 노출',
-                'app/page는 위젯 엔트리만 남기고 구현은 widget 경계로 이동',
-              ].map((item) => (
-                <BulletRow key={item}>{item}</BulletRow>
-              ))}
-            </div>
-          </SurfaceCard>
+          ) : null}
         </div>
       </div>
     </main>
@@ -1315,15 +1301,15 @@ function QuickGuide({
   transportMode: TransportMode;
 }) {
   const stepCopy = {
-    landing: '데모 플로우를 빠르게 소개하는 랜딩 구간입니다.',
-    taste: '취향 선택은 칩 스타일로 맞추고 주요 텍스트 줄바꿈을 안정화했습니다.',
-    trip: '입력 필드는 한 화면에 읽히도록 배치하고 CTA 우선순위를 고정했습니다.',
-    result: '결과와 재계획은 같은 제품 문법으로 이어지도록 카드 위계를 통일했습니다.',
+    landing: '데모를 시작하면 취향 선택부터 일정 생성까지 순서대로 이어집니다.',
+    taste: '먹거리, 분위기, 여행 환경을 고르면 일정 톤이 바로 정리됩니다.',
+    trip: '여행 기간과 이동 방식을 입력하면 지금 조건에 맞는 일정을 만들어요.',
+    result: '현재 일정과 재계획 기준을 한 번에 확인할 수 있어요.',
   }[step];
 
   return (
     <SurfaceCard>
-      <SectionTitle title="화면 가이드" description={stepCopy} />
+      <SectionTitle title="현재 설정 요약" description={stepCopy} />
       <div className="mt-4 grid gap-3">
         <MetricTile label="현재 단계" value={labelForStep(step)} compact />
         <MetricTile label="선택한 취향" value={tasteLabels.join(' · ') || '기본 취향'} compact />
