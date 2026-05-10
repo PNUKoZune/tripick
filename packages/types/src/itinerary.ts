@@ -37,5 +37,10 @@ export interface CreateItineraryItemDto {
   coordinates: Coordinates;
   scheduledAt: string;
   durationMin: number;
+  travelTimeMin?: number;
+  openingHours?: string;
+  phoneNumber?: string;
   kakaoPlaceId?: string;
+  imageUrl?: string;
+  memo?: string;
 }

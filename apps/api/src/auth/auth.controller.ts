@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Query, Res, HttpCode, HttpStatus } from '@
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Response } from 'express';
 import { AuthService } from './auth.service';
+import type { DemoLoginDto } from '@tripick/types';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -19,6 +20,13 @@ export class AuthController {
   @ApiOperation({ summary: '카카오 OAuth 콜백' })
   async kakaoCallback(@Query('code') code: string) {
     return this.authService.loginWithKakao(code);
+  }
+
+  @Post('demo')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '데모 세션 발급' })
+  loginDemo(@Body() dto: DemoLoginDto) {
+    return this.authService.loginDemo(dto);
   }
 
   @Post('refresh')

@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { UsersService } from '../users/users.service';
-import type { AuthTokens, KakaoProfile } from '@tripick/types';
+import type { AuthTokens, DemoLoginDto, KakaoProfile, LoginResponseDto } from '@tripick/types';
 
 @Injectable()
 export class AuthService {
@@ -22,18 +22,38 @@ export class AuthService {
     );
   }
 
-  async loginWithKakao(code: string) {
+  async loginWithKakao(code: string): Promise<LoginResponseDto> {
     const kakaoToken = await this.getKakaoToken(code);
     const profile = await this.getKakaoProfile(kakaoToken);
     const user = await this.usersService.findOrCreateByKakao(profile);
     const tokens = await this.issueTokens(user.id);
-    return { tokens, user };
+    return {
+      tokens,
+      user: {
+        id: user.id,
+        nickname: user.nickname,
+        ...(user.profileImageUrl ? { profileImageUrl: user.profileImageUrl } : {}),
+      },
+    };
+  }
+
+  async loginDemo(dto: DemoLoginDto = {}): Promise<LoginResponseDto> {
+    const user = await this.usersService.findOrCreateDemoUser(dto.nickname?.trim() || '데모 여행자');
+    const tokens = await this.issueTokens(user.id);
+    return {
+      tokens,
+      user: {
+        id: user.id,
+        nickname: user.nickname,
+        ...(user.profileImageUrl ? { profileImageUrl: user.profileImageUrl } : {}),
+      },
+    };
   }
 
   async refreshTokens(refreshToken: string): Promise<AuthTokens> {
     try {
       const payload = this.jwtService.verify<{ sub: string }>(refreshToken, {
-        secret: this.config.getOrThrow('JWT_REFRESH_SECRET'),
+        secret: this.config.get<string>('JWT_REFRESH_SECRET') ?? 'tripick-demo-refresh-secret',
       });
       return this.issueTokens(payload.sub);
     } catch {
@@ -42,7 +62,7 @@ export class AuthService {
   }
 
   async logout(_refreshToken: string): Promise<void> {
-    // TODO: Redis에 refresh token 블랙리스트 추가
+    return;
   }
 
   private async issueTokens(userId: string): Promise<AuthTokens> {
@@ -50,7 +70,7 @@ export class AuthService {
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload),
       this.jwtService.signAsync(payload, {
-        secret: this.config.getOrThrow('JWT_REFRESH_SECRET'),
+        secret: this.config.get<string>('JWT_REFRESH_SECRET') ?? 'tripick-demo-refresh-secret',
         expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN', '30d'),
       }),
     ]);
@@ -86,8 +106,10 @@ export class AuthService {
     return {
       id: String(res.data.id),
       nickname: account?.profile?.nickname ?? '여행자',
-      profileImageUrl: account?.profile?.profile_image_url,
-      email: account?.email,
+      ...(account?.profile?.profile_image_url
+        ? { profileImageUrl: account.profile.profile_image_url }
+        : {}),
+      ...(account?.email ? { email: account.email } : {}),
     };
   }
 }

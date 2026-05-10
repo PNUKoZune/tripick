@@ -25,3 +25,7 @@ export interface LoginResponseDto {
     profileImageUrl?: string;
   };
 }
+
+export interface DemoLoginDto {
+  nickname?: string;
+}

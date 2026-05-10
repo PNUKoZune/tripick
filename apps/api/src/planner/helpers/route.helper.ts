@@ -8,21 +8,16 @@ interface EtaResult {
   distanceM: number;
 }
 
-/**
- * TMAP API (자동차·도보), ODsay API (대중교통) 경로 ETA Helper
- */
 @Injectable()
 export class RouteHelper {
   private readonly logger = new Logger(RouteHelper.name);
 
   constructor(private readonly config: ConfigService) {}
 
-  /** 자동차 ETA (TMAP) */
   async getDrivingEta(from: Coordinates, to: Coordinates): Promise<EtaResult> {
     const apiKey = this.config.get<string>('TMAP_API_KEY', '');
     if (!apiKey) {
-      this.logger.warn('TMAP_API_KEY not configured');
-      return { durationSec: 0, distanceM: 0 };
+      return this.buildLocalEstimate(from, to, 28);
     }
 
     try {
@@ -49,16 +44,14 @@ export class RouteHelper {
       };
     } catch (err) {
       this.logger.error('TMAP ETA 조회 실패:', err);
-      return { durationSec: 0, distanceM: 0 };
+      return this.buildLocalEstimate(from, to, 28);
     }
   }
 
-  /** 대중교통 ETA (ODsay) */
   async getTransitEta(from: Coordinates, to: Coordinates): Promise<EtaResult> {
     const apiKey = this.config.get<string>('ODSAY_API_KEY', '');
     if (!apiKey) {
-      this.logger.warn('ODSAY_API_KEY not configured');
-      return { durationSec: 0, distanceM: 0 };
+      return this.buildLocalEstimate(from, to, 20);
     }
 
     try {
@@ -81,7 +74,21 @@ export class RouteHelper {
       };
     } catch (err) {
       this.logger.error('ODsay ETA 조회 실패:', err);
-      return { durationSec: 0, distanceM: 0 };
+      return this.buildLocalEstimate(from, to, 20);
     }
+  }
+
+  private buildLocalEstimate(from: Coordinates, to: Coordinates, kmPerHour: number): EtaResult {
+    const distanceKm = this.getDistanceKm(from, to);
+    return {
+      distanceM: Math.round(distanceKm * 1000),
+      durationSec: Math.max(600, Math.round((distanceKm / kmPerHour) * 3600)),
+    };
+  }
+
+  private getDistanceKm(from: Coordinates, to: Coordinates): number {
+    const latDelta = (from.lat - to.lat) * 111;
+    const lngDelta = (from.lng - to.lng) * 88;
+    return Math.sqrt(latDelta ** 2 + lngDelta ** 2);
   }
 }

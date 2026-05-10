@@ -22,7 +22,7 @@ import { PreferenceAnalyzerModule } from './preference-analyzer/preference-analy
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         type: 'postgres',
-        url: config.get<string>('DATABASE_URL'),
+        url: config.get<string>('DATABASE_URL') ?? 'postgresql://tripick:tripick@localhost:5432/tripick',
         autoLoadEntities: true,
         synchronize: config.get('NODE_ENV') === 'development',
         logging: config.get('NODE_ENV') === 'development',

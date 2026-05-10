@@ -4,12 +4,6 @@ import axios from 'axios';
 import { latLngToGrid, getBaseTime, groupForecastItems, toKmaDate } from '@tripick/utils';
 import type { ParsedForecast } from '@tripick/utils';
 
-/**
- * 기상청 단기예보 API 조회 Helper
- *
- * base_time: 02·05·08·11·14·17·20·23시 발표
- * PCP 필드: "강수없음", "1mm 미만" 등 문자열 파싱 필요 → weather-parser 사용
- */
 @Injectable()
 export class WeatherHelper {
   private readonly logger = new Logger(WeatherHelper.name);
@@ -23,10 +17,14 @@ export class WeatherHelper {
     lng: number,
     date: Date = new Date(),
   ): Promise<Map<string, ParsedForecast>> {
+    const apiKey = this.config.get<string>('KMA_API_KEY', '');
+    if (!apiKey) {
+      return new Map();
+    }
+
     const { nx, ny } = latLngToGrid({ lat, lng });
     const baseDate = toKmaDate(date);
     const baseTime = getBaseTime(date);
-    const apiKey = this.config.get<string>('KMA_API_KEY', '');
 
     try {
       const res = await axios.get<{
@@ -67,23 +65,19 @@ export class WeatherHelper {
     }
   }
 
-  /**
-   * 날씨 예보를 바탕으로 일정 조정 힌트 텍스트 생성
-   * (비·눈 예보 시 실내 장소 우선 배치 권고)
-   */
   buildWeatherHint(forecasts: Map<string, ParsedForecast>): string {
     const rainySlots: string[] = [];
 
-    for (const [key, f] of forecasts) {
+    for (const [key, forecast] of forecasts) {
       if (
-        (f.precipitationProbability ?? 0) >= 60 ||
-        (f.precipitationType !== undefined && f.precipitationType > 0)
+        (forecast.precipitationProbability ?? 0) >= 60 ||
+        (forecast.precipitationType !== undefined && forecast.precipitationType > 0)
       ) {
         rainySlots.push(key);
       }
     }
 
     if (rainySlots.length === 0) return '날씨 양호, 실외 일정 가능.';
-    return `다음 시간대에 강수 예보: ${rainySlots.slice(0, 5).join(', ')}. 해당 시간대 실내 장소(카페·박물관·쇼핑몰) 우선 배치 권장.`;
+    return `다음 시간대에 강수 예보: ${rainySlots.slice(0, 5).join(', ')}. 해당 시간대 실내 장소 우선 배치 권장.`;
   }
 }

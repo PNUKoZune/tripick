@@ -6,12 +6,14 @@ import { AlternativeGateway } from './alternative.gateway';
 import { REPLAN_QUEUE } from '../replanning/replanning.constants';
 import { PlannerModule } from '../planner/planner.module';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { ReplanningModule } from '../replanning/replanning.module';
 
 @Module({
   imports: [
     BullModule.registerQueue({ name: REPLAN_QUEUE }),
     PlannerModule,
     RealtimeModule,
+    ReplanningModule,
   ],
   controllers: [AlternativeController],
   providers: [AlternativeProcessor, AlternativeGateway],

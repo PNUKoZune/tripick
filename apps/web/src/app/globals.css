@@ -1,7 +1,97 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
-@theme {
-  --color-brand: #FF6B35;
-  --color-brand-light: #FF9A6C;
-  --color-brand-dark: #E54E1A;
+:root {
+  color-scheme: light;
+  --background: #f4f6fb;
+  --background-strong: #eef3ff;
+  --surface: rgba(255, 255, 255, 0.92);
+  --surface-solid: #ffffff;
+  --surface-muted: #f8fafc;
+  --surface-blue: #eef5ff;
+  --line: rgba(15, 23, 42, 0.08);
+  --line-strong: rgba(49, 130, 246, 0.2);
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #6b7280;
+  --text-quaternary: #94a3b8;
+  --primary: #3182f6;
+  --primary-strong: #1d4ed8;
+  --success-bg: #effcf5;
+  --success-text: #097347;
+  --success-line: #bce9d6;
+  --danger-bg: #fff5f7;
+  --danger-text: #c2415d;
+  --danger-line: #fecdd3;
+  --info-bg: #f4f8ff;
+  --info-text: #1d4ed8;
+  --info-line: #d7e7ff;
+  --shadow-lg: 0 24px 60px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 12px 32px rgba(15, 23, 42, 0.06);
+  --radius-xl: 32px;
+  --radius-lg: 24px;
+  --radius-md: 18px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background:
+    radial-gradient(circle at top, rgba(49, 130, 246, 0.12), transparent 30%),
+    linear-gradient(180deg, #f8fbff 0%, var(--background) 22%, #f3f5f8 100%);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: transparent;
+  color: var(--text-primary);
+  font-family:
+    'Pretendard',
+    'Apple SD Gothic Neo',
+    'Noto Sans KR',
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  word-break: keep-all;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+::selection {
+  background: rgba(49, 130, 246, 0.18);
+}
+
+input,
+textarea,
+select {
+  appearance: none;
+}
+
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+nextjs-portal {
+  display: none !important;
 }
