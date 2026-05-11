@@ -1,0 +1,79 @@
+'use client';
+
+import type { PlannerAlternativeDto } from '@tripick/types';
+
+import { Button, Chip } from '@/shared/ui';
+
+const toneToBg: Record<PlannerAlternativeDto['categoryTone'], string> = {
+  neutral: 'bg-[#F2F4F6] text-[#6B7684]',
+  primary: 'bg-[#EAF2FF] text-[#1B64DA]',
+  success: 'bg-[#E5F7EE] text-[#00A86B]',
+};
+
+const badgeToneMap: Record<
+  PlannerAlternativeDto['badgeTone'],
+  'warning' | 'primary' | 'success'
+> = {
+  urgent: 'warning',
+  recommend: 'primary',
+  local: 'success',
+};
+
+type Props = {
+  alternative: PlannerAlternativeDto;
+  selected?: boolean;
+  onSelect: () => void;
+};
+
+export function AlternativeCard({ alternative, selected, onSelect }: Props) {
+  return (
+    <div
+      className={`rounded-[16px] border p-3 transition ${
+        selected ? 'border-[#3182F6] bg-[#EAF2FF]' : 'border-[#E5E8EB] bg-white'
+      }`}
+    >
+      <div className="flex items-stretch gap-3">
+        <div
+          className={`flex size-[62px] shrink-0 items-center justify-center rounded-[14px] text-[22px] font-bold ${toneToBg[alternative.categoryTone]}`}
+        >
+          {alternative.categoryEmoji}
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="truncate text-[15px] font-semibold leading-[22px] text-[#191F28]">
+                {alternative.name}
+              </div>
+              <div className="mt-1 text-[13px] leading-[18px] text-[#6B7684]">
+                {alternative.walkLabel} · {alternative.waitLabel}
+              </div>
+            </div>
+            <Chip tone={badgeToneMap[alternative.badgeTone]}>{alternative.badge}</Chip>
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-[13px] leading-[18px] text-[#6B7684]">
+              <span className="text-[#FF8A00]">★</span>
+              <span>{alternative.rating.toFixed(1)}</span>
+              <a
+                href={alternative.mapHref}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-full border border-[#E5E8EB] bg-[#FAFBFC] px-2 py-1 text-[12px] font-semibold text-[#6B7684]"
+              >
+                카카오맵 보기
+              </a>
+            </div>
+            <Button
+              size="md"
+              variant={selected ? 'primary' : 'secondary'}
+              onClick={onSelect}
+              className="h-9 px-3 text-[13px]"
+            >
+              {selected ? '선택됨' : '선택'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

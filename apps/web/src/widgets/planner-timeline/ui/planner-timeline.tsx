@@ -1,0 +1,33 @@
+'use client';
+
+import type { PlannerItineraryItemDto } from '@tripick/types';
+
+import { ItineraryItemCard } from '@/entities/itinerary-item';
+
+type Props = {
+  items: PlannerItineraryItemDto[];
+  onSelectItem: (item: PlannerItineraryItemDto) => void;
+  selectedItemId?: string | null;
+};
+
+export function PlannerTimeline({ items, onSelectItem, selectedItemId = null }: Props) {
+  if (items.length === 0) {
+    return (
+      <div className="rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] p-5 text-center text-[14px] text-[#6B7684]">
+        해당 일차에 등록된 일정이 없어요.
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2 pb-4">
+      {items.map((item) => (
+        <ItineraryItemCard
+          key={item.id}
+          item={item}
+          selected={item.id === selectedItemId}
+          onClick={() => onSelectItem(item)}
+        />
+      ))}
+    </div>
+  );
+}

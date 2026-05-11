@@ -13,6 +13,7 @@ import { NotificationModule } from './notification/notification.module';
 import { PlannerModule } from './planner/planner.module';
 import { AlternativeModule } from './alternative/alternative.module';
 import { PreferenceAnalyzerModule } from './preference-analyzer/preference-analyzer.module';
+import { MainPlannerModule } from './main-planner/main-planner.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { PreferenceAnalyzerModule } from './preference-analyzer/preference-analy
     PlannerModule,
     AlternativeModule,
     PreferenceAnalyzerModule,
+    MainPlannerModule,
   ],
 })
 export class AppModule {}

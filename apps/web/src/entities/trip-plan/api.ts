@@ -1,0 +1,26 @@
+import type {
+  PlannerAlternativeResponseDto,
+  PlannerSwapResponseDto,
+  PlannerTripDto,
+} from '@tripick/types';
+
+import { api } from '@/shared/lib';
+
+export const DEMO_TRIP_ID = 'demo-gyeongju-1n2d';
+
+export function fetchPlannerTrip(tripId: string) {
+  return api.get<PlannerTripDto>(`/main-planner/trips/${tripId}`);
+}
+
+export function fetchPlannerAlternatives(tripId: string, itemId: string) {
+  return api.get<PlannerAlternativeResponseDto>(
+    `/main-planner/trips/${tripId}/items/${itemId}/alternatives`,
+  );
+}
+
+export function swapPlannerItem(
+  tripId: string,
+  body: { itemId: string; alternativeId: string },
+) {
+  return api.post<PlannerSwapResponseDto>(`/main-planner/trips/${tripId}/swap`, body);
+}

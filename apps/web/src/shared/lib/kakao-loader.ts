@@ -1,0 +1,106 @@
+declare global {
+  interface Window {
+    kakao?: {
+      maps: KakaoMaps;
+    };
+  }
+}
+
+export type KakaoLatLng = { lat: number; lng: number };
+
+export interface KakaoMaps {
+  LatLng: new (lat: number, lng: number) => unknown;
+  Map: new (container: HTMLElement, options: { center: unknown; level: number }) => KakaoMapInstance;
+  Marker: new (options: { position: unknown; map?: KakaoMapInstance; image?: unknown; title?: string }) => KakaoMarkerInstance;
+  CustomOverlay: new (options: {
+    position: unknown;
+    content: string | HTMLElement;
+    xAnchor?: number;
+    yAnchor?: number;
+    map?: KakaoMapInstance;
+  }) => KakaoOverlayInstance;
+  MarkerImage: new (
+    src: string,
+    size: unknown,
+    options?: { offset?: unknown },
+  ) => unknown;
+  Size: new (width: number, height: number) => unknown;
+  Point: new (x: number, y: number) => unknown;
+  load?: (cb: () => void) => void;
+}
+
+export interface KakaoMapInstance {
+  setCenter(latLng: unknown): void;
+  setLevel(level: number): void;
+  relayout(): void;
+}
+
+export interface KakaoMarkerInstance {
+  setMap(map: KakaoMapInstance | null): void;
+}
+
+export interface KakaoOverlayInstance {
+  setMap(map: KakaoMapInstance | null): void;
+}
+
+let pendingPromise: Promise<KakaoMaps | null> | null = null;
+
+export function getKakaoKey(): string | null {
+  const key = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
+  return key && key.length > 0 ? key : null;
+}
+
+/**
+ * Kakao Maps JS SDK 를 1회만 로드한다. 키가 없으면 null 을 돌려준다.
+ */
+export function loadKakaoMaps(): Promise<KakaoMaps | null> {
+  if (typeof window === 'undefined') {
+    return Promise.resolve(null);
+  }
+  const key = getKakaoKey();
+  if (!key) {
+    return Promise.resolve(null);
+  }
+  if (window.kakao?.maps) {
+    return Promise.resolve(window.kakao.maps);
+  }
+  if (pendingPromise) {
+    return pendingPromise;
+  }
+
+  pendingPromise = new Promise<KakaoMaps | null>((resolve) => {
+    const existing = document.getElementById('kakao-maps-sdk') as HTMLScriptElement | null;
+    const onReady = () => {
+      const maps = window.kakao?.maps;
+      if (!maps) {
+        resolve(null);
+        return;
+      }
+      if (typeof maps.load === 'function') {
+        maps.load(() => resolve(window.kakao?.maps ?? null));
+      } else {
+        resolve(maps);
+      }
+    };
+
+    if (existing) {
+      if (window.kakao?.maps) {
+        onReady();
+      } else {
+        existing.addEventListener('load', onReady, { once: true });
+        existing.addEventListener('error', () => resolve(null), { once: true });
+      }
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = 'kakao-maps-sdk';
+    script.async = true;
+    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${key}&autoload=false&libraries=services`;
+    script.onload = onReady;
+    script.onerror = () => resolve(null);
+    document.head.appendChild(script);
+  });
+
+  return pendingPromise;
+}
