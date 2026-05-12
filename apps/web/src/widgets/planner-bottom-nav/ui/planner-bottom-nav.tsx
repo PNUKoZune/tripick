@@ -1,10 +1,12 @@
 'use client';
 
+import Link from 'next/link';
+
 const ITEMS = [
-  { id: 'home', label: '홈', icon: '🏠' },
-  { id: 'map', label: '지도', icon: '🗺' },
-  { id: 'trips', label: '내 여행', icon: '🧳' },
-  { id: 'profile', label: '프로필', icon: '👤' },
+  { id: 'home', label: '홈', icon: '🏠', href: '/' },
+  { id: 'map', label: '지도', icon: '🗺', href: '/planner' },
+  { id: 'trips', label: '내 여행', icon: '🧳', href: '/trips' },
+  { id: 'profile', label: '프로필', icon: '👤', href: '#' },
 ] as const;
 
 type Props = {
@@ -19,8 +21,8 @@ export function PlannerBottomNav({ active = 'trips' }: Props) {
           const isActive = item.id === active;
           return (
             <li key={item.id} className="relative">
-              <button
-                type="button"
+              <Link
+                href={item.href}
                 className={`flex w-full flex-col items-center gap-1 py-2.5 text-[12px] font-semibold ${
                   isActive ? 'text-[#1B64DA]' : 'text-[#8B95A1]'
                 }`}
@@ -32,7 +34,7 @@ export function PlannerBottomNav({ active = 'trips' }: Props) {
                 {isActive ? (
                   <span className="absolute bottom-0 h-[3px] w-12 rounded-full bg-[#3182F6]" />
                 ) : null}
-              </button>
+              </Link>
             </li>
           );
         })}

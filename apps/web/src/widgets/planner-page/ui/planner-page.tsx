@@ -7,6 +7,8 @@ import type {
   PlannerTripDto,
 } from '@tripick/types';
 
+import Link from 'next/link';
+
 import { DEMO_TRIP_ID, fetchPlannerTrip } from '@/entities/trip-plan';
 import { MemberAvatars } from '@/entities/member';
 import { DaySelector } from '@/features/day-selector';
@@ -130,6 +132,13 @@ export function PlannerPage() {
         <header className="border-b border-[#E5E8EB] bg-white">
           <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-6 px-8 py-4 xl:px-10">
             <div className="flex items-center gap-4">
+              <Link
+                href="/trips"
+                className="flex h-9 items-center gap-1 rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[13px] font-semibold text-[#6B7684] hover:bg-[#FAFBFC] hover:text-[#191F28]"
+              >
+                <span aria-hidden>‹</span>
+                <span>내 여행</span>
+              </Link>
               <div>
                 <div className="text-[12px] font-semibold tracking-wide text-[#3182F6]">
                   TriPick · Main Planner

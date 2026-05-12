@@ -13,6 +13,7 @@
 - Screen 4 대안 추천 바텀시트 (사유 안내 / 반경 칩 / AI 추천 카드 / 원래 유지·대안 변경 CTA)
 - 정보 탭 (여행 개요, 취향 태그, 일정 통계, 단기 날씨 mock)
 - 지도 탭 (큰 카카오맵 + 콤팩트 일정 리스트 + 마커↔카드 양방향 하이라이트)
+- 내 여행 목록 페이지 `/trips` (다중 여행 카드 + 상태 필터 + 통계)
 - 데스크탑(≥ `lg`) 웹 레이아웃 (상단 헤더 + 좌측 일정 + 중앙 큰 지도 + xl 우측 정보)
 - 실제 카카오맵 SDK 동적 로드 + 폴백 미리보기
 - mock backend API (`/api/v1/main-planner/*`)
@@ -48,13 +49,13 @@ toss-v1.md `3. 색상 규칙` 의 역할 색상만 사용한다. Figma 의 brand
 
 ## 2-1. 반응형 전략
 
-mobile-first 셸과 데스크탑 웹 레이아웃을 별도 트리로 렌더해 같은 view-model 을 공유한다.
+mobile-first 셸과 데스크탑 웹 레이아웃을 별도 트리로 렌더해 같은 view-model 을 공유한다. `/planner` (Screen 3·4) 와 `/trips` (내 여행 목록) 두 페이지 모두 동일한 임계를 사용한다.
 
-| 구분             | 임계         | 레이아웃                                                                            |
-| ---------------- | ------------ | ----------------------------------------------------------------------------------- |
-| mobile (< `lg`)  | < 1024px     | 480px 폰 셸 1개. 헤더 → 지도 → 탭(일정/지도/정보) → 일차 → 본문 → 하단 4-tab 네비   |
-| desktop (≥ `lg`) | ≥ 1024px     | 상단 헤더 + `grid-cols-[380px_1fr]` (좌측 일정 / 중앙 큰 지도)                      |
-| wide (≥ `xl`)    | ≥ 1280px     | 상단 헤더 + `grid-cols-[420px_1fr_360px]` (좌측 일정 / 중앙 지도 / 우측 정보)       |
+| 구분             | 임계         | `/planner`                                                                          | `/trips`                                                        |
+| ---------------- | ------------ | ----------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| mobile (< `lg`)  | < 1024px     | 480px 폰 셸 1개. 헤더 → 지도 → 탭(일정/지도/정보) → 일차 → 본문 → 하단 4-tab 네비   | 480px 폰 셸. 헤더 + 통계 3칸 + 상태 필터 + 카드 세로 리스트     |
+| desktop (≥ `lg`) | ≥ 1024px     | 상단 헤더 + `grid-cols-[380px_1fr]` (좌측 일정 / 중앙 큰 지도)                      | 상단 헤더 + 통계 4칸 + 필터 + `grid-cols-2` 카드 그리드         |
+| wide (≥ `xl`)    | ≥ 1280px     | 상단 헤더 + `grid-cols-[420px_1fr_360px]` (좌측 일정 / 중앙 지도 / 우측 정보)       | `grid-cols-3` 카드 그리드                                       |
 
 - 데스크탑에서는 탭/하단 네비를 제거하고 일정·지도·정보 패널을 동시에 노출. 모바일 셸에서만 탭 인터랙션을 사용.
 - 모든 데스크탑 패널 높이는 `h-[calc(100dvh-120px)]` (헤더 72 + 컨테이너 padding 48) 로 고정해 스크롤 영역을 한 칸씩 분리.
@@ -69,17 +70,19 @@ mobile-first 셸과 데스크탑 웹 레이아웃을 별도 트리로 렌더해 
 ```
 apps/web/src/
 ├── app/
-│   └── planner/page.tsx              # Next.js 라우트, PlannerPage 래핑
+│   ├── planner/page.tsx              # Screen 3·4 라우트
+│   └── trips/page.tsx                # 내 여행 목록 라우트
 │
 ├── widgets/
 │   ├── planner-page/                 # Screen 3 전체 (모바일 셸 + 데스크탑 레이아웃)
 │   ├── planner-header/               # 상단 타이틀 + 멤버 아바타
 │   ├── planner-map/                  # 카카오맵 SDK + 폴백 + 마커 오버레이
 │   ├── planner-timeline/             # day 별 타임라인 리스트 (선택 상태 지원)
-│   ├── planner-bottom-nav/           # 홈/지도/내 여행/프로필 (모바일 전용)
+│   ├── planner-bottom-nav/           # 홈/지도/내 여행/프로필 (Next Link 연결)
 │   ├── alternative-sheet/            # Screen 4 바텀시트
 │   ├── trip-info-panel/              # 정보 탭 / 데스크탑 우측 패널
-│   └── trip-map-panel/               # 모바일 지도 탭 (큰 지도 + 콤팩트 리스트)
+│   ├── trip-map-panel/               # 모바일 지도 탭 (큰 지도 + 콤팩트 리스트)
+│   └── trip-list-page/               # /trips 전체 (모바일 셸 + 데스크탑 그리드)
 │
 ├── features/
 │   ├── planner-tab-switch/           # 일정/지도/정보 탭 (모바일)
@@ -87,7 +90,7 @@ apps/web/src/
 │   └── select-alternative/           # 대안 fetch + 선택 + swap hook
 │
 ├── entities/
-│   ├── trip-plan/                    # Trip mock API client + 타입 re-export
+│   ├── trip-plan/                    # Trip mock API client + TripSummaryCard
 │   ├── itinerary-item/               # ItineraryItemCard (선택 상태 prop)
 │   ├── alternative/                  # AlternativeCard
 │   └── member/                       # MemberAvatars
@@ -134,12 +137,14 @@ base URL: `http://localhost:4000/api/v1/main-planner`
 
 | Method | Path                                                    | 응답                              |
 | ------ | ------------------------------------------------------- | --------------------------------- |
+| GET    | `/trips`                                                | `TripSummaryDto[]`                |
 | GET    | `/trips/:tripId`                                        | `PlannerTripDto`                  |
 | GET    | `/trips/:tripId/items/:itemId/alternatives`             | `PlannerAlternativeResponseDto`   |
 | POST   | `/trips/:tripId/swap` body `{ itemId, alternativeId }`  | `PlannerSwapResponseDto`          |
 
 데모 고정 식별자:
-- `tripId = demo-gyeongju-1n2d`
+- 상세 mock 보유 `tripId = demo-gyeongju-1n2d` (Screen 3 진입 가능)
+- 목록 mock 추가 trip: `demo-busan-2n3d` / `demo-jeju-3n4d` / `demo-gangneung-day` (요약만, 상세 미연결 카드는 클릭 비활성)
 - alternative mock 등록 itemId: `item-cheomseongdae` / `item-hwang-cafe` / `item-gyori` / `item-bulguksa` (현재 day 의 4개 일정 모두)
 
 DTO 정의: [`packages/types/src/main-planner.ts`](../packages/types/src/main-planner.ts)
@@ -150,6 +155,7 @@ mock fixture: [`apps/api/src/main-planner/main-planner.mock.ts`](../apps/api/src
 - `PlannerWeatherDto` — 일자별 emoji + 최고/최저 라벨
 - `PlannerMapMarkerDto.itemId` — 마커 ↔ itinerary 항목 매핑 키
 - `PlannerMapCenterDto` — 지도 초기 중심/줌 레벨
+- `TripSummaryDto` + `TripSummaryStatus` — 내 여행 목록 카드용 (제목, 기간, 상태, 멤버, hasDetail 등). `trip.ts` 의 `TripStatus` 와 구분
 
 특징:
 - 인증 guard 미적용 → 데모 토큰 없이도 호출 가능
@@ -181,6 +187,20 @@ mock fixture: [`apps/api/src/main-planner/main-planner.mock.ts`](../apps/api/src
 | 좌측 일정 패널          | `features/day-selector` + `widgets/planner-timeline`      |
 | 중앙 큰 지도            | `widgets/planner-map` (`fill` 모드)                       |
 | 우측 정보 패널 (xl+)    | `widgets/trip-info-panel`                                 |
+
+### My Trips 페이지 (`/trips`)
+
+| 영역                       | 컴포넌트                                              |
+| -------------------------- | ----------------------------------------------------- |
+| 상단 헤더 (브랜드 / CTA)   | `widgets/trip-list-page` 인라인                       |
+| 통계 타일 (전체/곧/초안/끝)| 인라인 `SummaryTile`                                  |
+| 상태 필터 chip             | 인라인 `FilterBar` (`all/upcoming/ongoing/draft/done`)|
+| 여행 카드                  | `entities/trip-plan/TripSummaryCard` (Next `Link`)    |
+| 빈 상태                    | 인라인 `EmptyState`                                   |
+| 하단 4-tab 네비 (모바일)   | `widgets/planner-bottom-nav` (`active="trips"`)       |
+
+- `hasDetail=true` 인 카드만 `/planner?tripId=...` 로 링크. 나머지는 정적 카드(점선 안내 박스).
+- bottom nav 는 `next/link` 기반이라 `/trips ↔ /planner` 간 이동이 자연스럽다.
 
 ### Screen 4 (Alternative Popup)
 
@@ -228,10 +248,12 @@ pnpm --filter @tripick/web typecheck
 수동 검증 절차:
 1. `pnpm --filter @tripick/api dev` 로 API 4000 포트 기동
 2. `pnpm --filter @tripick/web dev` 로 Next.js 3000 포트 기동
-3. `http://localhost:3000/planner` 접속
-4. 모바일 뷰 (< 1024px): 일정/지도/정보 탭 전환, 카드 클릭 시 시트 슬라이드 업 확인
-5. 데스크탑 뷰 (≥ 1024px): 좌측 카드 클릭 → 중앙 지도 이동 + 마커 강조 → 한 번 더 클릭 시 시트 오픈
-6. `NEXT_PUBLIC_KAKAO_MAP_KEY` 설정 후 실 지도 렌더, 미설정 시 폴백 미리보기 확인
+3. `http://localhost:3000/trips` 접속 → 4개 여행 카드 + 통계/필터 노출 확인
+4. 경주 1박 2일 카드 클릭 → `/planner` 진입
+5. 모바일 뷰 (< 1024px): 일정/지도/정보 탭 전환, 카드 클릭 시 시트 슬라이드 업 확인, 하단 `내 여행` 탭으로 `/trips` 복귀 확인
+6. 데스크탑 뷰 (≥ 1024px): 좌측 카드 클릭 → 중앙 지도 이동 + 마커 강조 → 한 번 더 클릭 시 시트 오픈
+7. `/trips` 데스크탑 (≥ 1280px): 카드 3열 그리드, 상태 필터 동작 확인
+8. `NEXT_PUBLIC_KAKAO_MAP_KEY` 설정 후 실 지도 렌더, 미설정 시 폴백 미리보기 확인
 
 ## 8. 후속 작업 (backlog)
 
@@ -239,6 +261,9 @@ pnpm --filter @tripick/web typecheck
 - WebSocket `replan_result` 채널 연동 → swap 결과를 실시간 반영
 - 카카오맵 Polyline 으로 day 동선 시각화
 - 기상청 단기예보 실연동 (지금은 mock)
+- `/trips` 의 카드들 모두에 상세 mock 추가 → 다중 trip 진입 가능
+- `/planner` 라우트가 `?tripId` 쿼리 파라미터를 실제로 반영하도록 확장 (현재는 demo 1건 고정)
+- 새 여행 만들기 플로우 (`/trips/new`)
 - 모바일(React Native) 동일 화면 이식
 
 ## 9. 결정 요약
@@ -249,3 +274,4 @@ pnpm --filter @tripick/web typecheck
 4. 폰 셸과 데스크탑 웹 레이아웃은 별도 트리로 분리해 web 의 가로 공간을 활용한다.
 5. 카카오맵 SDK 는 동적 로드 + 폴백 + ResizeObserver 로 늦은 레이아웃에도 안전하게 렌더한다.
 6. 대안 변경은 in-memory 로만 반영하고, 새로고침 시 원복되는 한계는 문서화한다.
+7. 다중 여행 관리는 별도 라우트 `/trips` 로 분리하고, 상세 mock 이 없는 trip 카드는 클릭 비활성으로 명시한다.

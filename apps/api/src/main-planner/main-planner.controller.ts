@@ -5,6 +5,7 @@ import {
   getPlannerAlternativesMock,
   getPlannerTripMock,
 } from './main-planner.mock';
+import { TRIP_SUMMARIES_MOCK } from './main-planner-trips.mock';
 
 /**
  * v1 Screen 3/4 mock controller.
@@ -13,6 +14,12 @@ import {
 @ApiTags('Main Planner (Mock v1)')
 @Controller('main-planner')
 export class MainPlannerController {
+  @Get('trips')
+  @ApiOperation({ summary: '내 여행 목록 mock' })
+  listTrips() {
+    return TRIP_SUMMARIES_MOCK;
+  }
+
   @Get('trips/:tripId')
   @ApiOperation({ summary: 'Screen 3 메인 플래너 mock 데이터' })
   getTrip(@Param('tripId') tripId: string) {
