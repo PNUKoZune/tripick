@@ -37,11 +37,21 @@ type BridgeMessage =
   | { type: 'OPEN_EXTERNAL'; url: string }
   | { type: 'NAV_STATE'; canGoBack: boolean };
 
-const WEB_APP_HOST =
-  Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
+const WEB_APP_HOST = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
 const WEB_APP_URL = __DEV__ ? WEB_APP_HOST : 'https://tripick.vercel.app';
-const ENTRY_PATH = '/trips';
+// 라우트가 아직 정해지지 않은 단계에선 루트로 진입. planner v1 (`/trips`) 머지된 뒤 변경.
+const ENTRY_PATH = '/';
 const WEB_APP_ORIGIN = new URL(WEB_APP_URL).origin;
+
+// react-native-webview 13.x 타입 union 에서 Android 전용 onPermissionRequest 가 빠져있다.
+// Platform 분기로 prop 을 객체에 모아 spread 하면 타입 충돌 없이 안드로이드에만 적용된다.
+const androidOnlyProps =
+  Platform.OS === 'android'
+    ? {
+        onPermissionRequest: (request: { grant: (r: string[]) => void; resources: string[] }) =>
+          request.grant(request.resources),
+      }
+    : {};
 
 export default function App() {
   const webViewRef = useRef<InstanceType<typeof WebView>>(null);
@@ -77,19 +87,24 @@ export default function App() {
   }, []);
 
   const setupFcm = useCallback(async () => {
-    const authStatus = await messaging().requestPermission();
-    const enabled =
-      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-    if (!enabled) return;
+    try {
+      const authStatus = await messaging().requestPermission();
+      const enabled =
+        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+      if (!enabled) return;
 
-    const token = await messaging().getToken();
-    postToWeb({ type: 'FCM_TOKEN', token });
+      const token = await messaging().getToken();
+      postToWeb({ type: 'FCM_TOKEN', token });
 
-    const unsubscribe = messaging().onMessage(async (remoteMessage) => {
-      postToWeb({ type: 'PUSH_NOTIFICATION', data: remoteMessage });
-    });
-    return unsubscribe;
+      const unsubscribe = messaging().onMessage(async (remoteMessage) => {
+        postToWeb({ type: 'PUSH_NOTIFICATION', data: remoteMessage });
+      });
+      return unsubscribe;
+    } catch (error) {
+      // Firebase 자격 파일(google-services.json / GoogleService-Info.plist) 미배치 시 정상적으로 건너뛴다.
+      console.warn('[TriPick] FCM 초기화 생략:', error instanceof Error ? error.message : error);
+    }
   }, []);
 
   const injectLocation = useCallback(() => {
@@ -148,12 +163,11 @@ export default function App() {
         // Kakao Maps 가 https 리소스를 요청하므로 mixed content 는 허용 X
         mixedContentMode="never"
         allowsBackForwardNavigationGestures
-        decelerationRate="normal"
         // 카메라/마이크는 v1에서 사용 안 함. 추후 preference-analyzer 단계에서 활성화
         mediaPlaybackRequiresUserAction={false}
-        // Geolocation
+        // Geolocation + Android 전용 권한 brige
         geolocationEnabled
-        onPermissionRequest={(request) => request.grant(request.resources)}
+        {...androidOnlyProps}
         // 외부 도메인 진입 차단 → 시스템 브라우저로 위임
         onShouldStartLoadWithRequest={(request) => {
           if (request.url.startsWith(WEB_APP_ORIGIN)) return true;
