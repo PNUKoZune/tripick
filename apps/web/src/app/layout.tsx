@@ -12,25 +12,17 @@ export const viewport: Viewport = {
   themeColor: '#f4f6fb',
 };
 
-const kakaoMapKey = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
-
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko">
       <head>
         <link rel="preconnect" href="https://cdn.jsdelivr.net" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://dapi.kakao.com" />
         <link
           rel="stylesheet"
           href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
         />
-        {kakaoMapKey ? (
-          <script
-            type="text/javascript"
-            src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${kakaoMapKey}&libraries=services`}
-            async
-          />
-        ) : null}
       </head>
       <body>{children}</body>
     </html>
