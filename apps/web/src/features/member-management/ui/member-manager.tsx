@@ -31,6 +31,28 @@ const DEFAULT_MEMBER_PREF: TripMemberPreferenceDto = {
   budgetLevel: 'medium',
 };
 
+const PREFERENCE_LABELS: Record<string, string> = {
+  korean: '한식·전통',
+  cafe: '카페',
+  western: '양식',
+  healing: '힐링',
+  cultural: '문화·역사',
+  adventure: '액티비티',
+  romantic: '감성 코스',
+  family: '가족형',
+  city: '도시',
+  nature: '자연',
+  village: '로컬 골목',
+  mountain: '산·숲',
+  transit: '대중교통',
+  car: '자가용',
+  walk: '도보',
+  rental_car: '렌터카',
+  low: '낮음',
+  medium: '중간',
+  high: '높음',
+};
+
 export function MemberManager() {
   const router = useRouter();
   const [trip, setTrip] = useState<TripDto | null>(null);
@@ -105,45 +127,26 @@ export function MemberManager() {
   }
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-8">
       <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-[18px] font-bold leading-6">초대 방법</h2>
-          <span className="text-[13px] font-bold text-[color:var(--text-tertiary)]">
+        <div className="mb-4">
+          <div className="text-[13px] font-bold text-[color:var(--text-tertiary)]">
             {trip?.title ?? '여행 준비 중'}
-          </span>
+          </div>
+          <h2 className="mt-1 text-[26px] font-black leading-8">새 멤버 추가</h2>
         </div>
-        <div className="space-y-2.5">
-          <InviteMethod
-            title="카카오톡으로 초대"
-            description="키 연결 후 친구 목록 초대로 확장됩니다."
-            strong
-          />
-          <InviteMethod
-            title="링크로 초대"
-            description="초대 링크 복사 API를 붙일 수 있게 분리했습니다."
-          />
-          <InviteMethod
-            title="연락처에서 추가"
-            description="전화번호 기반 대기 멤버로 저장합니다."
-          />
-        </div>
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-[18px] font-bold leading-6">멤버 추가</h2>
         <div className="space-y-3">
           <input
             value={nickname}
             onChange={(event) => setNickname(event.target.value)}
             placeholder="이름"
-            className="h-14 w-full rounded-[16px] border border-[color:var(--line)] bg-white px-4 text-[16px] font-bold outline-none focus:border-[color:var(--blue-500)]"
+            className="h-14 w-full rounded-[16px] bg-[color:var(--soft-bg)] px-4 text-[16px] font-bold outline-none focus:bg-white focus:ring-2 focus:ring-[color:var(--blue-100)]"
           />
           <input
             value={contact}
             onChange={(event) => setContact(event.target.value)}
             placeholder="전화번호 또는 카카오 ID"
-            className="h-14 w-full rounded-[16px] border border-[color:var(--line)] bg-white px-4 text-[16px] font-bold outline-none focus:border-[color:var(--blue-500)]"
+            className="h-14 w-full rounded-[16px] bg-[color:var(--soft-bg)] px-4 text-[16px] font-bold outline-none focus:bg-white focus:ring-2 focus:ring-[color:var(--blue-100)]"
           />
           <PreferencePicker preference={preference} onChange={setPreference} />
           <PrimaryButton disabled={loading} onClick={handleAddMember}>
@@ -152,19 +155,22 @@ export function MemberManager() {
         </div>
       </section>
 
-      <section>
+      <section className="border-t border-[color:var(--line)] pt-6">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-[18px] font-bold leading-6">현재 멤버</h2>
+          <h2 className="text-[18px] font-black leading-6">현재 멤버</h2>
           <span className="text-[13px] font-bold text-[color:var(--blue-600)]">
             {members.length}명
           </span>
         </div>
-        <div className="divide-y divide-[color:var(--line)] overflow-hidden rounded-[18px] border border-[color:var(--line)] bg-white">
+        <div className="divide-y divide-[color:var(--line)] border-y border-[color:var(--line)]">
           {members.map((member) => (
-            <div key={member.id} className="flex items-center gap-3 px-4 py-4">
+            <div key={member.id} className="flex items-center gap-3 py-4">
               <div
-                className="flex size-11 shrink-0 items-center justify-center rounded-full text-[15px] font-black text-white"
-                style={{ backgroundColor: member.color }}
+                className={`flex size-11 shrink-0 items-center justify-center rounded-full text-[15px] font-black ${
+                  member.role === 'owner'
+                    ? 'bg-[color:var(--blue-600)] text-white'
+                    : 'bg-[color:var(--soft-bg)] text-[color:var(--text-secondary)]'
+                }`}
               >
                 {member.nickname.slice(0, 1)}
               </div>
@@ -180,20 +186,29 @@ export function MemberManager() {
                   </span>
                 </div>
                 <div className="mt-1 truncate text-[13px] font-medium text-[color:var(--text-tertiary)]">
-                  {member.preferenceTags.food.join(', ')} · {member.preferenceTags.mood.join(', ')}
+                  {formatPreferenceSummary(member.preferenceTags)}
                 </div>
               </div>
               {member.role !== 'owner' ? (
                 <button
                   type="button"
                   onClick={() => void handleDelete(member.id)}
-                  className="rounded-[12px] px-3 py-2 text-[13px] font-bold text-rose-500"
+                  className="px-2 py-2 text-[13px] font-bold text-[color:var(--text-tertiary)]"
                 >
                   삭제
                 </button>
               ) : null}
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="border-t border-[color:var(--line)] pt-6">
+        <h2 className="mb-1 text-[18px] font-black leading-6">초대 방식</h2>
+        <div className="divide-y divide-[color:var(--line)]">
+          <InviteMethod title="카카오톡 초대" description="친구 목록 연동 준비" strong />
+          <InviteMethod title="링크 초대" description="초대 링크 복사 준비" />
+          <InviteMethod title="연락처 추가" description="전화번호로 대기 멤버 저장" />
         </div>
       </section>
 
@@ -208,6 +223,12 @@ export function MemberManager() {
   );
 }
 
+function formatPreferenceSummary(preference: TripMemberPreferenceDto) {
+  return [...preference.food, ...preference.mood]
+    .map((value) => PREFERENCE_LABELS[value] ?? value)
+    .join(' · ');
+}
+
 function InviteMethod({
   title,
   description,
@@ -218,16 +239,26 @@ function InviteMethod({
   strong?: boolean;
 }) {
   return (
-    <div
-      className={`flex items-center justify-between rounded-[18px] px-4 py-4 ${
-        strong ? 'bg-[#FEE500] text-[#191919]' : 'border border-[color:var(--line)] bg-white'
-      }`}
-    >
+    <div className="flex items-center justify-between py-4">
       <div>
-        <div className="text-[15px] font-black leading-5">{title}</div>
-        <div className="mt-1 text-[13px] font-medium leading-5 opacity-70">{description}</div>
+        <div
+          className={`text-[15px] font-black leading-5 ${
+            strong ? 'text-[#191919]' : 'text-[color:var(--text-primary)]'
+          }`}
+        >
+          {title}
+        </div>
+        <div className="mt-1 text-[13px] font-bold leading-5 text-[color:var(--text-tertiary)]">
+          {description}
+        </div>
       </div>
-      <span className="text-[20px] font-bold">→</span>
+      <span
+        className={`text-[20px] font-bold ${
+          strong ? 'text-[#191919]' : 'text-[color:var(--text-tertiary)]'
+        }`}
+      >
+        →
+      </span>
     </div>
   );
 }
@@ -240,7 +271,7 @@ function PreferencePicker({
   onChange: (preference: TripMemberPreferenceDto) => void;
 }) {
   return (
-    <div className="space-y-3 rounded-[18px] bg-[color:var(--soft-bg)] p-3">
+    <div className="space-y-4 pt-2">
       <PickerRow
         title="식사"
         options={MEMBER_FOOD_OPTIONS}
@@ -275,7 +306,7 @@ function PickerRow({
   onPick: (value: string) => void;
 }) {
   return (
-    <div>
+    <div className="border-t border-[color:var(--line)] pt-4 first:border-t-0 first:pt-0">
       <div className="mb-2 text-[13px] font-black text-[color:var(--text-secondary)]">{title}</div>
       <div className="grid grid-cols-3 gap-2">
         {options.map((option) => (

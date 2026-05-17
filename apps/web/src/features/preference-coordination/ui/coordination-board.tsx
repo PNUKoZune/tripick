@@ -45,22 +45,22 @@ export function CoordinationBoard() {
   }
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-8">
       <section>
         <div className="flex items-end justify-between gap-4">
           <div>
             <div className="text-[13px] font-bold text-[color:var(--text-tertiary)]">
               {trip?.title ?? '여행 준비 중'}
             </div>
-            <h2 className="mt-1 text-[24px] font-black leading-8 tracking-[-0.02em]">
-              멤버 취향을 한 기준으로 맞췄어요
+            <h2 className="mt-1 text-[28px] font-black leading-9">
+              {coordination ? `${coordination.members.length}명의 공통 취향` : '공통 취향 계산 중'}
             </h2>
           </div>
           <button
             type="button"
             disabled={loading}
             onClick={() => void load()}
-            className="h-9 rounded-full bg-[color:var(--blue-50)] px-3 text-[13px] font-bold text-[color:var(--blue-700)]"
+            className="h-9 rounded-full bg-[color:var(--soft-bg)] px-3 text-[13px] font-bold text-[color:var(--text-secondary)]"
           >
             새로고침
           </button>
@@ -74,25 +74,27 @@ export function CoordinationBoard() {
 
       {coordination ? (
         <>
-          <section className="space-y-3">
-            <h2 className="text-[18px] font-bold leading-6">취향 비교</h2>
-            <VoteLine title="식사 스타일" votes={coordination.consensus.food} />
-            <VoteLine title="관광 취향" votes={coordination.consensus.mood} />
-            <VoteLine title="선호 환경" votes={coordination.consensus.environment} />
-            <VoteLine title="이동 수단" votes={coordination.consensus.transportMode} />
-            <VoteLine title="예산 수준" votes={coordination.consensus.budgetLevel} />
+          <section>
+            <h2 className="mb-2 text-[18px] font-black leading-6">취향 비교</h2>
+            <div className="divide-y divide-[color:var(--line)] border-y border-[color:var(--line)]">
+              <VoteLine title="식사 스타일" votes={coordination.consensus.food} />
+              <VoteLine title="관광 취향" votes={coordination.consensus.mood} />
+              <VoteLine title="선호 환경" votes={coordination.consensus.environment} />
+              <VoteLine title="이동 수단" votes={coordination.consensus.transportMode} />
+              <VoteLine title="예산 수준" votes={coordination.consensus.budgetLevel} />
+            </div>
           </section>
 
-          <section className="rounded-[22px] border border-[color:var(--blue-100)] bg-[color:var(--blue-50)] px-5 py-5">
+          <section className="-mx-5 bg-[color:var(--blue-50)] px-5 py-6">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-[18px] font-black leading-6 text-[color:var(--blue-800)]">
                 AI 절충 추천
               </h2>
-              <span className="rounded-full bg-white/80 px-3 py-1 text-[12px] font-bold text-[color:var(--blue-700)]">
+              <span className="rounded-full bg-white px-3 py-1 text-[12px] font-bold text-[color:var(--blue-700)]">
                 자동 생성
               </span>
             </div>
-            <div className="mt-4 text-[20px] font-black leading-7 tracking-[-0.01em]">
+            <div className="mt-4 text-[22px] font-black leading-8">
               {coordination.recommendation.title}
             </div>
             <p className="mt-2 text-[14px] font-medium leading-6 text-[color:var(--text-secondary)]">
@@ -108,7 +110,7 @@ export function CoordinationBoard() {
                 </div>
               ))}
             </div>
-            <div className="mt-4 rounded-[16px] bg-white px-4 py-3 text-[14px] font-semibold leading-6 text-[color:var(--text-secondary)]">
+            <div className="mt-5 border-t border-[color:var(--blue-100)] pt-4 text-[14px] font-semibold leading-6 text-[color:var(--text-secondary)]">
               {coordination.recommendation.scheduleHint}
             </div>
           </section>
@@ -131,7 +133,7 @@ function VoteLine({ title, votes }: { title: string; votes: PreferenceVoteDto[] 
   const total = votes.reduce((sum, vote) => sum + vote.count, 0) || 1;
 
   return (
-    <div className="rounded-[18px] border border-[color:var(--line)] bg-white px-4 py-4">
+    <div className="py-4">
       <div className="flex items-center justify-between gap-3">
         <div className="text-[15px] font-black">{title}</div>
         <div className="text-[13px] font-bold text-[color:var(--text-tertiary)]">

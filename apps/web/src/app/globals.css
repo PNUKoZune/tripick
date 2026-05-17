@@ -2,10 +2,12 @@
 
 :root {
   color-scheme: light;
-  --app-bg: #eef1f5;
-  --app-surface: #fbfbfd;
-  --soft-bg: #f4f6f8;
-  --line: rgba(15, 23, 42, 0.08);
+  --app-bg: #f2f4f6;
+  --app-surface: #ffffff;
+  --soft-bg: #f6f8fa;
+  --pressed-bg: #edf0f3;
+  --line: rgba(25, 31, 40, 0.08);
+  --line-strong: rgba(25, 31, 40, 0.14);
   --text-primary: #191f28;
   --text-secondary: #4e5968;
   --text-tertiary: #8b95a1;

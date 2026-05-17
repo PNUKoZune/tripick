@@ -14,7 +14,7 @@ const NAV_ITEMS = [
 export function AppFrame({ children, showNav = true }: { children: ReactNode; showNav?: boolean }) {
   return (
     <main className="min-h-screen bg-[color:var(--app-bg)] text-[color:var(--text-primary)]">
-      <div className="mx-auto min-h-screen w-full max-w-[430px] bg-[color:var(--app-surface)] shadow-[0_0_0_1px_rgba(15,23,42,0.04)]">
+      <div className="mx-auto min-h-screen w-full max-w-[430px] bg-[color:var(--app-surface)]">
         <div className={showNav ? 'min-h-screen pb-[86px]' : 'min-h-screen'}>{children}</div>
         {showNav ? <BottomNavigation /> : null}
       </div>
@@ -26,7 +26,7 @@ function BottomNavigation() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 border-t border-[color:var(--line)] bg-white/94 px-5 pb-4 pt-3 backdrop-blur-xl">
+    <nav className="fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 border-t border-[color:var(--line)] bg-white/95 px-5 pb-4 pt-2 backdrop-blur-xl">
       <div className="grid grid-cols-4 gap-2">
         {NAV_ITEMS.map((item) => {
           const active = pathname === item.href;
@@ -34,9 +34,9 @@ function BottomNavigation() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex h-11 items-center justify-center rounded-[14px] text-[13px] font-semibold transition ${
+              className={`flex h-12 items-center justify-center text-[13px] font-bold transition ${
                 active
-                  ? 'bg-[color:var(--blue-50)] text-[color:var(--blue-600)]'
+                  ? 'text-[color:var(--blue-600)]'
                   : 'text-[color:var(--text-tertiary)]'
               }`}
             >
@@ -59,18 +59,19 @@ export function TopBar({
   muted?: string;
 }) {
   return (
-    <header className="sticky top-0 z-20 border-b border-[color:var(--line)] bg-white/92 px-5 pb-4 pt-5 backdrop-blur-xl">
-      <div className="flex min-h-10 items-center justify-between gap-3">
+    <header className="sticky top-0 z-20 bg-white/94 px-5 pb-3 pt-5 backdrop-blur-xl">
+      <div className="flex min-h-11 items-center justify-between gap-3">
         <div>
           {muted ? (
-            <div className="text-[12px] font-semibold leading-4 text-[color:var(--text-tertiary)]">
+            <div className="text-[12px] font-bold leading-4 text-[color:var(--text-tertiary)]">
               {muted}
             </div>
           ) : null}
-          <h1 className="text-[22px] font-bold leading-7 tracking-[-0.01em]">{title}</h1>
+          <h1 className="text-[24px] font-black leading-8">{title}</h1>
         </div>
         {action}
       </div>
+      {muted ? <div className="mt-4 h-px bg-[color:var(--line)]" /> : null}
     </header>
   );
 }
@@ -99,8 +100,8 @@ export function PrimaryButton({
   tone?: 'blue' | 'dark' | 'kakao';
 }) {
   const toneClass = {
-    blue: 'bg-[color:var(--blue-600)] text-white shadow-[0_12px_24px_rgba(49,130,246,0.22)]',
-    dark: 'bg-[color:var(--text-primary)] text-white shadow-[0_12px_24px_rgba(15,23,42,0.18)]',
+    blue: 'bg-[color:var(--blue-600)] text-white',
+    dark: 'bg-[color:var(--text-primary)] text-white',
     kakao: 'bg-[#FEE500] text-[#191919]',
   }[tone];
 
@@ -109,8 +110,8 @@ export function PrimaryButton({
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className={`h-14 w-full rounded-[16px] px-5 text-[16px] font-bold leading-6 transition active:scale-[0.99] ${
-        disabled ? 'bg-slate-200 text-slate-400 shadow-none' : toneClass
+      className={`h-14 w-full rounded-[16px] px-5 text-[16px] font-black leading-6 transition active:scale-[0.99] ${
+        disabled ? 'bg-[color:var(--pressed-bg)] text-[color:var(--text-tertiary)]' : toneClass
       }`}
     >
       {children}
@@ -134,7 +135,7 @@ export function SecondaryButton({
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className="h-12 w-full rounded-[14px] border border-[color:var(--line)] bg-white px-4 text-[15px] font-bold text-[color:var(--text-secondary)] transition active:scale-[0.99] disabled:bg-slate-100 disabled:text-slate-400"
+      className="h-12 w-full rounded-[16px] bg-[color:var(--soft-bg)] px-4 text-[15px] font-black text-[color:var(--text-secondary)] transition active:scale-[0.99] disabled:text-[color:var(--text-tertiary)]"
     >
       {children}
     </button>
@@ -151,13 +152,13 @@ export function InlineNotice({
   tone?: 'blue' | 'red' | 'green';
 }) {
   const toneClass = {
-    blue: 'border-[color:var(--blue-100)] bg-[color:var(--blue-50)] text-[color:var(--blue-700)]',
-    red: 'border-rose-100 bg-rose-50 text-rose-700',
-    green: 'border-emerald-100 bg-emerald-50 text-emerald-700',
+    blue: 'bg-[color:var(--blue-50)] text-[color:var(--blue-700)]',
+    red: 'bg-rose-50 text-rose-700',
+    green: 'bg-emerald-50 text-emerald-700',
   }[tone];
 
   return (
-    <div className={`rounded-[16px] border px-4 py-3 ${toneClass}`}>
+    <div className={`rounded-[16px] px-4 py-3 ${toneClass}`}>
       <div className="text-[14px] font-bold leading-5">{title}</div>
       <div className="mt-1 text-[13px] font-medium leading-5 opacity-90">{description}</div>
     </div>
@@ -179,10 +180,10 @@ export function SegmentedOption({
     <button
       type="button"
       onClick={onClick}
-      className={`min-h-[56px] rounded-[14px] border px-3 py-3 text-left transition ${
+      className={`min-h-12 rounded-full px-4 py-3 text-center transition active:scale-[0.99] ${
         active
-          ? 'border-[color:var(--blue-500)] bg-[color:var(--blue-50)] text-[color:var(--blue-700)]'
-          : 'border-[color:var(--line)] bg-white text-[color:var(--text-primary)]'
+          ? 'bg-[color:var(--blue-50)] text-[color:var(--blue-700)]'
+          : 'bg-[color:var(--soft-bg)] text-[color:var(--text-secondary)]'
       }`}
     >
       <span className="block text-[14px] font-bold leading-5">{label}</span>

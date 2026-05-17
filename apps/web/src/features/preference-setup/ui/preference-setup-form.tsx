@@ -68,7 +68,7 @@ export function PreferenceSetupForm() {
   }
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-8">
       <SetupBlock title="어떤 여행을 좋아하세요?">
         <div className="grid grid-cols-2 gap-2.5">
           {TRAVEL_STYLE_OPTIONS.map((option) => (
@@ -124,11 +124,11 @@ export function PreferenceSetupForm() {
       </SetupBlock>
 
       <SetupBlock title="Instagram 사진 취향">
-        <div className="flex items-center justify-between gap-4 rounded-[18px] bg-[color:var(--soft-bg)] px-4 py-4">
+        <div className="flex items-center justify-between gap-4 border-y border-[color:var(--line)] py-4">
           <div>
             <div className="text-[15px] font-bold leading-5">사진 분석 준비</div>
             <div className="mt-1 text-[13px] font-medium leading-5 text-[color:var(--text-tertiary)]">
-              API 연결 전에는 태그만 저장합니다.
+              API 연결 전에는 태그만 저장
             </div>
           </div>
           <button
@@ -164,7 +164,7 @@ export function PreferenceSetupForm() {
                     : [...current.instagramTags, tag],
                 }))
               }
-              className={`h-10 rounded-[12px] text-[13px] font-bold ${
+              className={`h-10 rounded-full px-4 text-[13px] font-bold ${
                 form.instagramTags.includes(tag)
                   ? 'bg-[color:var(--blue-50)] text-[color:var(--blue-700)]'
                   : 'bg-[color:var(--soft-bg)] text-[color:var(--text-tertiary)]'
@@ -199,8 +199,8 @@ export function PreferenceSetupForm() {
 
 function SetupBlock({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section>
-      <h2 className="mb-3 text-[18px] font-bold leading-6 tracking-[-0.01em]">{title}</h2>
+    <section className="border-t border-[color:var(--line)] pt-6 first:border-t-0 first:pt-0">
+      <h2 className="mb-3 text-[18px] font-black leading-6">{title}</h2>
       {children}
     </section>
   );
@@ -216,13 +216,13 @@ function TimeField({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="block rounded-[16px] border border-[color:var(--line)] bg-white px-4 py-3">
+    <label className="block rounded-[16px] bg-[color:var(--soft-bg)] px-4 py-3">
       <span className="block text-[13px] font-bold text-[color:var(--text-tertiary)]">{label}</span>
       <input
         type="time"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 h-8 w-full bg-transparent text-[20px] font-bold leading-7 outline-none"
+        className="mt-1 h-8 w-full bg-transparent text-[20px] font-black leading-7 outline-none"
       />
     </label>
   );

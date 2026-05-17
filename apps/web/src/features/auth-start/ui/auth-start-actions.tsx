@@ -20,9 +20,7 @@ export function AuthStartActions() {
         return;
       }
       await startDemoSession();
-      setNotice(
-        '카카오 키가 들어오면 같은 버튼이 OAuth로 전환됩니다. 지금은 데모 세션으로 이어갑니다.',
-      );
+      setNotice('카카오 키 입력 전이라 데모 세션으로 시작합니다.');
       router.push('/preferences');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : '로그인을 시작하지 못했습니다.');
