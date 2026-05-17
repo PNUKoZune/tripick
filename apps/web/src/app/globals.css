@@ -46,8 +46,11 @@ body {
   word-break: keep-all;
 }
 
-a {
+a:not([class]) {
   color: inherit;
+}
+
+a {
   text-decoration: none;
 }
 
