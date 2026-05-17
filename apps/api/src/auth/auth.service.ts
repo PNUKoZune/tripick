@@ -1,9 +1,15 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { UsersService } from '../users/users.service';
-import type { AuthTokens, DemoLoginDto, KakaoProfile, LoginResponseDto } from '@tripick/types';
+import type {
+  AuthTokens,
+  DemoLoginDto,
+  KakaoAuthStatusDto,
+  KakaoProfile,
+  LoginResponseDto,
+} from '@tripick/types';
 
 @Injectable()
 export class AuthService {
@@ -14,12 +20,32 @@ export class AuthService {
   ) {}
 
   getKakaoAuthUrl(): string {
-    const clientId = this.config.getOrThrow<string>('KAKAO_REST_API_KEY');
-    const redirectUri = this.config.getOrThrow<string>('KAKAO_CALLBACK_URL');
-    return (
-      `https://kauth.kakao.com/oauth/authorize` +
-      `?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code`
-    );
+    const status = this.getKakaoStatus();
+    if (!status.ready || !status.authorizeUrl) {
+      throw new BadRequestException({
+        message: 'Kakao OAuth is not configured yet',
+        missingKeys: status.missingKeys,
+      });
+    }
+    return status.authorizeUrl;
+  }
+
+  getKakaoStatus(): KakaoAuthStatusDto {
+    const clientId = this.config.get<string>('KAKAO_REST_API_KEY');
+    const redirectUri = this.config.get<string>('KAKAO_CALLBACK_URL');
+    const missingKeys = [
+      ...(clientId ? [] : ['KAKAO_REST_API_KEY']),
+      ...(redirectUri ? [] : ['KAKAO_CALLBACK_URL']),
+    ];
+    if (missingKeys.length > 0 || !clientId || !redirectUri) {
+      return { ready: false, missingKeys };
+    }
+    return {
+      ready: true,
+      authorizeUrl:
+        `https://kauth.kakao.com/oauth/authorize` +
+        `?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code`,
+    };
   }
 
   async loginWithKakao(code: string): Promise<LoginResponseDto> {
@@ -38,7 +64,9 @@ export class AuthService {
   }
 
   async loginDemo(dto: DemoLoginDto = {}): Promise<LoginResponseDto> {
-    const user = await this.usersService.findOrCreateDemoUser(dto.nickname?.trim() || '데모 여행자');
+    const user = await this.usersService.findOrCreateDemoUser(
+      dto.nickname?.trim() || '데모 여행자',
+    );
     const tokens = await this.issueTokens(user.id);
     return {
       tokens,

@@ -1,0 +1,13 @@
+import { MemberManager } from '@/features/member-management/ui/member-manager';
+import { AppFrame, PageSection, TopBar } from '@/shared/ui/app-frame';
+
+export function MembersView() {
+  return (
+    <AppFrame>
+      <TopBar title="멤버 추가" muted="2 / 3 단계" />
+      <PageSection>
+        <MemberManager />
+      </PageSection>
+    </AppFrame>
+  );
+}

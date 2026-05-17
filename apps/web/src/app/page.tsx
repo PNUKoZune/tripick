@@ -1,5 +1,5 @@
-import { TripPlannerDemoPage } from '@/widgets/trip-planner-demo';
+import { LandingView } from '@/views/landing/ui/landing-view';
 
 export default function Page() {
-  return <TripPlannerDemoPage />;
+  return <LandingView />;
 }

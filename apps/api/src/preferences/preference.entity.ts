@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { UserEntity } from '../users/user.entity';
 import type { TasteTagDto } from '@tripick/types';
+import type { PreferenceProfileDto } from '@tripick/types';
 
 @Entity('preferences')
 export class PreferenceEntity {
@@ -24,6 +25,9 @@ export class PreferenceEntity {
 
   @Column({ type: 'jsonb', default: '{}' })
   tasteTags: TasteTagDto;
+
+  @Column({ type: 'jsonb', default: '{}' })
+  profile: PreferenceProfileDto;
 
   @Column({ nullable: true })
   embeddingId?: string;

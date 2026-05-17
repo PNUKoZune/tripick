@@ -13,6 +13,7 @@ import { NotificationModule } from './notification/notification.module';
 import { PlannerModule } from './planner/planner.module';
 import { AlternativeModule } from './alternative/alternative.module';
 import { PreferenceAnalyzerModule } from './preference-analyzer/preference-analyzer.module';
+import { TripMembersModule } from './trip-members/trip-members.module';
 
 @Module({
   imports: [
@@ -22,7 +23,9 @@ import { PreferenceAnalyzerModule } from './preference-analyzer/preference-analy
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         type: 'postgres',
-        url: config.get<string>('DATABASE_URL') ?? 'postgresql://tripick:tripick@localhost:5432/tripick',
+        url:
+          config.get<string>('DATABASE_URL') ??
+          'postgresql://tripick:tripick@localhost:5432/tripick',
         autoLoadEntities: true,
         synchronize: config.get('NODE_ENV') === 'development',
         logging: config.get('NODE_ENV') === 'development',
@@ -54,6 +57,7 @@ import { PreferenceAnalyzerModule } from './preference-analyzer/preference-analy
     PlannerModule,
     AlternativeModule,
     PreferenceAnalyzerModule,
+    TripMembersModule,
   ],
 })
 export class AppModule {}

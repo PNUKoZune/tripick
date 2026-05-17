@@ -6,3 +6,4 @@ export * from './preference';
 export * from './place';
 export * from './replanning';
 export * from './notification';
+export * from './trip-member';

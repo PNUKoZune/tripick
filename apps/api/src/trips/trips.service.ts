@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TripEntity } from './trip.entity';
@@ -7,6 +13,8 @@ import type { CreateTripDto, UpdateTripDto } from '@tripick/types';
 
 @Injectable()
 export class TripsService {
+  private readonly logger = new Logger(TripsService.name);
+
   constructor(
     @InjectRepository(TripEntity)
     private readonly repo: Repository<TripEntity>,
@@ -35,7 +43,15 @@ export class TripsService {
       sleepTime: dto.sleepTime ?? '22:00',
     });
     const saved = await this.repo.save(trip);
-    await this.plannerService.generateItinerary(saved.id);
+    try {
+      await this.plannerService.generateItinerary(saved.id);
+    } catch (error) {
+      saved.status = 'draft';
+      await this.repo.save(saved);
+      this.logger.warn(
+        `Trip ${saved.id} created without itinerary: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
     return this.findOne(saved.id, userId);
   }
 
