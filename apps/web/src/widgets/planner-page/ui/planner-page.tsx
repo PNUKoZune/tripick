@@ -14,8 +14,8 @@ import { MemberAvatars } from '@/entities/member';
 import { DaySelector } from '@/features/day-selector';
 import { PlannerTabs, type PlannerTab } from '@/features/planner-tab-switch';
 import { Button, Chip } from '@/shared/ui';
+import { AppBottomNavigation } from '@/shared/ui/app-frame';
 import { AlternativeSheet } from '@/widgets/alternative-sheet';
-import { PlannerBottomNav } from '@/widgets/planner-bottom-nav';
 import { PlannerHeader } from '@/widgets/planner-header';
 import { PlannerMap } from '@/widgets/planner-map';
 import { PlannerTimeline } from '@/widgets/planner-timeline';
@@ -76,56 +76,56 @@ export function PlannerPage() {
   return (
     <div className="min-h-dvh bg-[#F7F8FA]">
       {/* < lg : phone shell (모바일 우선) */}
-      <div className="mx-auto max-w-[480px] px-4 py-6 lg:hidden">
-        <div className="overflow-hidden rounded-[20px] border border-[#E5E8EB] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
-          <PlannerHeader title={trip?.title ?? '일정 불러오는 중'} members={trip?.members ?? []} />
+      <div className="mx-auto min-h-dvh max-w-[430px] bg-white pb-[88px] lg:hidden">
+        <PlannerHeader title={trip?.title ?? '일정 불러오는 중'} members={trip?.members ?? []} />
 
-          {trip ? (
-            <PlannerMap
-              placeholder={trip.searchPlaceholder}
-              center={trip.mapCenter}
-              markers={trip.mapMarkers}
-            />
-          ) : (
-            <div className="aspect-[390/290] bg-[#F2F4F6]" />
-          )}
+        {trip ? (
+          <PlannerMap
+            placeholder={trip.searchPlaceholder}
+            center={trip.mapCenter}
+            markers={trip.mapMarkers}
+          />
+        ) : (
+          <div className="aspect-[390/290] bg-[#F2F4F6]" />
+        )}
 
-          <PlannerTabs value={tab} onChange={setTab} />
+        <PlannerTabs value={tab} onChange={setTab} />
 
-          {trip ? (
-            <div className="px-4 pt-3">
-              <DaySelector days={trip.days} value={day} onChange={setDay} />
+        {trip ? (
+          <div className="px-4 pt-3">
+            <DaySelector days={trip.days} value={day} onChange={setDay} />
+          </div>
+        ) : null}
+
+        <div className="relative px-4 pb-8 pt-3">
+          {loadError ? (
+            <div className="rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-4 text-[14px] text-[#F04452]">
+              {loadError}
             </div>
           ) : null}
 
-          <div className="relative px-4 pb-4 pt-3">
-            {loadError ? (
-              <div className="rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-4 text-[14px] text-[#F04452]">
-                {loadError}
-              </div>
-            ) : null}
+          {tab === 'schedule' ? (
+            <PlannerTimeline items={itemsForDay} onSelectItem={setOpenItem} />
+          ) : null}
+          {tab === 'map' && trip ? (
+            <TripMapPanel trip={trip} items={itemsForDay} onSelectItem={setOpenItem} />
+          ) : null}
+          {tab === 'info' && trip ? <TripInfoPanel trip={trip} /> : null}
 
-            {tab === 'schedule' ? (
-              <PlannerTimeline items={itemsForDay} onSelectItem={setOpenItem} />
-            ) : null}
-            {tab === 'map' && trip ? (
-              <TripMapPanel trip={trip} items={itemsForDay} onSelectItem={setOpenItem} />
-            ) : null}
-            {tab === 'info' && trip ? <TripInfoPanel trip={trip} /> : null}
-
-            <button
-              type="button"
-              aria-label="AI 도움"
-              onClick={() => setOpenItem(itemsForDay.find((i) => i.hasWaiting) ?? itemsForDay[0] ?? null)}
-              className="absolute bottom-20 right-4 z-10 flex size-14 items-center justify-center rounded-full bg-[#3182F6] text-[14px] font-bold text-white shadow-[0_12px_24px_rgba(49,130,246,0.32)] active:translate-y-px"
-            >
-              AI
-            </button>
-          </div>
-
-          <PlannerBottomNav active="trips" />
+          <button
+            type="button"
+            aria-label="AI 도움"
+            onClick={() =>
+              setOpenItem(itemsForDay.find((i) => i.hasWaiting) ?? itemsForDay[0] ?? null)
+            }
+            className="fixed bottom-[96px] z-20 flex size-14 items-center justify-center rounded-full bg-[#3182F6] text-[14px] font-bold text-white shadow-[0_12px_24px_rgba(49,130,246,0.32)] active:translate-y-px lg:hidden"
+            style={{ right: 'max(20px, calc((100vw - 430px) / 2 + 20px))' }}
+          >
+            AI
+          </button>
         </div>
       </div>
+      <AppBottomNavigation className="lg:hidden" />
 
       {/* ≥ lg : 데스크탑 웹 레이아웃 */}
       <div className="hidden lg:grid lg:min-h-dvh lg:grid-rows-[auto_1fr]">

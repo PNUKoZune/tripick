@@ -17,10 +17,10 @@ export function LandingView() {
             Tripick
           </div>
           <Link
-            href="/coordination"
+            href="/trips"
             className="text-[13px] font-black text-[color:var(--text-tertiary)]"
           >
-            조율 보기
+            내 여행
           </Link>
         </header>
 

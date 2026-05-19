@@ -5,8 +5,8 @@ import { useEffect, useMemo, useState } from 'react';
 import type { TripSummaryStatus, TripSummaryDto } from '@tripick/types';
 
 import { fetchPlannerTrips, TripSummaryCard } from '@/entities/trip-plan';
+import { AppBottomNavigation } from '@/shared/ui/app-frame';
 import { Button, Chip } from '@/shared/ui';
-import { PlannerBottomNav } from '@/widgets/planner-bottom-nav';
 
 type Filter = 'all' | TripSummaryStatus;
 
@@ -54,41 +54,33 @@ export function TripListPage() {
   return (
     <div className="min-h-dvh bg-[#F7F8FA]">
       {/* < lg : 폰 셸 */}
-      <div className="mx-auto max-w-[480px] px-4 py-6 lg:hidden">
-        <div className="overflow-hidden rounded-[20px] border border-[#E5E8EB] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
-          <header className="px-5 pb-3 pt-5">
-            <div className="text-[12px] font-semibold tracking-wide text-[#3182F6]">
-              TriPick · My Trips
+      <div className="mx-auto min-h-dvh max-w-[430px] bg-white pb-[88px] lg:hidden">
+        <header className="px-5 pb-4 pt-6">
+          <div className="text-[13px] font-black leading-5 text-[#3182F6]">TriPick</div>
+          <h1 className="mt-2 text-[28px] font-black leading-9 text-[#191F28]">내 여행</h1>
+        </header>
+
+        <div className="grid grid-cols-3 gap-2 px-5 pb-5">
+          <SummaryTile label="곧 출발" value={stats.upcoming} tone="primary" />
+          <SummaryTile label="초안" value={stats.draft} tone="neutral" />
+          <SummaryTile label="다녀옴" value={stats.done} tone="success" />
+        </div>
+
+        <FilterBar value={filter} onChange={setFilter} />
+
+        <div className="space-y-3 px-4 pb-6 pt-3">
+          {loadError ? (
+            <div className="rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-4 text-[14px] text-[#F04452]">
+              {loadError}
             </div>
-            <h1 className="mt-1 text-[22px] font-bold leading-[30px] text-[#191F28]">내 여행</h1>
-            <p className="mt-1 text-[13px] leading-[20px] text-[#6B7684]">
-              지금 까지 만든 여행 계획을 한 곳에서 관리하세요.
-            </p>
-          </header>
-
-          <div className="grid grid-cols-3 gap-2 px-5 pb-4">
-            <SummaryTile label="곧 출발" value={stats.upcoming} tone="primary" />
-            <SummaryTile label="초안" value={stats.draft} tone="neutral" />
-            <SummaryTile label="다녀옴" value={stats.done} tone="success" />
-          </div>
-
-          <FilterBar value={filter} onChange={setFilter} />
-
-          <div className="space-y-3 px-4 pb-4 pt-3">
-            {loadError ? (
-              <div className="rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-4 text-[14px] text-[#F04452]">
-                {loadError}
-              </div>
-            ) : null}
-            {filtered.length === 0 && !loadError ? <EmptyState /> : null}
-            {filtered.map((trip) => (
-              <TripSummaryCard key={trip.id} trip={trip} />
-            ))}
-          </div>
-
-          <PlannerBottomNav active="trips" />
+          ) : null}
+          {filtered.length === 0 && !loadError ? <EmptyState /> : null}
+          {filtered.map((trip) => (
+            <TripSummaryCard key={trip.id} trip={trip} />
+          ))}
         </div>
       </div>
+      <AppBottomNavigation className="lg:hidden" />
 
       {/* ≥ lg : 데스크탑 웹 레이아웃 */}
       <div className="hidden lg:grid lg:min-h-dvh lg:grid-rows-[auto_1fr]">

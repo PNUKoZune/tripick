@@ -118,11 +118,11 @@ export function CoordinationBoard() {
       ) : null}
 
       {message ? <InlineNotice title="상태" description={message} tone="red" /> : null}
-      <PrimaryButton disabled={loading || !coordination} onClick={() => router.push('/members')}>
-        멤버 추가해서 다시 조율
+      <PrimaryButton disabled={loading || !coordination} onClick={() => router.push('/trips')}>
+        내 여행에서 일정 보기
       </PrimaryButton>
-      <SecondaryButton disabled={loading} onClick={() => router.push('/preferences')}>
-        내 취향 다시 설정
+      <SecondaryButton disabled={loading} onClick={() => router.push('/members')}>
+        멤버 추가해서 다시 조율
       </SecondaryButton>
     </div>
   );

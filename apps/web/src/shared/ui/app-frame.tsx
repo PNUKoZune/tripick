@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: '/', label: '홈', icon: 'home' },
   { href: '/preferences', label: '취향', icon: 'preference' },
   { href: '/coordination', label: '조율', icon: 'coordination' },
+  { href: '/trips', label: '내 여행', icon: 'trips' },
   { href: '/members', label: '멤버', icon: 'members' },
 ] as const;
 
@@ -18,23 +19,23 @@ export function AppFrame({ children, showNav = true }: { children: ReactNode; sh
     <main className="min-h-screen bg-[color:var(--app-bg)] text-[color:var(--text-primary)]">
       <div className="mx-auto min-h-screen w-full max-w-[430px] bg-[color:var(--app-surface)]">
         <div className={showNav ? 'min-h-screen pb-[88px]' : 'min-h-screen'}>{children}</div>
-        {showNav ? <BottomNavigation /> : null}
+        {showNav ? <AppBottomNavigation /> : null}
       </div>
     </main>
   );
 }
 
-function BottomNavigation() {
+export function AppBottomNavigation({ className = '' }: { className?: string }) {
   const pathname = usePathname();
 
   return (
     <nav
       aria-label="하단 탭"
-      className="fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 border-t border-[color:var(--line)] bg-white/95 px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-xl"
+      className={`fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 border-t border-[color:var(--line)] bg-white/95 px-1.5 pb-[max(10px,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-xl ${className}`}
     >
-      <div className="grid h-[66px] grid-cols-4 items-stretch">
+      <div className="grid h-[66px] grid-cols-5 items-stretch">
         {NAV_ITEMS.map((item) => {
-          const active = pathname === item.href;
+          const active = isNavItemActive(pathname, item.href);
           return (
             <Link
               key={item.href}
@@ -54,6 +55,16 @@ function BottomNavigation() {
       </div>
     </nav>
   );
+}
+
+function isNavItemActive(pathname: string, href: (typeof NAV_ITEMS)[number]['href']) {
+  if (href === '/') {
+    return pathname === '/';
+  }
+  if (href === '/trips') {
+    return pathname.startsWith('/trips') || pathname.startsWith('/planner');
+  }
+  return pathname === href;
 }
 
 function NavIcon({ name, active }: { name: NavIconName; active: boolean }) {
@@ -93,6 +104,13 @@ function NavIcon({ name, active }: { name: NavIconName; active: boolean }) {
           <path d="M12 18.5V5.5" />
           <path d="M19 18.5v-6" />
           <path d="M4 18.5h16" />
+        </>
+      ) : null}
+      {name === 'trips' ? (
+        <>
+          <path d="M8.5 7.3V6.1c0-.9.7-1.6 1.6-1.6h3.8c.9 0 1.6.7 1.6 1.6v1.2" />
+          <path d="M5.7 8.2h12.6c.9 0 1.6.7 1.5 1.6l-.8 8.1c-.1.9-.8 1.6-1.7 1.6H6.7c-.9 0-1.6-.7-1.7-1.6l-.8-8.1c-.1-.9.6-1.6 1.5-1.6Z" />
+          <path d="M9 12h6" />
         </>
       ) : null}
       {name === 'members' ? (
