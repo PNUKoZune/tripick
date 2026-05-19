@@ -127,15 +127,15 @@ export function MemberManager() {
   }
 
   return (
-    <div className="space-y-8">
-      <section>
+    <div className="space-y-8 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-x-8 lg:gap-y-8 lg:space-y-0">
+      <section className="lg:col-start-1">
         <div className="mb-4">
           <div className="text-[13px] font-bold text-[color:var(--text-tertiary)]">
             {trip?.title ?? '여행 준비 중'}
           </div>
           <h2 className="mt-1 text-[26px] font-black leading-8">새 멤버 추가</h2>
         </div>
-        <div className="space-y-3">
+        <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
           <input
             value={nickname}
             onChange={(event) => setNickname(event.target.value)}
@@ -148,14 +148,18 @@ export function MemberManager() {
             placeholder="전화번호 또는 카카오 ID"
             className="h-14 w-full rounded-[16px] bg-[color:var(--soft-bg)] px-4 text-[16px] font-bold outline-none focus:bg-white focus:ring-2 focus:ring-[color:var(--blue-100)]"
           />
-          <PreferencePicker preference={preference} onChange={setPreference} />
-          <PrimaryButton disabled={loading} onClick={handleAddMember}>
-            멤버 추가
-          </PrimaryButton>
+          <div className="lg:col-span-2">
+            <PreferencePicker preference={preference} onChange={setPreference} />
+          </div>
+          <div className="lg:col-span-2 lg:max-w-[360px]">
+            <PrimaryButton disabled={loading} onClick={handleAddMember}>
+              멤버 추가
+            </PrimaryButton>
+          </div>
         </div>
       </section>
 
-      <section className="border-t border-[color:var(--line)] pt-6">
+      <section className="border-t border-[color:var(--line)] pt-6 lg:col-start-2 lg:row-span-2 lg:border-t-0 lg:pt-0">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-[18px] font-black leading-6">현재 멤버</h2>
           <span className="text-[13px] font-bold text-[color:var(--blue-600)]">
@@ -203,7 +207,7 @@ export function MemberManager() {
         </div>
       </section>
 
-      <section className="border-t border-[color:var(--line)] pt-6">
+      <section className="border-t border-[color:var(--line)] pt-6 lg:col-start-1">
         <h2 className="mb-1 text-[18px] font-black leading-6">초대 방식</h2>
         <div className="divide-y divide-[color:var(--line)]">
           <InviteMethod title="카카오톡 초대" description="친구 목록 연동 준비" strong />
@@ -212,13 +216,19 @@ export function MemberManager() {
         </div>
       </section>
 
-      {message ? <InlineNotice title="상태" description={message} tone="red" /> : null}
-      <SecondaryButton
-        disabled={loading || members.length === 0}
-        onClick={() => router.push('/coordination')}
-      >
-        취향 조율 보기
-      </SecondaryButton>
+      {message ? (
+        <div className="lg:col-span-2">
+          <InlineNotice title="상태" description={message} tone="red" />
+        </div>
+      ) : null}
+      <div className="lg:col-span-2 lg:max-w-[360px]">
+        <SecondaryButton
+          disabled={loading || members.length === 0}
+          onClick={() => router.push('/coordination')}
+        >
+          취향 조율 보기
+        </SecondaryButton>
+      </div>
     </div>
   );
 }

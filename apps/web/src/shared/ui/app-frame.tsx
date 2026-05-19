@@ -14,11 +14,22 @@ const NAV_ITEMS = [
 type NavIconName = (typeof NAV_ITEMS)[number]['icon'];
 
 export function AppFrame({ children, showNav = true }: { children: ReactNode; showNav?: boolean }) {
+  if (!showNav) {
+    return (
+      <main className="min-h-screen bg-[color:var(--app-bg)] text-[color:var(--text-primary)]">
+        {children}
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[color:var(--app-bg)] text-[color:var(--text-primary)]">
-      <div className="mx-auto min-h-screen w-full max-w-[430px] bg-[color:var(--app-surface)]">
-        <div className={showNav ? 'min-h-screen pb-[88px]' : 'min-h-screen'}>{children}</div>
-        {showNav ? <AppBottomNavigation /> : null}
+      <div className="mx-auto min-h-screen w-full max-w-[430px] lg:grid lg:max-w-[1180px] lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:px-6">
+        <DesktopNavigation />
+        <div className="min-h-screen bg-[color:var(--app-surface)] lg:border-x lg:border-[color:var(--line)]">
+          <div className="min-h-screen pb-[88px] lg:pb-12">{children}</div>
+        </div>
+        <AppBottomNavigation className="lg:hidden" />
       </div>
     </main>
   );
@@ -53,6 +64,40 @@ export function AppBottomNavigation({ className = '' }: { className?: string }) 
         })}
       </div>
     </nav>
+  );
+}
+
+function DesktopNavigation() {
+  const pathname = usePathname();
+
+  return (
+    <aside className="hidden py-8 lg:block">
+      <div className="sticky top-8">
+        <Link href="/" className="text-[24px] font-black leading-8 text-[color:var(--blue-600)]">
+          Tripick
+        </Link>
+        <nav aria-label="데스크탑 내비게이션" className="mt-8 space-y-1">
+          {NAV_ITEMS.map((item) => {
+            const active = isNavItemActive(pathname, item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? 'page' : undefined}
+                className={`flex h-12 items-center gap-3 rounded-[16px] px-4 text-[15px] font-black transition-colors ${
+                  active
+                    ? 'bg-white text-[color:var(--blue-600)]'
+                    : 'text-[color:var(--text-secondary)] hover:bg-white/70 hover:text-[color:var(--text-primary)]'
+                }`}
+              >
+                <NavIcon name={item.icon} active={active} />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
+    </aside>
   );
 }
 
@@ -124,8 +169,8 @@ export function TopBar({
   muted?: string;
 }) {
   return (
-    <header className="sticky top-0 z-20 bg-white/94 px-5 pb-3 pt-5 backdrop-blur-xl">
-      <div className="flex min-h-11 items-center justify-between gap-3">
+    <header className="sticky top-0 z-20 bg-white/94 px-5 pb-3 pt-5 backdrop-blur-xl lg:static lg:bg-white lg:px-8 lg:pb-4 lg:pt-8">
+      <div className="mx-auto flex min-h-11 w-full max-w-[430px] items-center justify-between gap-3 lg:max-w-[880px]">
         <div>
           {muted ? (
             <div className="text-[12px] font-bold leading-4 text-[color:var(--text-tertiary)]">
@@ -136,7 +181,9 @@ export function TopBar({
         </div>
         {action}
       </div>
-      {muted ? <div className="mt-4 h-px bg-[color:var(--line)]" /> : null}
+      {muted ? (
+        <div className="mx-auto mt-4 h-px w-full max-w-[430px] bg-[color:var(--line)] lg:max-w-[880px]" />
+      ) : null}
     </header>
   );
 }
@@ -148,7 +195,11 @@ export function PageSection({
   children: ReactNode;
   className?: string;
 }) {
-  return <section className={`px-5 py-5 ${className}`}>{children}</section>;
+  return (
+    <section className={`mx-auto w-full max-w-[430px] px-5 py-5 lg:max-w-[880px] lg:px-8 lg:py-6 ${className}`}>
+      {children}
+    </section>
+  );
 }
 
 export function PrimaryButton({

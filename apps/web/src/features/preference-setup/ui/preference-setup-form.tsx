@@ -70,7 +70,7 @@ export function PreferenceSetupForm() {
   return (
     <div className="space-y-8">
       <SetupBlock title="어떤 여행을 좋아하세요?">
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3">
           {TRAVEL_STYLE_OPTIONS.map((option) => (
             <SegmentedOption
               key={option.value}
@@ -83,7 +83,7 @@ export function PreferenceSetupForm() {
       </SetupBlock>
 
       <SetupBlock title="누구와 여행하나요?">
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-4 gap-2 lg:max-w-[520px]">
           {COMPANION_OPTIONS.map((option) => (
             <SegmentedOption
               key={option.value}
@@ -96,7 +96,7 @@ export function PreferenceSetupForm() {
       </SetupBlock>
 
       <SetupBlock title="취침 / 기상 시간">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 lg:max-w-[520px]">
           <TimeField
             label="취침"
             value={form.sleepTime}
@@ -111,7 +111,7 @@ export function PreferenceSetupForm() {
       </SetupBlock>
 
       <SetupBlock title="선호 이동 수단">
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:max-w-[640px]">
           {TRANSPORT_OPTIONS.map((option) => (
             <SegmentedOption
               key={option.value}
@@ -151,7 +151,7 @@ export function PreferenceSetupForm() {
             />
           </button>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="mt-3 grid grid-cols-3 gap-2 lg:max-w-[420px]">
           {INSTAGRAM_TAGS.map((tag) => (
             <button
               key={tag}
@@ -177,9 +177,11 @@ export function PreferenceSetupForm() {
       </SetupBlock>
 
       {message ? <InlineNotice title="확인 필요" description={message} tone="red" /> : null}
-      <PrimaryButton disabled={loading || !ready} onClick={handleSubmit}>
-        {loading ? '저장 중' : '취향 저장하고 멤버 추가'}
-      </PrimaryButton>
+      <div className="lg:max-w-[360px]">
+        <PrimaryButton disabled={loading || !ready} onClick={handleSubmit}>
+          {loading ? '저장 중' : '취향 저장하고 멤버 추가'}
+        </PrimaryButton>
+      </div>
     </div>
   );
 

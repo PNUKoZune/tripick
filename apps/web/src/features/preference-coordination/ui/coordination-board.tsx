@@ -73,7 +73,7 @@ export function CoordinationBoard() {
       </section>
 
       {coordination ? (
-        <>
+        <div className="space-y-8 lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-8 lg:space-y-0">
           <section>
             <h2 className="mb-2 text-[18px] font-black leading-6">취향 비교</h2>
             <div className="divide-y divide-[color:var(--line)] border-y border-[color:var(--line)]">
@@ -85,7 +85,7 @@ export function CoordinationBoard() {
             </div>
           </section>
 
-          <section className="-mx-5 bg-[color:var(--blue-50)] px-5 py-6">
+          <section className="-mx-5 bg-[color:var(--blue-50)] px-5 py-6 lg:mx-0 lg:rounded-[24px] lg:px-6">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-[18px] font-black leading-6 text-[color:var(--blue-800)]">
                 AI 절충 추천
@@ -114,16 +114,18 @@ export function CoordinationBoard() {
               {coordination.recommendation.scheduleHint}
             </div>
           </section>
-        </>
+        </div>
       ) : null}
 
       {message ? <InlineNotice title="상태" description={message} tone="red" /> : null}
-      <PrimaryButton disabled={loading || !coordination} onClick={() => router.push('/')}>
-        내 여행에서 일정 보기
-      </PrimaryButton>
-      <SecondaryButton disabled={loading} onClick={() => router.push('/members')}>
-        멤버 추가해서 다시 조율
-      </SecondaryButton>
+      <div className="space-y-3 lg:flex lg:max-w-[560px] lg:gap-3 lg:space-y-0">
+        <PrimaryButton disabled={loading || !coordination} onClick={() => router.push('/')}>
+          내 여행에서 일정 보기
+        </PrimaryButton>
+        <SecondaryButton disabled={loading} onClick={() => router.push('/members')}>
+          멤버 추가해서 다시 조율
+        </SecondaryButton>
+      </div>
     </div>
   );
 }

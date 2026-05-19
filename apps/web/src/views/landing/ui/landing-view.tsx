@@ -11,48 +11,51 @@ const FLOW = [
 export function LandingView() {
   return (
     <AppFrame showNav={false}>
-      <section className="flex min-h-screen flex-col bg-white px-5 pb-6 pt-14">
-        <header className="flex items-center justify-between">
-          <div className="text-[23px] font-black leading-7 text-[color:var(--blue-600)]">
-            Tripick
-          </div>
-          <Link
-            href="/"
-            className="text-[13px] font-black text-[color:var(--text-tertiary)]"
-          >
-            홈
-          </Link>
-        </header>
+      <section className="min-h-screen bg-white px-5 pb-6 pt-14 lg:px-10 lg:pb-10">
+        <div className="mx-auto flex min-h-[calc(100vh-80px)] w-full max-w-[1080px] flex-col">
+          <header className="flex items-center justify-between">
+            <div className="text-[23px] font-black leading-7 text-[color:var(--blue-600)]">
+              Tripick
+            </div>
+            <Link href="/" className="text-[13px] font-black text-[color:var(--text-tertiary)]">
+              홈
+            </Link>
+          </header>
 
-        <div className="flex flex-1 flex-col justify-center py-10">
-          <div className="text-[13px] font-black leading-5 text-[color:var(--blue-600)]">
-            국내 여행 취향 조율
-          </div>
-          <h1 className="mt-4 text-[42px] font-black leading-[1.08]">
-            맞는 취향만
-            <br />
-            모아 일정으로
-          </h1>
-          <p className="mt-5 max-w-[25ch] text-[17px] font-bold leading-7 text-[color:var(--text-secondary)]">
-            멤버 취향을 저장하고 공통 기준을 만듭니다.
-          </p>
-
-          <div className="mt-11 border-l-2 border-[color:var(--blue-100)] pl-5">
-            {FLOW.map((step, index) => (
-              <div key={step.title} className={index === FLOW.length - 1 ? '' : 'pb-6'}>
-                <div className="relative">
-                  <span className="absolute -left-[27px] top-1 size-3 rounded-full bg-[color:var(--blue-600)] ring-4 ring-white" />
-                  <div className="text-[16px] font-black leading-6">{step.title}</div>
-                  <div className="mt-1 text-[14px] font-bold leading-5 text-[color:var(--text-tertiary)]">
-                    {step.description}
-                  </div>
-                </div>
+          <div className="grid flex-1 py-10 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-center lg:gap-16">
+            <div>
+              <div className="text-[13px] font-black leading-5 text-[color:var(--blue-600)]">
+                국내 여행 취향 조율
               </div>
-            ))}
+              <h1 className="mt-4 text-[42px] font-black leading-[1.08] lg:text-[64px] lg:leading-[1.02]">
+                맞는 취향만
+                <br />
+                모아 일정으로
+              </h1>
+              <p className="mt-5 max-w-[25ch] text-[17px] font-bold leading-7 text-[color:var(--text-secondary)] lg:text-[20px] lg:leading-8">
+                멤버 취향을 저장하고 공통 기준을 만듭니다.
+              </p>
+
+              <div className="mt-11 border-l-2 border-[color:var(--blue-100)] pl-5 lg:max-w-[420px]">
+                {FLOW.map((step, index) => (
+                  <div key={step.title} className={index === FLOW.length - 1 ? '' : 'pb-6'}>
+                    <div className="relative">
+                      <span className="absolute -left-[27px] top-1 size-3 rounded-full bg-[color:var(--blue-600)] ring-4 ring-white" />
+                      <div className="text-[16px] font-black leading-6">{step.title}</div>
+                      <div className="mt-1 text-[14px] font-bold leading-5 text-[color:var(--text-tertiary)]">
+                        {step.description}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-10 border-t border-[color:var(--line)] pt-6 lg:mt-0 lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0">
+              <AuthStartActions />
+            </div>
           </div>
         </div>
-
-        <AuthStartActions />
       </section>
     </AppFrame>
   );
