@@ -17,10 +17,10 @@ export function LandingView() {
             Tripick
           </div>
           <Link
-            href="/trips"
+            href="/"
             className="text-[13px] font-black text-[color:var(--text-tertiary)]"
           >
-            내 여행
+            홈
           </Link>
         </header>
 

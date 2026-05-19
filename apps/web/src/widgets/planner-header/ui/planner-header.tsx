@@ -13,7 +13,7 @@ type Props = {
 export function PlannerHeader({
   title,
   members,
-  backHref = '/trips',
+  backHref = '/',
   backLabel = '내 여행',
 }: Props) {
   return (

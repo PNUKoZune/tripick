@@ -133,7 +133,7 @@ export function PlannerPage() {
           <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-6 px-8 py-4 xl:px-10">
             <div className="flex items-center gap-4">
               <Link
-                href="/trips"
+                href="/"
                 className="flex h-9 items-center gap-1 rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[13px] font-semibold text-[#6B7684] hover:bg-[#FAFBFC] hover:text-[#191F28]"
               >
                 <span aria-hidden>‹</span>
