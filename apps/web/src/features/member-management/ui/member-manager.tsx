@@ -210,9 +210,9 @@ export function MemberManager() {
       <section className="border-t border-[color:var(--line)] pt-6 lg:col-start-1">
         <h2 className="mb-1 text-[18px] font-black leading-6">초대 방식</h2>
         <div className="divide-y divide-[color:var(--line)]">
-          <InviteMethod title="카카오톡 초대" description="친구 목록 연동 준비" strong />
-          <InviteMethod title="링크 초대" description="초대 링크 복사 준비" />
-          <InviteMethod title="연락처 추가" description="전화번호로 대기 멤버 저장" />
+          <InviteMethod title="카카오톡 초대" description="친구 목록 연동 예정" strong />
+          <InviteMethod title="링크 초대" description="초대 링크 생성 예정" />
+          <InviteMethod title="연락처 추가" description="위 입력창에서 바로 저장" />
         </div>
       </section>
 

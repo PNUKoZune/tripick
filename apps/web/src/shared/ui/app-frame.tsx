@@ -7,8 +7,8 @@ import type { ReactNode } from 'react';
 const NAV_ITEMS = [
   { href: '/', label: '홈', icon: 'home' },
   { href: '/preferences', label: '취향', icon: 'preference' },
-  { href: '/coordination', label: '조율', icon: 'coordination' },
   { href: '/members', label: '멤버', icon: 'members' },
+  { href: '/coordination', label: '조율', icon: 'coordination' },
 ] as const;
 
 type NavIconName = (typeof NAV_ITEMS)[number]['icon'];
@@ -25,7 +25,7 @@ export function AppFrame({ children, showNav = true }: { children: ReactNode; sh
   return (
     <main className="min-h-screen bg-[color:var(--app-bg)] text-[color:var(--text-primary)]">
       <div className="mx-auto min-h-screen w-full max-w-[430px] lg:grid lg:max-w-[1180px] lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:px-6">
-        <DesktopNavigation />
+        <AppDesktopNavigation />
         <div className="min-h-screen bg-[color:var(--app-surface)] lg:border-x lg:border-[color:var(--line)]">
           <div className="min-h-screen pb-[88px] lg:pb-12">{children}</div>
         </div>
@@ -67,7 +67,7 @@ export function AppBottomNavigation({ className = '' }: { className?: string }) 
   );
 }
 
-function DesktopNavigation() {
+export function AppDesktopNavigation() {
   const pathname = usePathname();
 
   return (
@@ -196,7 +196,9 @@ export function PageSection({
   className?: string;
 }) {
   return (
-    <section className={`mx-auto w-full max-w-[430px] px-5 py-5 lg:max-w-[880px] lg:px-8 lg:py-6 ${className}`}>
+    <section
+      className={`mx-auto w-full max-w-[430px] px-5 py-5 lg:max-w-[880px] lg:px-8 lg:py-6 ${className}`}
+    >
       {children}
     </section>
   );

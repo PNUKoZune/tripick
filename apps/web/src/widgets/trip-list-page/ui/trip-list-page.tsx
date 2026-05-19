@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { TripSummaryStatus, TripSummaryDto } from '@tripick/types';
 
 import { fetchPlannerTrips, TripSummaryCard } from '@/entities/trip-plan';
-import { AppBottomNavigation } from '@/shared/ui/app-frame';
+import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
 import { Button, Chip } from '@/shared/ui';
 
 type Filter = 'all' | TripSummaryStatus;
@@ -83,60 +83,63 @@ export function TripListPage() {
       <AppBottomNavigation className="lg:hidden" />
 
       {/* ≥ lg : 데스크탑 웹 레이아웃 */}
-      <div className="hidden lg:grid lg:min-h-dvh lg:grid-rows-[auto_1fr]">
-        <header className="border-b border-[#E5E8EB] bg-white">
-          <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-6 px-8 py-4 xl:px-10">
-            <div>
-              <div className="text-[12px] font-semibold tracking-wide text-[#3182F6]">
-                TriPick · My Trips
+      <div className="mx-auto hidden w-full max-w-[1440px] lg:grid lg:min-h-dvh lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:px-6">
+        <AppDesktopNavigation />
+        <div className="min-h-dvh border-x border-[#E5E8EB] bg-white">
+          <header className="border-b border-[#E5E8EB] bg-white">
+            <div className="mx-auto flex w-full max-w-[1160px] items-center justify-between gap-6 px-8 py-4 xl:px-10">
+              <div>
+                <div className="text-[12px] font-semibold tracking-wide text-[#3182F6]">
+                  Tripick · 내 여행
+                </div>
+                <h1 className="mt-0.5 text-[22px] font-bold leading-[30px] text-[#191F28]">
+                  내 여행
+                </h1>
+                <p className="mt-1 text-[13px] text-[#6B7684]">
+                  지금까지 만든 여행 계획을 한 곳에서 관리하세요.
+                </p>
               </div>
-              <h1 className="mt-0.5 text-[22px] font-bold leading-[30px] text-[#191F28]">
-                내 여행
-              </h1>
-              <p className="mt-1 text-[13px] text-[#6B7684]">
-                지금 까지 만든 여행 계획을 한 곳에서 관리하세요.
-              </p>
+              <div className="flex items-center gap-3">
+                <Link
+                  href="/planner"
+                  className="rounded-[14px] border border-[#E5E8EB] bg-white px-4 py-2 text-[14px] font-semibold text-[#191F28] hover:bg-[#FAFBFC]"
+                >
+                  현재 데모 일정 보기
+                </Link>
+                <Button variant="primary" size="md" className="h-10 px-4 text-[14px]">
+                  새 여행 만들기
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <Link
-                href="/planner"
-                className="rounded-[14px] border border-[#E5E8EB] bg-white px-4 py-2 text-[14px] font-semibold text-[#191F28] hover:bg-[#FAFBFC]"
-              >
-                현재 데모 일정 보기
-              </Link>
-              <Button variant="primary" size="md" className="h-10 px-4 text-[14px]">
-                새 여행 만들기
-              </Button>
+          </header>
+
+          <div className="mx-auto w-full max-w-[1160px] px-8 py-6 xl:px-10">
+            <div className="mb-4 grid grid-cols-4 gap-3">
+              <SummaryTile label="전체" value={trips.length} tone="neutral" />
+              <SummaryTile label="곧 출발" value={stats.upcoming} tone="primary" />
+              <SummaryTile label="초안" value={stats.draft} tone="neutral" />
+              <SummaryTile label="다녀옴" value={stats.done} tone="success" />
             </div>
-          </div>
-        </header>
 
-        <div className="mx-auto w-full max-w-[1600px] px-8 py-6 xl:px-10">
-          <div className="mb-4 grid grid-cols-4 gap-3">
-            <SummaryTile label="전체" value={trips.length} tone="neutral" />
-            <SummaryTile label="곧 출발" value={stats.upcoming} tone="primary" />
-            <SummaryTile label="초안" value={stats.draft} tone="neutral" />
-            <SummaryTile label="다녀옴" value={stats.done} tone="success" />
-          </div>
+            <FilterBar value={filter} onChange={setFilter} />
 
-          <FilterBar value={filter} onChange={setFilter} />
+            {loadError ? (
+              <div className="mt-4 rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-4 text-[14px] text-[#F04452]">
+                {loadError}
+              </div>
+            ) : null}
 
-          {loadError ? (
-            <div className="mt-4 rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-4 text-[14px] text-[#F04452]">
-              {loadError}
+            {filtered.length === 0 && !loadError ? (
+              <div className="mt-6">
+                <EmptyState />
+              </div>
+            ) : null}
+
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {filtered.map((trip) => (
+                <TripSummaryCard key={trip.id} trip={trip} />
+              ))}
             </div>
-          ) : null}
-
-          {filtered.length === 0 && !loadError ? (
-            <div className="mt-6">
-              <EmptyState />
-            </div>
-          ) : null}
-
-          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((trip) => (
-              <TripSummaryCard key={trip.id} trip={trip} />
-            ))}
           </div>
         </div>
       </div>
@@ -154,7 +157,11 @@ function SummaryTile({
   tone: 'neutral' | 'primary' | 'success';
 }) {
   const valueClass =
-    tone === 'primary' ? 'text-[#1B64DA]' : tone === 'success' ? 'text-[#00A86B]' : 'text-[#191F28]';
+    tone === 'primary'
+      ? 'text-[#1B64DA]'
+      : tone === 'success'
+        ? 'text-[#00A86B]'
+        : 'text-[#191F28]';
   return (
     <div className="rounded-[14px] border border-[#E5E8EB] bg-white px-3 py-3 text-center">
       <div className="text-[11px] font-semibold text-[#8B95A1]">{label}</div>

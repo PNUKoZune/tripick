@@ -24,22 +24,49 @@ import { startDemoSession } from '@/entities/session/api/auth-api';
 import { ensureActiveTrip } from '@/entities/trip/api/trip-api';
 import { InlineNotice, PrimaryButton, SegmentedOption } from '@/shared/ui/app-frame';
 
+type Notice = {
+  title: string;
+  description: string;
+  tone: 'red' | 'green';
+};
+
 export function PreferenceSetupForm() {
   const router = useRouter();
   const [form, setForm] = useState<PreferenceFormState>(DEFAULT_PREFERENCE_FORM);
+  const [hasSavedPreference, setHasSavedPreference] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     const session = getStoredSession();
     if (!session) {
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
-    void getMyPreferences(session.tokens.accessToken).then((preference) => {
-      if (preference?.profile) {
-        setForm({ ...DEFAULT_PREFERENCE_FORM, ...preference.profile });
-      }
-    });
+    void getMyPreferences(session.tokens.accessToken)
+      .then((preference) => {
+        if (cancelled) {
+          return;
+        }
+        if (preference?.profile) {
+          setForm({ ...DEFAULT_PREFERENCE_FORM, ...preference.profile });
+          setHasSavedPreference(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setNotice({
+            title: '불러오기 실패',
+            description: '저장된 취향을 불러오지 못했습니다.',
+            tone: 'red',
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const ready =
@@ -50,18 +77,36 @@ export function PreferenceSetupForm() {
 
   async function handleSubmit() {
     if (!ready) {
-      setMessage('취향, 동행 유형, 이동수단을 하나 이상 고르고 시간을 확인해주세요.');
+      setNotice({
+        title: '확인 필요',
+        description: '취향, 동행 유형, 이동수단을 하나 이상 고르고 시간을 확인해주세요.',
+        tone: 'red',
+      });
       return;
     }
     setLoading(true);
-    setMessage(null);
+    setNotice(null);
     try {
       const session = getStoredSession() ?? (await startDemoSession());
+      const shouldStayAfterSave = hasSavedPreference;
       await savePreferences(session.tokens.accessToken, form);
       await ensureActiveTrip(session.tokens.accessToken);
+      setHasSavedPreference(true);
+      if (shouldStayAfterSave) {
+        setNotice({
+          title: '저장 완료',
+          description: '취향을 저장했습니다.',
+          tone: 'green',
+        });
+        return;
+      }
       router.push('/members');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '취향 저장에 실패했습니다.');
+      setNotice({
+        title: '저장 실패',
+        description: error instanceof Error ? error.message : '취향 저장에 실패했습니다.',
+        tone: 'red',
+      });
     } finally {
       setLoading(false);
     }
@@ -126,9 +171,9 @@ export function PreferenceSetupForm() {
       <SetupBlock title="Instagram 사진 취향">
         <div className="flex items-center justify-between gap-4 border-y border-[color:var(--line)] py-4">
           <div>
-            <div className="text-[15px] font-bold leading-5">사진 분석 준비</div>
+            <div className="text-[15px] font-bold leading-5">연결 준비 중</div>
             <div className="mt-1 text-[13px] font-medium leading-5 text-[color:var(--text-tertiary)]">
-              API 연결 전에는 태그만 저장
+              지금은 선택한 태그만 저장돼요.
             </div>
           </div>
           <button
@@ -176,10 +221,12 @@ export function PreferenceSetupForm() {
         </div>
       </SetupBlock>
 
-      {message ? <InlineNotice title="확인 필요" description={message} tone="red" /> : null}
+      {notice ? (
+        <InlineNotice title={notice.title} description={notice.description} tone={notice.tone} />
+      ) : null}
       <div className="lg:max-w-[360px]">
         <PrimaryButton disabled={loading || !ready} onClick={handleSubmit}>
-          {loading ? '저장 중' : '취향 저장하고 멤버 추가'}
+          {loading ? '저장 중' : hasSavedPreference ? '취향 저장' : '취향 저장하고 멤버 추가'}
         </PrimaryButton>
       </div>
     </div>
