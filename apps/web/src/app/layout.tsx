@@ -2,14 +2,14 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'TriPick — 취향 기반 AI 여행 플래너',
-  description: '취향 입력부터 일정 생성, 재계획까지 한 흐름으로 보여주는 TriPick web demo',
+  title: 'Tripick — 취향 조율 여행 플래너',
+  description: '동행 멤버의 취향을 맞추고 국내 여행 일정을 준비하는 Tripick',
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#f4f6fb',
+  themeColor: '#ffffff',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

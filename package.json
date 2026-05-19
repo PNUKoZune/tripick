@@ -5,6 +5,9 @@
   "scripts": {
     "start": "pnpm db:up && turbo run dev",
     "dev": "turbo run dev",
+    "dev:mobile": "pnpm --filter @tripick/mobile start",
+    "dev:android": "pnpm --filter @tripick/mobile android",
+    "dev:ios": "pnpm --filter @tripick/mobile ios",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",

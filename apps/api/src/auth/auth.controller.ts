@@ -16,6 +16,12 @@ export class AuthController {
     res.redirect(kakaoAuthUrl);
   }
 
+  @Get('kakao/status')
+  @ApiOperation({ summary: '카카오 OAuth 설정 상태 조회' })
+  kakaoStatus() {
+    return this.authService.getKakaoStatus();
+  }
+
   @Get('kakao/callback')
   @ApiOperation({ summary: '카카오 OAuth 콜백' })
   async kakaoCallback(@Query('code') code: string) {

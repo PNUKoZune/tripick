@@ -36,15 +36,13 @@ tmp/
 coverage
 .nyc_output
 
-# React Native
+# React Native — 공통 (앱 별 native 디렉터리 안의 build 산출물은 apps/mobile/.gitignore 에서 처리)
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
 *.orig.*
-/android
-/ios
 web-build
 
 # TypeScript

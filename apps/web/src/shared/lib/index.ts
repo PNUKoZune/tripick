@@ -1,4 +1,4 @@
-export { api } from '@/lib/api';
+export { api } from '@/shared/api/client';
 export { loadKakaoMaps, getKakaoKey } from './kakao-loader';
 export type {
   KakaoMapInstance,

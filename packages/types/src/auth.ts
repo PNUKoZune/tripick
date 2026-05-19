@@ -29,3 +29,9 @@ export interface LoginResponseDto {
 export interface DemoLoginDto {
   nickname?: string;
 }
+
+export interface KakaoAuthStatusDto {
+  ready: boolean;
+  authorizeUrl?: string;
+  missingKeys?: string[];
+}
