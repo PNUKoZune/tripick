@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CompanionPreference,
   TransportPreference,
@@ -22,6 +23,7 @@ import {
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { startDemoSession } from '@/entities/session/api/auth-api';
 import { ensureActiveTrip } from '@/entities/trip/api/trip-api';
+import { queryKeys } from '@/shared/api/query-keys';
 import { InlineNotice, PrimaryButton, SegmentedOption } from '@/shared/ui/app-frame';
 
 type Notice = {
@@ -32,42 +34,44 @@ type Notice = {
 
 export function PreferenceSetupForm() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const hydrated = useRef(false);
   const [form, setForm] = useState<PreferenceFormState>(DEFAULT_PREFERENCE_FORM);
   const [hasSavedPreference, setHasSavedPreference] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [hasSession, setHasSession] = useState(() => Boolean(getStoredSession()));
   const [notice, setNotice] = useState<Notice | null>(null);
 
+  const preferenceQuery = useQuery({
+    queryKey: queryKeys.preferences.me,
+    queryFn: async () => {
+      const session = getStoredSession();
+      if (!session) {
+        return null;
+      }
+      return getMyPreferences(session.tokens.accessToken);
+    },
+    enabled: hasSession,
+    staleTime: 5 * 60 * 1000,
+  });
+
   useEffect(() => {
-    let cancelled = false;
-    const session = getStoredSession();
-    if (!session) {
-      return () => {
-        cancelled = true;
-      };
+    if (!preferenceQuery.data?.profile || hydrated.current) {
+      return;
     }
-    void getMyPreferences(session.tokens.accessToken)
-      .then((preference) => {
-        if (cancelled) {
-          return;
-        }
-        if (preference?.profile) {
-          setForm({ ...DEFAULT_PREFERENCE_FORM, ...preference.profile });
-          setHasSavedPreference(true);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setNotice({
-            title: '불러오기 실패',
-            description: '저장된 취향을 불러오지 못했습니다.',
-            tone: 'red',
-          });
-        }
+    hydrated.current = true;
+    setForm({ ...DEFAULT_PREFERENCE_FORM, ...preferenceQuery.data.profile });
+    setHasSavedPreference(true);
+  }, [preferenceQuery.data]);
+
+  useEffect(() => {
+    if (preferenceQuery.error instanceof Error) {
+      setNotice({
+        title: '불러오기 실패',
+        description: preferenceQuery.error.message,
+        tone: 'red',
       });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    }
+  }, [preferenceQuery.error]);
 
   const ready =
     form.travelStyles.length > 0 &&
@@ -75,22 +79,24 @@ export function PreferenceSetupForm() {
     form.transportModes.length > 0 &&
     form.wakeTime < form.sleepTime;
 
-  async function handleSubmit() {
-    if (!ready) {
-      setNotice({
-        title: '확인 필요',
-        description: '취향, 동행 유형, 이동수단을 하나 이상 고르고 시간을 확인해주세요.',
-        tone: 'red',
-      });
-      return;
-    }
-    setLoading(true);
-    setNotice(null);
-    try {
+  const savePreferenceMutation = useMutation({
+    mutationFn: async ({
+      nextForm,
+    }: {
+      nextForm: PreferenceFormState;
+      shouldStayAfterSave: boolean;
+    }) => {
       const session = getStoredSession() ?? (await startDemoSession());
-      const shouldStayAfterSave = hasSavedPreference;
-      await savePreferences(session.tokens.accessToken, form);
-      await ensureActiveTrip(session.tokens.accessToken);
+      const [preference, activeTrip] = await Promise.all([
+        savePreferences(session.tokens.accessToken, nextForm),
+        ensureActiveTrip(session.tokens.accessToken),
+      ]);
+      return { activeTrip, preference };
+    },
+    onSuccess: ({ activeTrip, preference }, { shouldStayAfterSave }) => {
+      queryClient.setQueryData(queryKeys.preferences.me, preference);
+      queryClient.setQueryData(queryKeys.trips.active, activeTrip);
+      setHasSession(true);
       setHasSavedPreference(true);
       if (shouldStayAfterSave) {
         setNotice({
@@ -101,15 +107,30 @@ export function PreferenceSetupForm() {
         return;
       }
       router.push('/members');
-    } catch (error) {
+    },
+    onError: (error) => {
       setNotice({
         title: '저장 실패',
         description: error instanceof Error ? error.message : '취향 저장에 실패했습니다.',
         tone: 'red',
       });
-    } finally {
-      setLoading(false);
+    },
+  });
+
+  function handleSubmit() {
+    if (!ready) {
+      setNotice({
+        title: '확인 필요',
+        description: '취향, 동행 유형, 이동수단을 하나 이상 고르고 시간을 확인해주세요.',
+        tone: 'red',
+      });
+      return;
     }
+    setNotice(null);
+    savePreferenceMutation.mutate({
+      nextForm: form,
+      shouldStayAfterSave: hasSavedPreference,
+    });
   }
 
   return (
@@ -225,8 +246,12 @@ export function PreferenceSetupForm() {
         <InlineNotice title={notice.title} description={notice.description} tone={notice.tone} />
       ) : null}
       <div className="lg:max-w-[360px]">
-        <PrimaryButton disabled={loading || !ready} onClick={handleSubmit}>
-          {loading ? '저장 중' : hasSavedPreference ? '취향 저장' : '취향 저장하고 멤버 추가'}
+        <PrimaryButton disabled={savePreferenceMutation.isPending || !ready} onClick={handleSubmit}>
+          {savePreferenceMutation.isPending
+            ? '저장 중'
+            : hasSavedPreference
+              ? '취향 저장'
+              : '취향 저장하고 멤버 추가'}
         </PrimaryButton>
       </div>
     </div>

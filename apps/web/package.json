@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.100.11",
     "@tripick/types": "workspace:*",
     "next": "^16.2.4",
     "react": "^19.2.5",

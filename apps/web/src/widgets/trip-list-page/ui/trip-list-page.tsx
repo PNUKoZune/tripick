@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { TripSummaryStatus, TripSummaryDto } from '@tripick/types';
 
 import { fetchPlannerTrips, TripSummaryCard } from '@/entities/trip-plan';
+import { queryKeys } from '@/shared/api/query-keys';
 import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
 import { Button, Chip } from '@/shared/ui';
 
@@ -19,25 +21,14 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
 ];
 
 export function TripListPage() {
-  const [trips, setTrips] = useState<TripSummaryDto[]>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
+  const { data: trips = [], error } = useQuery({
+    queryKey: queryKeys.planner.trips,
+    queryFn: fetchPlannerTrips,
+    staleTime: 5 * 60 * 1000,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchPlannerTrips()
-      .then((result) => {
-        if (cancelled) return;
-        setTrips(result);
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        setLoadError(error instanceof Error ? error.message : '여행 목록을 불러오지 못했어요.');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const loadError = error instanceof Error ? error.message : null;
 
   const filtered = useMemo(() => {
     if (filter === 'all') return trips;

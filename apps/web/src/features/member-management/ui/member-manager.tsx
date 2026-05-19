@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { TripDto, TripMemberDto, TripMemberPreferenceDto } from '@tripick/types';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { TripMemberPreferenceDto } from '@tripick/types';
 import {
   createTripMember,
   deleteTripMember,
@@ -16,6 +17,7 @@ import {
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { startDemoSession } from '@/entities/session/api/auth-api';
 import { ensureActiveTrip } from '@/entities/trip/api/trip-api';
+import { queryKeys } from '@/shared/api/query-keys';
 import {
   InlineNotice,
   PrimaryButton,
@@ -55,75 +57,112 @@ const PREFERENCE_LABELS: Record<string, string> = {
 
 export function MemberManager() {
   const router = useRouter();
-  const [trip, setTrip] = useState<TripDto | null>(null);
-  const [members, setMembers] = useState<TripMemberDto[]>([]);
+  const queryClient = useQueryClient();
   const [nickname, setNickname] = useState('');
   const [contact, setContact] = useState('');
   const [preference, setPreference] = useState<TripMemberPreferenceDto>(DEFAULT_MEMBER_PREF);
-  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    void load();
-  }, []);
-
-  async function load() {
-    setLoading(true);
-    setMessage(null);
-    try {
+  const activeTripQuery = useQuery({
+    queryKey: queryKeys.trips.active,
+    queryFn: async () => {
       const session = getStoredSession() ?? (await startDemoSession());
-      const activeTrip = await ensureActiveTrip(session.tokens.accessToken);
-      const nextMembers = await getTripMembers(session.tokens.accessToken, activeTrip.id);
-      setTrip(activeTrip);
-      setMembers(nextMembers);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '멤버 정보를 불러오지 못했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  }
+      return ensureActiveTrip(session.tokens.accessToken);
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
-  async function handleAddMember() {
-    const session = getStoredSession();
-    if (!session || !trip || !nickname.trim()) {
-      setMessage('이름을 입력하면 멤버를 추가할 수 있습니다.');
-      return;
-    }
-    setLoading(true);
-    setMessage(null);
-    try {
-      await createTripMember(session.tokens.accessToken, trip.id, {
+  const trip = activeTripQuery.data ?? null;
+  const membersQuery = useQuery({
+    queryKey: queryKeys.trips.members(trip?.id ?? 'pending'),
+    queryFn: async () => {
+      const session = getStoredSession() ?? (await startDemoSession());
+      if (!trip) {
+        return [];
+      }
+      return getTripMembers(session.tokens.accessToken, trip.id);
+    },
+    enabled: Boolean(trip),
+    staleTime: 30 * 1000,
+  });
+
+  const members = membersQuery.data ?? [];
+  const addMemberMutation = useMutation({
+    mutationFn: async () => {
+      const session = getStoredSession() ?? (await startDemoSession());
+      if (!trip) {
+        throw new Error('여행 정보를 불러온 뒤 다시 시도해주세요.');
+      }
+      return createTripMember(session.tokens.accessToken, trip.id, {
         nickname,
         contact,
         status: contact.trim() ? 'pending' : 'accepted',
         preferenceTags: preference,
       });
+    },
+    onSuccess: async () => {
+      if (!trip) {
+        return;
+      }
       setNickname('');
       setContact('');
       setPreference(DEFAULT_MEMBER_PREF);
-      setMembers(await getTripMembers(session.tokens.accessToken, trip.id));
-    } catch (error) {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.trips.members(trip.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.trips.coordination(trip.id) }),
+      ]);
+    },
+    onError: (error) => {
       setMessage(error instanceof Error ? error.message : '멤버 추가에 실패했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  }
+    },
+  });
 
-  async function handleDelete(memberId: string) {
-    const session = getStoredSession();
-    if (!session || !trip) {
+  const deleteMemberMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      const session = getStoredSession();
+      if (!session || !trip) {
+        return null;
+      }
+      return deleteTripMember(session.tokens.accessToken, trip.id, memberId);
+    },
+    onSuccess: async () => {
+      if (!trip) {
+        return;
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.trips.members(trip.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.trips.coordination(trip.id) }),
+      ]);
+    },
+    onError: (error) => {
+      setMessage(error instanceof Error ? error.message : '멤버 삭제에 실패했습니다.');
+    },
+  });
+
+  const loading =
+    activeTripQuery.isPending ||
+    membersQuery.isPending ||
+    addMemberMutation.isPending ||
+    deleteMemberMutation.isPending;
+  const loadError =
+    activeTripQuery.error instanceof Error
+      ? activeTripQuery.error.message
+      : membersQuery.error instanceof Error
+        ? membersQuery.error.message
+        : null;
+
+  function handleAddMember() {
+    if (!trip || !nickname.trim()) {
+      setMessage('이름을 입력하면 멤버를 추가할 수 있습니다.');
       return;
     }
-    setLoading(true);
     setMessage(null);
-    try {
-      await deleteTripMember(session.tokens.accessToken, trip.id, memberId);
-      setMembers(await getTripMembers(session.tokens.accessToken, trip.id));
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '멤버 삭제에 실패했습니다.');
-    } finally {
-      setLoading(false);
-    }
+    addMemberMutation.mutate();
+  }
+
+  function handleDelete(memberId: string) {
+    setMessage(null);
+    deleteMemberMutation.mutate(memberId);
   }
 
   return (
@@ -216,9 +255,9 @@ export function MemberManager() {
         </div>
       </section>
 
-      {message ? (
+      {message || loadError ? (
         <div className="lg:col-span-2">
-          <InlineNotice title="상태" description={message} tone="red" />
+          <InlineNotice title="상태" description={message ?? loadError ?? ''} tone="red" />
         </div>
       ) : null}
       <div className="lg:col-span-2 lg:max-w-[360px]">

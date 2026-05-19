@@ -1,48 +1,54 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import type { PreferenceCoordinationDto, PreferenceVoteDto, TripDto } from '@tripick/types';
+import { useQuery } from '@tanstack/react-query';
+import type { PreferenceVoteDto } from '@tripick/types';
 import { getPreferenceCoordination } from '@/entities/member/api/member-api';
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { startDemoSession } from '@/entities/session/api/auth-api';
 import { ensureActiveTrip } from '@/entities/trip/api/trip-api';
+import { queryKeys } from '@/shared/api/query-keys';
 import { InlineNotice, PrimaryButton, SecondaryButton } from '@/shared/ui/app-frame';
 
 export function CoordinationBoard() {
   const router = useRouter();
-  const [trip, setTrip] = useState<TripDto | null>(null);
-  const [coordination, setCoordination] = useState<PreferenceCoordinationDto | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const activeTripQuery = useQuery({
+    queryKey: queryKeys.trips.active,
+    queryFn: async () => {
+      const session = getStoredSession() ?? (await startDemoSession());
+      return ensureActiveTrip(session.tokens.accessToken);
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
-  useEffect(() => {
-    void load();
-  }, []);
+  const trip = activeTripQuery.data ?? null;
+  const coordinationQuery = useQuery({
+    queryKey: queryKeys.trips.coordination(trip?.id ?? 'pending'),
+    queryFn: async () => {
+      const session = getStoredSession() ?? (await startDemoSession());
+      if (!trip) {
+        throw new Error('여행 정보를 불러온 뒤 다시 시도해주세요.');
+      }
+      return getPreferenceCoordination(session.tokens.accessToken, trip.id);
+    },
+    enabled: Boolean(trip),
+    staleTime: 30 * 1000,
+  });
+
+  const coordination = coordinationQuery.data ?? null;
+  const loading = activeTripQuery.isFetching || coordinationQuery.isFetching;
+  const message =
+    activeTripQuery.error instanceof Error
+      ? activeTripQuery.error.message
+      : coordinationQuery.error instanceof Error
+        ? coordinationQuery.error.message
+        : null;
 
   const memberNames = useMemo(
     () => coordination?.members.map((member) => member.nickname).join(' · ') ?? '',
     [coordination],
   );
-
-  async function load() {
-    setLoading(true);
-    setMessage(null);
-    try {
-      const session = getStoredSession() ?? (await startDemoSession());
-      const activeTrip = await ensureActiveTrip(session.tokens.accessToken);
-      const nextCoordination = await getPreferenceCoordination(
-        session.tokens.accessToken,
-        activeTrip.id,
-      );
-      setTrip(activeTrip);
-      setCoordination(nextCoordination);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '취향 조율 결과를 불러오지 못했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  }
 
   return (
     <div className="space-y-8">
@@ -59,7 +65,7 @@ export function CoordinationBoard() {
           <button
             type="button"
             disabled={loading}
-            onClick={() => void load()}
+            onClick={() => void coordinationQuery.refetch()}
             className="h-9 rounded-full bg-[color:var(--soft-bg)] px-3 text-[13px] font-bold text-[color:var(--text-secondary)]"
           >
             새로고침

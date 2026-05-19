@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { PlannerItineraryItemDto, PlannerMapMarkerDto, PlannerTripDto } from '@tripick/types';
 
 import Link from 'next/link';
@@ -9,6 +10,7 @@ import { DEMO_TRIP_ID, fetchPlannerTrip } from '@/entities/trip-plan';
 import { MemberAvatars } from '@/entities/member';
 import { DaySelector } from '@/features/day-selector';
 import { PlannerTabs, type PlannerTab } from '@/features/planner-tab-switch';
+import { queryKeys } from '@/shared/api/query-keys';
 import { Button, Chip } from '@/shared/ui';
 import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
 import { AlternativeSheet } from '@/widgets/alternative-sheet';
@@ -19,30 +21,26 @@ import { TripInfoPanel } from '@/widgets/trip-info-panel';
 import { TripMapPanel } from '@/widgets/trip-map-panel';
 
 export function PlannerPage() {
-  const [trip, setTrip] = useState<PlannerTripDto | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<PlannerTab>('schedule');
   const [day, setDay] = useState(1);
   const [openItem, setOpenItem] = useState<PlannerItineraryItemDto | null>(null);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [swapResult, setSwapResult] = useState<{ id: string; name: string } | null>(null);
+  const { data: trip = null, error } = useQuery<PlannerTripDto>({
+    queryKey: queryKeys.planner.trip(DEMO_TRIP_ID),
+    queryFn: () => fetchPlannerTrip(DEMO_TRIP_ID),
+    staleTime: 5 * 60 * 1000,
+  });
 
   useEffect(() => {
-    let cancelled = false;
-    fetchPlannerTrip(DEMO_TRIP_ID)
-      .then((result) => {
-        if (cancelled) return;
-        setTrip(result);
-        setDay(result.days[0]?.day ?? 1);
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        setLoadError(error instanceof Error ? error.message : '여행 정보를 불러오지 못했어요.');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (trip) {
+      setDay((current) =>
+        trip.days.some((item) => item.day === current) ? current : (trip.days[0]?.day ?? 1),
+      );
+    }
+  }, [trip]);
+
+  const loadError = error instanceof Error ? error.message : null;
 
   const itemsForDay = useMemo(() => {
     if (!trip) return [];

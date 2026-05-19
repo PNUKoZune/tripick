@@ -1,12 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PlannerAlternativeResponseDto } from '@tripick/types';
 
-import {
-  fetchPlannerAlternatives,
-  swapPlannerItem,
-} from '@/entities/trip-plan';
+import { fetchPlannerAlternatives, swapPlannerItem } from '@/entities/trip-plan';
+import { queryKeys } from '@/shared/api/query-keys';
 
 type State =
   | { status: 'idle' }
@@ -15,59 +14,73 @@ type State =
   | { status: 'ready'; data: PlannerAlternativeResponseDto };
 
 export function useAlternativeController(tripId: string, itemId: string | null) {
-  const [state, setState] = useState<State>({ status: 'idle' });
+  const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [appliedName, setAppliedName] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const alternativesQuery = useQuery({
+    queryKey: queryKeys.planner.alternatives(tripId, itemId ?? 'pending'),
+    queryFn: () => {
+      if (!itemId) {
+        throw new Error('일정 항목을 먼저 선택해주세요.');
+      }
+      return fetchPlannerAlternatives(tripId, itemId);
+    },
+    enabled: Boolean(itemId),
+    staleTime: 2 * 60 * 1000,
+  });
 
   useEffect(() => {
     if (!itemId) {
-      setState({ status: 'idle' });
       setSelectedId(null);
       setAppliedName(null);
       return;
     }
-    let cancelled = false;
-    setState({ status: 'loading' });
-    fetchPlannerAlternatives(tripId, itemId)
-      .then((data) => {
-        if (cancelled) return;
-        setState({ status: 'ready', data });
-        setSelectedId(data.alternatives[0]?.id ?? null);
-        setAppliedName(null);
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        const message =
-          error instanceof Error ? error.message : '대안을 불러오지 못했어요.';
-        setState({ status: 'error', message });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tripId, itemId]);
+    if (alternativesQuery.data) {
+      setSelectedId(alternativesQuery.data.alternatives[0]?.id ?? null);
+      setAppliedName(null);
+    }
+  }, [itemId, alternativesQuery.data]);
 
-  const apply = useCallback(async () => {
-    if (!itemId || !selectedId || submitting) return null;
-    setSubmitting(true);
-    try {
-      const result = await swapPlannerItem(tripId, {
+  const applyMutation = useMutation({
+    mutationFn: async () => {
+      if (!itemId || !selectedId) {
+        return null;
+      }
+      return swapPlannerItem(tripId, {
         itemId,
         alternativeId: selectedId,
       });
+    },
+    onSuccess: async (result) => {
+      if (!result) {
+        return;
+      }
       setAppliedName(result.newItemName);
-      return result;
-    } finally {
-      setSubmitting(false);
-    }
-  }, [tripId, itemId, selectedId, submitting]);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.planner.trip(tripId) });
+    },
+  });
+
+  const state: State = !itemId
+    ? { status: 'idle' }
+    : alternativesQuery.isPending
+      ? { status: 'loading' }
+      : alternativesQuery.error instanceof Error
+        ? { status: 'error', message: alternativesQuery.error.message }
+        : alternativesQuery.data
+          ? { status: 'ready', data: alternativesQuery.data }
+          : { status: 'loading' };
+
+  const apply = useCallback(async () => {
+    if (!itemId || !selectedId || applyMutation.isPending) return null;
+    return applyMutation.mutateAsync();
+  }, [applyMutation, itemId, selectedId]);
 
   return {
     state,
     selectedId,
     setSelectedId,
     apply,
-    submitting,
+    submitting: applyMutation.isPending,
     appliedName,
   };
 }
