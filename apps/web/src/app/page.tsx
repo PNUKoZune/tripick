@@ -1,5 +1,5 @@
-import { TripListPage } from '@/widgets/trip-list-page';
+import { TripsView } from '@/views/trips/ui/trips-view';
 
 export default function Page() {
-  return <TripListPage />;
+  return <TripsView />;
 }

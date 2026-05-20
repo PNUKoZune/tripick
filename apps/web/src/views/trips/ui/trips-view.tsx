@@ -20,7 +20,7 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
   { value: 'done', label: '다녀옴' },
 ];
 
-export function TripListPage() {
+export function TripsView() {
   const [filter, setFilter] = useState<Filter>('all');
   const { data: trips = [], error } = useQuery({
     queryKey: queryKeys.planner.trips,

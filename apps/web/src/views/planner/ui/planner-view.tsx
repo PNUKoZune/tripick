@@ -20,7 +20,7 @@ import { PlannerTimeline } from '@/widgets/planner-timeline';
 import { TripInfoPanel } from '@/widgets/trip-info-panel';
 import { TripMapPanel } from '@/widgets/trip-map-panel';
 
-export function PlannerPage() {
+export function PlannerView() {
   const [tab, setTab] = useState<PlannerTab>('schedule');
   const [day, setDay] = useState(1);
   const [openItem, setOpenItem] = useState<PlannerItineraryItemDto | null>(null);

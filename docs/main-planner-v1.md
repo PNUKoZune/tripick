@@ -70,19 +70,21 @@ mobile-first 셸과 데스크탑 웹 레이아웃을 별도 트리로 렌더해 
 ```
 apps/web/src/
 ├── app/
-│   ├── planner/page.tsx              # Screen 3·4 라우트
-│   └── trips/page.tsx                # 내 여행 목록 라우트
+│   ├── planner/page.tsx              # Screen 3·4 라우트 → views/planner
+│   └── trips/page.tsx                # 내 여행 목록 라우트 → views/trips
 │
-├── widgets/
-│   ├── planner-page/                 # Screen 3 전체 (모바일 셸 + 데스크탑 레이아웃)
+├── views/                            # 라우트 컴포지션 (FSD 7.x)
+│   ├── trips/                        # /, /trips — TripsView
+│   └── planner/                      # /planner — PlannerView
+│
+├── widgets/                          # 재사용 가능한 UI 블록
 │   ├── planner-header/               # 상단 타이틀 + 멤버 아바타
 │   ├── planner-map/                  # 카카오맵 SDK + 폴백 + 마커 오버레이
 │   ├── planner-timeline/             # day 별 타임라인 리스트 (선택 상태 지원)
 │   ├── planner-bottom-nav/           # 홈/지도/내 여행/프로필 (Next Link 연결)
 │   ├── alternative-sheet/            # Screen 4 바텀시트
 │   ├── trip-info-panel/              # 정보 탭 / 데스크탑 우측 패널
-│   ├── trip-map-panel/               # 모바일 지도 탭 (큰 지도 + 콤팩트 리스트)
-│   └── trip-list-page/               # /trips 전체 (모바일 셸 + 데스크탑 그리드)
+│   └── trip-map-panel/               # 모바일 지도 탭 (큰 지도 + 콤팩트 리스트)
 │
 ├── features/
 │   ├── planner-tab-switch/           # 일정/지도/정보 탭 (모바일)
@@ -102,7 +104,9 @@ apps/web/src/
 ```
 
 규칙:
-- `entities` → `features` → `widgets` → `app` 방향으로만 import 한다.
+- import 방향: `entities` → `features` → `widgets` → `views` → `app`
+- 라우트 단위의 페이지 composition 은 `views/<route>/ui/<route>-view.tsx` 에 두고, 컴포넌트명은 `*View` 로 통일 (`TripsView`, `PlannerView`). 동료의 landing/preferences/members/coordination 패턴과 동일.
+- `widgets/` 는 여러 view 에서 재사용 가능한 블록만. 라우트별 화면 조립은 `widgets/` 에 두지 않는다.
 - shared/ui 는 어떤 도메인에도 종속되지 않는 primitive 만 둔다.
 - 도메인 hook (예: `useAlternativeController`)은 widget 이 아닌 feature 에 위치시킨다.
 - mock 의존이 강한 헬퍼는 `entities/trip-plan/api.ts` 한 군데에만 둔다.
@@ -176,14 +180,14 @@ mock fixture: [`apps/api/src/main-planner/main-planner.mock.ts`](../apps/api/src
 | 일정 탭 타임라인        | `widgets/planner-timeline` → `entities/itinerary-item`    |
 | 지도 탭                | `widgets/trip-map-panel` (큰 지도 + 콤팩트 row 리스트)    |
 | 정보 탭                | `widgets/trip-info-panel` (개요/취향/통계/날씨)            |
-| AI 플로팅 버튼          | `widgets/planner-page` 내부 fixed 버튼 (웨이팅 항목 우선) |
+| AI 플로팅 버튼          | `views/planner` 내부 fixed 버튼 (웨이팅 항목 우선) |
 | 하단 4-tab 내비         | `widgets/planner-bottom-nav`                              |
 
 ### Screen 3 — 데스크탑 (≥ `lg`)
 
 | 영역                   | 컴포넌트                                                  |
 | ---------------------- | --------------------------------------------------------- |
-| 상단 헤더              | `widgets/planner-page` 인라인 (제목, 기간 칩, 멤버, AI CTA)|
+| 상단 헤더              | `views/planner` 인라인 (제목, 기간 칩, 멤버, AI CTA)|
 | 좌측 일정 패널          | `features/day-selector` + `widgets/planner-timeline`      |
 | 중앙 큰 지도            | `widgets/planner-map` (`fill` 모드)                       |
 | 우측 정보 패널 (xl+)    | `widgets/trip-info-panel`                                 |
@@ -192,7 +196,7 @@ mock fixture: [`apps/api/src/main-planner/main-planner.mock.ts`](../apps/api/src
 
 | 영역                       | 컴포넌트                                              |
 | -------------------------- | ----------------------------------------------------- |
-| 상단 헤더 (브랜드 / CTA)   | `widgets/trip-list-page` 인라인                       |
+| 상단 헤더 (브랜드 / CTA)   | `views/trips` 인라인                       |
 | 통계 타일 (전체/곧/초안/끝)| 인라인 `SummaryTile`                                  |
 | 상태 필터 chip             | 인라인 `FilterBar` (`all/upcoming/ongoing/draft/done`)|
 | 여행 카드                  | `entities/trip-plan/TripSummaryCard` (Next `Link`)    |
