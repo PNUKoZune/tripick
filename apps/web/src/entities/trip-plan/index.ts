@@ -4,6 +4,8 @@ export {
   fetchPlannerTrip,
   fetchPlannerAlternatives,
   swapPlannerItem,
+  fetchDestinationSuggestions,
+  createTrip,
 } from './api';
 export { TripSummaryCard } from './ui/trip-summary-card';
 export type {
@@ -12,4 +14,6 @@ export type {
   PlannerMemberDto as TripMember,
   PlannerMapMarkerDto as TripMapMarker,
   TripSummaryDto as TripSummary,
+  DestinationSuggestionDto as TripDestinationSuggestion,
+  CreateTripRequestDto as CreateTripInput,
 } from '@tripick/types';

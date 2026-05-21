@@ -1,7 +1,11 @@
-import type { TripSummaryDto } from '@tripick/types';
+import type { CreateTripRequestDto, TripSummaryDto } from '@tripick/types';
 
 import { PLANNER_TRIP_MOCK } from './main-planner.mock';
 
+/**
+ * 데모용 in-memory 저장소. 프로세스 재시작 시 초기화된다.
+ * 신규 생성된 trip 은 상세 mock (PLANNER_TRIP_MOCK) 이 없으므로 hasDetail=false 로 둔다.
+ */
 export const TRIP_SUMMARIES_MOCK: TripSummaryDto[] = [
   {
     id: PLANNER_TRIP_MOCK.id,
@@ -72,3 +76,72 @@ export const TRIP_SUMMARIES_MOCK: TripSummaryDto[] = [
     hasDetail: false,
   },
 ];
+
+const STATUS_LABEL: Record<TripSummaryDto['status'], string> = {
+  draft: '초안',
+  upcoming: '곧 출발',
+  ongoing: '진행 중',
+  done: '다녀옴',
+};
+
+function formatDateLabel(iso: string) {
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  const dow = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
+  return `${d.getMonth() + 1}/${d.getDate()} ${dow}`;
+}
+
+function buildDurationLabel(
+  startDate: string,
+  endDate: string,
+  startTime?: string,
+  endTime?: string,
+) {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  const diff = Math.max(
+    0,
+    Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)),
+  );
+  const head = diff === 0 ? '당일치기' : `${diff}박 ${diff + 1}일`;
+  const startLabel = `${formatDateLabel(startDate)}${startTime ? ` ${startTime}` : ''}`;
+  const endLabel = `${formatDateLabel(endDate)}${endTime ? ` ${endTime}` : ''}`;
+  return `${head} · ${startLabel} ~ ${endLabel}`;
+}
+
+function resolveStatus(startDate: string): TripSummaryDto['status'] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = new Date(`${startDate}T00:00:00`);
+  const diffDays = Math.round((start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) return 'done';
+  if (diffDays <= 30) return 'upcoming';
+  return 'draft';
+}
+
+export function appendTripSummaryMock(input: CreateTripRequestDto): TripSummaryDto {
+  const id = `trip-${Date.now().toString(36)}`;
+  const status = resolveStatus(input.startDate);
+  const summary: TripSummaryDto = {
+    id,
+    title: input.title,
+    destination: input.destination,
+    startDate: input.startDate,
+    endDate: input.endDate,
+    durationLabel: buildDurationLabel(
+      input.startDate,
+      input.endDate,
+      input.startTime,
+      input.endTime,
+    ),
+    status,
+    statusLabel: STATUS_LABEL[status],
+    members: input.members,
+    coverEmoji: '🧳',
+    highlight: input.notes?.trim() || '새로 생성된 여행 계획',
+    itemCount: 0,
+    hasDetail: false,
+  };
+  TRIP_SUMMARIES_MOCK.unshift(summary);
+  return summary;
+}

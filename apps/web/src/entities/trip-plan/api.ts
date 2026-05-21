@@ -1,4 +1,6 @@
 import type {
+  CreateTripRequestDto,
+  DestinationSuggestionDto,
   PlannerAlternativeResponseDto,
   PlannerSwapResponseDto,
   PlannerTripDto,
@@ -28,4 +30,13 @@ export function swapPlannerItem(
   body: { itemId: string; alternativeId: string },
 ) {
   return api.post<PlannerSwapResponseDto>(`/main-planner/trips/${tripId}/swap`, body);
+}
+
+export function fetchDestinationSuggestions(query: string) {
+  const search = query ? `?q=${encodeURIComponent(query)}` : '';
+  return api.get<DestinationSuggestionDto[]>(`/main-planner/destinations${search}`);
+}
+
+export function createTrip(body: CreateTripRequestDto) {
+  return api.post<TripSummaryDto>('/main-planner/trips', body);
 }

@@ -1,5 +1,5 @@
-import { PlannerPage } from '@/widgets/planner-page';
+import { PlannerView } from '@/views/planner/ui/planner-view';
 
 export default function Page() {
-  return <PlannerPage />;
+  return <PlannerView />;
 }
