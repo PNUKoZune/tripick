@@ -1,11 +1,26 @@
-import { Controller, Get, NotFoundException, Param, Post, Body, HttpCode } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Post,
+  Body,
+  HttpCode,
+  Query,
+  BadRequestException,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import type { PlannerSwapRequestDto, PlannerSwapResponseDto } from '@tripick/types';
+import type {
+  CreateTripRequestDto,
+  PlannerSwapRequestDto,
+  PlannerSwapResponseDto,
+} from '@tripick/types';
 import {
   getPlannerAlternativesMock,
   getPlannerTripMock,
 } from './main-planner.mock';
-import { TRIP_SUMMARIES_MOCK } from './main-planner-trips.mock';
+import { appendTripSummaryMock, TRIP_SUMMARIES_MOCK } from './main-planner-trips.mock';
+import { searchDestinationsMock } from './destinations.mock';
 
 /**
  * v1 Screen 3/4 mock controller.
@@ -18,6 +33,36 @@ export class MainPlannerController {
   @ApiOperation({ summary: '내 여행 목록 mock' })
   listTrips() {
     return TRIP_SUMMARIES_MOCK;
+  }
+
+  @Get('destinations')
+  @ApiOperation({ summary: '여행 지역 자동완성 mock' })
+  searchDestinations(@Query('q') q?: string) {
+    return searchDestinationsMock(q ?? '');
+  }
+
+  @Post('trips')
+  @ApiOperation({ summary: '신규 여행 생성 mock (in-memory)' })
+  createTrip(@Body() dto: CreateTripRequestDto) {
+    if (!dto?.title?.trim()) {
+      throw new BadRequestException('제목을 입력해주세요.');
+    }
+    if (!dto.destination?.trim()) {
+      throw new BadRequestException('여행 지역을 입력해주세요.');
+    }
+    if (!dto.startDate || !dto.endDate) {
+      throw new BadRequestException('여행 기간을 선택해주세요.');
+    }
+    if (dto.startDate > dto.endDate) {
+      throw new BadRequestException('시작일은 종료일보다 빨라야 합니다.');
+    }
+    if (!dto.startTime || !dto.endTime) {
+      throw new BadRequestException('출발/도착 시각을 입력해주세요.');
+    }
+    if (dto.startDate === dto.endDate && dto.startTime >= dto.endTime) {
+      throw new BadRequestException('도착 시각은 출발 시각보다 늦어야 합니다.');
+    }
+    return appendTripSummaryMock(dto);
   }
 
   @Get('trips/:tripId')

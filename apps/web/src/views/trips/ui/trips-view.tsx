@@ -8,7 +8,6 @@ import type { TripSummaryStatus, TripSummaryDto } from '@tripick/types';
 import { fetchPlannerTrips, TripSummaryCard } from '@/entities/trip-plan';
 import { queryKeys } from '@/shared/api/query-keys';
 import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
-import { Button, Chip } from '@/shared/ui';
 
 type Filter = 'all' | TripSummaryStatus;
 
@@ -46,9 +45,18 @@ export function TripsView() {
     <div className="min-h-dvh bg-[#F7F8FA]">
       {/* < lg : 폰 셸 */}
       <div className="mx-auto min-h-dvh max-w-[430px] bg-white pb-[88px] lg:hidden">
-        <header className="px-5 pb-4 pt-6">
-          <div className="text-[13px] font-black leading-5 text-[#3182F6]">TriPick</div>
-          <h1 className="mt-2 text-[28px] font-black leading-9 text-[#191F28]">내 여행</h1>
+        <header className="flex items-end justify-between px-5 pb-4 pt-6">
+          <div>
+            <div className="text-[13px] font-black leading-5 text-[#3182F6]">TriPick</div>
+            <h1 className="mt-2 text-[28px] font-black leading-9 text-[#191F28]">내 여행</h1>
+          </div>
+          <Link
+            href="/trips/new"
+            className="inline-flex h-10 items-center gap-1 rounded-full bg-[#3182F6] px-4 text-[13px] font-bold text-white shadow-[0_6px_16px_rgba(49,130,246,0.28)] hover:bg-[#1B64DA]"
+          >
+            <span aria-hidden>＋</span>
+            <span>새 여행</span>
+          </Link>
         </header>
 
         <div className="grid grid-cols-3 gap-2 px-5 pb-5">
@@ -97,9 +105,12 @@ export function TripsView() {
                 >
                   현재 데모 일정 보기
                 </Link>
-                <Button variant="primary" size="md" className="h-10 px-4 text-[14px]">
+                <Link
+                  href="/trips/new"
+                  className="inline-flex h-10 items-center justify-center rounded-[14px] bg-[#3182F6] px-4 text-[14px] font-semibold text-white transition hover:bg-[#1B64DA]"
+                >
                   새 여행 만들기
-                </Button>
+                </Link>
               </div>
             </div>
           </header>
@@ -194,7 +205,12 @@ function EmptyState() {
         다른 필터를 선택하거나 새 여행을 만들어보세요.
       </div>
       <div className="mt-3 flex justify-center">
-        <Chip tone="primary">새 여행 만들기 (mock)</Chip>
+        <Link
+          href="/trips/new"
+          className="inline-flex h-9 items-center rounded-full bg-[#3182F6] px-4 text-[13px] font-semibold text-white hover:bg-[#1B64DA]"
+        >
+          새 여행 만들기
+        </Link>
       </div>
     </div>
   );

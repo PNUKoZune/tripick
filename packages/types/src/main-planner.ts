@@ -148,3 +148,29 @@ export interface TripSummaryDto {
   /** 진행 가능한 데모 trip 만 true (현재는 경주 1박 2일 만 mock 상세를 갖는다) */
   hasDetail: boolean;
 }
+
+/** 여행 생성 폼에서 사용되는 자동완성 후보 */
+export interface DestinationSuggestionDto {
+  id: string;
+  /** 표시 이름 (예: "해운대") */
+  name: string;
+  /** 상위 행정 구역 (예: "부산광역시") */
+  region: string;
+  emoji: string;
+}
+
+export interface CreateTripRequestDto {
+  title: string;
+  destination: string;
+  /** ISO date (YYYY-MM-DD) */
+  startDate: string;
+  /** "HH:mm" 출발 시각 */
+  startTime: string;
+  /** ISO date (YYYY-MM-DD) */
+  endDate: string;
+  /** "HH:mm" 도착 시각 */
+  endTime: string;
+  members: PlannerMemberDto[];
+  /** 이번 여행에 추가로 반영하고 싶은 요청/제약 (예: "유아 동반", "해산물 알레르기") */
+  notes?: string;
+}
