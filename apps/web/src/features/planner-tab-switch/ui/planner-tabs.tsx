@@ -1,11 +1,12 @@
 'use client';
 
-export type PlannerTab = 'schedule' | 'map' | 'info';
+export type PlannerTab = 'schedule' | 'map' | 'info' | 'coordination';
 
 const ITEMS: Array<{ value: PlannerTab; label: string }> = [
   { value: 'schedule', label: '일정' },
   { value: 'map', label: '지도' },
   { value: 'info', label: '정보' },
+  { value: 'coordination', label: '조율' },
 ];
 
 type Props = {
@@ -16,7 +17,7 @@ type Props = {
 export function PlannerTabs({ value, onChange }: Props) {
   return (
     <div className="border-b border-[#E5E8EB] bg-white">
-      <div className="grid grid-cols-3">
+      <div className="grid grid-cols-4">
         {ITEMS.map((item) => {
           const active = value === item.value;
           return (

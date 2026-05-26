@@ -1,7 +1,10 @@
 import type {
+  AddTripMemberRequestDto,
   CreateTripRequestDto,
   DestinationSuggestionDto,
   PlannerAlternativeResponseDto,
+  PlannerCoordinationDto,
+  PlannerMemberDto,
   PlannerSwapResponseDto,
   PlannerTripDto,
   TripSummaryDto,
@@ -39,4 +42,16 @@ export function fetchDestinationSuggestions(query: string) {
 
 export function createTrip(body: CreateTripRequestDto) {
   return api.post<TripSummaryDto>('/main-planner/trips', body);
+}
+
+export function addTripMember(tripId: string, body: AddTripMemberRequestDto) {
+  return api.post<PlannerMemberDto[]>(`/main-planner/trips/${tripId}/members`, body);
+}
+
+export function removeTripMember(tripId: string, memberId: string) {
+  return api.delete<PlannerMemberDto[]>(`/main-planner/trips/${tripId}/members/${memberId}`);
+}
+
+export function fetchPlannerCoordination(tripId: string) {
+  return api.get<PlannerCoordinationDto>(`/main-planner/trips/${tripId}/coordination`);
 }

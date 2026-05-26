@@ -8,3 +8,4 @@ export * from './replanning';
 export * from './notification';
 export * from './main-planner';
 export * from './trip-member';
+export * from './friend';

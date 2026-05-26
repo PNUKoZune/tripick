@@ -149,6 +149,46 @@ export interface TripSummaryDto {
   hasDetail: boolean;
 }
 
+/** 플래너 헤더 시트 — 친구를 trip 멤버로 추가 */
+export interface AddTripMemberRequestDto {
+  friendId: string;
+}
+
+/** Trip 별 취향 조율 결과 (planner 탭 전용 경량 DTO) */
+export interface PlannerCoordinationMemberDto {
+  id: string;
+  initial: string;
+  color: string;
+  /** 사람별 취향 태그 라벨 (예: "한식·전통", "감성 코스") */
+  tasteLabels: string[];
+}
+
+export interface PlannerCoordinationVoteRowDto {
+  key: string;
+  label: string;
+  count: number;
+  /** 표를 던진 멤버 이니셜 */
+  voters: string[];
+}
+
+export interface PlannerCoordinationRecommendationDto {
+  title: string;
+  summary: string;
+  reasons: string[];
+  scheduleHint: string;
+}
+
+export interface PlannerCoordinationDto {
+  tripId: string;
+  members: PlannerCoordinationMemberDto[];
+  consensus: {
+    food: PlannerCoordinationVoteRowDto[];
+    mood: PlannerCoordinationVoteRowDto[];
+    environment: PlannerCoordinationVoteRowDto[];
+  };
+  recommendation: PlannerCoordinationRecommendationDto;
+}
+
 /** 여행 생성 폼에서 사용되는 자동완성 후보 */
 export interface DestinationSuggestionDto {
   id: string;

@@ -5,12 +5,15 @@ import {
   Param,
   Post,
   Body,
+  Delete,
+  ConflictException,
   HttpCode,
   Query,
   BadRequestException,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type {
+  AddTripMemberRequestDto,
   CreateTripRequestDto,
   PlannerSwapRequestDto,
   PlannerSwapResponseDto,
@@ -21,6 +24,12 @@ import {
 } from './main-planner.mock';
 import { appendTripSummaryMock, TRIP_SUMMARIES_MOCK } from './main-planner-trips.mock';
 import { searchDestinationsMock } from './destinations.mock';
+import { PLANNER_COORDINATION_MOCK } from './main-planner-coordination.mock';
+import { getFriendByIdMock } from '../friends/friends.mock';
+
+function tripMemberIdFromFriend(friendId: string) {
+  return `tm-${friendId}`;
+}
 
 /**
  * v1 Screen 3/4 mock controller.
@@ -90,6 +99,60 @@ export class MainPlannerController {
       throw new NotFoundException('mock alternatives not found');
     }
     return response;
+  }
+
+  @Get('trips/:tripId/coordination')
+  @ApiOperation({ summary: '여행 취향 조율 결과 mock' })
+  getCoordination(@Param('tripId') tripId: string) {
+    const trip = getPlannerTripMock(tripId);
+    if (!trip) {
+      throw new NotFoundException('mock trip not found');
+    }
+    return PLANNER_COORDINATION_MOCK;
+  }
+
+  @Post('trips/:tripId/members')
+  @ApiOperation({ summary: '여행 멤버로 친구 추가 (mock)' })
+  addMember(@Param('tripId') tripId: string, @Body() dto: AddTripMemberRequestDto) {
+    const trip = getPlannerTripMock(tripId);
+    if (!trip) {
+      throw new NotFoundException('mock trip not found');
+    }
+    if (!dto?.friendId) {
+      throw new BadRequestException('friendId 가 필요합니다.');
+    }
+    const friend = getFriendByIdMock(dto.friendId);
+    if (!friend) {
+      throw new NotFoundException('friend not found');
+    }
+    const memberId = tripMemberIdFromFriend(friend.id);
+    if (trip.members.some((m) => m.id === memberId)) {
+      throw new ConflictException('이미 여행에 추가된 친구입니다.');
+    }
+    trip.members.push({
+      id: memberId,
+      initial: friend.initial,
+      color: friend.color,
+    });
+    return trip.members;
+  }
+
+  @Delete('trips/:tripId/members/:memberId')
+  @ApiOperation({ summary: '여행 멤버 제거 (mock)' })
+  removeMember(
+    @Param('tripId') tripId: string,
+    @Param('memberId') memberId: string,
+  ) {
+    const trip = getPlannerTripMock(tripId);
+    if (!trip) {
+      throw new NotFoundException('mock trip not found');
+    }
+    const index = trip.members.findIndex((m) => m.id === memberId);
+    if (index === -1) {
+      throw new NotFoundException('member not found');
+    }
+    trip.members.splice(index, 1);
+    return trip.members;
   }
 
   @Post('trips/:tripId/swap')

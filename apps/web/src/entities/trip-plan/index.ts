@@ -6,6 +6,9 @@ export {
   swapPlannerItem,
   fetchDestinationSuggestions,
   createTrip,
+  addTripMember,
+  removeTripMember,
+  fetchPlannerCoordination,
 } from './api';
 export { TripSummaryCard } from './ui/trip-summary-card';
 export type {

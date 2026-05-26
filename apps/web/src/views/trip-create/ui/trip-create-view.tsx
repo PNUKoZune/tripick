@@ -15,12 +15,11 @@ import { queryKeys } from '@/shared/api/query-keys';
 import { Button } from '@/shared/ui';
 import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
 
+import { FriendMemberPicker } from './friend-member-picker';
 import { TimeSelect } from './time-select';
 
 import 'react-day-picker/style.css';
 import './trip-create-calendar.css';
-
-const MEMBER_COLORS = ['#3182F6', '#00A86B', '#FF8A00', '#6B7684', '#191F28'];
 
 type DraftMember = PlannerMemberDto;
 
@@ -40,7 +39,6 @@ export function TripCreateView() {
   const [members, setMembers] = useState<DraftMember[]>([
     { id: 'me', initial: '나', color: '#3182F6' },
   ]);
-  const [memberInput, setMemberInput] = useState('');
   const [notes, setNotes] = useState('');
 
   const NOTES_MAX = 200;
@@ -71,19 +69,8 @@ export function TripCreateView() {
     );
   }, [title, destination, startDate, endDate, timeError]);
 
-  function addMember() {
-    const raw = memberInput.trim();
-    if (!raw) return;
-    const initial = raw.slice(0, 1);
-    setMembers((prev) => [
-      ...prev,
-      {
-        id: `m-${Date.now().toString(36)}`,
-        initial,
-        color: MEMBER_COLORS[prev.length % MEMBER_COLORS.length] ?? '#3182F6',
-      },
-    ]);
-    setMemberInput('');
+  function addMember(member: DraftMember) {
+    setMembers((prev) => (prev.some((m) => m.id === member.id) ? prev : [...prev, member]));
   }
 
   function removeMember(id: string) {
@@ -161,59 +148,8 @@ export function TripCreateView() {
         </div>
       </Field>
 
-      <Field label="동행자" hint="이니셜로 표시돼요. 엔터로 추가하세요.">
-        <div className="flex flex-wrap items-center gap-2">
-          {members.map((member) => (
-            <span
-              key={member.id}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#F2F4F6] pl-2 pr-1 text-[13px] font-semibold text-[#191F28]"
-            >
-              <span
-                aria-hidden
-                className="flex size-6 items-center justify-center rounded-full text-[11px] font-bold text-white"
-                style={{ background: member.color }}
-              >
-                {member.initial}
-              </span>
-              <span>{member.initial}</span>
-              {member.id !== 'me' ? (
-                <button
-                  type="button"
-                  onClick={() => removeMember(member.id)}
-                  aria-label={`${member.initial} 제거`}
-                  className="ml-0.5 flex size-6 items-center justify-center rounded-full text-[#8B95A1] hover:bg-[#E5E8EB] hover:text-[#191F28]"
-                >
-                  ×
-                </button>
-              ) : null}
-            </span>
-          ))}
-          <div className="flex h-9 items-center gap-2 rounded-full border border-dashed border-[#D6DBE1] bg-white pl-3 pr-1 focus-within:border-[#3182F6]">
-            <input
-              type="text"
-              value={memberInput}
-              onChange={(event) => setMemberInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  addMember();
-                }
-              }}
-              placeholder="이니셜"
-              maxLength={2}
-              className="h-7 w-16 bg-transparent text-[13px] font-semibold text-[#191F28] outline-none placeholder:text-[#B0B8C1]"
-            />
-            <button
-              type="button"
-              onClick={addMember}
-              disabled={!memberInput.trim()}
-              className="flex size-7 items-center justify-center rounded-full bg-[#3182F6] text-[14px] font-bold text-white disabled:bg-[#E5E8EB] disabled:text-[#B0B8C1]"
-              aria-label="동행자 추가"
-            >
-              +
-            </button>
-          </div>
-        </div>
+      <Field label="동행자" hint="내 친구 목록에서 선택해 추가합니다">
+        <FriendMemberPicker members={members} onAdd={addMember} onRemove={removeMember} />
       </Field>
 
       <Field
