@@ -7,8 +7,7 @@ import type { ReactNode } from 'react';
 const NAV_ITEMS = [
   { href: '/', label: '홈', icon: 'home' },
   { href: '/preferences', label: '취향', icon: 'preference' },
-  { href: '/members', label: '멤버', icon: 'members' },
-  { href: '/coordination', label: '조율', icon: 'coordination' },
+  { href: '/friends', label: '친구', icon: 'members' },
 ] as const;
 
 type NavIconName = (typeof NAV_ITEMS)[number]['icon'];
@@ -43,7 +42,7 @@ export function AppBottomNavigation({ className = '' }: { className?: string }) 
       aria-label="하단 탭"
       className={`fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 border-t border-[color:var(--line)] bg-white/95 px-1.5 pb-[max(10px,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-xl ${className}`}
     >
-      <div className="grid h-[66px] grid-cols-4 items-stretch">
+      <div className="grid h-[66px] grid-cols-3 items-stretch">
         {NAV_ITEMS.map((item) => {
           const active = isNavItemActive(pathname, item.href);
           return (
@@ -137,14 +136,6 @@ function NavIcon({ name, active }: { name: NavIconName; active: boolean }) {
           <path d="M12 17h7" />
           <circle cx="14" cy="7" r="2.1" />
           <circle cx="10" cy="17" r="2.1" />
-        </>
-      ) : null}
-      {name === 'coordination' ? (
-        <>
-          <path d="M5 18.5V10" />
-          <path d="M12 18.5V5.5" />
-          <path d="M19 18.5v-6" />
-          <path d="M4 18.5h16" />
         </>
       ) : null}
       {name === 'members' ? (

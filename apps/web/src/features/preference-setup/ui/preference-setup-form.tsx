@@ -106,7 +106,7 @@ export function PreferenceSetupForm() {
         });
         return;
       }
-      router.push('/members');
+      router.push('/friends');
     },
     onError: (error) => {
       setNotice({

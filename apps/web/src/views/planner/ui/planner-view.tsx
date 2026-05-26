@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { DEMO_TRIP_ID, fetchPlannerTrip } from '@/entities/trip-plan';
 import { MemberAvatars } from '@/entities/member';
 import { DaySelector } from '@/features/day-selector';
+import { TripMembersSheet } from '@/features/manage-trip-members';
 import { PlannerTabs, type PlannerTab } from '@/features/planner-tab-switch';
 import { queryKeys } from '@/shared/api/query-keys';
 import { Button, Chip } from '@/shared/ui';
@@ -17,6 +18,7 @@ import { AlternativeSheet } from '@/widgets/alternative-sheet';
 import { PlannerHeader } from '@/widgets/planner-header';
 import { PlannerMap } from '@/widgets/planner-map';
 import { PlannerTimeline } from '@/widgets/planner-timeline';
+import { TripCoordinationPanel } from '@/widgets/trip-coordination-panel';
 import { TripInfoPanel } from '@/widgets/trip-info-panel';
 import { TripMapPanel } from '@/widgets/trip-map-panel';
 
@@ -26,6 +28,7 @@ export function PlannerView() {
   const [openItem, setOpenItem] = useState<PlannerItineraryItemDto | null>(null);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [swapResult, setSwapResult] = useState<{ id: string; name: string } | null>(null);
+  const [membersOpen, setMembersOpen] = useState(false);
   const { data: trip = null, error } = useQuery<PlannerTripDto>({
     queryKey: queryKeys.planner.trip(DEMO_TRIP_ID),
     queryFn: () => fetchPlannerTrip(DEMO_TRIP_ID),
@@ -71,7 +74,11 @@ export function PlannerView() {
     <div className="min-h-dvh bg-[#F7F8FA]">
       {/* < lg : phone shell (모바일 우선) */}
       <div className="mx-auto min-h-dvh max-w-[430px] bg-white pb-[88px] lg:hidden">
-        <PlannerHeader title={trip?.title ?? '일정 불러오는 중'} members={trip?.members ?? []} />
+        <PlannerHeader
+          title={trip?.title ?? '일정 불러오는 중'}
+          members={trip?.members ?? []}
+          {...(trip ? { onMembersClick: () => setMembersOpen(true) } : {})}
+        />
 
         {trip ? (
           <PlannerMap
@@ -85,7 +92,7 @@ export function PlannerView() {
 
         <PlannerTabs value={tab} onChange={setTab} />
 
-        {trip ? (
+        {trip && tab !== 'coordination' ? (
           <div className="px-4 pt-3">
             <DaySelector days={trip.days} value={day} onChange={setDay} />
           </div>
@@ -105,6 +112,7 @@ export function PlannerView() {
             <TripMapPanel trip={trip} items={itemsForDay} onSelectItem={setOpenItem} />
           ) : null}
           {tab === 'info' && trip ? <TripInfoPanel trip={trip} /> : null}
+          {tab === 'coordination' && trip ? <TripCoordinationPanel tripId={trip.id} /> : null}
 
           <button
             type="button"
@@ -151,7 +159,17 @@ export function PlannerView() {
                 ) : null}
               </div>
               <div className="flex items-center gap-4">
-                {trip ? <MemberAvatars members={trip.members} /> : null}
+                {trip ? (
+                  <button
+                    type="button"
+                    onClick={() => setMembersOpen(true)}
+                    aria-label="여행 멤버 관리"
+                    className="flex items-center gap-2 rounded-full px-2 py-1 transition hover:bg-[#F2F4F6]"
+                  >
+                    <MemberAvatars members={trip.members} />
+                    <span className="text-[16px] text-[#8B95A1]" aria-hidden>＋</span>
+                  </button>
+                ) : null}
                 <Button
                   variant="primary"
                   size="md"
@@ -234,9 +252,10 @@ export function PlannerView() {
               )}
             </main>
 
-            {/* 우측: 정보 패널 (2xl+) */}
-            <aside className="hidden h-[calc(100dvh-120px)] min-h-0 overflow-y-auto 2xl:block">
+            {/* 우측: 정보 + 조율 패널 (2xl+) */}
+            <aside className="hidden h-[calc(100dvh-120px)] min-h-0 space-y-4 overflow-y-auto 2xl:block">
               {trip ? <TripInfoPanel trip={trip} /> : null}
+              {trip ? <TripCoordinationPanel tripId={trip.id} /> : null}
             </aside>
           </div>
         </div>
@@ -248,6 +267,14 @@ export function PlannerView() {
         item={openItem}
         onClose={() => setOpenItem(null)}
         onApplied={(name, itemId) => setSwapResult({ id: itemId, name })}
+      />
+
+      <TripMembersSheet
+        open={membersOpen}
+        onClose={() => setMembersOpen(false)}
+        tripId={trip?.id ?? DEMO_TRIP_ID}
+        tripTitle={trip?.title ?? '여행'}
+        members={trip?.members ?? []}
       />
     </div>
   );

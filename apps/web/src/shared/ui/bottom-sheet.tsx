@@ -19,8 +19,17 @@ const EASE_IN = 'cubic-bezier(0.4, 0, 1, 1)';
 
 export function BottomSheet({ open, onClose, children, topSlot }: Props) {
   const [phase, setPhase] = useState<Phase>('closed');
+  const [isDesktop, setIsDesktop] = useState(false);
   const closeTimer = useRef<number | null>(null);
   const openRafs = useRef<number[]>([]);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     const clearOpenRafs = () => {
@@ -93,19 +102,35 @@ export function BottomSheet({ open, onClose, children, topSlot }: Props) {
         }}
       />
       <div
-        className="absolute inset-x-0 bottom-0 flex justify-center"
-        style={{
-          transform: isVisible ? 'translate3d(0, 0, 0)' : 'translate3d(0, 100%, 0)',
-          transition: `transform ${DURATION_MS}ms ${easing}`,
-          willChange: 'transform',
+        onClick={(event) => {
+          if (event.target === event.currentTarget) onClose();
         }}
+        className="absolute inset-0 flex justify-center p-0 lg:items-center lg:p-6"
+        style={
+          isDesktop
+            ? {
+                opacity: isVisible ? 1 : 0,
+                transform: isVisible ? 'scale(1)' : 'scale(0.96)',
+                transition: `opacity ${DURATION_MS}ms ${easing}, transform ${DURATION_MS}ms ${easing}`,
+                willChange: 'opacity, transform',
+                alignItems: 'center',
+              }
+            : {
+                transform: isVisible ? 'translate3d(0, 0, 0)' : 'translate3d(0, 100%, 0)',
+                transition: `transform ${DURATION_MS}ms ${easing}`,
+                willChange: 'transform',
+                alignItems: 'flex-end',
+              }
+        }
       >
-        <div className="flex w-full max-w-[480px] flex-col overflow-hidden rounded-t-[24px] bg-white shadow-[0_-16px_40px_rgba(15,23,42,0.18)]">
+        <div className="flex max-h-full w-full max-w-[480px] flex-col overflow-hidden rounded-t-[24px] bg-white shadow-[0_-16px_40px_rgba(15,23,42,0.18)] lg:max-w-[560px] lg:rounded-[24px] lg:shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
           {topSlot ? <div className="bg-white">{topSlot}</div> : null}
-          <div className="flex items-center justify-center pt-2.5">
+          <div className="flex items-center justify-center pt-2.5 lg:hidden">
             <span className="h-1 w-10 rounded-full bg-[#E5E8EB]" />
           </div>
-          <div className="max-h-[70vh] overflow-y-auto px-5 pb-6 pt-3">{children}</div>
+          <div className="max-h-[70vh] min-h-0 flex-1 overflow-y-auto px-5 pb-6 pt-3 lg:max-h-[78vh]">
+            {children}
+          </div>
         </div>
       </div>
     </div>

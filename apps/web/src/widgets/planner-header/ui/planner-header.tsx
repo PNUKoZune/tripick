@@ -8,6 +8,7 @@ type Props = {
   members: PlannerMemberDto[];
   backHref?: string;
   backLabel?: string;
+  onMembersClick?: () => void;
 };
 
 export function PlannerHeader({
@@ -15,6 +16,7 @@ export function PlannerHeader({
   members,
   backHref = '/',
   backLabel = '내 여행',
+  onMembersClick,
 }: Props) {
   return (
     <header className="flex items-center justify-between gap-2 px-3 py-3">
@@ -28,7 +30,19 @@ export function PlannerHeader({
         </Link>
         <h1 className="truncate text-[18px] font-bold leading-[26px] text-[#191F28]">{title}</h1>
       </div>
-      <MemberAvatars members={members} />
+      {onMembersClick ? (
+        <button
+          type="button"
+          onClick={onMembersClick}
+          aria-label="여행 멤버 관리"
+          className="-mx-2 flex items-center gap-2 rounded-full px-2 py-1 transition hover:bg-[#F2F4F6]"
+        >
+          <MemberAvatars members={members} />
+          <span className="text-[16px] text-[#8B95A1]" aria-hidden>＋</span>
+        </button>
+      ) : (
+        <MemberAvatars members={members} />
+      )}
     </header>
   );
 }
