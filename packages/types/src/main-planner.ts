@@ -145,7 +145,7 @@ export interface TripSummaryDto {
   coverEmoji: string;
   highlight: string;
   itemCount: number;
-  /** 진행 가능한 데모 trip 만 true (현재는 경주 1박 2일 만 mock 상세를 갖는다) */
+  /** planner 상세 화면 진입 가능 여부 */
   hasDetail: boolean;
 }
 

@@ -18,13 +18,15 @@ import type {
   PlannerSwapRequestDto,
   PlannerSwapResponseDto,
 } from '@tripick/types';
+import { getPlannerAlternativesMock, getPlannerTripMock } from './main-planner.mock';
 import {
-  getPlannerAlternativesMock,
-  getPlannerTripMock,
-} from './main-planner.mock';
-import { appendTripSummaryMock, TRIP_SUMMARIES_MOCK } from './main-planner-trips.mock';
+  appendTripSummaryMock,
+  buildPlannerTripFromSummaryMock,
+  getTripSummaryMock,
+  TRIP_SUMMARIES_MOCK,
+} from './main-planner-trips.mock';
 import { searchDestinationsMock } from './destinations.mock';
-import { PLANNER_COORDINATION_MOCK } from './main-planner-coordination.mock';
+import { buildPlannerCoordinationMock } from './main-planner-coordination.mock';
 import { getFriendByIdMock } from '../friends/friends.mock';
 
 function tripMemberIdFromFriend(friendId: string) {
@@ -77,7 +79,7 @@ export class MainPlannerController {
   @Get('trips/:tripId')
   @ApiOperation({ summary: 'Screen 3 메인 플래너 mock 데이터' })
   getTrip(@Param('tripId') tripId: string) {
-    const trip = getPlannerTripMock(tripId);
+    const trip = this.getTripDetail(tripId);
     if (!trip) {
       throw new NotFoundException('mock trip not found');
     }
@@ -86,10 +88,7 @@ export class MainPlannerController {
 
   @Get('trips/:tripId/items/:itemId/alternatives')
   @ApiOperation({ summary: 'Screen 4 대안 추천 mock 데이터' })
-  getAlternatives(
-    @Param('tripId') tripId: string,
-    @Param('itemId') itemId: string,
-  ) {
+  getAlternatives(@Param('tripId') tripId: string, @Param('itemId') itemId: string) {
     const trip = getPlannerTripMock(tripId);
     if (!trip) {
       throw new NotFoundException('mock trip not found');
@@ -104,18 +103,18 @@ export class MainPlannerController {
   @Get('trips/:tripId/coordination')
   @ApiOperation({ summary: '여행 취향 조율 결과 mock' })
   getCoordination(@Param('tripId') tripId: string) {
-    const trip = getPlannerTripMock(tripId);
+    const trip = this.getTripDetail(tripId);
     if (!trip) {
       throw new NotFoundException('mock trip not found');
     }
-    return PLANNER_COORDINATION_MOCK;
+    return buildPlannerCoordinationMock(trip.id, trip.members);
   }
 
   @Post('trips/:tripId/members')
   @ApiOperation({ summary: '여행 멤버로 친구 추가 (mock)' })
   addMember(@Param('tripId') tripId: string, @Body() dto: AddTripMemberRequestDto) {
-    const trip = getPlannerTripMock(tripId);
-    if (!trip) {
+    const members = this.getMutableTripMembers(tripId);
+    if (!members) {
       throw new NotFoundException('mock trip not found');
     }
     if (!dto?.friendId) {
@@ -126,33 +125,30 @@ export class MainPlannerController {
       throw new NotFoundException('friend not found');
     }
     const memberId = tripMemberIdFromFriend(friend.id);
-    if (trip.members.some((m) => m.id === memberId)) {
+    if (members.some((m) => m.id === memberId)) {
       throw new ConflictException('이미 여행에 추가된 친구입니다.');
     }
-    trip.members.push({
+    members.push({
       id: memberId,
       initial: friend.initial,
       color: friend.color,
     });
-    return trip.members;
+    return members;
   }
 
   @Delete('trips/:tripId/members/:memberId')
   @ApiOperation({ summary: '여행 멤버 제거 (mock)' })
-  removeMember(
-    @Param('tripId') tripId: string,
-    @Param('memberId') memberId: string,
-  ) {
-    const trip = getPlannerTripMock(tripId);
-    if (!trip) {
+  removeMember(@Param('tripId') tripId: string, @Param('memberId') memberId: string) {
+    const members = this.getMutableTripMembers(tripId);
+    if (!members) {
       throw new NotFoundException('mock trip not found');
     }
-    const index = trip.members.findIndex((m) => m.id === memberId);
+    const index = members.findIndex((m) => m.id === memberId);
     if (index === -1) {
       throw new NotFoundException('member not found');
     }
-    trip.members.splice(index, 1);
-    return trip.members;
+    members.splice(index, 1);
+    return members;
   }
 
   @Post('trips/:tripId/swap')
@@ -176,5 +172,23 @@ export class MainPlannerController {
       swappedItemId: dto.itemId,
       newItemName: next.name,
     };
+  }
+
+  private getTripDetail(tripId: string) {
+    const fixedTrip = getPlannerTripMock(tripId);
+    if (fixedTrip) {
+      return fixedTrip;
+    }
+    const summary = getTripSummaryMock(tripId);
+    return summary ? buildPlannerTripFromSummaryMock(summary) : undefined;
+  }
+
+  private getMutableTripMembers(tripId: string) {
+    const fixedTrip = getPlannerTripMock(tripId);
+    if (fixedTrip) {
+      return fixedTrip.members;
+    }
+    const summary = getTripSummaryMock(tripId);
+    return summary?.members;
   }
 }

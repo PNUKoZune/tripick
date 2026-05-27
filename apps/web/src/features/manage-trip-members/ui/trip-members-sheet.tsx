@@ -32,17 +32,20 @@ export function TripMembersSheet({ open, onClose, tripId, tripTitle, members }: 
     enabled: open,
   });
 
-  const invalidate = async () => {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.planner.trip(tripId) });
+  const invalidateTrip = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.planner.trip(tripId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.planner.coordination(tripId) }),
+    ]);
   };
 
   const addMutation = useMutation({
     mutationFn: (friendId: string) => addTripMember(tripId, { friendId }),
-    onSuccess: invalidate,
+    onSuccess: invalidateTrip,
   });
   const removeMutation = useMutation({
     mutationFn: (memberId: string) => removeTripMember(tripId, memberId),
-    onSuccess: invalidate,
+    onSuccess: invalidateTrip,
   });
 
   const errorMessage =

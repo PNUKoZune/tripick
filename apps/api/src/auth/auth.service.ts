@@ -93,6 +93,19 @@ export class AuthService {
     return;
   }
 
+  getWebKakaoSuccessUrl(session: LoginResponseDto): string {
+    const url = new URL('/auth/kakao/callback', this.getWebAppUrl());
+    const payload = Buffer.from(JSON.stringify(session), 'utf8').toString('base64url');
+    url.hash = `session=${payload}`;
+    return url.toString();
+  }
+
+  getWebKakaoErrorUrl(message: string): string {
+    const url = new URL('/auth/kakao/callback', this.getWebAppUrl());
+    url.searchParams.set('error', message);
+    return url.toString();
+  }
+
   private async issueTokens(userId: string): Promise<AuthTokens> {
     const payload = { sub: userId };
     const [accessToken, refreshToken] = await Promise.all([
@@ -106,14 +119,20 @@ export class AuthService {
   }
 
   private async getKakaoToken(code: string): Promise<string> {
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: this.config.getOrThrow('KAKAO_REST_API_KEY'),
+      redirect_uri: this.config.getOrThrow('KAKAO_CALLBACK_URL'),
+      code,
+    });
+    const clientSecret = this.config.get<string>('KAKAO_CLIENT_SECRET');
+    if (clientSecret) {
+      body.set('client_secret', clientSecret);
+    }
+
     const res = await axios.post<{ access_token: string }>(
       'https://kauth.kakao.com/oauth/token',
-      new URLSearchParams({
-        grant_type: 'authorization_code',
-        client_id: this.config.getOrThrow('KAKAO_REST_API_KEY'),
-        redirect_uri: this.config.getOrThrow('KAKAO_CALLBACK_URL'),
-        code,
-      }),
+      body,
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
     );
     return res.data.access_token;
@@ -139,5 +158,9 @@ export class AuthService {
         : {}),
       ...(account?.email ? { email: account.email } : {}),
     };
+  }
+
+  private getWebAppUrl(): string {
+    return this.config.get<string>('WEB_APP_URL') ?? 'http://localhost:3000';
   }
 }

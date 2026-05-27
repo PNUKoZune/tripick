@@ -14,7 +14,7 @@ type Props = {
 };
 
 export function friendIdToMemberId(friendId: string) {
-  return `f-${friendId}`;
+  return `tm-${friendId}`;
 }
 
 const DROPDOWN_GAP = 8;

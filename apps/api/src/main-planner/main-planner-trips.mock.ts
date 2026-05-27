@@ -1,10 +1,10 @@
-import type { CreateTripRequestDto, TripSummaryDto } from '@tripick/types';
+import type { CreateTripRequestDto, PlannerTripDto, TripSummaryDto } from '@tripick/types';
 
 import { PLANNER_TRIP_MOCK } from './main-planner.mock';
 
 /**
  * 데모용 in-memory 저장소. 프로세스 재시작 시 초기화된다.
- * 신규 생성된 trip 은 상세 mock (PLANNER_TRIP_MOCK) 이 없으므로 hasDetail=false 로 둔다.
+ * 상세 mock 이 없는 trip 은 summary 기반 상세 화면을 즉시 구성한다.
  */
 export const TRIP_SUMMARIES_MOCK: TripSummaryDto[] = [
   {
@@ -38,7 +38,7 @@ export const TRIP_SUMMARIES_MOCK: TripSummaryDto[] = [
     coverEmoji: '🌊',
     highlight: '광안리·해운대·전포 카페거리',
     itemCount: 6,
-    hasDetail: false,
+    hasDetail: true,
   },
   {
     id: 'demo-jeju-3n4d',
@@ -58,7 +58,7 @@ export const TRIP_SUMMARIES_MOCK: TripSummaryDto[] = [
     coverEmoji: '🌴',
     highlight: '동쪽 해안 + 한라산 트래킹',
     itemCount: 12,
-    hasDetail: false,
+    hasDetail: true,
   },
   {
     id: 'demo-gangneung-day',
@@ -73,7 +73,7 @@ export const TRIP_SUMMARIES_MOCK: TripSummaryDto[] = [
     coverEmoji: '☕',
     highlight: '안목해변 카페 + 회 한 끼',
     itemCount: 3,
-    hasDetail: false,
+    hasDetail: true,
   },
 ];
 
@@ -99,10 +99,7 @@ function buildDurationLabel(
 ) {
   const start = new Date(`${startDate}T00:00:00`);
   const end = new Date(`${endDate}T00:00:00`);
-  const diff = Math.max(
-    0,
-    Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)),
-  );
+  const diff = Math.max(0, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
   const head = diff === 0 ? '당일치기' : `${diff}박 ${diff + 1}일`;
   const startLabel = `${formatDateLabel(startDate)}${startTime ? ` ${startTime}` : ''}`;
   const endLabel = `${formatDateLabel(endDate)}${endTime ? ` ${endTime}` : ''}`;
@@ -140,8 +137,65 @@ export function appendTripSummaryMock(input: CreateTripRequestDto): TripSummaryD
     coverEmoji: '🧳',
     highlight: input.notes?.trim() || '새로 생성된 여행 계획',
     itemCount: 0,
-    hasDetail: false,
+    hasDetail: true,
   };
   TRIP_SUMMARIES_MOCK.unshift(summary);
   return summary;
+}
+
+export function getTripSummaryMock(tripId: string) {
+  return TRIP_SUMMARIES_MOCK.find((trip) => trip.id === tripId);
+}
+
+export function buildPlannerTripFromSummaryMock(summary: TripSummaryDto): PlannerTripDto {
+  const days = buildDays(summary);
+  return {
+    id: summary.id,
+    title: summary.title,
+    members: summary.members,
+    searchPlaceholder: `${summary.destination} 여행 검색...`,
+    mapCenter: { lat: 37.5665, lng: 126.978, level: 8 },
+    mapMarkers: [],
+    days,
+    items: [],
+    meta: {
+      startDate: summary.startDate,
+      endDate: summary.endDate,
+      durationLabel: summary.durationLabel,
+      transportLabel: '이동수단 미정',
+      wakeTime: '08:00',
+      sleepTime: '23:00',
+      tasteTags: {
+        food: ['로컬 맛집'],
+        mood: ['취향 조율'],
+        environment: [summary.destination],
+      },
+      stats: {
+        totalItems: summary.itemCount,
+        waitingCount: 0,
+        estimatedTravelKm: 0,
+      },
+      weather: days.map((day) => ({
+        day: day.day,
+        label: `${day.dateLabel} 날씨 확인 전`,
+        emoji: '☁️',
+        tempLabel: '-',
+      })),
+    },
+  };
+}
+
+function buildDays(summary: TripSummaryDto) {
+  const start = new Date(`${summary.startDate}T00:00:00`);
+  const end = new Date(`${summary.endDate}T00:00:00`);
+  const diff = Math.max(0, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+  return Array.from({ length: diff + 1 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    return {
+      day: index + 1,
+      label: `${index + 1}일차`,
+      dateLabel: formatDateLabel(date.toISOString().slice(0, 10)),
+    };
+  });
 }

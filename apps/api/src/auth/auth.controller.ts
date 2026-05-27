@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Body, Query, Res, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  Res,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Response } from 'express';
 import { AuthService } from './auth.service';
@@ -24,8 +34,39 @@ export class AuthController {
 
   @Get('kakao/callback')
   @ApiOperation({ summary: '카카오 OAuth 콜백' })
-  async kakaoCallback(@Query('code') code: string) {
-    return this.authService.loginWithKakao(code);
+  async kakaoCallback(
+    @Query('code') code: string,
+    @Query('format') format: 'json' | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const wantsJson = format === 'json';
+    if (!code) {
+      const message = '카카오 인증 코드가 없습니다.';
+      if (wantsJson) {
+        throw new BadRequestException(message);
+      }
+      res.redirect(this.authService.getWebKakaoErrorUrl(message));
+      return undefined;
+    }
+
+    try {
+      const session = await this.authService.loginWithKakao(code);
+      if (wantsJson) {
+        return session;
+      }
+      res.redirect(this.authService.getWebKakaoSuccessUrl(session));
+      return undefined;
+    } catch (error) {
+      if (wantsJson) {
+        throw error;
+      }
+      res.redirect(
+        this.authService.getWebKakaoErrorUrl(
+          error instanceof Error ? error.message : '카카오 로그인을 완료하지 못했습니다.',
+        ),
+      );
+      return undefined;
+    }
   }
 
   @Post('demo')

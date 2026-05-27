@@ -22,7 +22,7 @@ import { TripCoordinationPanel } from '@/widgets/trip-coordination-panel';
 import { TripInfoPanel } from '@/widgets/trip-info-panel';
 import { TripMapPanel } from '@/widgets/trip-map-panel';
 
-export function PlannerView() {
+export function PlannerView({ tripId = DEMO_TRIP_ID }: { tripId?: string }) {
   const [tab, setTab] = useState<PlannerTab>('schedule');
   const [day, setDay] = useState(1);
   const [openItem, setOpenItem] = useState<PlannerItineraryItemDto | null>(null);
@@ -30,8 +30,8 @@ export function PlannerView() {
   const [swapResult, setSwapResult] = useState<{ id: string; name: string } | null>(null);
   const [membersOpen, setMembersOpen] = useState(false);
   const { data: trip = null, error } = useQuery<PlannerTripDto>({
-    queryKey: queryKeys.planner.trip(DEMO_TRIP_ID),
-    queryFn: () => fetchPlannerTrip(DEMO_TRIP_ID),
+    queryKey: queryKeys.planner.trip(tripId),
+    queryFn: () => fetchPlannerTrip(tripId),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -167,7 +167,9 @@ export function PlannerView() {
                     className="flex items-center gap-2 rounded-full px-2 py-1 transition hover:bg-[#F2F4F6]"
                   >
                     <MemberAvatars members={trip.members} />
-                    <span className="text-[16px] text-[#8B95A1]" aria-hidden>＋</span>
+                    <span className="text-[16px] text-[#8B95A1]" aria-hidden>
+                      ＋
+                    </span>
                   </button>
                 ) : null}
                 <Button
@@ -262,7 +264,7 @@ export function PlannerView() {
       </div>
 
       <AlternativeSheet
-        tripId={trip?.id ?? DEMO_TRIP_ID}
+        tripId={trip?.id ?? tripId}
         open={openItem !== null}
         item={openItem}
         onClose={() => setOpenItem(null)}
@@ -272,7 +274,7 @@ export function PlannerView() {
       <TripMembersSheet
         open={membersOpen}
         onClose={() => setMembersOpen(false)}
-        tripId={trip?.id ?? DEMO_TRIP_ID}
+        tripId={trip?.id ?? tripId}
         tripTitle={trip?.title ?? '여행'}
         members={trip?.members ?? []}
       />

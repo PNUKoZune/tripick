@@ -1,4 +1,4 @@
-import type { PlannerCoordinationDto } from '@tripick/types';
+import type { PlannerCoordinationDto, PlannerMemberDto } from '@tripick/types';
 
 import { PLANNER_TRIP_MOCK } from './main-planner.mock';
 
@@ -45,3 +45,64 @@ export const PLANNER_COORDINATION_MOCK: PlannerCoordinationDto = {
     scheduleHint: '오전: 유적지 / 오후: 카페 거리 / 저녁: 한식 한 끼 패턴을 일정에 적용했어요.',
   },
 };
+
+const TASTE_SEEDS = [
+  ['한식·전통', '도시·골목'],
+  ['카페·디저트', '문화·역사'],
+  ['감성 코스', '로컬 동네'],
+  ['자연 산책', '대중교통'],
+] as const;
+
+export function buildPlannerCoordinationMock(
+  tripId: string,
+  members: PlannerMemberDto[],
+): PlannerCoordinationDto {
+  const normalizedMembers =
+    members.length > 0 ? members : [{ id: 'empty', initial: '나', color: '#3182F6' }];
+  const initials = normalizedMembers.map((member) => member.initial);
+  const firstGroup = initials.slice(0, Math.max(1, Math.ceil(initials.length * 0.7)));
+  const secondGroup = initials.slice(
+    Math.max(0, initials.length - Math.max(1, Math.ceil(initials.length * 0.5))),
+  );
+
+  return {
+    tripId,
+    members: normalizedMembers.map((member, index) => {
+      const tasteLabels = TASTE_SEEDS[index % TASTE_SEEDS.length] ?? TASTE_SEEDS[0];
+      return {
+        id: member.id,
+        initial: member.initial,
+        color: member.color,
+        tasteLabels: [...tasteLabels],
+      };
+    }),
+    consensus: {
+      food: [
+        { key: 'local', label: '로컬 맛집', count: firstGroup.length, voters: firstGroup },
+        { key: 'cafe', label: '카페·디저트', count: secondGroup.length, voters: secondGroup },
+        { key: 'korean', label: '한식·전통', count: 1, voters: initials.slice(0, 1) },
+      ],
+      mood: [
+        { key: 'cultural', label: '문화·역사', count: firstGroup.length, voters: firstGroup },
+        { key: 'romantic', label: '감성 코스', count: secondGroup.length, voters: secondGroup },
+        { key: 'healing', label: '힐링', count: 1, voters: initials.slice(0, 1) },
+      ],
+      environment: [
+        { key: 'city', label: '도시·골목', count: firstGroup.length, voters: firstGroup },
+        { key: 'nature', label: '자연·산책', count: secondGroup.length, voters: secondGroup },
+        { key: 'village', label: '로컬 동네', count: 1, voters: initials.slice(-1) },
+      ],
+    },
+    recommendation: {
+      title: `${normalizedMembers.length}명 취향 기준 절충 코스`,
+      summary:
+        '여행 멤버 구성이 바뀌면 이 조율 결과도 tripId 기준으로 다시 계산됩니다. 지금은 친구 목록 기반 mock 취향을 사용합니다.',
+      reasons: [
+        '· 멤버별 선호 태그를 합쳐 공통 분모가 큰 항목을 먼저 배치',
+        '· 로컬 맛집과 감성 코스 선호가 충돌하지 않도록 반나절 단위로 분리',
+        '· 같은 여행 안의 멤버 변경만 반영하고 다른 여행에는 섞이지 않음',
+      ],
+      scheduleHint: '멤버 추가/제외 후 조율 탭을 다시 열면 최신 멤버 기준으로 갱신됩니다.',
+    },
+  };
+}
