@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import axios, { type AxiosError } from 'axios';
 import { UsersService } from '../users/users.service';
 import type {
   AuthTokens,
@@ -133,24 +133,32 @@ export class AuthService {
       body.set('client_secret', clientSecret);
     }
 
-    const res = await axios.post<{ access_token: string }>(
-      'https://kauth.kakao.com/oauth/token',
-      body,
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
-    );
-    return res.data.access_token;
+    try {
+      const res = await axios.post<{ access_token: string }>(
+        'https://kauth.kakao.com/oauth/token',
+        body,
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+      );
+      return res.data.access_token;
+    } catch (error) {
+      throw new BadRequestException(this.getKakaoAuthErrorMessage(error, 'token'));
+    }
   }
 
   private async getKakaoProfile(accessToken: string): Promise<KakaoProfile> {
-    const res = await axios.get<{
-      id: number;
-      kakao_account?: {
-        email?: string;
-        profile?: { nickname?: string; profile_image_url?: string };
-      };
-    }>('https://kapi.kakao.com/v2/user/me', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    const res = await axios
+      .get<{
+        id: number;
+        kakao_account?: {
+          email?: string;
+          profile?: { nickname?: string; profile_image_url?: string };
+        };
+      }>('https://kapi.kakao.com/v2/user/me', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      .catch((error) => {
+        throw new BadRequestException(this.getKakaoAuthErrorMessage(error, 'profile'));
+      });
 
     const account = res.data.kakao_account;
     return {
@@ -165,5 +173,40 @@ export class AuthService {
 
   private getWebAppUrl(): string {
     return this.config.get<string>('WEB_APP_URL') ?? 'http://localhost:3000';
+  }
+
+  private getKakaoAuthErrorMessage(error: unknown, phase: 'token' | 'profile'): string {
+    if (!axios.isAxiosError(error)) {
+      return '카카오 로그인을 완료하지 못했습니다. 잠시 후 다시 시도해주세요.';
+    }
+
+    const status = error.response?.status;
+    const kakaoError = this.extractKakaoError(error);
+
+    if (status === 401 || kakaoError === 'invalid_client') {
+      return '카카오 REST API 키 또는 Client Secret 설정이 맞지 않습니다. Client Secret을 켠 경우에만 KAKAO_CLIENT_SECRET을 넣어주세요.';
+    }
+    if (kakaoError === 'invalid_grant') {
+      return '카카오 인증 코드가 만료됐습니다. 다시 로그인해주세요.';
+    }
+    if (phase === 'profile') {
+      return '카카오 계정 정보를 불러오지 못했습니다. 동의 항목 설정을 확인한 뒤 다시 시도해주세요.';
+    }
+    return '카카오 인증 토큰을 발급받지 못했습니다. 리다이렉트 URI와 앱 키 설정을 확인해주세요.';
+  }
+
+  private extractKakaoError(error: AxiosError): string | undefined {
+    const data = error.response?.data;
+    if (!data || typeof data !== 'object') {
+      return undefined;
+    }
+    const record = data as { error?: unknown; error_code?: unknown };
+    if (typeof record.error === 'string') {
+      return record.error;
+    }
+    if (typeof record.error_code === 'string') {
+      return record.error_code;
+    }
+    return undefined;
   }
 }

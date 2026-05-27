@@ -26,6 +26,9 @@ async function fetcher<T>(path: string, init?: RequestInit): Promise<T> {
   const payload = await parseResponse(res);
 
   if (!res.ok) {
+    if (res.status === 401) {
+      clearStoredSession();
+    }
     throw Object.assign(new Error(normalizeErrorMessage(payload, res.status)), {
       payload,
       status: res.status,
@@ -64,6 +67,10 @@ async function parseResponse(res: Response): Promise<unknown> {
 }
 
 function normalizeErrorMessage(payload: unknown, status: number): string {
+  if (status === 401) {
+    return '로그인이 만료됐어요. 다시 로그인해주세요.';
+  }
+
   const candidates = extractMessages(payload)
     .map((message) => message.trim())
     .filter(Boolean);
@@ -76,6 +83,13 @@ function normalizeErrorMessage(payload: unknown, status: number): string {
     return FALLBACK_ERROR;
   }
   return first;
+}
+
+function clearStoredSession(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.localStorage.removeItem(SESSION_KEY);
 }
 
 function extractMessages(payload: unknown): string[] {

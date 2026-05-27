@@ -18,7 +18,7 @@ export function KakaoCallbackView() {
     const params = new URLSearchParams(window.location.search);
     const error = params.get('error');
     if (error) {
-      setState({ status: 'error', message: error });
+      setState({ status: 'error', message: normalizeCallbackError(error) });
       return;
     }
 
@@ -96,6 +96,13 @@ export function KakaoCallbackView() {
       </section>
     </AppFrame>
   );
+}
+
+function normalizeCallbackError(message: string): string {
+  if (message.trim().toLowerCase() === 'unauthorized') {
+    return '카카오 인증을 완료하지 못했어요. REST API 키와 Client Secret 설정을 확인한 뒤 다시 시도해주세요.';
+  }
+  return message;
 }
 
 function decodeSession(payload: string): LoginResponseDto {
