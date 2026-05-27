@@ -56,16 +56,21 @@ export function TripMembersSheet({ open, onClose, tripId, tripTitle, members }: 
         : null;
 
   const memberIdSet = useMemo(() => new Set(members.map((m) => m.id)), [members]);
+  const memberFriendIdSet = useMemo(
+    () => new Set(members.map((m) => m.friendId).filter(Boolean)),
+    [members],
+  );
 
   const candidateFriends = useMemo(() => {
     const q = search.trim().toLowerCase();
     return friends
       .filter((f) => f.status === 'accepted')
       .filter((f) => !memberIdSet.has(tripMemberIdFromFriend(f.id)))
+      .filter((f) => !memberFriendIdSet.has(f.id))
       .filter((f) =>
         q ? f.nickname.toLowerCase().includes(q) || f.handle.toLowerCase().includes(q) : true,
       );
-  }, [friends, memberIdSet, search]);
+  }, [friends, memberFriendIdSet, memberIdSet, search]);
 
   return (
     <BottomSheet open={open} onClose={onClose}>
@@ -89,7 +94,8 @@ export function TripMembersSheet({ open, onClose, tripId, tripTitle, members }: 
             </p>
           ) : (
             members.map((member) => {
-              const isOwner = !member.id.startsWith('tm-');
+              const isOwner = member.role === 'owner' || !member.friendId;
+              const label = member.nickname ?? member.initial;
               return (
                 <div
                   key={member.id}
@@ -100,7 +106,7 @@ export function TripMembersSheet({ open, onClose, tripId, tripTitle, members }: 
                     size="md"
                   />
                   <div className="flex-1 text-[14px] font-bold text-[#191F28]">
-                    {member.initial}
+                    {label}
                     {isOwner ? (
                       <span className="ml-2 rounded-full bg-[#F2F4F6] px-2 py-0.5 text-[11px] font-semibold text-[#6B7684]">
                         본 여행 기본 멤버

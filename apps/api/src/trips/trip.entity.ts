@@ -46,6 +46,9 @@ export class TripEntity {
   @Column({ default: 'transit' })
   transportMode: 'walk' | 'transit' | 'car';
 
+  @Column({ type: 'text', nullable: true })
+  notes: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

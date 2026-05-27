@@ -187,10 +187,9 @@ export class PlannerService {
     });
 
     if (!validated.valid) {
-      throw new BadRequestException({
-        message: 'trip constraints violated',
-        issues: validated.issues,
-      });
+      this.logger.warn(
+        `Generated best-effort itinerary for trip ${trip.id}: ${validated.issues.join('; ')}`,
+      );
     }
 
     const toStore: CreateItineraryItemDto[] = validated.items.map((item) => ({

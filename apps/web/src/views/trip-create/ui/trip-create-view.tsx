@@ -246,7 +246,7 @@ export function TripCreateView() {
               {formBody}
             </div>
             <p className="mt-4 text-[12px] text-[#8B95A1]">
-              · v1 데모: 생성된 여행은 서버 메모리에만 저장되며, 새로고침/재시작 시 초기화됩니다.
+              생성한 여행은 내 계정에 저장되고 친구 목록 기반으로 멤버를 관리합니다.
             </p>
           </div>
         </div>

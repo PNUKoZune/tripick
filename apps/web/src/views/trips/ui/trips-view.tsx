@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { TripSummaryStatus, TripSummaryDto } from '@tripick/types';
 
+import { getStoredSession } from '@/entities/session/model/session-storage';
 import { fetchPlannerTrips, TripSummaryCard } from '@/entities/trip-plan';
 import { queryKeys } from '@/shared/api/query-keys';
 import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
@@ -21,9 +22,16 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
 
 export function TripsView() {
   const [filter, setFilter] = useState<Filter>('all');
+  const [hasSession, setHasSession] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setHasSession(Boolean(getStoredSession()));
+  }, []);
+
   const { data: trips = [], error } = useQuery({
     queryKey: queryKeys.planner.trips,
     queryFn: fetchPlannerTrips,
+    enabled: hasSession === true,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -40,6 +48,33 @@ export function TripsView() {
     const done = trips.filter((t) => t.status === 'done').length;
     return { upcoming, draft, done };
   }, [trips]);
+  const latestTrip = trips[0];
+
+  if (hasSession === null) {
+    return <TripsSessionLoading />;
+  }
+
+  if (!hasSession) {
+    return (
+      <div className="min-h-dvh bg-white">
+        <div className="mx-auto flex min-h-dvh max-w-[430px] flex-col justify-center px-5 lg:max-w-[560px]">
+          <div className="text-[13px] font-black leading-5 text-[#3182F6]">Tripick</div>
+          <h1 className="mt-3 text-[30px] font-black leading-9 text-[#191F28]">
+            로그인이 필요해요
+          </h1>
+          <p className="mt-3 text-[15px] font-bold leading-6 text-[#6B7684]">
+            내 여행과 친구 목록은 계정 기준으로 저장됩니다.
+          </p>
+          <Link
+            href="/start"
+            className="mt-8 inline-flex h-14 items-center justify-center rounded-[16px] bg-[#3182F6] px-5 text-[16px] font-black text-white"
+          >
+            시작하기
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-dvh bg-[#F7F8FA]">
@@ -100,10 +135,10 @@ export function TripsView() {
               </div>
               <div className="flex items-center gap-3">
                 <Link
-                  href="/planner"
+                  href={latestTrip ? `/planner?tripId=${latestTrip.id}` : '/trips/new'}
                   className="rounded-[14px] border border-[#E5E8EB] bg-white px-4 py-2 text-[14px] font-semibold text-[#191F28] hover:bg-[#FAFBFC]"
                 >
-                  현재 데모 일정 보기
+                  {latestTrip ? '최근 여행 일정 보기' : '첫 여행 만들기'}
                 </Link>
                 <Link
                   href="/trips/new"
@@ -144,6 +179,19 @@ export function TripsView() {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function TripsSessionLoading() {
+  return (
+    <div className="min-h-dvh bg-white">
+      <div className="mx-auto flex min-h-dvh max-w-[430px] flex-col justify-center px-5 lg:max-w-[560px]">
+        <div className="text-[13px] font-black leading-5 text-[#3182F6]">Tripick</div>
+        <h1 className="mt-3 text-[30px] font-black leading-9 text-[#191F28]">
+          내 여행 확인 중
+        </h1>
       </div>
     </div>
   );

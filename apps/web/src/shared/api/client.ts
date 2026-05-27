@@ -1,4 +1,5 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1';
+const SESSION_KEY = 'tripick.session.v1';
 
 const FALLBACK_ERROR = '요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.';
 
@@ -10,6 +11,12 @@ async function fetcher<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (!headers.has('Content-Type') && init?.body) {
     headers.set('Content-Type', 'application/json');
+  }
+  if (!headers.has('Authorization')) {
+    const token = getStoredAccessToken();
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
   }
 
   const res = await fetch(apiUrl(path), {
@@ -26,6 +33,22 @@ async function fetcher<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return payload as T;
+}
+
+function getStoredAccessToken(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const raw = window.localStorage.getItem(SESSION_KEY);
+  if (!raw) {
+    return null;
+  }
+  try {
+    const session = JSON.parse(raw) as { tokens?: { accessToken?: unknown } };
+    return typeof session.tokens?.accessToken === 'string' ? session.tokens.accessToken : null;
+  } catch {
+    return null;
+  }
 }
 
 async function parseResponse(res: Response): Promise<unknown> {

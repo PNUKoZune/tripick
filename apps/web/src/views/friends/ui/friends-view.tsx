@@ -35,15 +35,13 @@ export function FriendsView() {
   const pinMutation = useMutation({ mutationFn: togglePinFriend, onSuccess: () => invalidate() });
   const removeMutation = useMutation({ mutationFn: removeFriend, onSuccess: () => invalidate() });
 
-  const mutationError =
-    addMutation.error instanceof Error ? addMutation.error.message : null;
+  const mutationError = addMutation.error instanceof Error ? addMutation.error.message : null;
 
   const { pinned, others, incoming } = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filtered = q
       ? friends.filter(
-          (f) =>
-            f.nickname.toLowerCase().includes(q) || f.handle.toLowerCase().includes(q),
+          (f) => f.nickname.toLowerCase().includes(q) || f.handle.toLowerCase().includes(q),
         )
       : friends;
     return {
@@ -73,11 +71,13 @@ export function FriendsView() {
 
       <div className="rounded-[16px] border border-[#E5E8EB] bg-white p-3">
         <div className="flex items-center gap-2">
-          <span className="text-[20px]" aria-hidden>＋</span>
+          <span className="text-[20px]" aria-hidden>
+            ＋
+          </span>
           <span className="text-[13px] font-bold text-[#191F28]">친구 추가</span>
         </div>
         <p className="mt-1 text-[12px] text-[#8B95A1]">
-          카카오 ID 또는 핸들을 입력하면 친구 요청을 보냅니다.
+          카카오 ID 또는 핸들을 입력하면 친구 목록에 저장합니다.
         </p>
         <div className="mt-2 flex items-center gap-2">
           <input
@@ -149,7 +149,13 @@ export function FriendsView() {
             <FriendRow
               key={friend.id}
               friend={friend}
-              trailing={<FriendRowMenu friend={friend} onPin={pinMutation.mutate} onRemove={removeMutation.mutate} />}
+              trailing={
+                <FriendRowMenu
+                  friend={friend}
+                  onPin={pinMutation.mutate}
+                  onRemove={removeMutation.mutate}
+                />
+              }
             />
           ))}
         </FriendSection>
@@ -165,7 +171,13 @@ export function FriendsView() {
             <FriendRow
               key={friend.id}
               friend={friend}
-              trailing={<FriendRowMenu friend={friend} onPin={pinMutation.mutate} onRemove={removeMutation.mutate} />}
+              trailing={
+                <FriendRowMenu
+                  friend={friend}
+                  onPin={pinMutation.mutate}
+                  onRemove={removeMutation.mutate}
+                />
+              }
             />
           ))
         )}
@@ -253,7 +265,9 @@ function FriendRowMenu({
         onClick={() => onPin(friend.id)}
         aria-label={friend.pinned ? '즐겨찾기 해제' : '즐겨찾기'}
         className={`flex size-9 items-center justify-center rounded-[10px] text-[16px] transition ${
-          friend.pinned ? 'text-[#FF8A00]' : 'text-[#B0B8C1] hover:bg-[#F7F8FA] hover:text-[#FF8A00]'
+          friend.pinned
+            ? 'text-[#FF8A00]'
+            : 'text-[#B0B8C1] hover:bg-[#F7F8FA] hover:text-[#FF8A00]'
         }`}
       >
         {friend.pinned ? '★' : '☆'}

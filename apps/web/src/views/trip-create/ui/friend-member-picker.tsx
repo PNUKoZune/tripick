@@ -29,7 +29,11 @@ export function FriendMemberPicker({ members, onAdd, onRemove }: Props) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
-  const { data: friends = [], isPending, error } = useQuery({
+  const {
+    data: friends = [],
+    isPending,
+    error,
+  } = useQuery({
     queryKey: queryKeys.friends.list,
     queryFn: fetchFriends,
     staleTime: 60 * 1000,
@@ -74,6 +78,10 @@ export function FriendMemberPicker({ members, onAdd, onRemove }: Props) {
   }, [open]);
 
   const selectedIds = useMemo(() => new Set(members.map((m) => m.id)), [members]);
+  const selectedFriendIds = useMemo(
+    () => new Set(members.map((m) => m.friendId).filter(Boolean)),
+    [members],
+  );
 
   const candidates = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -96,10 +104,7 @@ export function FriendMemberPicker({ members, onAdd, onRemove }: Props) {
               key={member.id}
               className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#F2F4F6] pl-2 pr-1 text-[13px] font-semibold text-[#191F28]"
             >
-              <FriendAvatar
-                friend={{ color: member.color, initial: member.initial }}
-                size="sm"
-              />
+              <FriendAvatar friend={{ color: member.color, initial: member.initial }} size="sm" />
               <span>{member.initial}</span>
               {!isSelf ? (
                 <button
@@ -149,9 +154,7 @@ export function FriendMemberPicker({ members, onAdd, onRemove }: Props) {
           </div>
 
           {errorMessage ? (
-            <div className="px-3 py-3 text-[12px] font-semibold text-[#F04452]">
-              {errorMessage}
-            </div>
+            <div className="px-3 py-3 text-[12px] font-semibold text-[#F04452]">{errorMessage}</div>
           ) : null}
 
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -162,14 +165,12 @@ export function FriendMemberPicker({ members, onAdd, onRemove }: Props) {
             ) : candidates.length === 0 ? (
               <div className="px-3 py-4 text-center text-[12px] text-[#8B95A1]">
                 추가할 수 있는 친구가 없어요.
-                <div className="mt-1 text-[11px]">
-                  먼저 친구 페이지에서 친구를 등록해주세요.
-                </div>
+                <div className="mt-1 text-[11px]">먼저 친구 페이지에서 친구를 등록해주세요.</div>
               </div>
             ) : (
               candidates.map((friend) => {
                 const memberId = friendIdToMemberId(friend.id);
-                const selected = selectedIds.has(memberId);
+                const selected = selectedIds.has(memberId) || selectedFriendIds.has(friend.id);
                 return (
                   <button
                     key={friend.id}
@@ -180,6 +181,9 @@ export function FriendMemberPicker({ members, onAdd, onRemove }: Props) {
                       } else {
                         onAdd({
                           id: memberId,
+                          friendId: friend.id,
+                          nickname: friend.nickname,
+                          role: 'companion',
                           initial: friend.initial,
                           color: friend.color,
                         });

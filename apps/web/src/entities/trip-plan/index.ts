@@ -1,5 +1,4 @@
 export {
-  DEMO_TRIP_ID,
   fetchPlannerTrips,
   fetchPlannerTrip,
   fetchPlannerAlternatives,

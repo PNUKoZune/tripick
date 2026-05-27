@@ -71,7 +71,7 @@ export class AuthController {
 
   @Post('demo')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '데모 세션 발급' })
+  @ApiOperation({ summary: '개발용 세션 발급' })
   loginDemo(@Body() dto: DemoLoginDto) {
     return this.authService.loginDemo(dto);
   }

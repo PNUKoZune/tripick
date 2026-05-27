@@ -47,7 +47,7 @@ export function KakaoCallbackView() {
     } catch (error) {
       setState({
         status: 'error',
-        message: error instanceof Error ? error.message : '데모 세션을 만들지 못했습니다.',
+        message: error instanceof Error ? error.message : '임시 세션을 만들지 못했습니다.',
       });
     } finally {
       setDemoLoading(false);
@@ -67,7 +67,7 @@ export function KakaoCallbackView() {
           <p className="mt-3 text-[15px] font-bold leading-6 text-[color:var(--text-secondary)]">
             {state.status === 'checking'
               ? '카카오 계정 정보를 앱에 저장하고 있어요.'
-              : '다시 시도하거나 데모 세션으로 먼저 둘러볼 수 있어요.'}
+              : '다시 시도하거나 임시 세션으로 먼저 확인할 수 있어요.'}
           </p>
 
           {state.status === 'error' ? (
@@ -83,7 +83,7 @@ export function KakaoCallbackView() {
                   카카오로 다시 시작
                 </PrimaryButton>
                 <SecondaryButton disabled={demoLoading} onClick={handleDemoStart}>
-                  {demoLoading ? '준비 중' : '데모 세션으로 계속'}
+                  {demoLoading ? '준비 중' : '임시 세션으로 계속'}
                 </SecondaryButton>
               </>
             ) : (

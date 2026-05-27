@@ -20,6 +20,7 @@ import type {
   TripMemberPreferenceDto,
   UpdateTripMemberDto,
 } from '@tripick/types';
+import type { ResolvedFriendDto } from '../friends/friends.service';
 
 const MEMBER_COLORS = ['#3182F6', '#00A881', '#F97316', '#8B5CF6', '#64748B', '#EC4899'];
 
@@ -85,6 +86,7 @@ export class TripMembersService {
     const count = await this.membersRepo.count({ where: { tripId } });
     const member = this.membersRepo.create({
       tripId,
+      friendId: null,
       nickname,
       contact: dto.contact?.trim() || null,
       kakaoId: dto.kakaoId?.trim() || null,
@@ -93,6 +95,35 @@ export class TripMembersService {
       status: dto.status ?? 'accepted',
       color: MEMBER_COLORS[count % MEMBER_COLORS.length] ?? MEMBER_COLORS[0]!,
       preferenceTags: this.mergePreference(dto.preferenceTags),
+    });
+    return this.toDto(await this.membersRepo.save(member));
+  }
+
+  async createFromFriend(
+    tripId: string,
+    userId: string,
+    friend: ResolvedFriendDto,
+  ): Promise<TripMemberDto> {
+    await this.assertTripOwner(tripId, userId);
+    const existing = await this.membersRepo.findOneBy({ tripId, friendId: friend.id });
+    if (existing) {
+      throw new BadRequestException('이미 여행에 추가된 친구입니다.');
+    }
+
+    const count = await this.membersRepo.count({ where: { tripId } });
+    const preferenceTags = await this.preferenceFromFriend(friend, count);
+    const member = this.membersRepo.create({
+      tripId,
+      userId: null,
+      friendId: friend.id,
+      nickname: friend.nickname,
+      contact: null,
+      kakaoId: friend.handle,
+      relation: '친구',
+      role: 'companion',
+      status: 'accepted',
+      color: friend.color || MEMBER_COLORS[count % MEMBER_COLORS.length] || MEMBER_COLORS[0]!,
+      preferenceTags,
     });
     return this.toDto(await this.membersRepo.save(member));
   }
@@ -191,6 +222,7 @@ export class TripMembersService {
       this.membersRepo.create({
         tripId,
         userId: user.id,
+        friendId: null,
         nickname: user.nickname,
         role: 'owner',
         status: 'accepted',
@@ -282,11 +314,55 @@ export class TripMembersService {
     };
   }
 
+  private async preferenceFromFriend(
+    friend: ResolvedFriendDto,
+    seedIndex: number,
+  ): Promise<TripMemberPreferenceDto> {
+    if (friend.friendUserId) {
+      const preference = await this.preferencesService.findByUser(friend.friendUserId);
+      return this.fromTasteTags(preference?.tasteTags);
+    }
+
+    const handle =
+      `${friend.nickname} ${friend.handle} ${friend.statusMessage ?? ''}`.toLowerCase();
+    const food = handle.includes('카페') || handle.includes('cafe') ? ['cafe'] : ['korean'];
+    const mood = handle.includes('사진') || handle.includes('감성') ? ['romantic'] : ['healing'];
+    const environment =
+      handle.includes('바다') || handle.includes('해변')
+        ? ['beach']
+        : handle.includes('캠퍼')
+          ? ['nature']
+          : ['city'];
+    return this.mergePreference({ food, mood, environment }, this.seedPreference(seedIndex));
+  }
+
+  private seedPreference(index: number): TripMemberPreferenceDto {
+    const seeds: TripMemberPreferenceDto[] = [
+      DEFAULT_MEMBER_PREFERENCE,
+      {
+        food: ['cafe'],
+        mood: ['romantic'],
+        environment: ['city'],
+        transportMode: 'transit',
+        budgetLevel: 'medium',
+      },
+      {
+        food: ['korean'],
+        mood: ['cultural'],
+        environment: ['village'],
+        transportMode: 'walk',
+        budgetLevel: 'low',
+      },
+    ];
+    return seeds[index % seeds.length] ?? DEFAULT_MEMBER_PREFERENCE;
+  }
+
   private toDto(member: TripMemberEntity): TripMemberDto {
     return {
       id: member.id,
       tripId: member.tripId,
       userId: member.userId ?? null,
+      friendId: member.friendId ?? null,
       nickname: member.nickname,
       contact: member.contact ?? null,
       kakaoId: member.kakaoId ?? null,

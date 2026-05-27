@@ -40,11 +40,14 @@ export class AuthService {
     if (missingKeys.length > 0 || !clientId || !redirectUri) {
       return { ready: false, missingKeys };
     }
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+    });
     return {
       ready: true,
-      authorizeUrl:
-        `https://kauth.kakao.com/oauth/authorize` +
-        `?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code`,
+      authorizeUrl: `https://kauth.kakao.com/oauth/authorize?${params.toString()}`,
     };
   }
 

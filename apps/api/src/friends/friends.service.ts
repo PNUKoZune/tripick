@@ -1,0 +1,221 @@
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { UserEntity } from '../users/user.entity';
+import { FriendEntity } from './friend.entity';
+import type { AddFriendRequestDto, FriendDto, FriendStatus } from '@tripick/types';
+
+const FRIEND_COLORS = ['#3182F6', '#00A86B', '#FF8A00', '#6B7684', '#191F28', '#7C3AED', '#F04452'];
+export type ResolvedFriendDto = FriendDto & { friendUserId?: string | null };
+
+@Injectable()
+export class FriendsService {
+  constructor(
+    @InjectRepository(FriendEntity)
+    private readonly friendsRepo: Repository<FriendEntity>,
+    @InjectRepository(UserEntity)
+    private readonly usersRepo: Repository<UserEntity>,
+  ) {}
+
+  async list(ownerId: string): Promise<FriendDto[]> {
+    const friends = await this.friendsRepo.find({
+      where: { ownerId },
+      order: { pinned: 'DESC', status: 'ASC', createdAt: 'ASC' },
+    });
+    return friends.map((friend) => this.toDto(friend));
+  }
+
+  async add(owner: UserEntity, dto: AddFriendRequestDto): Promise<FriendDto> {
+    const handle = this.normalizeHandle(dto.handle);
+    const handleKey = handle.slice(1);
+    if (!handleKey) {
+      throw new BadRequestException('카카오 ID를 입력해주세요.');
+    }
+    if (this.isSelfHandle(owner, handleKey)) {
+      throw new BadRequestException('내 계정은 친구로 추가할 수 없어요.');
+    }
+
+    const existing = await this.friendsRepo.findOneBy({ ownerId: owner.id, handle });
+    if (existing) {
+      throw new ConflictException('이미 친구 목록에 있는 사용자입니다.');
+    }
+
+    const friendUser = await this.findUserByHandle(handleKey);
+    const status: FriendStatus = friendUser ? 'pending' : 'accepted';
+    const saved = await this.friendsRepo.save(
+      this.friendsRepo.create({
+        ownerId: owner.id,
+        friendUserId: friendUser?.id ?? null,
+        nickname: friendUser?.nickname ?? this.nicknameFromHandle(handle),
+        handle,
+        color: this.colorFromString(handle),
+        initial: this.initialFromName(friendUser?.nickname ?? handleKey),
+        status,
+        pinned: false,
+        statusMessage: friendUser ? '친구 요청을 보냈어요.' : '직접 등록한 여행 친구',
+      }),
+    );
+
+    if (friendUser) {
+      await this.createIncomingRequest(friendUser, owner);
+    }
+
+    return this.toDto(saved);
+  }
+
+  async accept(ownerId: string, id: string): Promise<FriendDto> {
+    const friend = await this.findOwned(id, ownerId);
+    if (friend.status !== 'incoming') {
+      throw new BadRequestException('수락할 수 있는 친구 요청이 아닙니다.');
+    }
+
+    friend.status = 'accepted';
+    friend.statusMessage = '함께 여행할 수 있어요.';
+    const saved = await this.friendsRepo.save(friend);
+
+    if (friend.friendUserId) {
+      const reciprocal = await this.friendsRepo.findOneBy({
+        ownerId: friend.friendUserId,
+        friendUserId: ownerId,
+      });
+      if (reciprocal) {
+        reciprocal.status = 'accepted';
+        reciprocal.statusMessage = '함께 여행할 수 있어요.';
+        await this.friendsRepo.save(reciprocal);
+      }
+    }
+
+    return this.toDto(saved);
+  }
+
+  async togglePin(ownerId: string, id: string): Promise<FriendDto> {
+    const friend = await this.findOwned(id, ownerId);
+    friend.pinned = !friend.pinned;
+    return this.toDto(await this.friendsRepo.save(friend));
+  }
+
+  async remove(ownerId: string, id: string): Promise<void> {
+    const friend = await this.findOwned(id, ownerId);
+    await this.friendsRepo.remove(friend);
+  }
+
+  async findAcceptedById(ownerId: string, id: string): Promise<ResolvedFriendDto> {
+    const friend = await this.findOwned(id, ownerId);
+    if (friend.status !== 'accepted') {
+      throw new ForbiddenException('아직 여행에 추가할 수 있는 친구가 아닙니다.');
+    }
+    return this.toResolvedDto(friend);
+  }
+
+  private async createIncomingRequest(recipient: UserEntity, requester: UserEntity): Promise<void> {
+    const handle = this.userHandle(requester);
+    const existing = await this.friendsRepo.findOne({
+      where: [
+        { ownerId: recipient.id, friendUserId: requester.id },
+        { ownerId: recipient.id, handle },
+      ],
+    });
+    if (existing) {
+      if (!existing.friendUserId) {
+        existing.friendUserId = requester.id;
+        await this.friendsRepo.save(existing);
+      }
+      return;
+    }
+    await this.friendsRepo.save(
+      this.friendsRepo.create({
+        ownerId: recipient.id,
+        friendUserId: requester.id,
+        nickname: requester.nickname,
+        handle,
+        color: this.colorFromString(handle),
+        initial: this.initialFromName(requester.nickname),
+        status: 'incoming',
+        pinned: false,
+        statusMessage: '친구 요청을 보냈어요.',
+      }),
+    );
+  }
+
+  private async findOwned(id: string, ownerId: string): Promise<FriendEntity> {
+    const friend = await this.friendsRepo.findOneBy({ id });
+    if (!friend) {
+      throw new NotFoundException('friend not found');
+    }
+    if (friend.ownerId !== ownerId) {
+      throw new ForbiddenException();
+    }
+    return friend;
+  }
+
+  private async findUserByHandle(handleKey: string): Promise<UserEntity | null> {
+    return this.usersRepo.findOne({
+      where: [{ kakaoId: handleKey }, { email: handleKey }, { nickname: handleKey }],
+    });
+  }
+
+  private normalizeHandle(value: string): string {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      throw new BadRequestException('카카오 ID를 입력해주세요.');
+    }
+    return trimmed.startsWith('@') ? trimmed : `@${trimmed}`;
+  }
+
+  private nicknameFromHandle(handle: string): string {
+    return (
+      handle
+        .replace(/^@/, '')
+        .replace(/[._-]+/g, ' ')
+        .trim() || handle
+    );
+  }
+
+  private initialFromName(name: string): string {
+    return (name.trim().replace(/^@/, '')[0] ?? '?').toUpperCase();
+  }
+
+  private isSelfHandle(owner: UserEntity, handleKey: string): boolean {
+    return [owner.kakaoId, owner.email, owner.nickname].filter(Boolean).includes(handleKey);
+  }
+
+  private userHandle(user: UserEntity): string {
+    return `@${user.kakaoId || user.nickname}`;
+  }
+
+  private colorFromString(value: string): string {
+    let sum = 0;
+    for (const ch of value) {
+      sum = (sum + ch.charCodeAt(0)) % 997;
+    }
+    return FRIEND_COLORS[sum % FRIEND_COLORS.length] ?? '#3182F6';
+  }
+
+  private toDto(friend: FriendEntity): FriendDto {
+    return {
+      id: friend.id,
+      nickname: friend.nickname,
+      handle: friend.handle,
+      color: friend.color,
+      initial: friend.initial,
+      ...(friend.emoji ? { emoji: friend.emoji } : {}),
+      ...(friend.statusMessage ? { statusMessage: friend.statusMessage } : {}),
+      status: friend.status,
+      pinned: friend.pinned,
+      createdAt: friend.createdAt.toISOString(),
+    };
+  }
+
+  private toResolvedDto(friend: FriendEntity): ResolvedFriendDto {
+    return {
+      ...this.toDto(friend),
+      friendUserId: friend.friendUserId,
+    };
+  }
+}
