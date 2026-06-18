@@ -10,6 +10,9 @@ export const queryKeys = {
   friends: {
     list: ['friends', 'list'] as const,
   },
+  inbox: {
+    list: ['inbox', 'list'] as const,
+  },
   planner: {
     trips: ['planner', 'trips'] as const,
     trip: (tripId: string) => ['planner', 'trips', tripId] as const,

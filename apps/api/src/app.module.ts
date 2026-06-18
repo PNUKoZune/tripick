@@ -16,6 +16,7 @@ import { PreferenceAnalyzerModule } from './preference-analyzer/preference-analy
 import { MainPlannerModule } from './main-planner/main-planner.module';
 import { TripMembersModule } from './trip-members/trip-members.module';
 import { FriendsModule } from './friends/friends.module';
+import { InboxModule } from './inbox/inbox.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { FriendsModule } from './friends/friends.module';
     MainPlannerModule,
     TripMembersModule,
     FriendsModule,
+    InboxModule,
   ],
 })
 export class AppModule {}

@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: '/', label: '홈', icon: 'home' },
   { href: '/preferences', label: '취향', icon: 'preference' },
   { href: '/friends', label: '친구', icon: 'members' },
+  { href: '/inbox', label: '알림', icon: 'inbox' },
 ] as const;
 
 type NavIconName = (typeof NAV_ITEMS)[number]['icon'];
@@ -42,7 +43,7 @@ export function AppBottomNavigation({ className = '' }: { className?: string }) 
       aria-label="하단 탭"
       className={`fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 border-t border-[color:var(--line)] bg-white/95 px-1.5 pb-[max(10px,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-xl ${className}`}
     >
-      <div className="grid h-[66px] grid-cols-3 items-stretch">
+      <div className="grid h-[66px] grid-cols-4 items-stretch">
         {NAV_ITEMS.map((item) => {
           const active = isNavItemActive(pathname, item.href);
           return (
@@ -144,6 +145,13 @@ function NavIcon({ name, active }: { name: NavIconName; active: boolean }) {
           <path d="M4.8 19c.7-3.1 2.3-4.7 4.2-4.7s3.5 1.6 4.2 4.7" />
           <path d="M15 10.2a2.5 2.5 0 1 0-.7-4.9" />
           <path d="M15.6 14.6c1.8.4 3 1.8 3.6 4.4" />
+        </>
+      ) : null}
+      {name === 'inbox' ? (
+        <>
+          <path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-4l-3 3-3-3H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" />
+          <path d="M8.5 10h7" />
+          <path d="M8.5 13h4.5" />
         </>
       ) : null}
     </svg>

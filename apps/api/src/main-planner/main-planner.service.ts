@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { FriendsService } from '../friends/friends.service';
+import { InboxService } from '../inbox/inbox.service';
 import { ItineraryItemEntity } from '../itinerary/itinerary-item.entity';
 import { PreferencesService } from '../preferences/preferences.service';
 import { TripMembersService } from '../trip-members/trip-members.service';
@@ -67,6 +68,7 @@ export class MainPlannerService {
     private readonly tripMembersService: TripMembersService,
     private readonly friendsService: FriendsService,
     private readonly preferencesService: PreferencesService,
+    private readonly inboxService: InboxService,
   ) {}
 
   async listTrips(user: UserEntity): Promise<TripSummaryDto[]> {
@@ -173,10 +175,19 @@ export class MainPlannerService {
     }
 
     const marker = this.toAlternativeMarker(item, alternative, 1);
+    const previousName = item.name;
     item.name = alternative.name;
     item.address = `${alternative.name} 인근`;
     item.coordinates = { lat: marker.lat, lng: marker.lng };
     await this.itemsRepo.save(item);
+
+    await this.inboxService.create({
+      userId: user.id,
+      category: 'replan_ready',
+      title: '대안 일정 반영 완료',
+      body: `"${previousName}" 일정이 "${alternative.name}"(으)로 바뀌었어요.`,
+      payload: { tripId, itemId: dto.itemId },
+    });
 
     return {
       tripId,
