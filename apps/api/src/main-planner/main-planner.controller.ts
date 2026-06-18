@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -79,13 +80,34 @@ export class MainPlannerController {
   }
 
   @Delete('trips/:tripId/members/:memberId')
-  @ApiOperation({ summary: '여행 멤버 제거' })
+  @ApiOperation({ summary: '여행 멤버 제거 (owner)' })
   removeMember(
     @CurrentUser() user: UserEntity,
     @Param('tripId') tripId: string,
     @Param('memberId') memberId: string,
   ) {
     return this.mainPlannerService.removeMember(user, tripId, memberId);
+  }
+
+  @Patch('trips/:tripId/members/:memberId/accept-invite')
+  @ApiOperation({ summary: '여행 초대 수락 (invitee)' })
+  acceptInvite(
+    @CurrentUser() user: UserEntity,
+    @Param('tripId') tripId: string,
+    @Param('memberId') memberId: string,
+  ) {
+    return this.mainPlannerService.acceptInvite(user, tripId, memberId);
+  }
+
+  @Delete('trips/:tripId/members/:memberId/invite')
+  @HttpCode(204)
+  @ApiOperation({ summary: '여행 초대 거절 (invitee)' })
+  rejectInvite(
+    @CurrentUser() user: UserEntity,
+    @Param('tripId') tripId: string,
+    @Param('memberId') memberId: string,
+  ) {
+    return this.mainPlannerService.rejectInvite(user, tripId, memberId);
   }
 
   @Post('trips/:tripId/swap')

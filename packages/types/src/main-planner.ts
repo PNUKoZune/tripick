@@ -13,6 +13,7 @@ export interface PlannerMemberDto {
   friendId?: string | null;
   nickname?: string;
   role?: 'owner' | 'companion';
+  status?: 'accepted' | 'pending';
 }
 
 export interface PlannerMapMarkerDto {

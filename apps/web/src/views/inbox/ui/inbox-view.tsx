@@ -8,6 +8,7 @@ import type { InboxItemDto, InboxItemKind, NotificationCategory } from '@tripick
 
 import { acceptFriend, removeFriend } from '@/entities/friend';
 import { fetchInbox, markAllInboxRead, markInboxRead } from '@/entities/inbox';
+import { acceptTripInvite, rejectTripInvite } from '@/entities/trip-plan';
 import { queryKeys } from '@/shared/api/query-keys';
 import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
 
@@ -21,6 +22,7 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
 
 const KIND_META: Record<InboxItemKind, { emoji: string; label: string; tone: string }> = {
   friend_request: { emoji: '👋', label: '친구 요청', tone: '#3182F6' },
+  trip_invite: { emoji: '🎟️', label: '여행 초대', tone: '#7C3AED' },
   replan_ready: { emoji: '✨', label: '재계획 알림', tone: '#00A86B' },
   weather_alert: { emoji: '☔', label: '날씨 알림', tone: '#FF8A00' },
   trip_reminder: { emoji: '🧳', label: '여행 알림', tone: '#1B64DA' },
@@ -54,6 +56,13 @@ export function InboxView() {
       queryClient.invalidateQueries({ queryKey: queryKeys.friends.list }),
     ]);
 
+  const invalidateAll = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.inbox.list }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.friends.list }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.planner.trips }),
+    ]);
+
   const readMutation = useMutation({ mutationFn: markInboxRead, onSuccess: () => invalidate() });
   const readAllMutation = useMutation({
     mutationFn: markAllInboxRead,
@@ -61,6 +70,22 @@ export function InboxView() {
   });
   const acceptMutation = useMutation({ mutationFn: acceptFriend, onSuccess: () => invalidate() });
   const rejectMutation = useMutation({ mutationFn: removeFriend, onSuccess: () => invalidate() });
+  const acceptInviteMutation = useMutation({
+    mutationFn: ({ tripId, tripMemberId }: { tripId: string; tripMemberId: string }) =>
+      acceptTripInvite(tripId, tripMemberId),
+    onSuccess: (_data, variables) =>
+      Promise.all([
+        invalidateAll(),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.planner.trip(variables.tripId),
+        }),
+      ]),
+  });
+  const rejectInviteMutation = useMutation({
+    mutationFn: ({ tripId, tripMemberId }: { tripId: string; tripMemberId: string }) =>
+      rejectTripInvite(tripId, tripMemberId),
+    onSuccess: () => invalidateAll(),
+  });
 
   const filteredItems = useMemo(() => {
     if (filter === 'unread') return items.filter((item) => !item.readAt);
@@ -77,6 +102,22 @@ export function InboxView() {
       acceptMutation.mutate(action.friendId);
     } else if (action.type === 'reject-friend' && action.friendId) {
       rejectMutation.mutate(action.friendId);
+    } else if (action.type === 'accept-trip-invite' && action.tripId && action.tripMemberId) {
+      if (!item.readAt) readMutation.mutate(item.id);
+      acceptInviteMutation.mutate(
+        { tripId: action.tripId, tripMemberId: action.tripMemberId },
+        {
+          onSuccess: () => {
+            router.push(`/planner?tripId=${action.tripId}`);
+          },
+        },
+      );
+    } else if (action.type === 'reject-trip-invite' && action.tripId && action.tripMemberId) {
+      if (!item.readAt) readMutation.mutate(item.id);
+      rejectInviteMutation.mutate({
+        tripId: action.tripId,
+        tripMemberId: action.tripMemberId,
+      });
     } else if (action.type === 'open-trip' && action.tripId) {
       if (!item.readAt && CATEGORY_KINDS.has(item.kind)) {
         readMutation.mutate(item.id);
@@ -155,8 +196,10 @@ export function InboxView() {
                 key={item.id}
                 item={item}
                 pending={
-                  (acceptMutation.isPending || rejectMutation.isPending) &&
-                  item.kind === 'friend_request'
+                  ((acceptMutation.isPending || rejectMutation.isPending) &&
+                    item.kind === 'friend_request') ||
+                  ((acceptInviteMutation.isPending || rejectInviteMutation.isPending) &&
+                    item.kind === 'trip_invite')
                 }
                 onAction={(actionType) => handleAction(item, actionType)}
                 onClick={() => handleRowClick(item)}
@@ -274,7 +317,9 @@ function InboxRow({
           <div className="mt-2 flex flex-wrap gap-2">
             {item.actions.map((action) => {
               const primary =
-                action.type === 'accept-friend' || action.type === 'open-trip';
+                action.type === 'accept-friend' ||
+                action.type === 'accept-trip-invite' ||
+                action.type === 'open-trip';
               return (
                 <button
                   key={`${action.type}:${action.label}`}

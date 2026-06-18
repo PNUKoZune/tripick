@@ -72,7 +72,7 @@ export class MainPlannerService {
   ) {}
 
   async listTrips(user: UserEntity): Promise<TripSummaryDto[]> {
-    const trips = await this.tripsService.findByUser(user.id);
+    const trips = await this.tripsService.findVisible(user.id);
     return Promise.all(trips.map((trip) => this.toTripSummary(trip, user)));
   }
 
@@ -95,7 +95,7 @@ export class MainPlannerService {
   }
 
   async getTrip(user: UserEntity, tripId: string): Promise<PlannerTripDto> {
-    const trip = await this.tripsService.findOne(tripId, user.id);
+    const trip = await this.tripsService.findOneForViewer(tripId, user.id);
     const [members, items, preference] = await Promise.all([
       this.tripMembersService.findAll(tripId, user),
       this.findItems(tripId),
@@ -118,8 +118,51 @@ export class MainPlannerService {
       throw new BadRequestException('friendId 가 필요합니다.');
     }
     const friend = await this.friendsService.findAcceptedById(user.id, dto.friendId);
-    await this.tripMembersService.createFromFriend(tripId, user.id, friend);
+    const member = await this.tripMembersService.createFromFriend(tripId, user.id, friend);
+    if (member.status === 'pending' && member.userId) {
+      const trip = await this.tripsService.findOne(tripId, user.id);
+      await this.inboxService.create({
+        userId: member.userId,
+        category: 'trip_invite',
+        title: `${user.nickname} 님의 여행 초대`,
+        body: `"${trip.title}" (${trip.destination}, ${trip.startDate} ~ ${trip.endDate})에 함께 떠나요!`,
+        payload: { tripId, tripMemberId: member.id, inviterNickname: user.nickname },
+      });
+    }
     return this.listPlannerMembers(user, tripId);
+  }
+
+  async acceptInvite(
+    user: UserEntity,
+    tripId: string,
+    memberId: string,
+  ): Promise<PlannerMemberDto> {
+    const member = await this.tripMembersService.acceptInvite(tripId, memberId, user);
+    const trip = await this.tripsService.findOneForViewer(tripId, user.id);
+    if (trip.userId !== user.id) {
+      await this.inboxService.create({
+        userId: trip.userId,
+        category: 'general',
+        title: `${user.nickname} 님이 초대를 수락했어요`,
+        body: `"${trip.title}" 여행 멤버로 합류했습니다.`,
+        payload: { tripId },
+      });
+    }
+    return this.toPlannerMember(member);
+  }
+
+  async rejectInvite(user: UserEntity, tripId: string, memberId: string): Promise<void> {
+    const trip = await this.tripsRepo.findOneBy({ id: tripId });
+    await this.tripMembersService.rejectInvite(tripId, memberId, user);
+    if (trip && trip.userId !== user.id) {
+      await this.inboxService.create({
+        userId: trip.userId,
+        category: 'general',
+        title: `${user.nickname} 님이 초대를 거절했어요`,
+        body: `"${trip.title}" 여행 초대가 거절되었습니다.`,
+        payload: { tripId },
+      });
+    }
   }
 
   async removeMember(
@@ -359,6 +402,7 @@ export class MainPlannerService {
       friendId: member.friendId ?? null,
       nickname: member.nickname,
       role: member.role,
+      status: member.status,
     };
   }
 

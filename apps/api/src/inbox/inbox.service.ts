@@ -111,11 +111,24 @@ export class InboxService {
 
   private actionsForNotification(notification: NotificationEntity): InboxItemActionDto[] {
     const tripId = notification.payload?.tripId;
-    if ((notification.category === 'replan_ready' || notification.category === 'trip_reminder') && tripId) {
+    const tripMemberId = notification.payload?.tripMemberId;
+    if (notification.category === 'trip_invite' && tripId && tripMemberId) {
+      return [
+        { type: 'accept-trip-invite', label: '수락', tripId, tripMemberId },
+        { type: 'reject-trip-invite', label: '거절', tripId, tripMemberId },
+      ];
+    }
+    if (
+      (notification.category === 'replan_ready' || notification.category === 'trip_reminder') &&
+      tripId
+    ) {
       return [{ type: 'open-trip', label: '여행 보기', tripId }];
     }
     if (notification.category === 'weather_alert' && tripId) {
       return [{ type: 'open-trip', label: '일정 확인', tripId }];
+    }
+    if (notification.category === 'general' && tripId) {
+      return [{ type: 'open-trip', label: '여행 보기', tripId }];
     }
     return [];
   }

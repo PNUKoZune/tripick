@@ -10,6 +10,7 @@ export type NotificationCategory =
   | 'replan_ready'
   | 'weather_alert'
   | 'trip_reminder'
+  | 'trip_invite'
   | 'general';
 
 export type InboxItemKind = NotificationCategory | 'friend_request';
@@ -20,10 +21,13 @@ export interface InboxItemActionDto {
     | 'open-trip' // tripId 가지고 /planner 이동
     | 'open-friends' // /friends 이동
     | 'accept-friend' // friend.id 로 PATCH /friends/:id/accept
-    | 'reject-friend'; // friend.id 로 DELETE /friends/:id
+    | 'reject-friend' // friend.id 로 DELETE /friends/:id
+    | 'accept-trip-invite' // tripId + tripMemberId 로 invite 수락
+    | 'reject-trip-invite'; // tripId + tripMemberId 로 invite 거절
   label: string;
   /** 액션 동작에 필요한 식별자 */
   tripId?: string;
+  tripMemberId?: string;
   friendId?: string;
 }
 

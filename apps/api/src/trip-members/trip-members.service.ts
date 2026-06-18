@@ -68,7 +68,22 @@ export class TripMembersService {
   ) {}
 
   async findAll(tripId: string, user: UserEntity): Promise<TripMemberDto[]> {
-    await this.ensureOwnerMember(tripId, user);
+    const trip = await this.tripsRepo.findOneBy({ id: tripId });
+    if (!trip) {
+      throw new NotFoundException(`Trip ${tripId} not found`);
+    }
+    if (trip.userId === user.id) {
+      await this.ensureOwnerMember(tripId, user);
+    } else {
+      const membership = await this.membersRepo.findOneBy({
+        tripId,
+        userId: user.id,
+        status: 'accepted',
+      });
+      if (!membership) {
+        throw new ForbiddenException();
+      }
+    }
     const members = await this.membersRepo.find({
       where: { tripId },
       order: { role: 'DESC', createdAt: 'ASC' },
@@ -112,20 +127,59 @@ export class TripMembersService {
 
     const count = await this.membersRepo.count({ where: { tripId } });
     const preferenceTags = await this.preferenceFromFriend(friend, count);
+    // 친구가 실제 사용자(friendUserId)와 매칭된 경우 'pending' 으로 초대.
+    // 단순 핸들 등록(매칭 안 됨)은 알릴 곳이 없으므로 즉시 accepted.
+    const invitedUserId = friend.friendUserId ?? null;
     const member = this.membersRepo.create({
       tripId,
-      userId: null,
+      userId: invitedUserId,
       friendId: friend.id,
       nickname: friend.nickname,
       contact: null,
       kakaoId: friend.handle,
       relation: '친구',
       role: 'companion',
-      status: 'accepted',
+      status: invitedUserId ? 'pending' : 'accepted',
       color: friend.color || MEMBER_COLORS[count % MEMBER_COLORS.length] || MEMBER_COLORS[0]!,
       preferenceTags,
     });
     return this.toDto(await this.membersRepo.save(member));
+  }
+
+  /** 초대받은 사용자가 trip 멤버 자격 수락 */
+  async acceptInvite(
+    tripId: string,
+    memberId: string,
+    user: UserEntity,
+  ): Promise<TripMemberDto> {
+    const member = await this.membersRepo.findOneBy({ id: memberId, tripId });
+    if (!member) {
+      throw new NotFoundException(`Trip member ${memberId} not found`);
+    }
+    if (member.userId !== user.id) {
+      throw new ForbiddenException('본인에게 온 초대가 아닙니다.');
+    }
+    if (member.status === 'accepted') {
+      return this.toDto(member);
+    }
+    member.status = 'accepted';
+    member.nickname = user.nickname;
+    return this.toDto(await this.membersRepo.save(member));
+  }
+
+  /** 초대받은 사용자가 trip 멤버 자격 거절 */
+  async rejectInvite(tripId: string, memberId: string, user: UserEntity): Promise<void> {
+    const member = await this.membersRepo.findOneBy({ id: memberId, tripId });
+    if (!member) {
+      throw new NotFoundException(`Trip member ${memberId} not found`);
+    }
+    if (member.userId !== user.id) {
+      throw new ForbiddenException('본인에게 온 초대가 아닙니다.');
+    }
+    if (member.role === 'owner') {
+      throw new BadRequestException('owner member cannot reject');
+    }
+    await this.membersRepo.remove(member);
   }
 
   async update(
@@ -172,6 +226,7 @@ export class TripMembersService {
 
   async getCoordination(tripId: string, user: UserEntity): Promise<PreferenceCoordinationDto> {
     const members = await this.findAll(tripId, user);
+    const activeMembers = members.filter((member) => member.status === 'accepted');
     const ownerPreference = await this.preferencesService.findByUser(user.id);
     const ownerTasteTags = ownerPreference?.tasteTags;
 
@@ -179,13 +234,13 @@ export class TripMembersService {
       tripId,
       members,
       consensus: {
-        food: this.vote(members, (member) => member.preferenceTags.food),
-        mood: this.vote(members, (member) => member.preferenceTags.mood),
-        environment: this.vote(members, (member) => member.preferenceTags.environment),
-        transportMode: this.vote(members, (member) => [member.preferenceTags.transportMode]),
-        budgetLevel: this.vote(members, (member) => [member.preferenceTags.budgetLevel]),
+        food: this.vote(activeMembers, (member) => member.preferenceTags.food),
+        mood: this.vote(activeMembers, (member) => member.preferenceTags.mood),
+        environment: this.vote(activeMembers, (member) => member.preferenceTags.environment),
+        transportMode: this.vote(activeMembers, (member) => [member.preferenceTags.transportMode]),
+        budgetLevel: this.vote(activeMembers, (member) => [member.preferenceTags.budgetLevel]),
       },
-      recommendation: this.buildRecommendation(members),
+      recommendation: this.buildRecommendation(activeMembers),
       ...(ownerTasteTags ? { ownerTasteTags } : {}),
       updatedAt: new Date().toISOString(),
     };
