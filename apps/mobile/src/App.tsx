@@ -9,7 +9,14 @@ import {
   Linking,
 } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import messaging from '@react-native-firebase/messaging';
+import {
+  AuthorizationStatus,
+  getMessaging,
+  getToken,
+  onMessage,
+  onTokenRefresh,
+  requestPermission,
+} from '@react-native-firebase/messaging';
 import notifee, { AndroidImportance } from '@notifee/react-native';
 import Geolocation from 'react-native-geolocation-service';
 
@@ -96,22 +103,23 @@ export default function App() {
         importance: AndroidImportance.HIGH,
       });
 
-      const authStatus = await messaging().requestPermission();
+      const messaging = getMessaging();
+      const authStatus = await requestPermission(messaging);
       const enabled =
-        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+        authStatus === AuthorizationStatus.AUTHORIZED ||
+        authStatus === AuthorizationStatus.PROVISIONAL;
       if (!enabled) return;
 
-      const token = await messaging().getToken();
+      const token = await getToken(messaging);
       postToWeb({ type: 'FCM_TOKEN', token });
 
       // 토큰 갱신(앱 데이터 초기화·재설치·12개월 미사용 등) 시에도 백엔드에 다시 보낸다.
-      const unsubscribeRefresh = messaging().onTokenRefresh((next) => {
+      const unsubscribeRefresh = onTokenRefresh(messaging, (next) => {
         postToWeb({ type: 'FCM_TOKEN', token: next });
       });
 
       // 포그라운드 메시지는 OS 가 표시하지 않으므로 notifee 로 직접 표시 + WebView 에 invalidate 신호.
-      const unsubscribeMessage = messaging().onMessage(async (remoteMessage) => {
+      const unsubscribeMessage = onMessage(messaging, async (remoteMessage) => {
         const { notification, data } = remoteMessage ?? {};
         const title = notification?.title ?? (data?.title ? String(data.title) : 'TriPick');
         const body = notification?.body ?? (data?.body ? String(data.body) : '');
@@ -208,7 +216,10 @@ export default function App() {
           Linking.openURL(request.url).catch(() => undefined);
           return false;
         }}
-        onNavigationStateChange={(state) => setCanGoBack(state.canGoBack)}
+        onNavigationStateChange={(state) => {
+          console.log('[TriPick] WebView URL:', state.url);
+          setCanGoBack(state.canGoBack);
+        }}
         onMessage={handleMessage}
         // 로딩 인디케이터는 web 의 스켈레톤이 담당하므로 native 에선 비움
         renderLoading={() => <View style={styles.loadingFill} />}
