@@ -47,3 +47,10 @@ web-build
 
 # TypeScript
 *.tsbuildinfo
+
+# Windows / WSL noise — NTFS alternate data streams attached to files downloaded via Windows browser
+*:Zone.Identifier
+
+# Firebase client config
+apps/mobile/android/app/google-services.json
+apps/mobile/ios/TriPick/GoogleService-Info.plist
