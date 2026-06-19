@@ -14,6 +14,11 @@ const workspaceRoot = path.resolve(projectRoot, '../..');
  * - unstable_enablePackageExports: package.json `exports` 필드를 metro 도 인식
  * - hierarchical lookup 은 pnpm 에선 켜둬야 sibling dep 검색이 정상 동작
  */
+// pnpm 으로 풀린 RN 라이브러리들이 gradle 빌드 중에 임시 디렉터리를 생성·삭제하면서
+// Metro 의 inotify watcher 가 ENOENT 로 죽는다. 네이티브 빌드 산출물은 Metro 가
+// 추적할 이유가 없으므로 blockList 로 통째 차단.
+const nativeBuildBlockList = /[\\/](?:android|ios)[\\/](?:build|\.cxx|\.gradle|DerivedData|Pods)[\\/].*$/;
+
 const config = {
   watchFolders: [workspaceRoot],
   resolver: {
@@ -23,6 +28,7 @@ const config = {
     ],
     unstable_enableSymlinks: true,
     unstable_enablePackageExports: true,
+    blockList: nativeBuildBlockList,
   },
 };
 
