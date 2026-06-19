@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { FriendEntity } from '../friends/friend.entity';
+import { NotificationService } from '../notification/notification.service';
 import { UserEntity } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
 import { NotificationEntity } from './notification.entity';
@@ -20,6 +21,7 @@ export class InboxService {
     @InjectRepository(FriendEntity)
     private readonly friendsRepo: Repository<FriendEntity>,
     private readonly usersService: UsersService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   async list(user: UserEntity): Promise<InboxSummaryDto> {
@@ -74,7 +76,7 @@ export class InboxService {
     if (receiver && !this.usersService.prefersCategory(receiver, dto.category)) {
       return null;
     }
-    return this.notificationsRepo.save(
+    const saved = await this.notificationsRepo.save(
       this.notificationsRepo.create({
         userId: dto.userId,
         category: dto.category,
@@ -84,6 +86,36 @@ export class InboxService {
         readAt: null,
       }),
     );
+
+    // 푸시 발송은 인박스 저장 결과와 독립 — 실패해도 인박스 row 는 살아있다.
+    if (receiver?.fcmToken) {
+      void this.notificationService.send(
+        {
+          userId: dto.userId,
+          type: dto.category,
+          title: dto.title,
+          body: dto.body,
+          data: this.stringifyPayload({
+            notificationId: saved.id,
+            category: dto.category,
+            ...(dto.payload ?? {}),
+          }),
+        },
+        receiver.fcmToken,
+      );
+    }
+
+    return saved;
+  }
+
+  /** FCM data payload 는 모든 값이 string 이어야 함 — 타입 보정. */
+  private stringifyPayload(payload: Record<string, unknown>): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(payload)) {
+      if (value === undefined || value === null) continue;
+      out[key] = typeof value === 'string' ? value : JSON.stringify(value);
+    }
+    return out;
   }
 
   private fromNotification(notification: NotificationEntity): InboxItemDto {

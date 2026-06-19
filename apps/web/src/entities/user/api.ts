@@ -22,3 +22,7 @@ export function updateNotificationPreferences(dto: UpdateNotificationPreferences
 export function deleteMe() {
   return api.delete<void>('/users/me');
 }
+
+export function updateFcmToken(fcmToken: string) {
+  return api.patch<void>('/users/me/fcm-token', { fcmToken });
+}

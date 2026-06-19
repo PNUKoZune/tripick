@@ -1,4 +1,10 @@
-export { fetchMe, updateMe, updateNotificationPreferences, deleteMe } from './api';
+export {
+  fetchMe,
+  updateMe,
+  updateNotificationPreferences,
+  deleteMe,
+  updateFcmToken,
+} from './api';
 export type {
   UserDto as MeUser,
   UpdateUserDto as UpdateMeInput,
