@@ -1,4 +1,4 @@
-package com.tripick
+package com.tripick.place
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
