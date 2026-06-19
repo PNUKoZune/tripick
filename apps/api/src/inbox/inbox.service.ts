@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { FriendEntity } from '../friends/friend.entity';
 import { UserEntity } from '../users/user.entity';
+import { UsersService } from '../users/users.service';
 import { NotificationEntity } from './notification.entity';
 import type {
   CreateNotificationDto,
@@ -18,6 +19,7 @@ export class InboxService {
     private readonly notificationsRepo: Repository<NotificationEntity>,
     @InjectRepository(FriendEntity)
     private readonly friendsRepo: Repository<FriendEntity>,
+    private readonly usersService: UsersService,
   ) {}
 
   async list(user: UserEntity): Promise<InboxSummaryDto> {
@@ -67,7 +69,11 @@ export class InboxService {
     return { updated: result.affected ?? 0 };
   }
 
-  async create(dto: CreateNotificationDto): Promise<NotificationEntity> {
+  async create(dto: CreateNotificationDto): Promise<NotificationEntity | null> {
+    const receiver = await this.usersService.findById(dto.userId);
+    if (receiver && !this.usersService.prefersCategory(receiver, dto.category)) {
+      return null;
+    }
     return this.notificationsRepo.save(
       this.notificationsRepo.create({
         userId: dto.userId,

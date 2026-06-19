@@ -13,6 +13,9 @@ export const queryKeys = {
   inbox: {
     list: ['inbox', 'list'] as const,
   },
+  user: {
+    me: ['user', 'me'] as const,
+  },
   planner: {
     trips: ['planner', 'trips'] as const,
     trip: (tripId: string) => ['planner', 'trips', tripId] as const,
