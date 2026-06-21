@@ -60,4 +60,4 @@ yarn-error.log
 
 # Firebase 자격 (별도 secret 채널로 배포)
 android/app/google-services.json
-ios/GoogleService-Info.plist
+ios/TriPick/GoogleService-Info.plist

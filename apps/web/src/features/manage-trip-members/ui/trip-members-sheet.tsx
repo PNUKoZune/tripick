@@ -95,21 +95,30 @@ export function TripMembersSheet({ open, onClose, tripId, tripTitle, members }: 
           ) : (
             members.map((member) => {
               const isOwner = member.role === 'owner' || !member.friendId;
+              const isPending = member.status === 'pending';
               const label = member.nickname ?? member.initial;
               return (
                 <div
                   key={member.id}
-                  className="flex items-center gap-3 rounded-[12px] border border-[#E5E8EB] bg-white px-3 py-2.5"
+                  className={`flex items-center gap-3 rounded-[12px] border px-3 py-2.5 ${
+                    isPending
+                      ? 'border-dashed border-[#D6DBE1] bg-[#FAFBFC]'
+                      : 'border-[#E5E8EB] bg-white'
+                  }`}
                 >
                   <FriendAvatar
                     friend={{ color: member.color, initial: member.initial }}
                     size="md"
                   />
                   <div className="flex-1 text-[14px] font-bold text-[#191F28]">
-                    {label}
+                    <span className={isPending ? 'text-[#8B95A1]' : undefined}>{label}</span>
                     {isOwner ? (
                       <span className="ml-2 rounded-full bg-[#F2F4F6] px-2 py-0.5 text-[11px] font-semibold text-[#6B7684]">
                         본 여행 기본 멤버
+                      </span>
+                    ) : isPending ? (
+                      <span className="ml-2 rounded-full bg-[#FFF4E6] px-2 py-0.5 text-[11px] font-semibold text-[#FF8A00]">
+                        초대 응답 대기
                       </span>
                     ) : null}
                   </div>
@@ -120,7 +129,7 @@ export function TripMembersSheet({ open, onClose, tripId, tripTitle, members }: 
                       disabled={removeMutation.isPending}
                       className="h-9 rounded-[10px] border border-[#E5E8EB] px-3 text-[12px] font-bold text-[#6B7684] hover:bg-[#FAFBFC] disabled:opacity-50"
                     >
-                      제외
+                      {isPending ? '초대 취소' : '제외'}
                     </button>
                   ) : null}
                 </div>

@@ -4,9 +4,10 @@ import { TripEntity } from './trip.entity';
 import { TripsController } from './trips.controller';
 import { TripsService } from './trips.service';
 import { PlannerModule } from '../planner/planner.module';
+import { TripMemberEntity } from '../trip-members/trip-member.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([TripEntity]), PlannerModule],
+  imports: [TypeOrmModule.forFeature([TripEntity, TripMemberEntity]), PlannerModule],
   controllers: [TripsController],
   providers: [TripsService],
   exports: [TripsService],

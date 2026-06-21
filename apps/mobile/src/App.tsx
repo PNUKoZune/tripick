@@ -9,7 +9,15 @@ import {
   Linking,
 } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import messaging from '@react-native-firebase/messaging';
+import {
+  AuthorizationStatus,
+  getMessaging,
+  getToken,
+  onMessage,
+  onTokenRefresh,
+  requestPermission,
+} from '@react-native-firebase/messaging';
+import notifee, { AndroidImportance } from '@notifee/react-native';
 import Geolocation from 'react-native-geolocation-service';
 
 /**
@@ -88,19 +96,52 @@ export default function App() {
 
   const setupFcm = useCallback(async () => {
     try {
-      const authStatus = await messaging().requestPermission();
+      // 포그라운드/백그라운드 공용 Android 채널. iOS 는 무시.
+      await notifee.createChannel({
+        id: 'tripick-default',
+        name: 'TriPick 알림',
+        importance: AndroidImportance.HIGH,
+      });
+
+      const messaging = getMessaging();
+      const authStatus = await requestPermission(messaging);
       const enabled =
-        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+        authStatus === AuthorizationStatus.AUTHORIZED ||
+        authStatus === AuthorizationStatus.PROVISIONAL;
       if (!enabled) return;
 
-      const token = await messaging().getToken();
+      const token = await getToken(messaging);
       postToWeb({ type: 'FCM_TOKEN', token });
 
-      const unsubscribe = messaging().onMessage(async (remoteMessage) => {
+      // 토큰 갱신(앱 데이터 초기화·재설치·12개월 미사용 등) 시에도 백엔드에 다시 보낸다.
+      const unsubscribeRefresh = onTokenRefresh(messaging, (next) => {
+        postToWeb({ type: 'FCM_TOKEN', token: next });
+      });
+
+      // 포그라운드 메시지는 OS 가 표시하지 않으므로 notifee 로 직접 표시 + WebView 에 invalidate 신호.
+      const unsubscribeMessage = onMessage(messaging, async (remoteMessage) => {
+        const { notification, data } = remoteMessage ?? {};
+        const title = notification?.title ?? (data?.title ? String(data.title) : 'TriPick');
+        const body = notification?.body ?? (data?.body ? String(data.body) : '');
+        if (title || body) {
+          await notifee.displayNotification({
+            title,
+            body,
+            android: {
+              channelId: 'tripick-default',
+              importance: AndroidImportance.HIGH,
+              smallIcon: 'ic_launcher',
+              pressAction: { id: 'default' },
+            },
+          });
+        }
         postToWeb({ type: 'PUSH_NOTIFICATION', data: remoteMessage });
       });
-      return unsubscribe;
+
+      return () => {
+        unsubscribeRefresh();
+        unsubscribeMessage();
+      };
     } catch (error) {
       // Firebase 자격 파일(google-services.json / GoogleService-Info.plist) 미배치 시 정상적으로 건너뛴다.
       console.warn('[TriPick] FCM 초기화 생략:', error instanceof Error ? error.message : error);
@@ -175,7 +216,10 @@ export default function App() {
           Linking.openURL(request.url).catch(() => undefined);
           return false;
         }}
-        onNavigationStateChange={(state) => setCanGoBack(state.canGoBack)}
+        onNavigationStateChange={(state) => {
+          console.log('[TriPick] WebView URL:', state.url);
+          setCanGoBack(state.canGoBack);
+        }}
         onMessage={handleMessage}
         // 로딩 인디케이터는 web 의 스켈레톤이 담당하므로 native 에선 비움
         renderLoading={() => <View style={styles.loadingFill} />}

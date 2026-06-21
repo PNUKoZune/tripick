@@ -1,4 +1,6 @@
-export type NotificationType = 'replan_ready' | 'weather_alert' | 'trip_reminder' | 'general';
+import type { NotificationCategory } from './inbox';
+
+export type NotificationType = NotificationCategory;
 
 export interface PushNotificationDto {
   userId: string;

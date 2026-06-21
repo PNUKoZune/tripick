@@ -7,6 +7,8 @@ export {
   createTrip,
   addTripMember,
   removeTripMember,
+  acceptTripInvite,
+  rejectTripInvite,
   fetchPlannerCoordination,
 } from './api';
 export { TripSummaryCard } from './ui/trip-summary-card';

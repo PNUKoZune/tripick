@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { FriendsModule } from '../friends/friends.module';
+import { InboxModule } from '../inbox/inbox.module';
 import { ItineraryItemEntity } from '../itinerary/itinerary-item.entity';
 import { PreferencesModule } from '../preferences/preferences.module';
 import { TripMembersModule } from '../trip-members/trip-members.module';
@@ -16,6 +17,7 @@ import { MainPlannerService } from './main-planner.service';
     TripMembersModule,
     FriendsModule,
     PreferencesModule,
+    InboxModule,
   ],
   controllers: [MainPlannerController],
   providers: [MainPlannerService],

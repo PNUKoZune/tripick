@@ -50,6 +50,17 @@ export function removeTripMember(tripId: string, memberId: string) {
   return api.delete<PlannerMemberDto[]>(`/main-planner/trips/${tripId}/members/${memberId}`);
 }
 
+export function acceptTripInvite(tripId: string, memberId: string) {
+  return api.patch<PlannerMemberDto>(
+    `/main-planner/trips/${tripId}/members/${memberId}/accept-invite`,
+    {},
+  );
+}
+
+export function rejectTripInvite(tripId: string, memberId: string) {
+  return api.delete<void>(`/main-planner/trips/${tripId}/members/${memberId}/invite`);
+}
+
 export function fetchPlannerCoordination(tripId: string) {
   return api.get<PlannerCoordinationDto>(`/main-planner/trips/${tripId}/coordination`);
 }

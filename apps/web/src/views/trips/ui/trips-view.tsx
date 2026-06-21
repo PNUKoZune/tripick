@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { TripSummaryStatus, TripSummaryDto } from '@tripick/types';
@@ -21,12 +22,15 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
 ];
 
 export function TripsView() {
+  const router = useRouter();
   const [filter, setFilter] = useState<Filter>('all');
   const [hasSession, setHasSession] = useState<boolean | null>(null);
 
   useEffect(() => {
-    setHasSession(Boolean(getStoredSession()));
-  }, []);
+    const exists = Boolean(getStoredSession());
+    setHasSession(exists);
+    if (!exists) router.replace('/start');
+  }, [router]);
 
   const { data: trips = [], error } = useQuery({
     queryKey: queryKeys.planner.trips,
@@ -50,30 +54,9 @@ export function TripsView() {
   }, [trips]);
   const latestTrip = trips[0];
 
-  if (hasSession === null) {
+  // 세션 확인 중이거나 미로그인 시(replace 중) 화면 깜빡임 방지
+  if (hasSession !== true) {
     return <TripsSessionLoading />;
-  }
-
-  if (!hasSession) {
-    return (
-      <div className="min-h-dvh bg-white">
-        <div className="mx-auto flex min-h-dvh max-w-[430px] flex-col justify-center px-5 lg:max-w-[560px]">
-          <div className="text-[13px] font-black leading-5 text-[#3182F6]">Tripick</div>
-          <h1 className="mt-3 text-[30px] font-black leading-9 text-[#191F28]">
-            로그인이 필요해요
-          </h1>
-          <p className="mt-3 text-[15px] font-bold leading-6 text-[#6B7684]">
-            내 여행과 친구 목록은 계정 기준으로 저장됩니다.
-          </p>
-          <Link
-            href="/start"
-            className="mt-8 inline-flex h-14 items-center justify-center rounded-[16px] bg-[#3182F6] px-5 text-[16px] font-black text-white"
-          >
-            시작하기
-          </Link>
-        </div>
-      </div>
-    );
   }
 
   return (
