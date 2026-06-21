@@ -26,3 +26,13 @@ export function deleteMe() {
 export function updateFcmToken(fcmToken: string) {
   return api.patch<void>('/users/me/fcm-token', { fcmToken });
 }
+
+export function uploadProfileImage(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return api.upload<UserDto>('/users/me/profile-image', formData);
+}
+
+export function removeProfileImage() {
+  return api.delete<UserDto>('/users/me/profile-image');
+}

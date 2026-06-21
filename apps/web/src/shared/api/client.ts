@@ -9,7 +9,11 @@ export function apiUrl(path: string) {
 
 async function fetcher<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
-  if (!headers.has('Content-Type') && init?.body) {
+  // FormData 본문은 브라우저가 boundary 와 함께 multipart Content-Type 을 자동으로 붙인다.
+  // 명시적으로 application/json 을 세팅하면 파싱 실패하므로 FormData 일 때만 건너뛴다.
+  const isFormDataBody =
+    typeof FormData !== 'undefined' && init?.body instanceof FormData;
+  if (!headers.has('Content-Type') && init?.body && !isFormDataBody) {
     headers.set('Content-Type', 'application/json');
   }
   if (!headers.has('Authorization')) {
@@ -142,6 +146,13 @@ export const api = {
   delete: <T>(path: string, token?: string) =>
     fetcher<T>(path, {
       method: 'DELETE',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }),
+
+  upload: <T>(path: string, formData: FormData, token?: string) =>
+    fetcher<T>(path, {
+      method: 'POST',
+      body: formData,
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     }),
 };

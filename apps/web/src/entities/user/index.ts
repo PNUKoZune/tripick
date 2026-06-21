@@ -4,6 +4,8 @@ export {
   updateNotificationPreferences,
   deleteMe,
   updateFcmToken,
+  uploadProfileImage,
+  removeProfileImage,
 } from './api';
 export type {
   UserDto as MeUser,
@@ -13,3 +15,5 @@ export type {
   UpdateNotificationPreferencesDto,
 } from '@tripick/types';
 export { DEFAULT_NOTIFICATION_PREFERENCES } from '@tripick/types';
+export { UserAvatar } from './ui/user-avatar';
+export { formatJoinedSince } from './lib/format-joined';
