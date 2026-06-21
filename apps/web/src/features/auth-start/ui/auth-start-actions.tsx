@@ -19,9 +19,8 @@ export function AuthStartActions() {
         redirectToKakao();
         return;
       }
-      await startDemoSession();
-      setNotice('카카오 키 입력 전이라 데모 세션으로 시작합니다.');
-      router.push('/preferences');
+      const missingKeys = status.missingKeys?.join(', ') || 'KAKAO_REST_API_KEY, KAKAO_CALLBACK_URL';
+      setNotice(`카카오 로그인 환경 변수가 필요해요: ${missingKeys}`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : '로그인을 시작하지 못했습니다.');
     } finally {
@@ -36,7 +35,7 @@ export function AuthStartActions() {
       await startDemoSession();
       router.push('/preferences');
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : '데모 세션을 만들지 못했습니다.');
+      setNotice(error instanceof Error ? error.message : '임시 세션을 만들지 못했습니다.');
     } finally {
       setLoading(null);
     }
@@ -48,7 +47,7 @@ export function AuthStartActions() {
         {loading === 'kakao' ? '확인 중' : '카카오로 시작하기'}
       </PrimaryButton>
       <SecondaryButton disabled={loading !== null} onClick={handleDemoStart}>
-        데모 세션으로 계속
+        임시 세션으로 계속
       </SecondaryButton>
       {notice ? <InlineNotice title="로그인 준비 상태" description={notice} tone="blue" /> : null}
     </div>

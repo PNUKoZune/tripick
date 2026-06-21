@@ -1,6 +1,6 @@
 /**
  * Screen 3 (Main Planner) / Screen 4 (Alternative Popup) 전용 DTO.
- * v1 데모에서는 mock 데이터를 그대로 직렬화한다.
+ * API가 저장된 여행/멤버/일정 데이터를 planner 화면 형태로 직렬화한다.
  */
 
 export type PlannerItemType = 'attraction' | 'restaurant' | 'cafe' | 'transport';
@@ -10,6 +10,9 @@ export interface PlannerMemberDto {
   id: string;
   initial: string;
   color: string;
+  friendId?: string | null;
+  nickname?: string;
+  role?: 'owner' | 'companion';
 }
 
 export interface PlannerMapMarkerDto {
@@ -145,7 +148,7 @@ export interface TripSummaryDto {
   coverEmoji: string;
   highlight: string;
   itemCount: number;
-  /** 진행 가능한 데모 trip 만 true (현재는 경주 1박 2일 만 mock 상세를 갖는다) */
+  /** planner 상세 화면 진입 가능 여부 */
   hasDetail: boolean;
 }
 
@@ -159,6 +162,9 @@ export interface PlannerCoordinationMemberDto {
   id: string;
   initial: string;
   color: string;
+  friendId?: string | null;
+  nickname?: string;
+  role?: 'owner' | 'companion';
   /** 사람별 취향 태그 라벨 (예: "한식·전통", "감성 코스") */
   tasteLabels: string[];
 }

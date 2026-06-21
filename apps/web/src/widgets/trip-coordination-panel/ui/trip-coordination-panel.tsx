@@ -1,10 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import type {
-  PlannerCoordinationDto,
-  PlannerCoordinationVoteRowDto,
-} from '@tripick/types';
+import type { PlannerCoordinationDto, PlannerCoordinationVoteRowDto } from '@tripick/types';
 
 import { fetchPlannerCoordination } from '@/entities/trip-plan';
 import { queryKeys } from '@/shared/api/query-keys';
@@ -57,7 +54,7 @@ export function TripCoordinationPanel({ tripId }: Props) {
               </span>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[14px] font-bold text-[#191F28]">
-                  {member.initial}
+                  {member.nickname ?? member.initial}
                 </div>
                 <div className="mt-0.5 flex flex-wrap gap-1">
                   {member.tasteLabels.map((label) => (
@@ -112,13 +109,7 @@ export function TripCoordinationPanel({ tripId }: Props) {
   );
 }
 
-function VoteGroup({
-  title,
-  votes,
-}: {
-  title: string;
-  votes: PlannerCoordinationVoteRowDto[];
-}) {
+function VoteGroup({ title, votes }: { title: string; votes: PlannerCoordinationVoteRowDto[] }) {
   const total = votes.reduce((sum, row) => sum + row.count, 0) || 1;
   const top = votes[0];
   return (

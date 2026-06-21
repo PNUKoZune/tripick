@@ -8,6 +8,7 @@ export interface TripDto {
   startDate: string;
   endDate: string;
   status: TripStatus;
+  notes?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -23,6 +24,7 @@ export interface CreateTripDto {
   wakeTime?: string;
   /** 선호 이동 수단: walk | transit | car */
   transportMode?: 'walk' | 'transit' | 'car';
+  notes?: string;
 }
 
 export interface UpdateTripDto {
@@ -31,4 +33,5 @@ export interface UpdateTripDto {
   sleepTime?: string;
   wakeTime?: string;
   transportMode?: 'walk' | 'transit' | 'car';
+  notes?: string | null;
 }

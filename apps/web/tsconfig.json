@@ -21,7 +21,7 @@
         "./src/*"
       ],
       "@tripick/types": [
-        "../../packages/types/src"
+        "../../packages/types/src/index.ts"
       ]
     },
     "allowJs": true,

@@ -1,74 +1,56 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
   HttpCode,
-  NotFoundException,
   Param,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { AddFriendRequestDto } from '@tripick/types';
-import {
-  FRIENDS_MOCK,
-  acceptFriendMock,
-  addFriendMock,
-  removeFriendMock,
-  togglePinFriendMock,
-} from './friends.mock';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { UserEntity } from '../users/user.entity';
+import { FriendsService } from './friends.service';
 
-/**
- * v1 카카오톡 친구 목록 톤의 mock 컨트롤러.
- * 인증/DB 없이 in-memory 배열만 다룬다.
- */
-@ApiTags('Friends (Mock v1)')
+@ApiTags('Friends')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('friends')
 export class FriendsController {
+  constructor(private readonly friendsService: FriendsService) {}
+
   @Get()
-  @ApiOperation({ summary: '내 친구 목록 mock' })
-  list() {
-    return FRIENDS_MOCK;
+  @ApiOperation({ summary: '내 친구 목록' })
+  list(@CurrentUser() user: UserEntity) {
+    return this.friendsService.list(user.id);
   }
 
   @Post()
-  @ApiOperation({ summary: '친구 추가 요청 mock (handle 로 검색)' })
-  add(@Body() dto: AddFriendRequestDto) {
-    if (!dto?.handle?.trim()) {
-      throw new BadRequestException('카카오 ID를 입력해주세요.');
-    }
-    return addFriendMock(dto.handle.trim());
+  @ApiOperation({ summary: '친구 추가 또는 요청 생성' })
+  add(@CurrentUser() user: UserEntity, @Body() dto: AddFriendRequestDto) {
+    return this.friendsService.add(user, dto);
   }
 
   @Patch(':id/accept')
-  @ApiOperation({ summary: '받은 친구 요청 수락 mock' })
-  accept(@Param('id') id: string) {
-    const friend = acceptFriendMock(id);
-    if (!friend) {
-      throw new NotFoundException('friend not found');
-    }
-    return friend;
+  @ApiOperation({ summary: '받은 친구 요청 수락' })
+  accept(@CurrentUser() user: UserEntity, @Param('id') id: string) {
+    return this.friendsService.accept(user.id, id);
   }
 
   @Patch(':id/pin')
-  @ApiOperation({ summary: '친구 즐겨찾기 토글 mock' })
-  togglePin(@Param('id') id: string) {
-    const friend = togglePinFriendMock(id);
-    if (!friend) {
-      throw new NotFoundException('friend not found');
-    }
-    return friend;
+  @ApiOperation({ summary: '친구 즐겨찾기 토글' })
+  togglePin(@CurrentUser() user: UserEntity, @Param('id') id: string) {
+    return this.friendsService.togglePin(user.id, id);
   }
 
   @Delete(':id')
   @HttpCode(204)
-  @ApiOperation({ summary: '친구 삭제 mock' })
-  remove(@Param('id') id: string) {
-    const ok = removeFriendMock(id);
-    if (!ok) {
-      throw new NotFoundException('friend not found');
-    }
+  @ApiOperation({ summary: '친구 삭제' })
+  remove(@CurrentUser() user: UserEntity, @Param('id') id: string) {
+    return this.friendsService.remove(user.id, id);
   }
 }

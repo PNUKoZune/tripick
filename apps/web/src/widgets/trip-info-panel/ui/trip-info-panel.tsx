@@ -55,7 +55,7 @@ export function TripInfoPanel({ trip }: Props) {
       </SurfaceCard>
 
       <SurfaceCard padding="sm">
-        <SectionLabel title="단기 날씨" description="기상청 단기예보 mock 입니다." />
+        <SectionLabel title="날씨 정보" description="여행 날짜별 확인 상태입니다." />
         <ul className="mt-2 space-y-2">
           {meta.weather.map((w) => (
             <li

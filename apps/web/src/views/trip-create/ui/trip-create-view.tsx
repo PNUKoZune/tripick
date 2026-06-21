@@ -45,9 +45,9 @@ export function TripCreateView() {
 
   const { mutate, isPending, error } = useMutation({
     mutationFn: createTrip,
-    onSuccess: async () => {
+    onSuccess: async (trip) => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.planner.trips });
-      router.push('/trips');
+      router.push(`/planner?tripId=${trip.id}`);
     },
   });
 
@@ -57,7 +57,8 @@ export function TripCreateView() {
   const endDate = range?.to ? toIsoDate(range.to) : range?.from ? toIsoDate(range.from) : '';
 
   const sameDay = !!range?.from && !!range?.to && startDate === endDate;
-  const timeError = sameDay && startTime >= endTime ? '도착 시각은 출발 시각보다 늦어야 해요.' : null;
+  const timeError =
+    sameDay && startTime >= endTime ? '도착 시각은 출발 시각보다 늦어야 해요.' : null;
 
   const canSubmit = useMemo(() => {
     return (
@@ -99,9 +100,7 @@ export function TripCreateView() {
       return `${fromLabel} · 당일치기`;
     }
     const toLabel = format(range.to, 'M월 d일 (E)', { locale: ko });
-    const nights = Math.round(
-      (range.to.getTime() - range.from.getTime()) / (1000 * 60 * 60 * 24),
-    );
+    const nights = Math.round((range.to.getTime() - range.from.getTime()) / (1000 * 60 * 60 * 24));
     return `${fromLabel} ~ ${toLabel} · ${nights}박 ${nights + 1}일`;
   })();
 
@@ -152,14 +151,13 @@ export function TripCreateView() {
         <FriendMemberPicker members={members} onAdd={addMember} onRemove={removeMember} />
       </Field>
 
-      <Field
-        label="이번 여행에 반영할 사항"
-        hint={`선택 · ${notes.length}/${NOTES_MAX}자`}
-      >
+      <Field label="이번 여행에 반영할 사항" hint={`선택 · ${notes.length}/${NOTES_MAX}자`}>
         <textarea
           value={notes}
           onChange={(event) => setNotes(event.target.value.slice(0, NOTES_MAX))}
-          placeholder={'예) 유아 동반이라 동선이 짧았으면 좋겠어요\n사진 찍기 좋은 장소 위주로 부탁드려요'}
+          placeholder={
+            '예) 유아 동반이라 동선이 짧았으면 좋겠어요\n사진 찍기 좋은 장소 위주로 부탁드려요'
+          }
           rows={4}
           className="w-full resize-none rounded-[14px] border border-[#E5E8EB] bg-white px-4 py-3 text-[14px] leading-[22px] text-[#191F28] outline-none transition placeholder:text-[#B0B8C1] focus:border-[#3182F6] focus:ring-2 focus:ring-[#E1ECFF]"
         />
@@ -248,7 +246,7 @@ export function TripCreateView() {
               {formBody}
             </div>
             <p className="mt-4 text-[12px] text-[#8B95A1]">
-              · v1 데모: 생성된 여행은 서버 메모리에만 저장되며, 새로고침/재시작 시 초기화됩니다.
+              생성한 여행은 내 계정에 저장되고 친구 목록 기반으로 멤버를 관리합니다.
             </p>
           </div>
         </div>
@@ -276,4 +274,3 @@ function Field({
     </div>
   );
 }
-

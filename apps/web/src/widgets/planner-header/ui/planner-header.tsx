@@ -14,7 +14,7 @@ type Props = {
 export function PlannerHeader({
   title,
   members,
-  backHref = '/',
+  backHref = '/trips',
   backLabel = '내 여행',
   onMembersClick,
 }: Props) {
@@ -38,7 +38,9 @@ export function PlannerHeader({
           className="-mx-2 flex items-center gap-2 rounded-full px-2 py-1 transition hover:bg-[#F2F4F6]"
         >
           <MemberAvatars members={members} />
-          <span className="text-[16px] text-[#8B95A1]" aria-hidden>＋</span>
+          <span className="text-[16px] text-[#8B95A1]" aria-hidden>
+            ＋
+          </span>
         </button>
       ) : (
         <MemberAvatars members={members} />

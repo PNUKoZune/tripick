@@ -1,4 +1,5 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1';
+const SESSION_KEY = 'tripick.session.v1';
 
 const FALLBACK_ERROR = '요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.';
 
@@ -11,6 +12,12 @@ async function fetcher<T>(path: string, init?: RequestInit): Promise<T> {
   if (!headers.has('Content-Type') && init?.body) {
     headers.set('Content-Type', 'application/json');
   }
+  if (!headers.has('Authorization')) {
+    const token = getStoredAccessToken();
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+  }
 
   const res = await fetch(apiUrl(path), {
     ...init,
@@ -19,6 +26,9 @@ async function fetcher<T>(path: string, init?: RequestInit): Promise<T> {
   const payload = await parseResponse(res);
 
   if (!res.ok) {
+    if (res.status === 401) {
+      clearStoredSession();
+    }
     throw Object.assign(new Error(normalizeErrorMessage(payload, res.status)), {
       payload,
       status: res.status,
@@ -26,6 +36,22 @@ async function fetcher<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return payload as T;
+}
+
+function getStoredAccessToken(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const raw = window.localStorage.getItem(SESSION_KEY);
+  if (!raw) {
+    return null;
+  }
+  try {
+    const session = JSON.parse(raw) as { tokens?: { accessToken?: unknown } };
+    return typeof session.tokens?.accessToken === 'string' ? session.tokens.accessToken : null;
+  } catch {
+    return null;
+  }
 }
 
 async function parseResponse(res: Response): Promise<unknown> {
@@ -41,6 +67,10 @@ async function parseResponse(res: Response): Promise<unknown> {
 }
 
 function normalizeErrorMessage(payload: unknown, status: number): string {
+  if (status === 401) {
+    return '로그인이 만료됐어요. 다시 로그인해주세요.';
+  }
+
   const candidates = extractMessages(payload)
     .map((message) => message.trim())
     .filter(Boolean);
@@ -53,6 +83,13 @@ function normalizeErrorMessage(payload: unknown, status: number): string {
     return FALLBACK_ERROR;
   }
   return first;
+}
+
+function clearStoredSession(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.localStorage.removeItem(SESSION_KEY);
 }
 
 function extractMessages(payload: unknown): string[] {

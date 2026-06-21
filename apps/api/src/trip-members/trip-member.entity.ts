@@ -30,6 +30,9 @@ export class TripMemberEntity {
   @JoinColumn({ name: 'userId' })
   user: UserEntity | null;
 
+  @Column({ type: 'uuid', nullable: true })
+  friendId: string | null;
+
   @Column()
   nickname: string;
 

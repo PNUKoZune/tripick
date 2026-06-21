@@ -1,12 +1,12 @@
 'use client';
 
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { PlannerItineraryItemDto, PlannerMapMarkerDto, PlannerTripDto } from '@tripick/types';
 
-import Link from 'next/link';
-
-import { DEMO_TRIP_ID, fetchPlannerTrip } from '@/entities/trip-plan';
+import { fetchPlannerTrip, fetchPlannerTrips } from '@/entities/trip-plan';
 import { MemberAvatars } from '@/entities/member';
 import { DaySelector } from '@/features/day-selector';
 import { TripMembersSheet } from '@/features/manage-trip-members';
@@ -22,16 +22,39 @@ import { TripCoordinationPanel } from '@/widgets/trip-coordination-panel';
 import { TripInfoPanel } from '@/widgets/trip-info-panel';
 import { TripMapPanel } from '@/widgets/trip-map-panel';
 
-export function PlannerView() {
+export function PlannerView({ tripId }: { tripId?: string }) {
+  const router = useRouter();
   const [tab, setTab] = useState<PlannerTab>('schedule');
   const [day, setDay] = useState(1);
   const [openItem, setOpenItem] = useState<PlannerItineraryItemDto | null>(null);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [swapResult, setSwapResult] = useState<{ id: string; name: string } | null>(null);
   const [membersOpen, setMembersOpen] = useState(false);
+
+  const {
+    data: trips = [],
+    error: tripsError,
+    isLoading: isTripsLoading,
+  } = useQuery({
+    queryKey: queryKeys.planner.trips,
+    queryFn: fetchPlannerTrips,
+    enabled: !tripId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const firstTripId = trips[0]?.id;
+  const selectedTripId = tripId ?? firstTripId ?? '';
+
+  useEffect(() => {
+    if (!tripId && firstTripId) {
+      router.replace(`/planner?tripId=${firstTripId}`);
+    }
+  }, [firstTripId, router, tripId]);
+
   const { data: trip = null, error } = useQuery<PlannerTripDto>({
-    queryKey: queryKeys.planner.trip(DEMO_TRIP_ID),
-    queryFn: () => fetchPlannerTrip(DEMO_TRIP_ID),
+    queryKey: queryKeys.planner.trip(selectedTripId || 'pending'),
+    queryFn: () => fetchPlannerTrip(selectedTripId),
+    enabled: Boolean(selectedTripId),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -43,7 +66,13 @@ export function PlannerView() {
     }
   }, [trip]);
 
-  const loadError = error instanceof Error ? error.message : null;
+  const loadError =
+    error instanceof Error
+      ? error.message
+      : tripsError instanceof Error
+        ? tripsError.message
+        : null;
+  const isResolvingTrip = !selectedTripId && isTripsLoading;
 
   const itemsForDay = useMemo(() => {
     if (!trip) return [];
@@ -75,7 +104,7 @@ export function PlannerView() {
       {/* < lg : phone shell (모바일 우선) */}
       <div className="mx-auto min-h-dvh max-w-[430px] bg-white pb-[88px] lg:hidden">
         <PlannerHeader
-          title={trip?.title ?? '일정 불러오는 중'}
+          title={trip?.title ?? (isResolvingTrip ? '여행 찾는 중' : '여행을 먼저 만들어주세요')}
           members={trip?.members ?? []}
           {...(trip ? { onMembersClick: () => setMembersOpen(true) } : {})}
         />
@@ -83,14 +112,16 @@ export function PlannerView() {
         {trip ? (
           <PlannerMap
             placeholder={trip.searchPlaceholder}
-            center={trip.mapCenter}
-            markers={trip.mapMarkers}
+            center={mapCenter}
+            markers={dayMarkers}
           />
         ) : (
-          <div className="aspect-[390/290] bg-[#F2F4F6]" />
+          <div className="flex aspect-[390/290] items-center justify-center bg-[#F2F4F6] px-5 text-center text-[13px] font-semibold text-[#8B95A1]">
+            {isResolvingTrip ? '내 여행을 찾는 중' : '새 여행을 만들면 일정과 지도가 표시돼요'}
+          </div>
         )}
 
-        <PlannerTabs value={tab} onChange={setTab} />
+        {selectedTripId ? <PlannerTabs value={tab} onChange={setTab} /> : null}
 
         {trip && tab !== 'coordination' ? (
           <div className="px-4 pt-3">
@@ -105,7 +136,9 @@ export function PlannerView() {
             </div>
           ) : null}
 
-          {tab === 'schedule' ? (
+          {!selectedTripId && !loadError ? <PlannerEmptyState loading={isResolvingTrip} /> : null}
+
+          {tab === 'schedule' && selectedTripId ? (
             <PlannerTimeline items={itemsForDay} onSelectItem={setOpenItem} />
           ) : null}
           {tab === 'map' && trip ? (
@@ -114,17 +147,19 @@ export function PlannerView() {
           {tab === 'info' && trip ? <TripInfoPanel trip={trip} /> : null}
           {tab === 'coordination' && trip ? <TripCoordinationPanel tripId={trip.id} /> : null}
 
-          <button
-            type="button"
-            aria-label="AI 도움"
-            onClick={() =>
-              setOpenItem(itemsForDay.find((i) => i.hasWaiting) ?? itemsForDay[0] ?? null)
-            }
-            className="fixed bottom-[96px] z-20 flex size-14 items-center justify-center rounded-full bg-[#3182F6] text-[14px] font-bold text-white shadow-[0_12px_24px_rgba(49,130,246,0.32)] active:translate-y-px lg:hidden"
-            style={{ right: 'max(20px, calc((100vw - 430px) / 2 + 20px))' }}
-          >
-            AI
-          </button>
+          {trip ? (
+            <button
+              type="button"
+              aria-label="AI 도움"
+              onClick={() =>
+                setOpenItem(itemsForDay.find((i) => i.hasWaiting) ?? itemsForDay[0] ?? null)
+              }
+              className="fixed bottom-[96px] z-20 flex size-14 items-center justify-center rounded-full bg-[#3182F6] text-[14px] font-bold text-white shadow-[0_12px_24px_rgba(49,130,246,0.32)] active:translate-y-px lg:hidden"
+              style={{ right: 'max(20px, calc((100vw - 430px) / 2 + 20px))' }}
+            >
+              AI
+            </button>
+          ) : null}
         </div>
       </div>
       <AppBottomNavigation className="lg:hidden" />
@@ -137,7 +172,7 @@ export function PlannerView() {
             <div className="mx-auto flex w-full max-w-[1360px] items-center justify-between gap-6 px-8 py-4 xl:px-10">
               <div className="flex items-center gap-4">
                 <Link
-                  href="/"
+                  href="/trips"
                   className="flex h-9 items-center gap-1 rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[13px] font-semibold text-[#6B7684] hover:bg-[#FAFBFC] hover:text-[#191F28]"
                 >
                   <span aria-hidden>‹</span>
@@ -167,19 +202,23 @@ export function PlannerView() {
                     className="flex items-center gap-2 rounded-full px-2 py-1 transition hover:bg-[#F2F4F6]"
                   >
                     <MemberAvatars members={trip.members} />
-                    <span className="text-[16px] text-[#8B95A1]" aria-hidden>＋</span>
+                    <span className="text-[16px] text-[#8B95A1]" aria-hidden>
+                      ＋
+                    </span>
                   </button>
                 ) : null}
-                <Button
-                  variant="primary"
-                  size="md"
-                  className="h-10 px-4 text-[14px]"
-                  onClick={() =>
-                    setOpenItem(itemsForDay.find((i) => i.hasWaiting) ?? itemsForDay[0] ?? null)
-                  }
-                >
-                  AI 대안 제안
-                </Button>
+                {trip ? (
+                  <Button
+                    variant="primary"
+                    size="md"
+                    className="h-10 px-4 text-[14px]"
+                    onClick={() =>
+                      setOpenItem(itemsForDay.find((i) => i.hasWaiting) ?? itemsForDay[0] ?? null)
+                    }
+                  >
+                    AI 대안 제안
+                  </Button>
+                ) : null}
               </div>
             </div>
           </header>
@@ -208,6 +247,8 @@ export function PlannerView() {
                   <div className="rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-4 text-[14px] text-[#F04452]">
                     {loadError}
                   </div>
+                ) : !selectedTripId ? (
+                  <PlannerEmptyState loading={isResolvingTrip} />
                 ) : (
                   <PlannerTimeline
                     items={itemsForDay}
@@ -248,7 +289,9 @@ export function PlannerView() {
                   }}
                 />
               ) : (
-                <div className="flex-1 bg-[#F2F4F6]" />
+                <div className="flex flex-1 items-center justify-center bg-[#F2F4F6] px-6 text-center text-[14px] font-semibold text-[#8B95A1]">
+                  {isResolvingTrip ? '내 여행을 찾는 중' : '새 여행을 만들면 지도가 표시돼요'}
+                </div>
               )}
             </main>
 
@@ -262,7 +305,7 @@ export function PlannerView() {
       </div>
 
       <AlternativeSheet
-        tripId={trip?.id ?? DEMO_TRIP_ID}
+        tripId={trip?.id ?? selectedTripId}
         open={openItem !== null}
         item={openItem}
         onClose={() => setOpenItem(null)}
@@ -272,10 +315,36 @@ export function PlannerView() {
       <TripMembersSheet
         open={membersOpen}
         onClose={() => setMembersOpen(false)}
-        tripId={trip?.id ?? DEMO_TRIP_ID}
+        tripId={trip?.id ?? selectedTripId}
         tripTitle={trip?.title ?? '여행'}
         members={trip?.members ?? []}
       />
+    </div>
+  );
+}
+
+function PlannerEmptyState({ loading }: { loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] px-4 py-5 text-[14px] font-semibold text-[#8B95A1]">
+        내 여행을 불러오고 있어요.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] px-4 py-5">
+      <div className="text-[12px] font-bold text-[#3182F6]">내 여행</div>
+      <h2 className="mt-1 text-[18px] font-bold text-[#191F28]">여행을 먼저 만들어주세요</h2>
+      <p className="mt-1 text-[13px] leading-5 text-[#6B7684]">
+        일정·지도·취향 조율은 여행 단위로 저장됩니다.
+      </p>
+      <Link
+        href="/trips/new"
+        className="mt-4 inline-flex h-10 items-center rounded-full bg-[#3182F6] px-4 text-[13px] font-bold text-white hover:bg-[#1B64DA]"
+      >
+        새 여행 만들기
+      </Link>
     </div>
   );
 }

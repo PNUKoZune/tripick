@@ -22,7 +22,9 @@ export function TripSummaryCard({ trip }: Props) {
   const inner = (
     <article
       className={`group flex h-full flex-col overflow-hidden rounded-[20px] border border-[#E5E8EB] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.04)] transition ${
-        trip.hasDetail ? 'hover:border-[#C7DCFF] hover:shadow-[0_12px_32px_rgba(49,130,246,0.12)]' : 'opacity-90'
+        trip.hasDetail
+          ? 'hover:border-[#C7DCFF] hover:shadow-[0_12px_32px_rgba(49,130,246,0.12)]'
+          : 'opacity-90'
       }`}
     >
       <div className="flex h-32 items-center justify-center bg-[linear-gradient(180deg,#EAF2FF_0%,#FAFBFC_100%)] text-[44px]">
@@ -47,7 +49,7 @@ export function TripSummaryCard({ trip }: Props) {
         </div>
         {!trip.hasDetail ? (
           <div className="rounded-[12px] border border-dashed border-[#E5E8EB] bg-[#FAFBFC] px-3 py-2 text-[12px] text-[#8B95A1]">
-            상세 mock 미연결 — 카드 클릭 비활성
+            상세 준비 중
           </div>
         ) : null}
       </div>
@@ -55,7 +57,11 @@ export function TripSummaryCard({ trip }: Props) {
   );
 
   if (!trip.hasDetail) {
-    return <div aria-disabled className="block h-full">{inner}</div>;
+    return (
+      <div aria-disabled className="block h-full">
+        {inner}
+      </div>
+    );
   }
 
   return (

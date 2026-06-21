@@ -2,9 +2,9 @@ import type { DestinationSuggestionDto } from '@tripick/types';
 
 /**
  * 여행 생성 폼 자동완성용 정적 후보 목록.
- * 실제로는 카카오 로컬 API + 한국관광공사 데이터를 사용하지만, v1 mock 에선 고정 fixture 만 반환한다.
+ * 외부 지역 데이터 연동 전에도 국내 여행 생성 플로우가 끊기지 않도록 둔 fallback fixture.
  */
-export const DESTINATIONS_MOCK: DestinationSuggestionDto[] = [
+export const DESTINATION_FALLBACKS: DestinationSuggestionDto[] = [
   { id: 'gyeongju', name: '경주', region: '경상북도', emoji: '🏛️' },
   { id: 'busan', name: '부산', region: '부산광역시', emoji: '🌊' },
   { id: 'haeundae', name: '해운대', region: '부산광역시', emoji: '🏖️' },
@@ -29,10 +29,11 @@ export const DESTINATIONS_MOCK: DestinationSuggestionDto[] = [
   { id: 'suwon', name: '수원', region: '경기도', emoji: '🏰' },
 ];
 
-export function searchDestinationsMock(query: string): DestinationSuggestionDto[] {
+export function searchDestinationFallbacks(query: string): DestinationSuggestionDto[] {
   const q = query.trim().toLowerCase();
-  if (!q) return DESTINATIONS_MOCK.slice(0, 8);
-  return DESTINATIONS_MOCK.filter(
-    (d) => d.name.toLowerCase().includes(q) || d.region.toLowerCase().includes(q),
+  if (!q) return DESTINATION_FALLBACKS.slice(0, 8);
+  return DESTINATION_FALLBACKS.filter(
+    (destination) =>
+      destination.name.toLowerCase().includes(q) || destination.region.toLowerCase().includes(q),
   ).slice(0, 10);
 }

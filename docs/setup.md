@@ -53,7 +53,9 @@ pnpm --filter @tripick/mobile start
 - `JWT_EXPIRES_IN` (기본값 `7d`)
 - `JWT_REFRESH_EXPIRES_IN` (기본값 `30d`)
 - `KAKAO_REST_API_KEY`
+- `KAKAO_CLIENT_SECRET` (카카오 앱에서 client secret을 켠 경우에만 입력)
 - `KAKAO_CALLBACK_URL`
+- `WEB_APP_URL` (카카오 OAuth 성공/실패 후 돌아갈 웹 앱 origin, 기본값 `http://localhost:3000`)
 - `CORS_ORIGIN` (기본값 `http://localhost:3000`)
 - `PORT` (기본값 `4000`)
 - `LLM_BASE_URL` (기본값 `http://localhost:8080/v1`)

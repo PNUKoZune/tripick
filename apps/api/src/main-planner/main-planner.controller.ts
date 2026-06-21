@@ -1,180 +1,101 @@
 import {
+  Body,
   Controller,
+  Delete,
   Get,
-  NotFoundException,
+  HttpCode,
   Param,
   Post,
-  Body,
-  Delete,
-  ConflictException,
-  HttpCode,
   Query,
-  BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { UserEntity } from '../users/user.entity';
+import { searchDestinationFallbacks } from './destinations.fallback';
+import { MainPlannerService } from './main-planner.service';
 import type {
   AddTripMemberRequestDto,
   CreateTripRequestDto,
   PlannerSwapRequestDto,
-  PlannerSwapResponseDto,
 } from '@tripick/types';
-import {
-  getPlannerAlternativesMock,
-  getPlannerTripMock,
-} from './main-planner.mock';
-import { appendTripSummaryMock, TRIP_SUMMARIES_MOCK } from './main-planner-trips.mock';
-import { searchDestinationsMock } from './destinations.mock';
-import { PLANNER_COORDINATION_MOCK } from './main-planner-coordination.mock';
-import { getFriendByIdMock } from '../friends/friends.mock';
 
-function tripMemberIdFromFriend(friendId: string) {
-  return `tm-${friendId}`;
-}
-
-/**
- * v1 Screen 3/4 mock controller.
- * 인증/DB 의존을 제거하고 고정 fixture 만 반환한다.
- */
-@ApiTags('Main Planner (Mock v1)')
+@ApiTags('Main Planner')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('main-planner')
 export class MainPlannerController {
+  constructor(private readonly mainPlannerService: MainPlannerService) {}
+
   @Get('trips')
-  @ApiOperation({ summary: '내 여행 목록 mock' })
-  listTrips() {
-    return TRIP_SUMMARIES_MOCK;
+  @ApiOperation({ summary: '내 여행 목록' })
+  listTrips(@CurrentUser() user: UserEntity) {
+    return this.mainPlannerService.listTrips(user);
   }
 
   @Get('destinations')
-  @ApiOperation({ summary: '여행 지역 자동완성 mock' })
+  @ApiOperation({ summary: '여행 지역 자동완성' })
   searchDestinations(@Query('q') q?: string) {
-    return searchDestinationsMock(q ?? '');
+    return searchDestinationFallbacks(q ?? '');
   }
 
   @Post('trips')
-  @ApiOperation({ summary: '신규 여행 생성 mock (in-memory)' })
-  createTrip(@Body() dto: CreateTripRequestDto) {
-    if (!dto?.title?.trim()) {
-      throw new BadRequestException('제목을 입력해주세요.');
-    }
-    if (!dto.destination?.trim()) {
-      throw new BadRequestException('여행 지역을 입력해주세요.');
-    }
-    if (!dto.startDate || !dto.endDate) {
-      throw new BadRequestException('여행 기간을 선택해주세요.');
-    }
-    if (dto.startDate > dto.endDate) {
-      throw new BadRequestException('시작일은 종료일보다 빨라야 합니다.');
-    }
-    if (!dto.startTime || !dto.endTime) {
-      throw new BadRequestException('출발/도착 시각을 입력해주세요.');
-    }
-    if (dto.startDate === dto.endDate && dto.startTime >= dto.endTime) {
-      throw new BadRequestException('도착 시각은 출발 시각보다 늦어야 합니다.');
-    }
-    return appendTripSummaryMock(dto);
+  @ApiOperation({ summary: '신규 여행 생성 및 일정 생성' })
+  createTrip(@CurrentUser() user: UserEntity, @Body() dto: CreateTripRequestDto) {
+    return this.mainPlannerService.createTrip(user, dto);
   }
 
   @Get('trips/:tripId')
-  @ApiOperation({ summary: 'Screen 3 메인 플래너 mock 데이터' })
-  getTrip(@Param('tripId') tripId: string) {
-    const trip = getPlannerTripMock(tripId);
-    if (!trip) {
-      throw new NotFoundException('mock trip not found');
-    }
-    return trip;
+  @ApiOperation({ summary: '메인 플래너 데이터' })
+  getTrip(@CurrentUser() user: UserEntity, @Param('tripId') tripId: string) {
+    return this.mainPlannerService.getTrip(user, tripId);
   }
 
   @Get('trips/:tripId/items/:itemId/alternatives')
-  @ApiOperation({ summary: 'Screen 4 대안 추천 mock 데이터' })
+  @ApiOperation({ summary: '일정 항목 대안 추천' })
   getAlternatives(
+    @CurrentUser() user: UserEntity,
     @Param('tripId') tripId: string,
     @Param('itemId') itemId: string,
   ) {
-    const trip = getPlannerTripMock(tripId);
-    if (!trip) {
-      throw new NotFoundException('mock trip not found');
-    }
-    const response = getPlannerAlternativesMock(itemId);
-    if (!response) {
-      throw new NotFoundException('mock alternatives not found');
-    }
-    return response;
+    return this.mainPlannerService.getAlternatives(user, tripId, itemId);
   }
 
   @Get('trips/:tripId/coordination')
-  @ApiOperation({ summary: '여행 취향 조율 결과 mock' })
-  getCoordination(@Param('tripId') tripId: string) {
-    const trip = getPlannerTripMock(tripId);
-    if (!trip) {
-      throw new NotFoundException('mock trip not found');
-    }
-    return PLANNER_COORDINATION_MOCK;
+  @ApiOperation({ summary: '여행 취향 조율 결과' })
+  getCoordination(@CurrentUser() user: UserEntity, @Param('tripId') tripId: string) {
+    return this.mainPlannerService.getCoordination(user, tripId);
   }
 
   @Post('trips/:tripId/members')
-  @ApiOperation({ summary: '여행 멤버로 친구 추가 (mock)' })
-  addMember(@Param('tripId') tripId: string, @Body() dto: AddTripMemberRequestDto) {
-    const trip = getPlannerTripMock(tripId);
-    if (!trip) {
-      throw new NotFoundException('mock trip not found');
-    }
-    if (!dto?.friendId) {
-      throw new BadRequestException('friendId 가 필요합니다.');
-    }
-    const friend = getFriendByIdMock(dto.friendId);
-    if (!friend) {
-      throw new NotFoundException('friend not found');
-    }
-    const memberId = tripMemberIdFromFriend(friend.id);
-    if (trip.members.some((m) => m.id === memberId)) {
-      throw new ConflictException('이미 여행에 추가된 친구입니다.');
-    }
-    trip.members.push({
-      id: memberId,
-      initial: friend.initial,
-      color: friend.color,
-    });
-    return trip.members;
+  @ApiOperation({ summary: '여행 멤버로 친구 추가' })
+  addMember(
+    @CurrentUser() user: UserEntity,
+    @Param('tripId') tripId: string,
+    @Body() dto: AddTripMemberRequestDto,
+  ) {
+    return this.mainPlannerService.addMember(user, tripId, dto);
   }
 
   @Delete('trips/:tripId/members/:memberId')
-  @ApiOperation({ summary: '여행 멤버 제거 (mock)' })
+  @ApiOperation({ summary: '여행 멤버 제거' })
   removeMember(
+    @CurrentUser() user: UserEntity,
     @Param('tripId') tripId: string,
     @Param('memberId') memberId: string,
   ) {
-    const trip = getPlannerTripMock(tripId);
-    if (!trip) {
-      throw new NotFoundException('mock trip not found');
-    }
-    const index = trip.members.findIndex((m) => m.id === memberId);
-    if (index === -1) {
-      throw new NotFoundException('member not found');
-    }
-    trip.members.splice(index, 1);
-    return trip.members;
+    return this.mainPlannerService.removeMember(user, tripId, memberId);
   }
 
   @Post('trips/:tripId/swap')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Screen 4 대안 선택 → 일정 항목 치환 (mock)' })
+  @ApiOperation({ summary: '대안 선택 후 일정 항목 치환' })
   swap(
+    @CurrentUser() user: UserEntity,
     @Param('tripId') tripId: string,
     @Body() dto: PlannerSwapRequestDto,
-  ): PlannerSwapResponseDto {
-    const trip = getPlannerTripMock(tripId);
-    if (!trip) {
-      throw new NotFoundException('mock trip not found');
-    }
-    const alternatives = getPlannerAlternativesMock(dto.itemId);
-    const next = alternatives?.alternatives.find((alt) => alt.id === dto.alternativeId);
-    if (!next) {
-      throw new NotFoundException('alternative not found');
-    }
-    return {
-      tripId,
-      swappedItemId: dto.itemId,
-      newItemName: next.name,
-    };
+  ) {
+    return this.mainPlannerService.swap(user, tripId, dto);
   }
 }

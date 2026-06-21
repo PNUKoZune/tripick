@@ -16,6 +16,7 @@ export interface TripMemberDto {
   id: string;
   tripId: string;
   userId?: string | null;
+  friendId?: string | null;
   nickname: string;
   contact?: string | null;
   kakaoId?: string | null;

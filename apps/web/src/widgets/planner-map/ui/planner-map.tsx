@@ -135,7 +135,7 @@ export function PlannerMap({
       content.className = `flex flex-col items-center gap-1 ${onMarkerClickRef.current ? 'cursor-pointer' : ''}`;
       content.innerHTML = `
         <span class="flex size-7 items-center justify-center rounded-full border text-[12px] font-bold transition-transform ${style.dot}">${marker.order > 0 ? marker.order : '·'}</span>
-        <span class="inline-block whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[11px] font-semibold ${style.label}">${escapeHtml(marker.label)}</span>
+        <span class="inline-block max-w-[112px] truncate rounded-md border px-1.5 py-0.5 text-[11px] font-semibold ${style.label}">${escapeHtml(marker.label)}</span>
       `;
       if (onMarkerClickRef.current) {
         content.addEventListener('click', (e) => {
@@ -175,7 +175,9 @@ export function PlannerMap({
       {showSearch ? (
         <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center gap-2 px-3 pt-3">
           <div className="pointer-events-auto flex h-9 flex-1 items-center rounded-[16px] border border-[#E5E8EB] bg-white px-3 text-[13px] text-[#8B95A1] shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
-            <span aria-hidden className="mr-2">🔍</span>
+            <span aria-hidden className="mr-2">
+              🔍
+            </span>
             {placeholder}
           </div>
           <button
@@ -201,12 +203,7 @@ type FallbackProps = {
   onMarkerClick?: ((marker: PlannerMapMarkerDto) => void) | undefined;
 };
 
-function FallbackMap({
-  markers,
-  showCurrentDot,
-  selectedMarkerId,
-  onMarkerClick,
-}: FallbackProps) {
+function FallbackMap({ markers, showCurrentDot, selectedMarkerId, onMarkerClick }: FallbackProps) {
   return (
     <div className="absolute inset-0 bg-[#EEF2F4]">
       <div className="absolute inset-x-0 top-0 h-1/2 bg-[#F2F4F6]" />
@@ -223,10 +220,14 @@ function FallbackMap({
             className="absolute -translate-x-1/2 -translate-y-1/2 text-center"
             style={{ left: `${marker.x * 100}%`, top: `${marker.y * 100}%` }}
           >
-            <span className={`flex size-7 items-center justify-center rounded-full border text-[12px] font-bold transition-transform ${style.dot}`}>
+            <span
+              className={`flex size-7 items-center justify-center rounded-full border text-[12px] font-bold transition-transform ${style.dot}`}
+            >
               {marker.order > 0 ? marker.order : '·'}
             </span>
-            <span className={`mt-1 inline-block whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[11px] font-semibold ${style.label}`}>
+            <span
+              className={`mt-1 inline-block max-w-[112px] truncate rounded-md border px-1.5 py-0.5 text-[11px] font-semibold ${style.label}`}
+            >
               {marker.label}
             </span>
           </button>

@@ -8,8 +8,8 @@
     "rootDir": "./src",
     "types": ["node"],
     "paths": {
-      "@tripick/types": ["../../packages/types/dist"],
-      "@tripick/utils": ["../../packages/utils/dist"]
+      "@tripick/types": ["../../packages/types/src/index.ts"],
+      "@tripick/utils": ["../../packages/utils/src"]
     },
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
@@ -17,8 +17,5 @@
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist", "test"],
-  "references": [
-    { "path": "../../packages/types" },
-    { "path": "../../packages/utils" }
-  ]
+  "references": [{ "path": "../../packages/types" }, { "path": "../../packages/utils" }]
 }
