@@ -211,7 +211,7 @@ export function TripCreateView() {
         <AppDesktopNavigation />
         <div className="min-h-dvh border-x border-[#E5E8EB] bg-white">
           <header className="border-b border-[#E5E8EB] bg-white">
-            <div className="mx-auto flex w-full max-w-[960px] items-center justify-between gap-6 px-8 py-4 xl:px-10">
+            <div className="mx-auto flex w-full max-w-[1160px] items-center justify-between gap-6 px-8 py-4 xl:px-10">
               <div className="flex items-center gap-3">
                 <Link
                   href="/trips"
@@ -241,7 +241,7 @@ export function TripCreateView() {
             </div>
           </header>
 
-          <div className="mx-auto w-full max-w-[960px] px-8 py-8 xl:px-10">
+          <div className="mx-auto w-full max-w-[1160px] px-8 py-8 xl:px-10">
             <div className="rounded-[20px] border border-[#E5E8EB] bg-white p-8 shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
               {formBody}
             </div>

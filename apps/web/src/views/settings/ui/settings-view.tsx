@@ -102,7 +102,7 @@ export function SettingsView() {
         <AppDesktopNavigation />
         <div className="min-h-dvh border-x border-[#E5E8EB] bg-white">
           <header className="border-b border-[#E5E8EB] bg-white">
-            <div className="mx-auto flex w-full max-w-[760px] items-center justify-between gap-6 px-8 py-4 xl:px-10">
+            <div className="mx-auto flex w-full max-w-[1160px] items-center justify-between gap-6 px-8 py-4 xl:px-10">
               <div>
                 <div className="text-[12px] font-semibold tracking-wide text-[#3182F6]">
                   Tripick · 설정
@@ -113,7 +113,7 @@ export function SettingsView() {
               </div>
             </div>
           </header>
-          <div className="mx-auto w-full max-w-[760px] px-8 py-6 xl:px-10">{content}</div>
+          <div className="mx-auto w-full max-w-[1160px] px-8 py-6 xl:px-10">{content}</div>
         </div>
       </div>
     </div>
