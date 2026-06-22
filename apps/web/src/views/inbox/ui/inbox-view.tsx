@@ -10,7 +10,7 @@ import { acceptFriend, removeFriend } from '@/entities/friend';
 import { fetchInbox, markAllInboxRead, markInboxRead } from '@/entities/inbox';
 import { acceptTripInvite, rejectTripInvite } from '@/entities/trip-plan';
 import { queryKeys } from '@/shared/api/query-keys';
-import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
+import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
 
 type Filter = 'all' | 'unread' | 'action';
 
@@ -212,63 +212,30 @@ export function InboxView() {
   );
 
   return (
-    <div className="min-h-dvh bg-[#F7F8FA]">
-      {/* < lg : 폰 셸 */}
-      <div className="mx-auto min-h-dvh max-w-[430px] bg-white pb-[88px] lg:hidden">
-        <header className="flex items-end justify-between px-5 pb-4 pt-6">
-          <div>
-            <div className="text-[13px] font-black leading-5 text-[#3182F6]">TriPick</div>
-            <h1 className="mt-2 text-[28px] font-black leading-9 text-[#191F28]">알림</h1>
-            <p className="mt-1 text-[13px] text-[#6B7684]">
-              친구 요청과 여행 일정 알림을 한 곳에서 확인해요.
-            </p>
-          </div>
-          {unreadCount > 0 ? (
-            <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-[#3182F6] px-2 text-[12px] font-bold text-white">
-              {unreadCount}
-            </span>
-          ) : null}
-        </header>
-        <div className="px-4 pb-6">{content}</div>
-      </div>
-      <AppBottomNavigation className="lg:hidden" />
-
-      {/* ≥ lg : 데스크탑 */}
-      <div className="mx-auto hidden w-full max-w-[1440px] lg:grid lg:min-h-dvh lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:px-6">
-        <AppDesktopNavigation />
-        <div className="min-h-dvh border-x border-[#E5E8EB] bg-white">
-          <header className="border-b border-[#E5E8EB] bg-white">
-            <div className="mx-auto flex w-full max-w-[960px] items-center justify-between gap-6 px-8 py-4 xl:px-10">
-              <div>
-                <div className="text-[12px] font-semibold tracking-wide text-[#3182F6]">
-                  Tripick · 알림
-                </div>
-                <h1 className="mt-0.5 text-[22px] font-bold leading-[30px] text-[#191F28]">
-                  인박스
-                </h1>
-                <p className="mt-1 text-[13px] text-[#6B7684]">
-                  친구 요청, 재계획, 일정 알림이 모입니다.
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Link
-                  href="/friends"
-                  className="rounded-[14px] border border-[#E5E8EB] bg-white px-4 py-2 text-[14px] font-semibold text-[#191F28] hover:bg-[#FAFBFC]"
-                >
-                  친구 목록
-                </Link>
-                {unreadCount > 0 ? (
-                  <span className="inline-flex h-9 min-w-9 items-center justify-center rounded-full bg-[#3182F6] px-3 text-[13px] font-bold text-white">
-                    {unreadCount} 새 알림
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          </header>
-          <div className="mx-auto w-full max-w-[960px] px-8 py-6 xl:px-10">{content}</div>
-        </div>
-      </div>
-    </div>
+    <AppFrame>
+      <PageHeader
+        title="알림"
+        label="알림"
+        description="친구 요청, 재계획, 일정 알림이 모입니다."
+        action={
+          <>
+            <Link
+              href="/friends"
+              className="hidden rounded-[14px] border border-[#E5E8EB] bg-white px-4 py-2 text-[14px] font-semibold text-[#191F28] hover:bg-[#FAFBFC] lg:inline-flex"
+            >
+              친구 목록
+            </Link>
+            {unreadCount > 0 ? (
+              <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-[#3182F6] px-2 text-[12px] font-bold text-white lg:h-9 lg:min-w-9 lg:px-3 lg:text-[13px]">
+                <span className="lg:hidden">{unreadCount}</span>
+                <span className="hidden lg:inline">{unreadCount} 새 알림</span>
+              </span>
+            ) : null}
+          </>
+        }
+      />
+      <PageContainer>{content}</PageContainer>
+    </AppFrame>
   );
 }
 

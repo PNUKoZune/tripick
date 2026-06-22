@@ -1,13 +1,24 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
   HttpCode,
   Patch,
+  Post,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UsersService } from './users.service';
@@ -16,6 +27,12 @@ import type {
   UpdateNotificationPreferencesDto,
   UpdateUserDto,
 } from '@tripick/types';
+
+interface UploadedImage {
+  buffer: Buffer;
+  mimetype: string;
+  size: number;
+}
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -56,6 +73,30 @@ export class UsersController {
   ) {
     await this.usersService.updateFcmToken(user.id, fcmToken);
     return { success: true };
+  }
+
+  @Post('me/profile-image')
+  @ApiOperation({ summary: '프로필 이미지 업로드' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
+  uploadProfileImage(
+    @CurrentUser() user: UserEntity,
+    @UploadedFile() file?: UploadedImage,
+  ) {
+    if (!file) throw new BadRequestException('파일이 필요합니다.');
+    return this.usersService.uploadProfileImage(user.id, file);
+  }
+
+  @Delete('me/profile-image')
+  @ApiOperation({ summary: '프로필 이미지 초기화 (기본 아바타로 복구)' })
+  removeProfileImage(@CurrentUser() user: UserEntity) {
+    return this.usersService.removeProfileImage(user.id);
   }
 
   @Delete('me')

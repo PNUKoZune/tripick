@@ -13,7 +13,7 @@ import {
   togglePinFriend,
 } from '@/entities/friend';
 import { queryKeys } from '@/shared/api/query-keys';
-import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
+import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
 
 export function FriendsView() {
   const queryClient = useQueryClient();
@@ -186,46 +186,21 @@ export function FriendsView() {
   );
 
   return (
-    <div className="min-h-dvh bg-[#F7F8FA]">
-      {/* < lg : 폰 셸 */}
-      <div className="mx-auto min-h-dvh max-w-[430px] bg-white pb-[88px] lg:hidden">
-        <header className="px-5 pb-4 pt-6">
-          <div className="text-[13px] font-black leading-5 text-[#3182F6]">TriPick</div>
-          <h1 className="mt-2 text-[28px] font-black leading-9 text-[#191F28]">친구</h1>
-          <p className="mt-1 text-[13px] text-[#6B7684]">
-            여행에 함께할 친구를 미리 등록해두면 빠르게 멤버로 초대할 수 있어요.
-          </p>
-        </header>
-        <div className="px-4 pb-6">{content}</div>
-      </div>
-      <AppBottomNavigation className="lg:hidden" />
-
-      {/* ≥ lg : 데스크탑 */}
-      <div className="mx-auto hidden w-full max-w-[1440px] lg:grid lg:min-h-dvh lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:px-6">
-        <AppDesktopNavigation />
-        <div className="min-h-dvh border-x border-[#E5E8EB] bg-white">
-          <header className="border-b border-[#E5E8EB] bg-white">
-            <div className="mx-auto flex w-full max-w-[960px] items-center justify-between gap-6 px-8 py-4 xl:px-10">
-              <div>
-                <div className="text-[12px] font-semibold tracking-wide text-[#3182F6]">
-                  Tripick · 친구
-                </div>
-                <h1 className="mt-0.5 text-[22px] font-bold leading-[30px] text-[#191F28]">
-                  내 친구
-                </h1>
-                <p className="mt-1 text-[13px] text-[#6B7684]">
-                  카카오톡 친구 추가하듯, 핸들로 친구를 추가하고 여행 멤버 후보로 둡니다.
-                </p>
-              </div>
-              <div className="text-[13px] font-semibold text-[#6B7684]">
-                전체 {friends.length}명
-              </div>
-            </div>
-          </header>
-          <div className="mx-auto w-full max-w-[960px] px-8 py-6 xl:px-10">{content}</div>
-        </div>
-      </div>
-    </div>
+    <AppFrame>
+      <PageHeader
+        title="친구"
+        label="친구"
+        description="카카오톡 친구 추가하듯, 핸들로 친구를 추가하고 여행 멤버 후보로 둡니다."
+        action={
+          friends.length > 0 ? (
+            <span className="text-[13px] font-semibold text-[#6B7684]">
+              전체 {friends.length}명
+            </span>
+          ) : null
+        }
+      />
+      <PageContainer>{content}</PageContainer>
+    </AppFrame>
   );
 }
 

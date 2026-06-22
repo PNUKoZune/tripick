@@ -1,6 +1,12 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { StorageService } from '../storage/storage.service';
 import { UserEntity } from './user.entity';
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -9,11 +15,15 @@ import {
   type UpdateUserDto,
 } from '@tripick/types';
 
+const ALLOWED_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
+
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(UserEntity)
     private readonly repo: Repository<UserEntity>,
+    private readonly storage: StorageService,
   ) {}
 
   async findById(id: string): Promise<UserEntity | null> {
@@ -106,9 +116,71 @@ export class UsersService {
     await this.repo.update(id, { fcmToken });
   }
 
+  /** 프로필 이미지 업로드 — 기존에 우리가 발급한 URL 이 있으면 같이 삭제. */
+  async uploadProfileImage(
+    id: string,
+    file: { buffer: Buffer; mimetype: string; size: number },
+  ): Promise<UserEntity> {
+    if (!this.storage.isReady()) {
+      throw new ServiceUnavailableException('스토리지가 설정되지 않았습니다.');
+    }
+    if (!ALLOWED_IMAGE_MIME.has(file.mimetype)) {
+      throw new BadRequestException('JPG, PNG, WebP 이미지만 업로드할 수 있어요.');
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      throw new BadRequestException('이미지 크기는 5MB 이하만 업로드할 수 있어요.');
+    }
+
+    const user = await this.findById(id);
+    if (!user) throw new NotFoundException(`User ${id} not found`);
+
+    const ext = extForMime(file.mimetype);
+    const key = `public/profiles/${user.id}/${Date.now()}.${ext}`;
+    const url = await this.storage.putObject({
+      key,
+      body: file.buffer,
+      contentType: file.mimetype,
+    });
+
+    // 직전에 우리가 올린 이미지가 있으면 정리. 카카오 등 외부 URL 은 건드리지 않음.
+    if (user.profileImageUrl) {
+      const oldKey = this.storage.keyFromPublicUrl(user.profileImageUrl);
+      if (oldKey) void this.storage.deleteObject(oldKey);
+    }
+
+    user.profileImageUrl = url;
+    return this.repo.save(user);
+  }
+
+  /** 사용자가 직접 올린 이미지를 제거하고 기본(아바타 이니셜) 상태로 되돌린다. */
+  async removeProfileImage(id: string): Promise<UserEntity> {
+    const user = await this.findById(id);
+    if (!user) throw new NotFoundException(`User ${id} not found`);
+    if (user.profileImageUrl) {
+      const oldKey = this.storage.keyFromPublicUrl(user.profileImageUrl);
+      if (oldKey) await this.storage.deleteObject(oldKey);
+    }
+    // exactOptionalPropertyTypes 때문에 update 객체로 null 전달이 막혀 query builder 사용.
+    await this.repo
+      .createQueryBuilder()
+      .update(UserEntity)
+      .set({ profileImageUrl: () => 'NULL' })
+      .where('id = :id', { id })
+      .execute();
+    delete user.profileImageUrl;
+    return user;
+  }
+
   async remove(id: string): Promise<void> {
     const user = await this.findById(id);
     if (!user) throw new NotFoundException(`User ${id} not found`);
     await this.repo.remove(user);
   }
+}
+
+function extForMime(mime: string): string {
+  if (mime === 'image/jpeg') return 'jpg';
+  if (mime === 'image/png') return 'png';
+  if (mime === 'image/webp') return 'webp';
+  return 'bin';
 }

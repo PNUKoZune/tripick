@@ -13,7 +13,7 @@ import { createTrip } from '@/entities/trip-plan';
 import { DestinationSearchInput } from '@/features/destination-search';
 import { queryKeys } from '@/shared/api/query-keys';
 import { Button } from '@/shared/ui';
-import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
+import { AppFrame } from '@/shared/ui/app-frame';
 
 import { FriendMemberPicker } from './friend-member-picker';
 import { TimeSelect } from './time-select';
@@ -175,83 +175,65 @@ export function TripCreateView() {
   );
 
   return (
-    <div className="min-h-dvh bg-[#F7F8FA]">
-      {/* < lg : 폰 셸 */}
-      <div className="mx-auto min-h-dvh max-w-[430px] bg-white pb-[170px] lg:hidden">
-        <header className="flex items-center gap-2 px-4 pb-3 pt-5">
-          <Link
-            href="/trips"
-            aria-label="뒤로"
-            className="flex size-9 items-center justify-center rounded-full hover:bg-[#F2F4F6]"
-          >
-            <span className="text-[20px] text-[#191F28]" aria-hidden>
-              ‹
-            </span>
-          </Link>
-          <h1 className="text-[18px] font-bold text-[#191F28]">새 여행 만들기</h1>
-        </header>
-        <div className="px-5 pt-2">{formBody}</div>
-
-        <div className="fixed inset-x-0 bottom-[66px] z-10 mx-auto max-w-[430px] border-t border-[#E5E8EB] bg-white px-5 py-3">
+    <AppFrame>
+      {/* 헤더: 모바일 = 뒤로 + 작은 제목 / 데스크탑 = 뒤로 + 라벨/제목 + 우측 CTA */}
+      <header className="px-4 pt-5 lg:border-b lg:border-[#E5E8EB] lg:bg-white lg:px-0 lg:pt-0">
+        <div className="mx-auto flex w-full max-w-[1160px] items-center justify-between gap-3 pb-3 lg:gap-6 lg:px-8 lg:py-4 xl:px-10">
+          <div className="flex min-w-0 flex-1 items-center gap-2 lg:gap-3">
+            <Link
+              href="/trips"
+              aria-label="뒤로"
+              className="flex size-9 items-center justify-center rounded-full hover:bg-[#F2F4F6] lg:size-auto lg:gap-1 lg:rounded-[12px] lg:border lg:border-[#E5E8EB] lg:bg-white lg:px-3 lg:py-2 lg:text-[13px] lg:font-semibold lg:text-[#6B7684] lg:hover:bg-[#FAFBFC] lg:hover:text-[#191F28]"
+            >
+              <span aria-hidden className="text-[20px] text-[#191F28] lg:text-inherit">
+                ‹
+              </span>
+              <span className="hidden lg:inline">내 여행</span>
+            </Link>
+            <div className="min-w-0">
+              <div className="hidden text-[12px] font-semibold tracking-wide text-[#3182F6] lg:block">
+                Tripick · 새 여행
+              </div>
+              <h1 className="text-[18px] font-bold text-[#191F28] lg:mt-0.5 lg:text-[22px] lg:leading-[30px]">
+                새 여행 만들기
+              </h1>
+            </div>
+          </div>
+          {/* 데스크탑 CTA */}
           <Button
             variant="primary"
-            size="lg"
-            fullWidth
+            size="md"
+            className="hidden h-10 px-5 text-[14px] lg:inline-flex"
             onClick={handleSubmit}
             disabled={!canSubmit || isPending}
           >
             {isPending ? '생성 중…' : '여행 만들기'}
           </Button>
         </div>
-      </div>
-      <AppBottomNavigation className="lg:hidden" />
+      </header>
 
-      {/* ≥ lg : 데스크탑 */}
-      <div className="mx-auto hidden w-full max-w-[1440px] lg:grid lg:min-h-dvh lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:px-6">
-        <AppDesktopNavigation />
-        <div className="min-h-dvh border-x border-[#E5E8EB] bg-white">
-          <header className="border-b border-[#E5E8EB] bg-white">
-            <div className="mx-auto flex w-full max-w-[960px] items-center justify-between gap-6 px-8 py-4 xl:px-10">
-              <div className="flex items-center gap-3">
-                <Link
-                  href="/trips"
-                  className="flex h-9 items-center gap-1 rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[13px] font-semibold text-[#6B7684] hover:bg-[#FAFBFC] hover:text-[#191F28]"
-                >
-                  <span aria-hidden>‹</span>
-                  <span>내 여행</span>
-                </Link>
-                <div>
-                  <div className="text-[12px] font-semibold tracking-wide text-[#3182F6]">
-                    Tripick · 새 여행
-                  </div>
-                  <h1 className="mt-0.5 text-[22px] font-bold leading-[30px] text-[#191F28]">
-                    새 여행 만들기
-                  </h1>
-                </div>
-              </div>
-              <Button
-                variant="primary"
-                size="md"
-                className="h-10 px-5 text-[14px]"
-                onClick={handleSubmit}
-                disabled={!canSubmit || isPending}
-              >
-                {isPending ? '생성 중…' : '여행 만들기'}
-              </Button>
-            </div>
-          </header>
-
-          <div className="mx-auto w-full max-w-[960px] px-8 py-8 xl:px-10">
-            <div className="rounded-[20px] border border-[#E5E8EB] bg-white p-8 shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
-              {formBody}
-            </div>
-            <p className="mt-4 text-[12px] text-[#8B95A1]">
-              생성한 여행은 내 계정에 저장되고 친구 목록 기반으로 멤버를 관리합니다.
-            </p>
-          </div>
+      <div className="mx-auto w-full max-w-[1160px] px-4 pb-[100px] pt-3 lg:px-8 lg:py-8 lg:pb-8 xl:px-10">
+        <div className="lg:rounded-[20px] lg:border lg:border-[#E5E8EB] lg:bg-white lg:p-8 lg:shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
+          {formBody}
         </div>
+        <p className="mt-4 hidden text-[12px] text-[#8B95A1] lg:block">
+          생성한 여행은 내 계정에 저장되고 친구 목록 기반으로 멤버를 관리합니다.
+        </p>
       </div>
-    </div>
+
+      {/* 모바일 sticky CTA: bottom nav (66px) 바로 위 */}
+      <div className="fixed inset-x-0 bottom-[66px] z-10 mx-auto max-w-[430px] border-t border-[#E5E8EB] bg-white px-5 py-3 lg:hidden">
+        <Button
+          variant="primary"
+          size="lg"
+          fullWidth
+          onClick={handleSubmit}
+          disabled={!canSubmit || isPending}
+        >
+          {isPending ? '생성 중…' : '여행 만들기'}
+        </Button>
+      </div>
+    </AppFrame>
   );
 }
 

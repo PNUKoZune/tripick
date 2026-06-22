@@ -14,25 +14,88 @@ const NAV_ITEMS = [
 
 type NavIconName = (typeof NAV_ITEMS)[number]['icon'];
 
-export function AppFrame({ children, showNav = true }: { children: ReactNode; showNav?: boolean }) {
+/**
+ * 페이지 셸: 모바일 = 430px 단일 컬럼 + 하단 탭, 데스크탑 = 사이드 네비 + border-x 카드.
+ * `showNav={false}` 면 네비·셸 없이 자식만 풀-블리드 (랜딩/콜백용).
+ */
+export function AppFrame({
+  children,
+  showNav = true,
+}: {
+  children: ReactNode;
+  showNav?: boolean;
+}) {
   if (!showNav) {
-    return (
-      <main className="min-h-screen bg-[color:var(--app-bg)] text-[color:var(--text-primary)]">
-        {children}
-      </main>
-    );
+    return <main className="min-h-dvh bg-white">{children}</main>;
   }
 
   return (
-    <main className="min-h-screen bg-[color:var(--app-bg)] text-[color:var(--text-primary)]">
-      <div className="mx-auto min-h-screen w-full max-w-[430px] lg:grid lg:max-w-[1180px] lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:px-6">
+    <div className="min-h-dvh bg-[#F7F8FA]">
+      <div className="mx-auto w-full max-w-[430px] bg-white pb-[88px] lg:grid lg:max-w-[1440px] lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:bg-transparent lg:px-6 lg:pb-0">
         <AppDesktopNavigation />
-        <div className="min-h-screen bg-[color:var(--app-surface)] lg:border-x lg:border-[color:var(--line)]">
-          <div className="min-h-screen pb-[88px] lg:pb-12">{children}</div>
+        <div className="min-h-dvh lg:border-x lg:border-[#E5E8EB] lg:bg-white">
+          {children}
         </div>
-        <AppBottomNavigation className="lg:hidden" />
       </div>
-    </main>
+      <AppBottomNavigation className="lg:hidden" />
+    </div>
+  );
+}
+
+/**
+ * 페이지 헤더. 모바일/데스크탑 자동 분기.
+ * - mobile: 20px bold 제목 + 부가 설명(선택) + 우측 액션(선택)
+ * - desktop: 12px "Tripick · {label}" 라벨(선택) + 22px 제목 + 부가 설명(선택) + 우측 액션
+ */
+export function PageHeader({
+  title,
+  description,
+  label,
+  action,
+}: {
+  title: string;
+  description?: string;
+  /** 데스크탑 전용 'Tripick · X' 작은 라벨 */
+  label?: string;
+  /** 헤더 우측 액션 (배지·버튼 등) */
+  action?: ReactNode;
+}) {
+  return (
+    <header className="px-4 pt-5 lg:border-b lg:border-[#E5E8EB] lg:bg-white lg:px-0 lg:pt-0">
+      <div className="mx-auto flex w-full max-w-[1160px] items-center justify-between gap-3 pb-3 lg:gap-6 lg:px-8 lg:py-4 xl:px-10">
+        <div className="min-w-0 flex-1">
+          {label ? (
+            <div className="hidden text-[12px] font-semibold tracking-wide text-[#3182F6] lg:block">
+              Tripick · {label}
+            </div>
+          ) : null}
+          <h1 className="text-[20px] font-bold text-[#191F28] lg:mt-0.5 lg:text-[22px] lg:leading-[30px]">
+            {title}
+          </h1>
+          {description ? (
+            <p className="mt-1 text-[13px] text-[#6B7684]">{description}</p>
+          ) : null}
+        </div>
+        {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
+      </div>
+    </header>
+  );
+}
+
+/** 헤더 아래 본문 컨테이너. 모바일/데스크탑 padding 자동 적용. */
+export function PageContainer({
+  children,
+  className = '',
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`mx-auto w-full max-w-[1160px] px-4 pb-6 pt-3 lg:px-8 lg:py-6 xl:px-10 ${className}`}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -169,51 +232,6 @@ function NavIcon({ name, active }: { name: NavIconName; active: boolean }) {
         </>
       ) : null}
     </svg>
-  );
-}
-
-export function TopBar({
-  title,
-  action,
-  muted,
-}: {
-  title: string;
-  action?: ReactNode;
-  muted?: string;
-}) {
-  return (
-    <header className="sticky top-0 z-20 bg-white/94 px-5 pb-3 pt-5 backdrop-blur-xl lg:static lg:bg-white lg:px-8 lg:pb-4 lg:pt-8">
-      <div className="mx-auto flex min-h-11 w-full max-w-[430px] items-center justify-between gap-3 lg:max-w-[880px]">
-        <div>
-          {muted ? (
-            <div className="text-[12px] font-bold leading-4 text-[color:var(--text-tertiary)]">
-              {muted}
-            </div>
-          ) : null}
-          <h1 className="text-[24px] font-black leading-8">{title}</h1>
-        </div>
-        {action}
-      </div>
-      {muted ? (
-        <div className="mx-auto mt-4 h-px w-full max-w-[430px] bg-[color:var(--line)] lg:max-w-[880px]" />
-      ) : null}
-    </header>
-  );
-}
-
-export function PageSection({
-  children,
-  className = '',
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <section
-      className={`mx-auto w-full max-w-[430px] px-5 py-5 lg:max-w-[880px] lg:px-8 lg:py-6 ${className}`}
-    >
-      {children}
-    </section>
   );
 }
 
