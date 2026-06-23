@@ -9,6 +9,7 @@ import { format } from 'date-fns';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { PlannerMemberDto } from '@tripick/types';
 
+import { SessionGuard } from '@/entities/session';
 import { createTrip } from '@/entities/trip-plan';
 import { DestinationSearchInput } from '@/features/destination-search';
 import { queryKeys } from '@/shared/api/query-keys';
@@ -28,6 +29,14 @@ function toIsoDate(date: Date) {
 }
 
 export function TripCreateView() {
+  return (
+    <SessionGuard>
+      <TripCreateContent />
+    </SessionGuard>
+  );
+}
+
+function TripCreateContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
 

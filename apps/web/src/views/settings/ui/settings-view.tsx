@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
+import { SessionGuard } from '@/entities/session';
 import { fetchMe } from '@/entities/user';
 import { DeleteAccountButton } from '@/features/delete-account';
 import { SignOutButton } from '@/features/sign-out';
@@ -16,6 +17,14 @@ import { SettingsProfileHero } from '@/widgets/settings-profile-hero';
 const APP_VERSION = '0.1.0';
 
 export function SettingsView() {
+  return (
+    <SessionGuard>
+      <SettingsContent />
+    </SessionGuard>
+  );
+}
+
+function SettingsContent() {
   const { data: me, error } = useQuery({
     queryKey: queryKeys.user.me,
     queryFn: fetchMe,

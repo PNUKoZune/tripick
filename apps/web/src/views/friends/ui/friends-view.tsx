@@ -12,10 +12,19 @@ import {
   removeFriend,
   togglePinFriend,
 } from '@/entities/friend';
+import { SessionGuard } from '@/entities/session';
 import { queryKeys } from '@/shared/api/query-keys';
 import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
 
 export function FriendsView() {
+  return (
+    <SessionGuard>
+      <FriendsContent />
+    </SessionGuard>
+  );
+}
+
+function FriendsContent() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [addInput, setAddInput] = useState('');

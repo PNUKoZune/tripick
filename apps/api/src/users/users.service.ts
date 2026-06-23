@@ -30,23 +30,89 @@ export class UsersService {
     return this.repo.findOneBy({ id });
   }
 
-  async findOrCreateByKakao(profile: KakaoProfile): Promise<UserEntity> {
-    const existing = await this.repo.findOneBy({ kakaoId: profile.id });
-    if (existing) return existing;
+  async findByEmail(email: string): Promise<UserEntity | null> {
+    if (!email) return null;
+    return this.repo.findOneBy({ email });
+  }
 
+  async findOrCreateByKakao(profile: KakaoProfile): Promise<UserEntity> {
+    // 1순위: 이미 카카오 ID 로 가입한 사용자
+    const byKakao = await this.repo.findOneBy({ kakaoId: profile.id });
+    if (byKakao) return byKakao;
+
+    // 2순위: 같은 이메일로 이메일 가입한 사용자가 있으면 자동 merge — 카카오 연동 추가
+    if (profile.email) {
+      const byEmail = await this.findByEmail(profile.email.toLowerCase());
+      if (byEmail) {
+        byEmail.kakaoId = profile.id;
+        if (!byEmail.profileImageUrl && profile.profileImageUrl) {
+          byEmail.profileImageUrl = profile.profileImageUrl;
+        }
+        if (!byEmail.emailVerifiedAt) {
+          // 카카오 가입자는 이메일 인증된 것으로 간주
+          byEmail.emailVerifiedAt = new Date();
+        }
+        return this.repo.save(byEmail);
+      }
+    }
+
+    // 3순위: 신규 가입 (카카오에서 이메일 동의받았으면 자동 인증)
     const user = this.repo.create({
       kakaoId: profile.id,
       nickname: profile.nickname,
     });
-
     if (profile.profileImageUrl !== undefined) {
       user.profileImageUrl = profile.profileImageUrl;
     }
     if (profile.email !== undefined) {
-      user.email = profile.email;
+      user.email = profile.email.toLowerCase();
+      user.emailVerifiedAt = new Date();
     }
-
     return this.repo.save(user);
+  }
+
+  /** 신규 이메일 가입. 비밀번호는 인증 전이므로 pending 으로만 저장한다. */
+  async createEmailUser(params: {
+    email: string;
+    passwordHash: string;
+    nickname: string;
+  }): Promise<UserEntity> {
+    const user = this.repo.create({
+      email: params.email,
+      pendingPasswordHash: params.passwordHash,
+      nickname: params.nickname,
+    });
+    return this.repo.save(user);
+  }
+
+  /** 계정 연동/재가입 시 인증 대기 비밀번호 설정. 활성 passwordHash 는 건드리지 않는다. */
+  async setPendingPassword(id: string, passwordHash: string): Promise<UserEntity> {
+    const user = await this.findById(id);
+    if (!user) throw new NotFoundException(`User ${id} not found`);
+    user.pendingPasswordHash = passwordHash;
+    return this.repo.save(user);
+  }
+
+  /** 비밀번호 즉시 확정(재설정 플로우). 이메일 소유 증명이 끝난 상태 → 인증도 같이 처리. */
+  async setPassword(id: string, passwordHash: string): Promise<UserEntity> {
+    const user = await this.findById(id);
+    if (!user) throw new NotFoundException(`User ${id} not found`);
+    user.passwordHash = passwordHash;
+    user.pendingPasswordHash = null;
+    if (!user.emailVerifiedAt) user.emailVerifiedAt = new Date();
+    return this.repo.save(user);
+  }
+
+  /** 이메일 인증 완료 처리 + 대기 중이던 비밀번호가 있으면 활성화. */
+  async markEmailVerified(id: string): Promise<void> {
+    const user = await this.findById(id);
+    if (!user) throw new NotFoundException(`User ${id} not found`);
+    if (user.pendingPasswordHash) {
+      user.passwordHash = user.pendingPasswordHash;
+      user.pendingPasswordHash = null;
+    }
+    if (!user.emailVerifiedAt) user.emailVerifiedAt = new Date();
+    await this.repo.save(user);
   }
 
   async findOrCreateDemoUser(nickname = '데모 여행자'): Promise<UserEntity> {

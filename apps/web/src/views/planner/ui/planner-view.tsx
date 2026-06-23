@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { PlannerItineraryItemDto, PlannerMapMarkerDto, PlannerTripDto } from '@tripick/types';
 
+import { SessionGuard } from '@/entities/session';
 import { fetchPlannerTrip, fetchPlannerTrips } from '@/entities/trip-plan';
 import { MemberAvatars } from '@/entities/member';
 import { DaySelector } from '@/features/day-selector';
@@ -23,6 +24,14 @@ import { TripInfoPanel } from '@/widgets/trip-info-panel';
 import { TripMapPanel } from '@/widgets/trip-map-panel';
 
 export function PlannerView({ tripId }: { tripId?: string }) {
+  return (
+    <SessionGuard>
+      <PlannerContent {...(tripId ? { tripId } : {})} />
+    </SessionGuard>
+  );
+}
+
+function PlannerContent({ tripId }: { tripId?: string }) {
   const router = useRouter();
   const [tab, setTab] = useState<PlannerTab>('schedule');
   const [day, setDay] = useState(1);
