@@ -44,13 +44,13 @@ export class UsersController {
   @Get('me')
   @ApiOperation({ summary: '내 프로필 조회' })
   getMe(@CurrentUser() user: UserEntity) {
-    return user;
+    return this.usersService.publicProfile(user);
   }
 
   @Patch('me')
   @ApiOperation({ summary: '내 프로필 수정' })
-  updateMe(@CurrentUser() user: UserEntity, @Body() dto: UpdateUserDto) {
-    return this.usersService.update(user.id, dto);
+  async updateMe(@CurrentUser() user: UserEntity, @Body() dto: UpdateUserDto) {
+    return this.usersService.publicProfile(await this.usersService.update(user.id, dto));
   }
 
   @Patch('me/notification-preferences')

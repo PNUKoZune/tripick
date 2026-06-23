@@ -20,6 +20,8 @@ export interface AuthTokens {
 export interface SessionUserDto {
   id: string;
   nickname: string;
+  /** 친구 추가·멘션용 고유 핸들 (예: "koty"). 가입 경로와 무관하게 항상 존재. */
+  handle?: string;
   profileImageUrl?: string;
   email?: string;
   emailVerified: boolean;

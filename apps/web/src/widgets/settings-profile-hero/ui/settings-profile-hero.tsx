@@ -3,6 +3,7 @@
 import type { UserDto } from '@tripick/types';
 
 import { formatJoinedSince } from '@/entities/user';
+import { HandleEditor } from '@/features/edit-handle';
 import { NicknameEditor } from '@/features/edit-nickname';
 import { ProfileImageUploader } from '@/features/manage-profile-image';
 
@@ -35,12 +36,8 @@ export function SettingsProfileHero({ me, onError }: Props) {
           <NicknameEditor me={me} {...(onError ? { onError } : {})} />
 
           <div className="flex flex-col items-center gap-0.5 text-[13px] text-[#6B7684] lg:items-start lg:text-[14px]">
+            <HandleEditor me={me} {...(onError ? { onError } : {})} />
             {me?.email ? <span className="truncate">{me.email}</span> : null}
-            {me?.kakaoId ? (
-              <span className="truncate text-[#8B95A1]">@{me.kakaoId}</span>
-            ) : !me?.email ? (
-              <span className="text-[#8B95A1]">카카오 ID 연동 안 됨</span>
-            ) : null}
           </div>
 
           <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 lg:justify-start">

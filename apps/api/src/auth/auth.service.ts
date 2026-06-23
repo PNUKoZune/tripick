@@ -421,6 +421,7 @@ export class AuthService {
     return {
       id: user.id,
       nickname: user.nickname,
+      ...(user.handle ? { handle: user.handle } : {}),
       ...(user.profileImageUrl ? { profileImageUrl: user.profileImageUrl } : {}),
       ...(user.email ? { email: user.email } : {}),
       emailVerified: Boolean(user.emailVerifiedAt),

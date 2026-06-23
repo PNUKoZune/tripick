@@ -24,6 +24,14 @@ export class UserEntity {
   @Column({ nullable: true })
   email?: string;
 
+  /**
+   * 가입 경로(카카오/이메일)와 무관한 고유 사용자 핸들. 친구 추가·멘션의 유일한 식별자.
+   * 소문자 영숫자/언더스코어. 가입 시 자동 생성, 설정에서 변경 가능.
+   */
+  @Index({ unique: true, where: '"handle" IS NOT NULL' })
+  @Column({ type: 'varchar', nullable: true })
+  handle?: string | null;
+
   /** bcrypt hash. 이메일 가입자만 가짐. 카카오 단독 가입자는 null. 이메일 인증 완료 후에만 채워짐. */
   @Column({ nullable: true })
   passwordHash?: string;
