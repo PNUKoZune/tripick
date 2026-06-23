@@ -13,6 +13,9 @@ const DEFAULT_CORS_ORIGINS = [
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // nginx 등 리버스 프록시 뒤에서 X-Forwarded-For 의 실제 클라이언트 IP 를 신뢰 (레이트리밋 IP 식별용)
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   app.setGlobalPrefix('api/v1');
 
   app.useGlobalPipes(

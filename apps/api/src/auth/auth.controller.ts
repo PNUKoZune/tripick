@@ -11,8 +11,12 @@ import {
   Res,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthService, type TokenContext } from './auth.service';
+
+/** 분당 요청 제한 헬퍼 (ttl 단위 ms) */
+const perMinute = (limit: number) => ({ default: { limit, ttl: 60_000 } });
 import type {
   DemoLoginDto,
   EmailLoginDto,
@@ -32,6 +36,7 @@ export class AuthController {
 
   @Post('signup')
   @HttpCode(HttpStatus.OK)
+  @Throttle(perMinute(5)) // 계정 생성 + 메일 발송 남용 방지
   @ApiOperation({ summary: '이메일 회원가입 (인증 메일 발송)' })
   signup(@Body() dto: EmailSignupDto) {
     return this.authService.signupWithEmail(dto);
@@ -39,6 +44,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @Throttle(perMinute(10)) // 비밀번호 브루트포스 방지
   @ApiOperation({ summary: '이메일 + 비밀번호 로그인' })
   login(@Body() dto: EmailLoginDto, @Req() req: Request) {
     return this.authService.loginWithEmail(dto, this.tokenContext(req));
@@ -46,6 +52,7 @@ export class AuthController {
 
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
+  @Throttle(perMinute(20)) // 인증 토큰 추측 방지
   @ApiOperation({ summary: '이메일 인증 토큰 검증' })
   verifyEmail(@Body() dto: VerifyEmailDto) {
     return this.authService.verifyEmail(dto?.token ?? '');
@@ -53,6 +60,7 @@ export class AuthController {
 
   @Post('resend-verification')
   @HttpCode(HttpStatus.OK)
+  @Throttle(perMinute(3)) // 메일 발송 남용 방지
   @ApiOperation({ summary: '이메일 인증 메일 재발송' })
   resendVerification(@Body() dto: ResendVerificationDto) {
     return this.authService.resendVerification(dto?.email ?? '');
@@ -60,6 +68,7 @@ export class AuthController {
 
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
+  @Throttle(perMinute(3)) // 메일 발송 남용 방지
   @ApiOperation({ summary: '비밀번호 재설정 메일 발송' })
   forgotPassword(@Body() dto: RequestPasswordResetDto) {
     return this.authService.requestPasswordReset(dto?.email ?? '');
@@ -67,6 +76,7 @@ export class AuthController {
 
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
+  @Throttle(perMinute(10)) // 재설정 토큰 추측 방지
   @ApiOperation({ summary: '비밀번호 재설정 토큰 검증 + 새 비밀번호 저장' })
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto?.token ?? '', dto?.password ?? '');
