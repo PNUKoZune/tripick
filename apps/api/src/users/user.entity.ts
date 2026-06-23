@@ -33,7 +33,7 @@ export class UserEntity {
    * 이메일 인증 토큰을 소비할 때 비로소 passwordHash 로 승격한다.
    * (인증 전에는 로그인 불가 → 이메일 소유 증명 없이 비밀번호 활성화되는 계정 탈취 차단)
    */
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   pendingPasswordHash?: string | null;
 
   /** 이메일 인증 완료 시각. null = 미인증 상태. 카카오 가입자는 자동으로 채워짐. */
