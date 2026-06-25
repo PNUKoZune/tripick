@@ -11,6 +11,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import type { JwtPayload, ReplanResultDto } from '@tripick/types';
+import { TripMembersService } from '../trip-members/trip-members.service';
 
 /** 인증을 통과한 소켓의 client.data 에 담기는 사용자 정보 */
 interface AuthedSocketData {
@@ -40,7 +41,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly tripMembersService: TripMembersService,
+  ) {}
 
   async handleConnection(client: Socket) {
     const token = extractToken(client);
@@ -65,10 +69,17 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @SubscribeMessage('join-trip')
-  handleJoinTrip(
+  async handleJoinTrip(
     @MessageBody() data: { tripId: string },
     @ConnectedSocket() client: AuthedSocket,
   ) {
+    const userId = client.data.user.sub;
+    const allowed = await this.tripMembersService.canAccessTrip(data.tripId, userId);
+    if (!allowed) {
+      this.logger.warn(`WS join denied: user ${userId} → trip ${data.tripId}`);
+      return { event: 'join-denied', tripId: data.tripId };
+    }
+
     void client.join(`trip-session:${data.tripId}`);
     return { event: 'joined', tripId: data.tripId };
   }
