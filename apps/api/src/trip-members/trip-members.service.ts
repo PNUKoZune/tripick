@@ -67,6 +67,26 @@ export class TripMembersService {
     private readonly preferencesService: PreferencesService,
   ) {}
 
+  /**
+   * 사용자가 해당 trip 에 접근(조회·실시간 세션 참여)할 수 있는지 여부.
+   * owner 이거나 accepted 상태의 멤버면 true.
+   */
+  async canAccessTrip(tripId: string, userId: string): Promise<boolean> {
+    const trip = await this.tripsRepo.findOneBy({ id: tripId });
+    if (!trip) {
+      return false;
+    }
+    if (trip.userId === userId) {
+      return true;
+    }
+    const membership = await this.membersRepo.findOneBy({
+      tripId,
+      userId,
+      status: 'accepted',
+    });
+    return Boolean(membership);
+  }
+
   async findAll(tripId: string, user: UserEntity): Promise<TripMemberDto[]> {
     const trip = await this.tripsRepo.findOneBy({ id: tripId });
     if (!trip) {

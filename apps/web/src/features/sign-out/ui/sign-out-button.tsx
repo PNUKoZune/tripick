@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { logout } from '@/entities/session/api/auth-api';
+import { disconnectRealtimeSocket } from '@/shared/realtime';
 
 export function SignOutButton() {
   const router = useRouter();
@@ -15,6 +16,7 @@ export function SignOutButton() {
     setPending(true);
     try {
       await logout();
+      disconnectRealtimeSocket();
       queryClient.clear();
       router.replace('/start');
     } finally {
