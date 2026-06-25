@@ -8,6 +8,7 @@ import type { InboxItemDto, InboxItemKind, NotificationCategory } from '@tripick
 
 import { acceptFriend, removeFriend } from '@/entities/friend';
 import { fetchInbox, markAllInboxRead, markInboxRead } from '@/entities/inbox';
+import { SessionGuard } from '@/entities/session';
 import { acceptTripInvite, rejectTripInvite } from '@/entities/trip-plan';
 import { queryKeys } from '@/shared/api/query-keys';
 import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
@@ -37,6 +38,14 @@ const CATEGORY_KINDS: Set<InboxItemKind> = new Set([
 ]);
 
 export function InboxView() {
+  return (
+    <SessionGuard>
+      <InboxContent />
+    </SessionGuard>
+  );
+}
+
+function InboxContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<Filter>('all');

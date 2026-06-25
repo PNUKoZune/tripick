@@ -1,23 +1,31 @@
+import {
+  clearStoredSession,
+  getAccessToken,
+  getRefreshToken,
+  replaceTokens,
+} from '@/shared/lib/session-token';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1';
-const SESSION_KEY = 'tripick.session.v1';
 
 const FALLBACK_ERROR = '요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.';
+
+// 401 시 백엔드에 refresh 시도 — 다발성 호출을 1회로 합치기 위해 공유 Promise.
+// 같은 시점에 여러 API 호출이 401 받으면 모두 같은 refresh 결과를 기다린다.
+let refreshInFlight: Promise<string | null> | null = null;
 
 export function apiUrl(path: string) {
   return `${API_BASE}${path}`;
 }
 
-async function fetcher<T>(path: string, init?: RequestInit): Promise<T> {
+async function fetcher<T>(path: string, init?: RequestInit, attempt = 0): Promise<T> {
   const headers = new Headers(init?.headers);
-  // FormData 본문은 브라우저가 boundary 와 함께 multipart Content-Type 을 자동으로 붙인다.
-  // 명시적으로 application/json 을 세팅하면 파싱 실패하므로 FormData 일 때만 건너뛴다.
   const isFormDataBody =
     typeof FormData !== 'undefined' && init?.body instanceof FormData;
   if (!headers.has('Content-Type') && init?.body && !isFormDataBody) {
     headers.set('Content-Type', 'application/json');
   }
   if (!headers.has('Authorization')) {
-    const token = getStoredAccessToken();
+    const token = getAccessToken();
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
     }
@@ -27,13 +35,24 @@ async function fetcher<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers,
   });
+
+  // 401 + 최초 시도 + auth/refresh·login 자체가 아닌 경우 → 자동 refresh 후 1회 재시도
+  if (res.status === 401 && attempt === 0 && !path.startsWith('/auth/')) {
+    const newAccessToken = await tryRefresh();
+    if (newAccessToken) {
+      return fetcher<T>(path, init, attempt + 1);
+    }
+  }
+
   const payload = await parseResponse(res);
 
   if (!res.ok) {
-    if (res.status === 401) {
+    // 인증된 요청이 401 → 세션 만료. /auth/* (로그인 시도 등) 의 401 은 자격 증명 실패라 세션을 건드리지 않는다.
+    const isAuthEndpoint = path.startsWith('/auth/');
+    if (res.status === 401 && !isAuthEndpoint) {
       clearStoredSession();
     }
-    throw Object.assign(new Error(normalizeErrorMessage(payload, res.status)), {
+    throw Object.assign(new Error(normalizeErrorMessage(payload, res.status, isAuthEndpoint)), {
       payload,
       status: res.status,
     });
@@ -42,20 +61,32 @@ async function fetcher<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
-function getStoredAccessToken(): string | null {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-  const raw = window.localStorage.getItem(SESSION_KEY);
-  if (!raw) {
-    return null;
-  }
-  try {
-    const session = JSON.parse(raw) as { tokens?: { accessToken?: unknown } };
-    return typeof session.tokens?.accessToken === 'string' ? session.tokens.accessToken : null;
-  } catch {
-    return null;
-  }
+async function tryRefresh(): Promise<string | null> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) return null;
+    try {
+      const res = await fetch(apiUrl('/auth/refresh'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!res.ok) {
+        clearStoredSession();
+        return null;
+      }
+      const tokens = (await res.json()) as { accessToken: string; refreshToken: string };
+      replaceTokens(tokens);
+      return tokens.accessToken;
+    } catch {
+      clearStoredSession();
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
 }
 
 async function parseResponse(res: Response): Promise<unknown> {
@@ -70,8 +101,9 @@ async function parseResponse(res: Response): Promise<unknown> {
   return text || null;
 }
 
-function normalizeErrorMessage(payload: unknown, status: number): string {
-  if (status === 401) {
+function normalizeErrorMessage(payload: unknown, status: number, isAuthEndpoint = false): string {
+  // 세션 만료 안내는 인증된 요청에만. 로그인/가입 같은 /auth/* 401 은 서버 메시지를 그대로 노출.
+  if (status === 401 && !isAuthEndpoint) {
     return '로그인이 만료됐어요. 다시 로그인해주세요.';
   }
 
@@ -87,13 +119,6 @@ function normalizeErrorMessage(payload: unknown, status: number): string {
     return FALLBACK_ERROR;
   }
   return first;
-}
-
-function clearStoredSession(): void {
-  if (typeof window === 'undefined') {
-    return;
-  }
-  window.localStorage.removeItem(SESSION_KEY);
 }
 
 function extractMessages(payload: unknown): string[] {

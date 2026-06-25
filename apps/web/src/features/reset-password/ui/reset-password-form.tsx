@@ -1,0 +1,95 @@
+'use client';
+
+import Link from 'next/link';
+import { useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
+
+import { resetPassword } from '@/entities/session/api/auth-api';
+
+type Props = {
+  token: string;
+};
+
+export function ResetPasswordForm({ token }: Props) {
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [done, setDone] = useState(false);
+
+  const mutation = useMutation({
+    mutationFn: () => resetPassword(token, password),
+    onSuccess: () => setDone(true),
+  });
+
+  if (done) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] p-5">
+          <h2 className="text-[16px] font-bold text-[#191F28]">비밀번호 변경 완료</h2>
+          <p className="mt-2 text-[13px] leading-[20px] text-[#4E5968]">
+            새 비밀번호로 다시 로그인해주세요. 보안을 위해 다른 디바이스의 세션은 모두
+            로그아웃됐어요.
+          </p>
+        </div>
+        <Link
+          href="/login"
+          className="inline-flex h-12 w-full items-center justify-center rounded-[12px] bg-[#3182F6] text-[15px] font-bold text-white"
+        >
+          로그인 페이지로
+        </Link>
+      </div>
+    );
+  }
+
+  const mismatch = confirm.length > 0 && password !== confirm;
+  const canSubmit = password.length >= 8 && password === confirm && !mutation.isPending;
+  const errorMessage = mutation.error instanceof Error ? mutation.error.message : null;
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (canSubmit) mutation.mutate();
+      }}
+      className="space-y-3"
+    >
+      <label className="block">
+        <span className="mb-1 block text-[13px] font-bold text-[#191F28]">새 비밀번호</span>
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="new-password"
+          className="h-12 w-full rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[15px] outline-none focus:border-[#3182F6]"
+        />
+        <span className="mt-1 block text-[12px] text-[#8B95A1]">8자 이상, 영문+숫자 포함</span>
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-[13px] font-bold text-[#191F28]">비밀번호 확인</span>
+        <input
+          type="password"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          autoComplete="new-password"
+          className="h-12 w-full rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[15px] outline-none focus:border-[#3182F6]"
+        />
+        {mismatch ? (
+          <span className="mt-1 block text-[12px] font-semibold text-[#F04452]">
+            비밀번호가 일치하지 않아요.
+          </span>
+        ) : null}
+      </label>
+
+      {errorMessage ? (
+        <p className="text-[13px] font-semibold text-[#F04452]">{errorMessage}</p>
+      ) : null}
+
+      <button
+        type="submit"
+        disabled={!canSubmit}
+        className="mt-2 h-12 w-full rounded-[12px] bg-[#3182F6] text-[15px] font-bold text-white hover:bg-[#1B64DA] disabled:bg-[#E5E8EB] disabled:text-[#B0B8C1]"
+      >
+        {mutation.isPending ? '변경 중…' : '비밀번호 변경'}
+      </button>
+    </form>
+  );
+}

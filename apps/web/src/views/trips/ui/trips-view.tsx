@@ -1,12 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { TripSummaryStatus, TripSummaryDto } from '@tripick/types';
 
-import { getStoredSession } from '@/entities/session/model/session-storage';
+import { SessionGuard } from '@/entities/session';
 import { fetchPlannerTrips, TripSummaryCard } from '@/entities/trip-plan';
 import { queryKeys } from '@/shared/api/query-keys';
 import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
@@ -22,20 +21,19 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
 ];
 
 export function TripsView() {
-  const router = useRouter();
-  const [filter, setFilter] = useState<Filter>('all');
-  const [hasSession, setHasSession] = useState<boolean | null>(null);
+  return (
+    <SessionGuard>
+      <TripsContent />
+    </SessionGuard>
+  );
+}
 
-  useEffect(() => {
-    const exists = Boolean(getStoredSession());
-    setHasSession(exists);
-    if (!exists) router.replace('/start');
-  }, [router]);
+function TripsContent() {
+  const [filter, setFilter] = useState<Filter>('all');
 
   const { data: trips = [], error } = useQuery({
     queryKey: queryKeys.planner.trips,
     queryFn: fetchPlannerTrips,
-    enabled: hasSession === true,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -53,11 +51,6 @@ export function TripsView() {
     return { upcoming, draft, done };
   }, [trips]);
   const latestTrip = trips[0];
-
-  // 세션 확인 중이거나 미로그인 시(replace 중) 화면 깜빡임 방지
-  if (hasSession !== true) {
-    return <TripsSessionLoading />;
-  }
 
   return (
     <AppFrame>
@@ -121,19 +114,6 @@ export function TripsView() {
         </div>
       </PageContainer>
     </AppFrame>
-  );
-}
-
-function TripsSessionLoading() {
-  return (
-    <div className="min-h-dvh bg-white">
-      <div className="mx-auto flex min-h-dvh max-w-[430px] flex-col justify-center px-5 lg:max-w-[560px]">
-        <div className="text-[13px] font-black leading-5 text-[#3182F6]">Tripick</div>
-        <h1 className="mt-3 text-[30px] font-black leading-9 text-[#191F28]">
-          내 여행 확인 중
-        </h1>
-      </div>
-    </div>
   );
 }
 

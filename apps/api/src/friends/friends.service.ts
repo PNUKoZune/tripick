@@ -35,7 +35,7 @@ export class FriendsService {
     const handle = this.normalizeHandle(dto.handle);
     const handleKey = handle.slice(1);
     if (!handleKey) {
-      throw new BadRequestException('카카오 ID를 입력해주세요.');
+      throw new BadRequestException('상대방 아이디를 입력해주세요.');
     }
     if (this.isSelfHandle(owner, handleKey)) {
       throw new BadRequestException('내 계정은 친구로 추가할 수 없어요.');
@@ -154,16 +154,18 @@ export class FriendsService {
     return friend;
   }
 
+  /**
+   * 친구 검색은 고유 핸들로만. (email·nickname 퍼지 매칭은 PII enumeration·동명이인 오매칭이라 제거)
+   * 카카오/이메일 가입 구분 없이 동일하게 동작.
+   */
   private async findUserByHandle(handleKey: string): Promise<UserEntity | null> {
-    return this.usersRepo.findOne({
-      where: [{ kakaoId: handleKey }, { email: handleKey }, { nickname: handleKey }],
-    });
+    return this.usersRepo.findOneBy({ handle: handleKey.toLowerCase() });
   }
 
   private normalizeHandle(value: string): string {
-    const trimmed = value.trim();
+    const trimmed = value.trim().toLowerCase();
     if (!trimmed) {
-      throw new BadRequestException('카카오 ID를 입력해주세요.');
+      throw new BadRequestException('상대방 아이디를 입력해주세요.');
     }
     return trimmed.startsWith('@') ? trimmed : `@${trimmed}`;
   }
@@ -182,11 +184,11 @@ export class FriendsService {
   }
 
   private isSelfHandle(owner: UserEntity, handleKey: string): boolean {
-    return [owner.kakaoId, owner.email, owner.nickname].filter(Boolean).includes(handleKey);
+    return Boolean(owner.handle) && owner.handle === handleKey.toLowerCase();
   }
 
   private userHandle(user: UserEntity): string {
-    return `@${user.kakaoId || user.nickname}`;
+    return `@${user.handle ?? user.nickname}`;
   }
 
   private colorFromString(value: string): string {

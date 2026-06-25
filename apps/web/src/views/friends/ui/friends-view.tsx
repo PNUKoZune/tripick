@@ -12,10 +12,19 @@ import {
   removeFriend,
   togglePinFriend,
 } from '@/entities/friend';
+import { SessionGuard } from '@/entities/session';
 import { queryKeys } from '@/shared/api/query-keys';
 import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
 
 export function FriendsView() {
+  return (
+    <SessionGuard>
+      <FriendsContent />
+    </SessionGuard>
+  );
+}
+
+function FriendsContent() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [addInput, setAddInput] = useState('');
@@ -77,7 +86,7 @@ export function FriendsView() {
           <span className="text-[13px] font-bold text-[#191F28]">친구 추가</span>
         </div>
         <p className="mt-1 text-[12px] text-[#8B95A1]">
-          카카오 ID 또는 핸들을 입력하면 친구 목록에 저장합니다.
+          상대방의 아이디(@)를 입력하면 친구 목록에 저장합니다.
         </p>
         <div className="mt-2 flex items-center gap-2">
           <input
@@ -164,7 +173,7 @@ export function FriendsView() {
       <FriendSection title="친구" count={others.length}>
         {others.length === 0 && !loadError ? (
           <p className="px-4 py-6 text-center text-[13px] text-[#8B95A1]">
-            친구가 없어요. 카카오 ID로 친구를 추가해보세요.
+            친구가 없어요. 핸들(@아이디)로 친구를 추가해보세요.
           </p>
         ) : (
           others.map((friend) => (
@@ -190,7 +199,7 @@ export function FriendsView() {
       <PageHeader
         title="친구"
         label="친구"
-        description="카카오톡 친구 추가하듯, 핸들로 친구를 추가하고 여행 멤버 후보로 둡니다."
+        description="카카오톡 친구 추가하듯, 아이디(@)로 친구를 추가하고 여행 멤버 후보로 둡니다."
         action={
           friends.length > 0 ? (
             <span className="text-[13px] font-semibold text-[#6B7684]">

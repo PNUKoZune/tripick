@@ -1,9 +1,18 @@
 'use client';
 
+import { SessionGuard } from '@/entities/session';
 import { PreferenceSetupForm } from '@/features/preference-setup/ui/preference-setup-form';
 import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
 
 export function PreferencesView() {
+  return (
+    <SessionGuard>
+      <PreferencesContent />
+    </SessionGuard>
+  );
+}
+
+function PreferencesContent() {
   return (
     <AppFrame>
       <PageHeader

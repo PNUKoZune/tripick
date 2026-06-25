@@ -57,6 +57,20 @@ services:
       timeout: 5s
       retries: 5
 
+  # Mailpit (SMTP catcher — 로컬에서 보낸 메일을 웹 UI 에서 확인)
+  # 라이브: SMTP_HOST 만 Resend/SendGrid SMTP 로 전환
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: tripick-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
   # MinIO 버킷 초기화
   minio-init:
     image: minio/mc:latest

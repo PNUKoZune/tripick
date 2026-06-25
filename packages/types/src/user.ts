@@ -18,6 +18,8 @@ export interface UserDto {
   id: string;
   kakaoId: string;
   nickname: string;
+  /** 친구 추가·멘션용 고유 핸들 (예: "koty") */
+  handle?: string;
   profileImageUrl?: string;
   email?: string;
   isDemo?: boolean;
@@ -28,6 +30,8 @@ export interface UserDto {
 
 export interface UpdateUserDto {
   nickname?: string;
+  /** 영문 소문자/숫자/밑줄 3~20자. 중복 불가. */
+  handle?: string;
   profileImageUrl?: string;
 }
 
