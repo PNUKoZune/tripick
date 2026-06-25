@@ -1,3 +1,5 @@
+import { Logger } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import {
   WebSocketGateway,
   WebSocketServer,
@@ -8,7 +10,14 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import type { ReplanResultDto } from '@tripick/types';
+import type { JwtPayload, ReplanResultDto } from '@tripick/types';
+
+/** 인증을 통과한 소켓의 client.data 에 담기는 사용자 정보 */
+interface AuthedSocketData {
+  user: JwtPayload;
+}
+
+type AuthedSocket = Socket & { data: AuthedSocketData };
 
 /**
  * Socket.IO WebSocket Gateway
@@ -17,27 +26,48 @@ import type { ReplanResultDto } from '@tripick/types';
  * - trip-session:{tripId}  — 여행 세션
  * - deviation:{tripId}     — 경로 이탈 이벤트
  * - replan-result:{tripId} — 재계획 결과 push
+ *
+ * 인증: 핸드셰이크의 `auth.token` (또는 Authorization 헤더) JWT 를 검증한다.
+ * 검증 실패 시 즉시 연결을 끊는다.
  */
 @WebSocketGateway({
   cors: { origin: '*' },
   namespace: '/realtime',
 })
 export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
+  private readonly logger = new Logger(RealtimeGateway.name);
+
   @WebSocketServer()
   server: Server;
 
-  handleConnection(client: Socket) {
-    console.log(`WS connected: ${client.id}`);
+  constructor(private readonly jwtService: JwtService) {}
+
+  async handleConnection(client: Socket) {
+    const token = extractToken(client);
+    if (!token) {
+      this.logger.warn(`WS rejected (no token): ${client.id}`);
+      client.disconnect(true);
+      return;
+    }
+
+    try {
+      const payload = await this.jwtService.verifyAsync<JwtPayload>(token);
+      (client as AuthedSocket).data.user = payload;
+      this.logger.log(`WS connected: ${client.id} (user ${payload.sub})`);
+    } catch {
+      this.logger.warn(`WS rejected (invalid token): ${client.id}`);
+      client.disconnect(true);
+    }
   }
 
   handleDisconnect(client: Socket) {
-    console.log(`WS disconnected: ${client.id}`);
+    this.logger.log(`WS disconnected: ${client.id}`);
   }
 
   @SubscribeMessage('join-trip')
   handleJoinTrip(
     @MessageBody() data: { tripId: string },
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: AuthedSocket,
   ) {
     void client.join(`trip-session:${data.tripId}`);
     return { event: 'joined', tripId: data.tripId };
@@ -58,4 +88,19 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       .to(`trip-session:${result.tripId}`)
       .emit('replan_result', result);
   }
+}
+
+/** 핸드셰이크 auth.token → Authorization 헤더 순으로 Bearer 토큰을 추출한다. */
+function extractToken(client: Socket): string | null {
+  const authToken = client.handshake.auth?.token;
+  if (typeof authToken === 'string' && authToken.length > 0) {
+    return authToken.replace(/^Bearer\s+/i, '');
+  }
+
+  const header = client.handshake.headers.authorization;
+  if (typeof header === 'string' && header.startsWith('Bearer ')) {
+    return header.slice(7);
+  }
+
+  return null;
 }

@@ -12,6 +12,7 @@ import { MemberAvatars } from '@/entities/member';
 import { DaySelector } from '@/features/day-selector';
 import { TripMembersSheet } from '@/features/manage-trip-members';
 import { PlannerTabs, type PlannerTab } from '@/features/planner-tab-switch';
+import { ReplanToast } from '@/features/subscribe-replan-result';
 import { queryKeys } from '@/shared/api/query-keys';
 import { Button, Chip } from '@/shared/ui';
 import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
@@ -328,6 +329,8 @@ function PlannerContent({ tripId }: { tripId?: string }) {
         tripTitle={trip?.title ?? '여행'}
         members={trip?.members ?? []}
       />
+
+      {selectedTripId ? <ReplanToast tripId={selectedTripId} /> : null}
     </div>
   );
 }
