@@ -1,25 +1,21 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
-import { InjectRepository } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
-import { Repository } from 'typeorm';
 import { REPLAN_QUEUE, REPLAN_JOB } from './replanning.constants';
-import { TripEntity } from '../trips/trip.entity';
+import { TripMembersService } from '../trip-members/trip-members.service';
 import type { ReplanRequestDto, ReplanJobDto } from '@tripick/types';
 
 @Injectable()
 export class ReplanningService {
   constructor(
     @InjectQueue(REPLAN_QUEUE) private readonly queue: Queue,
-    @InjectRepository(TripEntity) private readonly tripsRepo: Repository<TripEntity>,
+    private readonly tripMembersService: TripMembersService,
   ) {}
 
   async enqueue(userId: string, dto: ReplanRequestDto): Promise<ReplanJobDto> {
-    const trip = await this.tripsRepo.findOneBy({ id: dto.tripId });
-    if (!trip) {
-      throw new NotFoundException(`Trip ${dto.tripId} not found`);
-    }
-    if (trip.userId !== userId) {
+    // owner 뿐 아니라 accepted 멤버도 웨이팅/이탈 신고로 재계획을 트리거할 수 있다.
+    const canAccess = await this.tripMembersService.canAccessTrip(dto.tripId, userId);
+    if (!canAccess) {
       throw new ForbiddenException();
     }
 
