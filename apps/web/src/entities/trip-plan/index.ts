@@ -13,7 +13,7 @@ export {
   reportTripWaiting,
   reportTripDeviation,
 } from './api';
-export { splitTripSchedule } from './lib/select-active-trip';
+export { splitTripSchedule, isTripPeriodActive } from './lib/select-active-trip';
 export type { TripScheduleSplit } from './lib/select-active-trip';
 export { TripSummaryCard } from './ui/trip-summary-card';
 export type {

@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { PlannerItineraryItemDto, PlannerMapMarkerDto, PlannerTripDto } from '@tripick/types';
 
 import { SessionGuard } from '@/entities/session';
-import { fetchPlannerTrip, fetchPlannerTrips } from '@/entities/trip-plan';
+import { fetchPlannerTrip, fetchPlannerTrips, isTripPeriodActive } from '@/entities/trip-plan';
 import { MemberAvatars } from '@/entities/member';
 import { DaySelector } from '@/features/day-selector';
 import { TripMembersSheet } from '@/features/manage-trip-members';
@@ -83,6 +83,7 @@ function PlannerContent({ tripId }: { tripId?: string }) {
         ? tripsError.message
         : null;
   const isResolvingTrip = !selectedTripId && isTripsLoading;
+  const isLiveActive = trip ? isTripPeriodActive(trip.meta.startDate, trip.meta.endDate) : false;
 
   const itemsForDay = useMemo(() => {
     if (!trip) return [];
@@ -118,6 +119,8 @@ function PlannerContent({ tripId }: { tripId?: string }) {
           members={trip?.members ?? []}
           {...(trip ? { onMembersClick: () => setMembersOpen(true) } : {})}
         />
+
+        {isLiveActive ? <LivePromoBanner /> : null}
 
         {trip ? (
           <PlannerMap
@@ -233,6 +236,8 @@ function PlannerContent({ tripId }: { tripId?: string }) {
             </div>
           </header>
 
+          {isLiveActive ? <LivePromoBanner /> : null}
+
           <div className="mx-auto grid h-full w-full min-h-0 max-w-[1360px] grid-cols-[360px_minmax(0,1fr)] gap-5 px-8 py-6 xl:grid-cols-[400px_minmax(0,1fr)] xl:gap-6 xl:px-10 2xl:grid-cols-[420px_minmax(0,1fr)_360px]">
             {/* 좌측: 일정 패널 */}
             <aside className="flex h-[calc(100dvh-120px)] min-h-0 flex-col overflow-hidden rounded-[20px] border border-[#E5E8EB] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
@@ -332,6 +337,24 @@ function PlannerContent({ tripId }: { tripId?: string }) {
 
       {selectedTripId ? <ReplanToast tripId={selectedTripId} /> : null}
     </div>
+  );
+}
+
+function LivePromoBanner() {
+  return (
+    <Link
+      href="/trip/live"
+      className="flex items-center justify-between gap-3 bg-[#3182F6] px-4 py-2.5 text-white transition hover:bg-[#1B64DA]"
+    >
+      <span className="flex items-center gap-2 text-[13px] font-bold">
+        <span className="relative flex size-2">
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-white/70" />
+          <span className="relative inline-flex size-2 rounded-full bg-white" />
+        </span>
+        지금 여행 중이에요
+      </span>
+      <span className="text-[12px] font-semibold">실시간 화면 보기 ›</span>
+    </Link>
   );
 }
 

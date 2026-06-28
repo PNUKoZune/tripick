@@ -11,6 +11,16 @@ function startOfDay(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
+/** 오늘이 여행 기간(startDate~endDate) 안에 드는지 (진행 중 여부) */
+export function isTripPeriodActive(
+  startDate: string,
+  endDate: string,
+  now: Date = new Date(),
+): boolean {
+  const today = startOfDay(now);
+  return startOfDay(new Date(startDate)) <= today && today <= startOfDay(new Date(endDate));
+}
+
 /**
  * 오늘 기준으로 진행 중(active) 여행과 다가오는(upcoming) 여행을 분리한다.
  * 진행 중 여행은 한 시점에 하나라고 가정해 첫 번째 매칭을 active 로 본다.

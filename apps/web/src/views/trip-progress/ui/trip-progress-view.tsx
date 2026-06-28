@@ -22,7 +22,7 @@ import { ReplanToast } from '@/features/subscribe-replan-result';
 import { useTripProgress } from '@/features/track-trip-progress';
 import { queryKeys } from '@/shared/api/query-keys';
 import { useCurrentLocation } from '@/shared/location';
-import { AppBottomNavigation } from '@/shared/ui/app-frame';
+import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
 import { LiveMap } from '@/widgets/live-map';
 import { TripProgressTimeline } from '@/widgets/trip-progress-timeline';
 
@@ -92,40 +92,99 @@ function TripProgressContent() {
   }, [trip, itemsForDay]);
 
   const [waitingItem, setWaitingItem] = useState<PlannerItineraryItemDto | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+
+  const selectedMarker = useMemo(
+    () => dayMarkers.find((marker) => marker.itemId === selectedItemId) ?? null,
+    [dayMarkers, selectedItemId],
+  );
 
   if (!active) {
     return <TripProgressEmpty loading={isLoading} upcoming={upcoming} />;
   }
 
   return (
-    <div className="min-h-dvh bg-[#F7F8FA]">
-      <div className="mx-auto min-h-dvh max-w-[430px] bg-white pb-[88px]">
-        <header className="flex items-center justify-between border-b border-[#E5E8EB] px-5 py-4">
-          <div>
-            <div className="text-[12px] font-bold tracking-wide text-[#3182F6]">여행 중</div>
-            <h1 className="mt-0.5 text-[18px] font-bold leading-[26px] text-[#191F28]">
-              {trip?.title ?? active.title}
-            </h1>
+    <div className="bg-[#F7F8FA]">
+      {/* 모바일 (< lg): 지도 위 + 일정 아래 풀스크린 셸 */}
+      <div className="lg:hidden">
+        <div className="mx-auto flex h-dvh max-w-[430px] flex-col overflow-hidden bg-white">
+          <header className="flex shrink-0 items-center justify-between border-b border-[#E5E8EB] px-5 py-4">
+            <div>
+              <div className="text-[12px] font-bold tracking-wide text-[#3182F6]">여행 중</div>
+              <h1 className="mt-0.5 text-[18px] font-bold leading-[26px] text-[#191F28]">
+                {trip?.title ?? active.title}
+              </h1>
+            </div>
+            <span className="rounded-full bg-[#F2F4F6] px-3 py-1 text-[12px] font-bold text-[#4E5968]">
+              {dayNumber}일차
+            </span>
+          </header>
+
+          <div className="h-[280px] w-full shrink-0">
+            <LiveMap
+              center={trip?.mapCenter ?? DEFAULT_CENTER}
+              markers={dayMarkers}
+              position={position}
+              focusCoord={
+                selectedMarker ? { lat: selectedMarker.lat, lng: selectedMarker.lng } : null
+              }
+              selectedMarkerId={selectedMarker?.id ?? null}
+              onRecenterToCurrent={() => setSelectedItemId(null)}
+            />
           </div>
-          <span className="rounded-full bg-[#F2F4F6] px-3 py-1 text-[12px] font-bold text-[#4E5968]">
-            {dayNumber}일차
-          </span>
-        </header>
 
-        <div className="h-[280px] w-full">
-          <LiveMap
-            center={trip?.mapCenter ?? DEFAULT_CENTER}
-            markers={dayMarkers}
-            position={position}
-          />
+          <div className="flex-1 overflow-y-auto px-4 py-5 pb-[104px]">
+            <TripProgressTimeline
+              items={progressItems}
+              selectedItemId={selectedItemId}
+              onSelectItem={(item) => setSelectedItemId(item.id)}
+              onReportWaiting={setWaitingItem}
+            />
+          </div>
         </div>
-
-        <div className="px-4 py-5">
-          <TripProgressTimeline items={progressItems} onReportWaiting={setWaitingItem} />
-        </div>
+        <AppBottomNavigation className="lg:hidden" />
       </div>
 
-      <AppBottomNavigation />
+      {/* 태블릿·PC (≥ lg): 좌측 네비 + 큰 지도 + 우측 일정 패널 */}
+      <div className="mx-auto hidden h-dvh w-full max-w-[1640px] lg:grid lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:px-6">
+        <AppDesktopNavigation />
+        <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_380px] overflow-hidden border-x border-[#E5E8EB] bg-white xl:grid-cols-[minmax(0,1fr)_440px]">
+          <main className="relative min-h-0">
+            <LiveMap
+              center={trip?.mapCenter ?? DEFAULT_CENTER}
+              markers={dayMarkers}
+              position={position}
+              focusCoord={
+                selectedMarker ? { lat: selectedMarker.lat, lng: selectedMarker.lng } : null
+              }
+              selectedMarkerId={selectedMarker?.id ?? null}
+              onRecenterToCurrent={() => setSelectedItemId(null)}
+            />
+          </main>
+
+          <aside className="flex min-h-0 flex-col overflow-hidden border-l border-[#E5E8EB]">
+            <header className="flex shrink-0 items-center justify-between border-b border-[#E5E8EB] px-5 py-4">
+              <div>
+                <div className="text-[12px] font-bold tracking-wide text-[#3182F6]">여행 중</div>
+                <h1 className="mt-0.5 text-[18px] font-bold leading-[26px] text-[#191F28]">
+                  {trip?.title ?? active.title}
+                </h1>
+              </div>
+              <span className="rounded-full bg-[#F2F4F6] px-3 py-1 text-[12px] font-bold text-[#4E5968]">
+                {dayNumber}일차
+              </span>
+            </header>
+            <div className="flex-1 overflow-y-auto px-4 py-5">
+              <TripProgressTimeline
+                items={progressItems}
+                selectedItemId={selectedItemId}
+                onSelectItem={(item) => setSelectedItemId(item.id)}
+                onReportWaiting={setWaitingItem}
+              />
+            </div>
+          </aside>
+        </div>
+      </div>
 
       <DeviationBanner
         open={deviation.deviated}
