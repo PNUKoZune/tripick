@@ -42,6 +42,8 @@ import Geolocation from 'react-native-geolocation-service';
 
 type BridgeMessage =
   | { type: 'REQUEST_LOCATION' }
+  | { type: 'START_LOCATION_TRACKING' }
+  | { type: 'STOP_LOCATION_TRACKING' }
   | { type: 'OPEN_EXTERNAL'; url: string }
   | { type: 'NAV_STATE'; canGoBack: boolean };
 
@@ -63,11 +65,15 @@ const androidOnlyProps =
 
 export default function App() {
   const webViewRef = useRef<InstanceType<typeof WebView>>(null);
+  const watchIdRef = useRef<number | null>(null);
   const [canGoBack, setCanGoBack] = useState(false);
 
   useEffect(() => {
     requestPermissions();
     setupFcm();
+    // 앱 종료 시 위치 워치 정리
+    return () => stopTracking();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Android 하드웨어 백버튼 → WebView 히스토리 이동 (없으면 앱 종료)
@@ -148,6 +154,7 @@ export default function App() {
     }
   }, []);
 
+  // 단발 위치 조회 (이전 호환용 — 웹은 현재 START_LOCATION_TRACKING 을 보낸다)
   const injectLocation = useCallback(() => {
     Geolocation.getCurrentPosition(
       (pos) => {
@@ -166,6 +173,44 @@ export default function App() {
     );
   }, []);
 
+  /**
+   * 여행 진행(Live) 화면이 켜져 있는 동안 연속 위치 추적.
+   * 웹의 useCurrentLocation 이 START/STOP_LOCATION_TRACKING 으로 켜고 끈다.
+   * - distanceFilter: 10m 이동 시에만 갱신해 배터리/네트워크 절약
+   * - iOS: Always 권한 + UIBackgroundModes(location) 가 있으면 백그라운드에서도 수신
+   * - Android: 화면 꺼진 채 장시간 추적은 별도 foreground service 필요 (후속)
+   */
+  const startTracking = useCallback(() => {
+    if (watchIdRef.current !== null) return; // 이미 추적 중이면 중복 등록 방지
+    watchIdRef.current = Geolocation.watchPosition(
+      (pos) => {
+        postToWeb({
+          type: 'LOCATION_UPDATE',
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          timestamp: pos.timestamp,
+        });
+      },
+      (err) => {
+        postToWeb({ type: 'LOCATION_ERROR', code: err.code, message: err.message });
+      },
+      {
+        enableHighAccuracy: true,
+        distanceFilter: 10,
+        interval: 5000,
+        fastestInterval: 3000,
+        showsBackgroundLocationIndicator: true,
+      },
+    );
+  }, []);
+
+  const stopTracking = useCallback(() => {
+    if (watchIdRef.current === null) return;
+    Geolocation.clearWatch(watchIdRef.current);
+    watchIdRef.current = null;
+  }, []);
+
   function postToWeb(payload: unknown) {
     const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const js = `window.postMessage('${json}', '${WEB_APP_ORIGIN}'); true;`;
@@ -182,6 +227,14 @@ export default function App() {
     if (!msg) return;
     if (msg.type === 'REQUEST_LOCATION') {
       injectLocation();
+      return;
+    }
+    if (msg.type === 'START_LOCATION_TRACKING') {
+      startTracking();
+      return;
+    }
+    if (msg.type === 'STOP_LOCATION_TRACKING') {
+      stopTracking();
       return;
     }
     if (msg.type === 'OPEN_EXTERNAL' && msg.url) {
