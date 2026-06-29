@@ -36,3 +36,10 @@ CREATE INDEX IF NOT EXISTS idx_place_embeddings_hnsw
 -- 장소 임베딩 destination_region 인덱스
 CREATE INDEX IF NOT EXISTS idx_place_embeddings_region
   ON place_embeddings (destination_region);
+
+-- 로컬 seed 및 외부 API 후보 중복 방지/조회 최적화용 보조 인덱스
+CREATE INDEX IF NOT EXISTS idx_place_embeddings_region_name
+  ON place_embeddings (destination_region, name);
+
+CREATE INDEX IF NOT EXISTS idx_place_embeddings_kakao_place_id
+  ON place_embeddings (kakao_place_id);

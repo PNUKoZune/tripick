@@ -6,6 +6,7 @@ import {
   SubscribeMessage,
   MessageBody,
   ConnectedSocket,
+  Ack,
   OnGatewayConnection,
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
@@ -19,6 +20,7 @@ interface AuthedSocketData {
 }
 
 type AuthedSocket = Socket & { data: AuthedSocketData };
+type JoinTripAck = (response: { event: 'joined' | 'join-denied'; tripId: string }) => void;
 
 /**
  * Socket.IO WebSocket Gateway
@@ -72,16 +74,21 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   async handleJoinTrip(
     @MessageBody() data: { tripId: string },
     @ConnectedSocket() client: AuthedSocket,
+    @Ack() ack?: JoinTripAck,
   ) {
     const userId = client.data.user.sub;
     const allowed = await this.tripMembersService.canAccessTrip(data.tripId, userId);
     if (!allowed) {
       this.logger.warn(`WS join denied: user ${userId} → trip ${data.tripId}`);
-      return { event: 'join-denied', tripId: data.tripId };
+      const response = { event: 'join-denied' as const, tripId: data.tripId };
+      ack?.(response);
+      return response;
     }
 
-    void client.join(`trip-session:${data.tripId}`);
-    return { event: 'joined', tripId: data.tripId };
+    await client.join(`trip-session:${data.tripId}`);
+    const response = { event: 'joined' as const, tripId: data.tripId };
+    ack?.(response);
+    return response;
   }
 
   @SubscribeMessage('report-deviation')

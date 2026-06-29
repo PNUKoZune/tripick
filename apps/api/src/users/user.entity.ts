@@ -7,7 +7,7 @@ import {
   Index,
 } from 'typeorm';
 import type { NotificationPreferencesDto } from '@tripick/types';
-import { DEFAULT_NOTIFICATION_PREFERENCES } from '@tripick/types';
+import { DEFAULT_NOTIFICATION_PREFERENCES } from './notification-preferences.constants';
 
 @Entity('users')
 export class UserEntity {

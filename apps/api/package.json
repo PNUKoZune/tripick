@@ -9,7 +9,7 @@
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
     "test": "jest",
-    "test:e2e": "jest --config test/jest-e2e.json"
+    "test:e2e": "jest --config test/jest-e2e.json --runInBand --forceExit --silent"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1073.0",
@@ -60,6 +60,7 @@
     "@types/passport-jwt": "^4.0.1",
     "@types/pg": "^8.11.10",
     "jest": "^29.7.0",
+    "socket.io-client": "^4.8.3",
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.0"

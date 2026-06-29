@@ -12,8 +12,8 @@ import { IsNull, Repository } from 'typeorm';
 import { randomBytes } from 'node:crypto';
 import { StorageService } from '../storage/storage.service';
 import { UserEntity } from './user.entity';
+import { DEFAULT_NOTIFICATION_PREFERENCES } from './notification-preferences.constants';
 import {
-  DEFAULT_NOTIFICATION_PREFERENCES,
   type KakaoProfile,
   type NotificationPreferencesDto,
   type UpdateUserDto,
