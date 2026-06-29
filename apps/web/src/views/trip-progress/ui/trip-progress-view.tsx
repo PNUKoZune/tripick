@@ -28,10 +28,6 @@ import { TripProgressTimeline } from '@/widgets/trip-progress-timeline';
 
 const DEFAULT_CENTER: PlannerMapCenterDto = { lat: 37.5665, lng: 126.978, level: 5 };
 
-function startOfDay(date: Date): number {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-}
-
 export function TripProgressView() {
   return (
     <SessionGuard>
@@ -56,13 +52,8 @@ function TripProgressContent() {
     staleTime: 60 * 1000,
   });
 
-  // 오늘이 여행의 몇 일차인지 (startDate 기준)
-  const dayNumber = useMemo(() => {
-    if (!trip) return 1;
-    const start = startOfDay(new Date(trip.meta.startDate));
-    const diff = Math.floor((startOfDay(new Date()) - start) / 86_400_000) + 1;
-    return Math.min(Math.max(diff, 1), trip.days.length || 1);
-  }, [trip]);
+  // 오늘이 여행의 몇 일차인지 — 서버가 KST 기준으로 파생한 progress.currentDay 를 신뢰한다.
+  const dayNumber = trip?.progress.currentDay ?? 1;
 
   const itemsForDay = useMemo(
     () => (trip ? trip.items.filter((item) => item.day === dayNumber) : []),
