@@ -1,6 +1,6 @@
 module.exports = {
   project: {
     ios: { sourceDir: './ios' },
-    android: { sourceDir: './android' },
+    android: { sourceDir: './android', packageName: 'com.tripick.place' },
   },
 };

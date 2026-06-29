@@ -9,16 +9,13 @@ import {
   Linking,
 } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import {
-  AuthorizationStatus,
-  getMessaging,
-  getToken,
-  onMessage,
-  onTokenRefresh,
-  requestPermission,
-} from '@react-native-firebase/messaging';
+import { getApps } from '@react-native-firebase/app';
 import notifee, { AndroidImportance } from '@notifee/react-native';
 import Geolocation from 'react-native-geolocation-service';
+
+type FirebaseMessagingModule = typeof import('@react-native-firebase/messaging');
+
+declare const require: <TModule>(moduleName: string) => TModule;
 
 /**
  * TriPick React Native WebView Shell
@@ -96,6 +93,25 @@ export default function App() {
 
   const setupFcm = useCallback(async () => {
     try {
+      if (__DEV__) {
+        console.warn('[TriPick] FCM 초기화 생략: local dev build.');
+        return;
+      }
+
+      if (getApps().length === 0) {
+        console.warn('[TriPick] FCM 초기화 생략: Firebase default app is not configured.');
+        return;
+      }
+
+      const {
+        AuthorizationStatus,
+        getMessaging,
+        getToken,
+        onMessage,
+        onTokenRefresh,
+        requestPermission,
+      } = require<FirebaseMessagingModule>('@react-native-firebase/messaging');
+
       // 포그라운드/백그라운드 공용 Android 채널. iOS 는 무시.
       await notifee.createChannel({
         id: 'tripick-default',
