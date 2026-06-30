@@ -12,6 +12,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.100.11",
     "@tripick/types": "workspace:*",
+    "@tripick/utils": "workspace:*",
     "date-fns": "^4.2.1",
     "next": "^16.2.4",
     "react": "^19.2.5",

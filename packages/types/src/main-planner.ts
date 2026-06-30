@@ -86,6 +86,21 @@ export interface PlannerTripMetaDto {
   weather: PlannerWeatherDto[];
 }
 
+/**
+ * 서버가 KST(+09:00) 기준으로 파생한 여행 진행 상태.
+ * 클라가 startDate 로 직접 day 를 계산하지 않고 이 값을 신뢰한다.
+ */
+export interface PlannerTripProgressDto {
+  /** 'upcoming' 출발 전 · 'ongoing' 진행 중 · 'done' 종료 · 'draft' 초안 */
+  status: TripSummaryStatus;
+  /** 오늘이 몇 일차인지 (1-based). 출발 전이면 1, 종료 후면 마지막 일차로 클램프. */
+  currentDay: number;
+  /** 전체 일차 수 */
+  totalDays: number;
+  /** 서버 응답 시각 (ISO). 클라 시계 보정·표시용. */
+  serverTime: string;
+}
+
 export interface PlannerTripDto {
   id: string;
   title: string;
@@ -96,6 +111,7 @@ export interface PlannerTripDto {
   days: PlannerDayDto[];
   items: PlannerItineraryItemDto[];
   meta: PlannerTripMetaDto;
+  progress: PlannerTripProgressDto;
 }
 
 export interface PlannerAlternativeDto {

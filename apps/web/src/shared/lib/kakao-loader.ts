@@ -31,6 +31,7 @@ export interface KakaoMaps {
 
 export interface KakaoMapInstance {
   setCenter(latLng: unknown): void;
+  panTo(latLng: unknown): void;
   setLevel(level: number): void;
   relayout(): void;
 }

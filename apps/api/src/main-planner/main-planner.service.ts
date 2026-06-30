@@ -23,6 +23,7 @@ import type {
   PlannerSwapRequestDto,
   PlannerSwapResponseDto,
   PlannerTripDto,
+  PlannerTripProgressDto,
   PreferenceCoordinationDto,
   PreferenceVoteDto,
   TripMemberDto,
@@ -335,6 +336,7 @@ export class MainPlannerService {
       mapMarkers: markers,
       days,
       items: items.map((item) => this.toPlannerItem(item)),
+      progress: this.tripProgress(trip, days.length),
       meta: {
         startDate: trip.startDate,
         endDate: trip.endDate,
@@ -580,6 +582,24 @@ export class MainPlannerService {
         dateLabel: this.dateLabel(iso),
       };
     });
+  }
+
+  /**
+   * KST(+09:00) 기준으로 오늘이 여행의 몇 일차인지와 진행 상태를 파생한다.
+   * 클라가 startDate 로 직접 계산하던 로직을 서버로 옮긴 것.
+   */
+  private tripProgress(trip: TripEntity, totalDays: number): PlannerTripProgressDto {
+    const status = this.summaryStatus(trip);
+    const start = new Date(`${trip.startDate}T00:00:00+09:00`);
+    const today = new Date(`${this.isoDate(new Date())}T00:00:00+09:00`);
+    const dayDiff = Math.floor((today.getTime() - start.getTime()) / 86400000) + 1;
+    const currentDay = Math.min(Math.max(dayDiff, 1), Math.max(totalDays, 1));
+    return {
+      status,
+      currentDay,
+      totalDays,
+      serverTime: new Date().toISOString(),
+    };
   }
 
   private summaryStatus(trip: TripEntity): TripSummaryStatus {
