@@ -4,7 +4,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserEntity } from '../users/user.entity';
 import { ReplanningService } from './replanning.service';
-import type { ReplanRequestDto } from '@tripick/types';
+import { ReplanRequestBodyDto } from './dto/replan-request.dto';
 
 @ApiTags('Replanning')
 @ApiBearerAuth()
@@ -15,7 +15,7 @@ export class ReplanningController {
 
   @Post()
   @ApiOperation({ summary: '재계획 요청 (BullMQ 잡 등록)' })
-  requestReplan(@CurrentUser() user: UserEntity, @Body() dto: ReplanRequestDto) {
+  requestReplan(@CurrentUser() user: UserEntity, @Body() dto: ReplanRequestBodyDto) {
     return this.replanningService.enqueue(user.id, dto);
   }
 }

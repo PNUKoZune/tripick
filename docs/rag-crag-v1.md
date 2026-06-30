@@ -28,8 +28,15 @@
 | `apps/api/src/planner/retrieval/place-seeds.ts` | 서울/부산/제주/경주/local fallback catalog |
 | `apps/api/src/planner/agent/planner-agent.service.ts` | CRAG 후보를 LLM `/chat/completions`에 전달해 JSON 일정안을 생성 |
 | `apps/api/src/planner/planner.service.ts` | 기존 seed 후보 선택을 CRAG retrieval + AI planner agent 결과로 교체 |
+| `apps/api/src/planner/constraint/constraint.engine.ts` | 영업시간, 기상/취침 범위, 이동시간 gap hard constraint 검증 |
+| `apps/api/src/replanning/dto/replan-request.dto.ts` | 재계획 요청 payload 런타임 schema 검증 |
+| `apps/api/src/main-planner/dto/main-planner.dto.ts` | 여행 생성/멤버 추가/대안 swap payload 런타임 schema 검증 |
 | `apps/api/test/planner/agent/planner-agent.service.spec.ts` | AI planner 호출/LLM fallback fixture 테스트 |
 | `apps/api/test/planner/retrieval/crag-evaluator.service.spec.ts` | CRAG evaluator fixture 테스트 |
+| `apps/api/test/planner/constraint/constraint-engine.service.spec.ts` | hard constraint fixture 테스트 |
+| `apps/api/test/planner/planner.service.spec.ts` | constraint 실패 시 저장 차단/재생성 fixture 테스트 |
+| `apps/api/test/replanning/replan-request.dto.spec.ts` | 재계획 DTO validation fixture 테스트 |
+| `apps/api/test/main-planner/main-planner.dto.spec.ts` | main planner DTO validation fixture 테스트 |
 
 ## 3. 실행 흐름
 
@@ -53,7 +60,11 @@ flowchart TD
   N -- "no" --> P["Deterministic fallback plan"]
   P --> O
   O --> Q["ScheduleConstraint + ConstraintEngine"]
-  Q --> R["Persist itinerary items"]
+  Q --> S{"Hard constraints pass?"}
+  S -- "yes" --> R["Persist itinerary items"]
+  S -- "no" --> T["Rebuild deterministic CRAG fallback"]
+  T --> Q
+  S -- "still invalid" --> U["Reject without replacing stored itinerary"]
 ```
 
 ## 4. CRAG scoring
@@ -122,6 +133,14 @@ PlaceRetrievalService.retrieve
 
 재계획 요청도 같은 retrieval pipeline을 사용한다. `waiting`, `weather`, `deviation`, `manual` trigger에 따라 context score가 달라진다.
 
+Hard constraint 정책:
+
+- LLM plan은 바로 저장하지 않고 `ScheduleConstraint + ConstraintEngine`을 통과해야 한다.
+- 검증 항목은 기상/취침 범위, 장소 영업시간, 같은 날 인접 일정 간 이동시간 gap이다.
+- LLM plan이 실패하면 CRAG 후보 순위 기반 deterministic fallback으로 재생성한 뒤 다시 검증한다.
+- AI plan과 fallback plan이 모두 실패하면 `BadRequestException`으로 거절하고 기존 `itinerary_items`는 replace하지 않는다.
+- 재계획/대안 신고 API는 class-validator DTO를 통해 trigger, tripId, 좌표 범위, waitingMinutes 범위를 런타임 검증한다.
+
 ## 7. 환경 변수
 
 ```env
@@ -171,7 +190,14 @@ corepack pnpm --filter @tripick/web typecheck
 | 후보 다양화 | cafe 후보가 많아도 attraction 후보를 일정 후보에 포함 |
 | AI planner 호출 | CRAG 후보를 `/chat/completions` JSON 일정안으로 변환 |
 | AI fallback | LLM 비활성화 시 CRAG 순위 기반 deterministic plan 유지 |
+| opening hours 위반 | 영업시간 밖 방문을 hard constraint violation으로 판정 |
+| route gap 위반 | ETA보다 짧은 일정 간 buffer를 hard constraint violation으로 판정 |
+| wake/sleep 위반 | 기상/취침 범위를 넘는 장시간 일정을 violation으로 판정 |
+| invalid AI draft | AI 일정안이 constraint 실패 시 deterministic fallback으로 재생성 후 저장 |
+| invalid AI + fallback draft | 모든 생성안이 constraint 실패 시 DB replace 미호출 |
+| Replan DTO | 잘못된 trigger, 좌표 범위, waitingMinutes, tripId를 validation error로 차단 |
+| Main Planner DTO | 잘못된 여행 생성 날짜/시각/member payload 및 swap itemId 차단 |
 
 ## 9. 중간보고서용 구현 현황 문단
 
-본 프로젝트는 기존 rule-based planner의 후보 장소 선택부를 RAG/CRAG 기반 검색 보정 구조로 교체하였다. 사용자 취향 태그와 여행 목적지를 embedding query로 변환하고, PostgreSQL pgvector의 `place_embeddings` 테이블에서 cosine similarity 기반 후보 장소를 검색한다. 검색 결과는 그대로 일정 생성에 사용하지 않고 CRAG evaluator를 통해 취향 일치도, 목적지 일치도, 이벤트 적합성, 영업시간, 데이터 완성도를 점수화한다. 후보 confidence가 낮거나 수가 부족하면 Kakao Local API로 키워드 확장 재검색을 수행하고, 외부 API가 없거나 실패한 경우에는 로컬 seed catalog로 fallback하여 일정 생성이 중단되지 않도록 구성하였다. 최종 후보는 OpenAI-compatible LLM planner agent에 전달되어 day/order/duration/memo 형태의 JSON 일정안으로 생성된다. agent는 제공된 candidate id만 사용할 수 있으며, 응답 JSON은 서버에서 다시 검증한다. LLM이 사용할 수 없거나 schema가 맞지 않으면 CRAG 순위 기반 deterministic fallback으로 일정을 만든다. 이후 weather helper, route helper, schedule constraint, constraint engine을 통과한 뒤 itinerary item으로 저장되며, 각 일정 memo에는 AI planner 생성 여부, 검색 source, confidence가 남아 추천 근거를 확인할 수 있다. 이를 통해 LLM이 장소 정보를 임의 생성하지 않고 검색 근거와 제약 검증을 기반으로 일정을 생성하는 AI 여행 플래너 구조를 구현하였다.
+본 프로젝트는 기존 rule-based planner의 후보 장소 선택부를 RAG/CRAG 기반 검색 보정 구조로 교체하였다. 사용자 취향 태그와 여행 목적지를 embedding query로 변환하고, PostgreSQL pgvector의 `place_embeddings` 테이블에서 cosine similarity 기반 후보 장소를 검색한다. 검색 결과는 그대로 일정 생성에 사용하지 않고 CRAG evaluator를 통해 취향 일치도, 목적지 일치도, 이벤트 적합성, 영업시간, 데이터 완성도를 점수화한다. 후보 confidence가 낮거나 수가 부족하면 Kakao Local API로 키워드 확장 재검색을 수행하고, 외부 API가 없거나 실패한 경우에는 로컬 seed catalog로 fallback하여 일정 생성이 중단되지 않도록 구성하였다. 최종 후보는 OpenAI-compatible LLM planner agent에 전달되어 day/order/duration/memo 형태의 JSON 일정안으로 생성된다. agent는 제공된 candidate id만 사용할 수 있으며, 응답 JSON은 서버에서 다시 검증한다. LLM이 사용할 수 없거나 schema가 맞지 않으면 CRAG 순위 기반 deterministic fallback으로 일정을 만든다. 이후 weather helper, route helper, schedule constraint, constraint engine을 통과한 뒤 itinerary item으로 저장된다. 이때 기상/취침 범위, 영업시간, 일정 간 이동시간 같은 hard constraint를 위반하면 즉시 저장하지 않고 CRAG fallback으로 재생성하며, 재생성 결과도 실패하면 기존 일정을 교체하지 않는다. 각 일정 memo에는 AI planner 생성 여부, 검색 source, confidence가 남아 추천 근거를 확인할 수 있다. 이를 통해 LLM이 장소 정보를 임의 생성하지 않고 검색 근거와 제약 검증을 기반으로 실행 가능한 일정을 생성하는 AI 여행 플래너 구조를 구현하였다.

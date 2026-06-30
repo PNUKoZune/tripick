@@ -6,8 +6,9 @@ import { PreferencesService } from '../preferences/preferences.service';
 import { WeatherHelper } from './helpers/weather.helper';
 import { RouteHelper } from './helpers/route.helper';
 import { ScheduleConstraint } from './helpers/schedule.constraint';
-import { ConstraintEngine } from './constraint/constraint.engine';
+import { ConstraintEngine, type ValidationResult } from './constraint/constraint.engine';
 import { PlannerAgentService } from './agent/planner-agent.service';
+import type { PlannedCandidate } from './agent/planner-agent.service';
 import { PlaceRetrievalService } from './retrieval/place-retrieval.service';
 import { TripEntity } from '../trips/trip.entity';
 import type { CreateItineraryItemDto, ItineraryItemDto, PlaceDto, ReplanRequestDto, TasteTagDto } from '@tripick/types';
@@ -18,6 +19,17 @@ interface GenerateOptions {
   waitingMinutes?: number;
   deviatedItemId?: string;
   currentLocation?: ReplanRequestDto['currentLocation'];
+}
+
+interface DraftBuildContext {
+  trip: TripEntity;
+  dayCount: number;
+  itemsPerDay: number;
+  wakeTime: string;
+  sleepTime: string;
+  tasteTags: TasteTagDto | undefined;
+  options: GenerateOptions;
+  weatherHint: string;
 }
 
 @Injectable()
@@ -82,8 +94,6 @@ export class PlannerService {
       ...(options.currentLocation !== undefined ? { currentLocation: options.currentLocation } : {}),
     });
     const candidates = retrieval.places;
-    const created: CreateItineraryItemDto[] = [];
-    const waitingPadding = options.waitingMinutes ? Math.min(options.waitingMinutes, 90) : 0;
 
     if (candidates.length === 0) {
       throw new BadRequestException('No place candidates found for itinerary generation');
@@ -111,88 +121,23 @@ export class PlannerService {
       ...(options.waitingMinutes !== undefined ? { waitingMinutes: options.waitingMinutes } : {}),
     });
 
-    for (let day = 1; day <= dayCount; day += 1) {
-      const dayPlan = agentPlan
-        .filter((item) => item.day === day)
-        .sort((a, b) => a.order - b.order)
-        .slice(0, itemsPerDay);
-      let currentAt = this.makeDateTime(this.offsetDate(trip.startDate, day - 1), wakeTime);
-
-      for (let order = 0; order < dayPlan.length; order += 1) {
-        const planned = dayPlan[order]!;
-        const seed = planned.candidate;
-        const durationMin = planned.durationMin;
-        const previous = created[created.length - 1];
-        const sameDayPrevious = previous?.day === day ? previous : undefined;
-        const travelTimeMin = sameDayPrevious
-          ? await this.estimateTravelTime(
-              sameDayPrevious.coordinates,
-              seed.coordinates,
-              trip.transportMode,
-            )
-          : 0;
-
-        currentAt = new Date(currentAt.getTime() + travelTimeMin * 60000);
-        if (order === 1 && waitingPadding > 0) {
-          currentAt = new Date(currentAt.getTime() + waitingPadding * 60000);
-        }
-        currentAt = this.alignToOpeningHours(currentAt, seed.openingHours);
-
-        created.push({
-          tripId: trip.id,
-          day,
-          order: order + 1,
-          type: this.toItemType(seed.category),
-          name: this.buildPlaceName(seed.name, options.trigger, day, order),
-          address: seed.address,
-          coordinates: seed.coordinates,
-          scheduledAt: currentAt.toISOString(),
-          durationMin,
-          kakaoPlaceId: seed.kakaoPlaceId,
-          openingHours: seed.openingHours,
-          phoneNumber: seed.phone,
-          imageUrl: seed.imageUrl,
-          memo: this.buildMemo(seed, tasteTags, trip, options, planned.memo, planned.aiGenerated),
-          travelTimeMin: travelTimeMin || undefined,
-        } as CreateItineraryItemDto & Partial<ItineraryItemDto>);
-
-        currentAt = new Date(currentAt.getTime() + durationMin * 60000);
-      }
-    }
-
-    const draft = created.map((item) => ({
-      id: `${item.tripId}-${item.day}-${item.order}`,
-      tripId: item.tripId,
-      day: item.day,
-      order: item.order,
-      type: item.type,
-      name: item.name,
-      address: item.address,
-      coordinates: item.coordinates,
-      scheduledAt: item.scheduledAt,
-      durationMin: item.durationMin,
-      ...(item.travelTimeMin ? { travelTimeMin: item.travelTimeMin } : {}),
-      ...(item.openingHours ? { openingHours: item.openingHours } : {}),
-      ...(item.phoneNumber ? { phoneNumber: item.phoneNumber } : {}),
-      ...(item.kakaoPlaceId ? { kakaoPlaceId: item.kakaoPlaceId } : {}),
-      ...(item.imageUrl ? { imageUrl: item.imageUrl } : {}),
-      memo: `${item.memo ?? ''}${item.memo ? ' · ' : ''}${weatherHint}`,
-    }));
-
-    const bounded = this.scheduleConstraint.apply(draft, { wakeTime, sleepTime });
-    const validated = await this.constraintEngine.validate(bounded, {
+    const draftContext: DraftBuildContext = {
+      trip,
+      dayCount,
+      itemsPerDay,
       wakeTime,
       sleepTime,
-      transportMode: trip.transportMode,
-    });
+      tasteTags,
+      options,
+      weatherHint,
+    };
+    const aiDraft = await this.buildDraft(agentPlan, draftContext);
+    const aiValidation = await this.validateDraft(aiDraft, draftContext);
+    const finalItems = aiValidation.valid
+      ? aiValidation.items
+      : await this.rebuildValidDraft(candidates, draftContext, aiValidation);
 
-    if (!validated.valid) {
-      this.logger.warn(
-        `Generated best-effort itinerary for trip ${trip.id}: ${validated.issues.join('; ')}`,
-      );
-    }
-
-    const toStore: CreateItineraryItemDto[] = validated.items.map((item) => ({
+    const toStore: CreateItineraryItemDto[] = finalItems.map((item) => ({
       tripId: item.tripId,
       day: item.day,
       order: item.order,
@@ -232,6 +177,151 @@ export class PlannerService {
       ...(item.imageUrl ? { imageUrl: item.imageUrl } : {}),
       ...(item.memo ? { memo: item.memo } : {}),
     }));
+  }
+
+  private async buildDraft(
+    plan: PlannedCandidate[],
+    context: DraftBuildContext,
+  ): Promise<ItineraryItemDto[]> {
+    const { trip, dayCount, itemsPerDay, wakeTime, tasteTags, options, weatherHint } = context;
+    const waitingPadding = options.waitingMinutes ? Math.min(options.waitingMinutes, 90) : 0;
+    const created: CreateItineraryItemDto[] = [];
+
+    for (let day = 1; day <= dayCount; day += 1) {
+      const dayPlan = plan
+        .filter((item) => item.day === day)
+        .sort((a, b) => a.order - b.order)
+        .slice(0, itemsPerDay);
+      let currentAt = this.makeDateTime(this.offsetDate(trip.startDate, day - 1), wakeTime);
+
+      for (let order = 0; order < dayPlan.length; order += 1) {
+        const planned = dayPlan[order]!;
+        const seed = planned.candidate;
+        const durationMin = planned.durationMin;
+        const previous = created[created.length - 1];
+        const sameDayPrevious = previous?.day === day ? previous : undefined;
+        const travelTimeMin = sameDayPrevious
+          ? await this.estimateTravelTime(
+              sameDayPrevious.coordinates,
+              seed.coordinates,
+              trip.transportMode,
+            )
+          : 0;
+
+        currentAt = new Date(currentAt.getTime() + travelTimeMin * 60000);
+        if (order === 1 && waitingPadding > 0) {
+          currentAt = new Date(currentAt.getTime() + waitingPadding * 60000);
+        }
+        currentAt = this.alignToOpeningHours(currentAt, seed.openingHours);
+
+        const item: CreateItineraryItemDto = {
+          tripId: trip.id,
+          day,
+          order: order + 1,
+          type: this.toItemType(seed.category),
+          name: this.buildPlaceName(seed.name, options.trigger, day, order),
+          address: seed.address,
+          coordinates: seed.coordinates,
+          scheduledAt: currentAt.toISOString(),
+          durationMin,
+          memo: this.buildMemo(seed, tasteTags, trip, options, planned.memo, planned.aiGenerated),
+        };
+        if (seed.kakaoPlaceId) item.kakaoPlaceId = seed.kakaoPlaceId;
+        if (seed.openingHours) item.openingHours = seed.openingHours;
+        if (seed.phone) item.phoneNumber = seed.phone;
+        if (seed.imageUrl) item.imageUrl = seed.imageUrl;
+        if (travelTimeMin > 0) item.travelTimeMin = travelTimeMin;
+        created.push(item);
+
+        currentAt = new Date(currentAt.getTime() + durationMin * 60000);
+      }
+    }
+
+    return created.map((item) => ({
+      id: `${item.tripId}-${item.day}-${item.order}`,
+      tripId: item.tripId,
+      day: item.day,
+      order: item.order,
+      type: item.type,
+      name: item.name,
+      address: item.address,
+      coordinates: item.coordinates,
+      scheduledAt: item.scheduledAt,
+      durationMin: item.durationMin,
+      ...(item.travelTimeMin ? { travelTimeMin: item.travelTimeMin } : {}),
+      ...(item.openingHours ? { openingHours: item.openingHours } : {}),
+      ...(item.phoneNumber ? { phoneNumber: item.phoneNumber } : {}),
+      ...(item.kakaoPlaceId ? { kakaoPlaceId: item.kakaoPlaceId } : {}),
+      ...(item.imageUrl ? { imageUrl: item.imageUrl } : {}),
+      memo: `${item.memo ?? ''}${item.memo ? ' · ' : ''}${weatherHint}`,
+    }));
+  }
+
+  private async validateDraft(
+    draft: ItineraryItemDto[],
+    context: DraftBuildContext,
+  ): Promise<ValidationResult> {
+    const bounded = this.scheduleConstraint.apply(draft, {
+      wakeTime: context.wakeTime,
+      sleepTime: context.sleepTime,
+    });
+    return this.constraintEngine.validate(bounded, {
+      wakeTime: context.wakeTime,
+      sleepTime: context.sleepTime,
+      transportMode: context.trip.transportMode,
+    });
+  }
+
+  private async rebuildValidDraft(
+    candidates: CandidatePlace[],
+    context: DraftBuildContext,
+    failedAiValidation: ValidationResult,
+  ): Promise<ItineraryItemDto[]> {
+    this.logger.warn(
+      `AI planner itinerary for trip ${context.trip.id} violated hard constraints: ${failedAiValidation.issues.join('; ')}`,
+    );
+
+    let lastValidation = failedAiValidation;
+    const attempts = Math.min(3, candidates.length);
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const fallbackPlan = this.buildDeterministicPlan(
+        this.rotate(candidates, attempt),
+        context.dayCount,
+        context.itemsPerDay,
+      );
+      const fallbackDraft = await this.buildDraft(fallbackPlan, context);
+      const fallbackValidation = await this.validateDraft(fallbackDraft, context);
+      if (fallbackValidation.valid) {
+        this.logger.log(
+          `Recovered valid itinerary for trip ${context.trip.id} with deterministic CRAG fallback attempt ${attempt + 1}`,
+        );
+        return fallbackValidation.items;
+      }
+      lastValidation = fallbackValidation;
+    }
+
+    throw new BadRequestException(
+      `Generated itinerary violates hard constraints: ${lastValidation.issues.join('; ')}`,
+    );
+  }
+
+  private buildDeterministicPlan(
+    candidates: CandidatePlace[],
+    dayCount: number,
+    itemsPerDay: number,
+  ): PlannedCandidate[] {
+    const targetCount = Math.min(candidates.length, dayCount * itemsPerDay);
+    return Array.from({ length: targetCount }, (_, index) => {
+      const candidate = candidates[index]!;
+      return {
+        candidate,
+        day: Math.floor(index / itemsPerDay) + 1,
+        order: (index % itemsPerDay) + 1,
+        durationMin: this.defaultDuration(candidate.category),
+        memo: 'CRAG 후보 순위 기반 배치',
+        aiGenerated: false,
+      };
+    });
   }
 
   private buildPlaceName(name: string, trigger: GenerateOptions['trigger'], day: number, order: number): string {
@@ -319,6 +409,12 @@ export class PlannerService {
     const adjusted = new Date(date);
     adjusted.setUTCHours(Number(startHour) - 9, Number(startMinute), 0, 0);
     return adjusted;
+  }
+
+  private defaultDuration(category: string): number {
+    if (category === 'restaurant') return 80;
+    if (category === 'cafe') return 60;
+    return 90;
   }
 
   private rotate<T>(items: T[], offset: number): T[] {
