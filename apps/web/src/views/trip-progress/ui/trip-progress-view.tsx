@@ -18,10 +18,10 @@ import {
   type NextPlace,
 } from '@/features/detect-route-deviation';
 import { WaitingReportSheet } from '@/features/report-waiting';
-import { ReplanToast } from '@/features/subscribe-replan-result';
-import { useTripProgress } from '@/features/track-trip-progress';
+import { ReplanToast, useReplanSubscription } from '@/features/subscribe-replan-result';
+import { NextStopBar, useTripProgress } from '@/features/track-trip-progress';
 import { queryKeys } from '@/shared/api/query-keys';
-import { useCurrentLocation } from '@/shared/location';
+import { LocationPermissionBanner, useCurrentLocation } from '@/shared/location';
 import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
 import { LiveMap } from '@/widgets/live-map';
 import { TripProgressTimeline } from '@/widgets/trip-progress-timeline';
@@ -61,7 +61,10 @@ function TripProgressContent() {
   );
 
   const { items: progressItems, nextItem } = useTripProgress(itemsForDay);
-  const { position } = useCurrentLocation({ enabled: Boolean(active) });
+  const { position, permission } = useCurrentLocation({ enabled: Boolean(active) });
+  const replan = useReplanSubscription(active?.id ?? '');
+  const isReplanning =
+    replan.latest?.status === 'pending' || replan.latest?.status === 'processing';
 
   const nextPlace = useMemo<NextPlace | null>(() => {
     if (!nextItem || !trip) return null;
@@ -106,9 +109,12 @@ function TripProgressContent() {
                 {trip?.title ?? active.title}
               </h1>
             </div>
-            <span className="rounded-full bg-[#F2F4F6] px-3 py-1 text-[12px] font-bold text-[#4E5968]">
-              {dayNumber}일차
-            </span>
+            <div className="flex items-center gap-2">
+              {isReplanning ? <ReplanningPill /> : null}
+              <span className="rounded-full bg-[#F2F4F6] px-3 py-1 text-[12px] font-bold text-[#4E5968]">
+                {dayNumber}일차
+              </span>
+            </div>
           </header>
 
           <div className="h-[280px] w-full shrink-0">
@@ -125,6 +131,12 @@ function TripProgressContent() {
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 py-5 pb-[104px]">
+            <LocationPermissionBanner permission={permission} />
+            <NextStopBar
+              item={nextItem}
+              distanceM={deviation.distanceM}
+              transportLabel={trip?.meta.transportLabel}
+            />
             <TripProgressTimeline
               items={progressItems}
               selectedItemId={selectedItemId}
@@ -166,6 +178,12 @@ function TripProgressContent() {
               </span>
             </header>
             <div className="flex-1 overflow-y-auto px-4 py-5">
+              <LocationPermissionBanner permission={permission} />
+              <NextStopBar
+                item={nextItem}
+                distanceM={deviation.distanceM}
+                transportLabel={trip?.meta.transportLabel}
+              />
               <TripProgressTimeline
                 items={progressItems}
                 selectedItemId={selectedItemId}
@@ -193,8 +211,18 @@ function TripProgressContent() {
         position={position}
       />
 
-      <ReplanToast tripId={active.id} />
+      <ReplanToast tripId={active.id} subscription={replan} />
     </div>
+  );
+}
+
+/** 헤더에 표시되는 "AI 재계획 중" 진행 핀 (replan pending/processing 동안). */
+function ReplanningPill() {
+  return (
+    <span className="flex items-center gap-1.5 rounded-full bg-[#EAF2FF] px-2.5 py-1 text-[11px] font-bold text-[#1B64DA]">
+      <span className="size-1.5 animate-pulse rounded-full bg-[#3182F6]" />
+      AI 재계획 중
+    </span>
   );
 }
 

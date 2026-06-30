@@ -6,6 +6,8 @@ import { Toast } from '@/shared/ui';
 
 import { useReplanSubscription } from '../model/use-replan-subscription';
 
+export type ReplanSubscription = ReturnType<typeof useReplanSubscription>;
+
 const STATUS_TONE = {
   completed: 'primary',
   failed: 'error',
@@ -23,9 +25,20 @@ const STATUS_TITLE = {
 /**
  * planner 화면에 마운트해 재계획 결과·접근 거부를 실시간 토스트로 노출한다.
  * tripId 만 넘기면 구독·갱신·알림이 모두 처리된다.
+ *
+ * 이미 상위에서 구독 중이면 `subscription` 을 넘겨 중복 구독을 피할 수 있다
+ * (예: Live 화면이 진행 핀과 토스트에 같은 구독을 공유).
  */
-export function ReplanToast({ tripId }: { tripId: string }) {
-  const { latest, dismiss, accessDenied } = useReplanSubscription(tripId);
+export function ReplanToast({
+  tripId,
+  subscription,
+}: {
+  tripId: string;
+  subscription?: ReplanSubscription;
+}) {
+  // subscription 이 주어지면 자체 구독은 비활성화('' → no-op)
+  const own = useReplanSubscription(subscription ? '' : tripId);
+  const { latest, dismiss, accessDenied } = subscription ?? own;
   const [deniedDismissed, setDeniedDismissed] = useState(false);
 
   // 여행이 바뀌면 거부 안내 닫힘 상태를 초기화
