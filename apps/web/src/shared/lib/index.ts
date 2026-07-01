@@ -6,4 +6,7 @@ export type {
   KakaoMarkerInstance,
   KakaoOverlayInstance,
   KakaoMaps,
+  KakaoMouseEvent,
+  KakaoRegionCode,
+  KakaoPlace,
 } from './kakao-loader';
