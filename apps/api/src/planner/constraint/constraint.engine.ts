@@ -3,10 +3,16 @@ import { RouteHelper } from '../helpers/route.helper';
 import { ScheduleConstraint } from '../helpers/schedule.constraint';
 import type { ItineraryItemDto } from '@tripick/types';
 
-interface ValidationResult {
+export interface ValidationResult {
   valid: boolean;
   issues: string[];
   items: ItineraryItemDto[];
+}
+
+export interface ConstraintValidationOptions {
+  wakeTime?: string;
+  sleepTime?: string;
+  transportMode?: string;
 }
 
 const KST_OFFSET_MINUTES = 9 * 60;
@@ -22,16 +28,21 @@ export class ConstraintEngine {
 
   async validate(
     items: ItineraryItemDto[],
-    options: { wakeTime?: string; sleepTime?: string; transportMode?: string } = {},
+    options: ConstraintValidationOptions = {},
   ): Promise<ValidationResult> {
     const issues: string[] = [];
+    const wakeTime = options.wakeTime ?? '07:00';
+    const sleepTime = options.sleepTime ?? '23:00';
 
     const bounded = this.scheduleConstraint.apply(items, {
-      wakeTime: options.wakeTime ?? '07:00',
-      sleepTime: options.sleepTime ?? '23:00',
+      wakeTime,
+      sleepTime,
     });
 
     for (const item of bounded) {
+      if (!this.checkScheduleBounds(item, wakeTime, sleepTime)) {
+        issues.push(`"${item.name}" 기상/취침 시간 범위 밖 일정 (${item.scheduledAt})`);
+      }
       if (!this.checkOpeningHours(item)) {
         issues.push(`"${item.name}" 영업시간 외 방문 시간 (${item.scheduledAt})`);
       }
@@ -77,6 +88,19 @@ export class ConstraintEngine {
     const visitStart = this.getKstMinutes(new Date(item.scheduledAt));
     const visitEnd = visitStart + item.durationMin;
     return visitStart >= start && visitEnd <= end;
+  }
+
+  private checkScheduleBounds(item: ItineraryItemDto, wakeTime: string, sleepTime: string): boolean {
+    const wake = this.timeToMinutes(wakeTime);
+    const sleep = this.timeToMinutes(sleepTime);
+    const visitStart = this.getKstMinutes(new Date(item.scheduledAt));
+    const visitEnd = visitStart + item.durationMin;
+    return visitStart >= wake && visitEnd <= sleep;
+  }
+
+  private timeToMinutes(value: string): number {
+    const [hour, minute] = value.split(':').map(Number);
+    return (hour ?? 0) * 60 + (minute ?? 0);
   }
 
   private getKstMinutes(date: Date): number {

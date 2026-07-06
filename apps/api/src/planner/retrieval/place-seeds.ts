@@ -1,0 +1,130 @@
+import type { PlaceDto, TasteTagDto } from '@tripick/types';
+import type { RawPlaceCandidate } from './types';
+
+export interface SeedPlace extends PlaceDto {
+  tags: string[];
+}
+
+const SEOUL_SEEDS: SeedPlace[] = [
+  { id: 'seoul-1', name: '성수 서울숲', category: 'park', address: '서울 성동구 뚝섬로 273', coordinates: { lat: 37.5446, lng: 127.0375 }, openingHours: '08:00-21:00', tags: ['nature', 'healing', 'walk'] },
+  { id: 'seoul-2', name: '성수 감도 카페', category: 'cafe', address: '서울 성동구 연무장길 45', coordinates: { lat: 37.5441, lng: 127.0541 }, openingHours: '10:00-22:00', tags: ['cafe', 'city', 'healing'] },
+  { id: 'seoul-3', name: '을지로 한식 다이닝', category: 'restaurant', address: '서울 중구 수표로 48', coordinates: { lat: 37.5667, lng: 126.9913 }, openingHours: '11:00-21:00', tags: ['korean', 'cultural', 'city'] },
+  { id: 'seoul-4', name: '국립중앙박물관', category: 'attraction', address: '서울 용산구 서빙고로 137', coordinates: { lat: 37.523, lng: 126.9804 }, openingHours: '10:00-18:00', tags: ['cultural', 'family', 'city'] },
+  { id: 'seoul-5', name: '한강 노들섬', category: 'attraction', address: '서울 용산구 양녕로 445', coordinates: { lat: 37.5177, lng: 126.9574 }, openingHours: '09:00-22:00', tags: ['nature', 'romantic', 'city'] },
+  { id: 'seoul-6', name: '북촌 골목 산책', category: 'attraction', address: '서울 종로구 계동길 37', coordinates: { lat: 37.5826, lng: 126.9831 }, openingHours: '09:00-18:00', tags: ['cultural', 'village', 'walk'] },
+];
+
+const BUSAN_SEEDS: SeedPlace[] = [
+  { id: 'busan-1', name: '해운대 블루라인파크', category: 'attraction', address: '부산 해운대구 청사포로 116', coordinates: { lat: 35.1587, lng: 129.1758 }, openingHours: '09:00-19:00', tags: ['beach', 'adventure', 'nature'] },
+  { id: 'busan-2', name: '광안리 브런치 카페', category: 'cafe', address: '부산 수영구 광안해변로 219', coordinates: { lat: 35.1532, lng: 129.1185 }, openingHours: '10:00-22:00', tags: ['cafe', 'beach', 'romantic'] },
+  { id: 'busan-3', name: '기장 해산물 식당', category: 'restaurant', address: '부산 기장군 기장해안로 266', coordinates: { lat: 35.1906, lng: 129.2231 }, openingHours: '11:00-21:00', tags: ['korean', 'family', 'beach'] },
+  { id: 'busan-4', name: '흰여울문화마을', category: 'attraction', address: '부산 영도구 영선동4가 605-3', coordinates: { lat: 35.078, lng: 129.0455 }, openingHours: '09:00-18:00', tags: ['village', 'healing', 'nature'] },
+  { id: 'busan-5', name: '부산현대미술관', category: 'attraction', address: '부산 사하구 낙동남로 1191', coordinates: { lat: 35.1049, lng: 128.9668 }, openingHours: '10:00-18:00', tags: ['cultural', 'city', 'family'] },
+  { id: 'busan-6', name: '송정 해변 산책', category: 'attraction', address: '부산 해운대구 송정해변로 50', coordinates: { lat: 35.1804, lng: 129.1998 }, openingHours: '08:00-21:00', tags: ['beach', 'healing', 'walk'] },
+];
+
+const JEJU_SEEDS: SeedPlace[] = [
+  { id: 'jeju-1', name: '사려니숲길', category: 'attraction', address: '제주 제주시 조천읍 교래리 산137-1', coordinates: { lat: 33.4221, lng: 126.6426 }, openingHours: '09:00-17:00', tags: ['nature', 'healing', 'mountain'] },
+  { id: 'jeju-2', name: '애월 오션뷰 카페', category: 'cafe', address: '제주 제주시 애월읍 애월북서길 56', coordinates: { lat: 33.4634, lng: 126.3098 }, openingHours: '10:00-21:00', tags: ['cafe', 'beach', 'romantic'] },
+  { id: 'jeju-3', name: '제주 흑돼지 식당', category: 'restaurant', address: '제주 제주시 원노형로 41', coordinates: { lat: 33.4872, lng: 126.4815 }, openingHours: '11:00-22:00', tags: ['korean', 'family', 'city'] },
+  { id: 'jeju-4', name: '성산일출봉', category: 'attraction', address: '제주 서귀포시 성산읍 일출로 284-12', coordinates: { lat: 33.4589, lng: 126.9425 }, openingHours: '07:00-20:00', tags: ['adventure', 'nature', 'mountain'] },
+  { id: 'jeju-5', name: '제주 민속촌', category: 'attraction', address: '제주 서귀포시 표선면 민속해안로 631-34', coordinates: { lat: 33.3225, lng: 126.8425 }, openingHours: '09:00-18:00', tags: ['cultural', 'village', 'family'] },
+  { id: 'jeju-6', name: '협재 해변 산책', category: 'attraction', address: '제주 제주시 한림읍 협재리 2497-1', coordinates: { lat: 33.3945, lng: 126.2395 }, openingHours: '08:00-21:00', tags: ['beach', 'healing', 'walk'] },
+];
+
+const GYEONGJU_SEEDS: SeedPlace[] = [
+  { id: 'gyeongju-1', name: '첨성대 야경 산책', category: 'attraction', address: '경북 경주시 인왕동 839-1', coordinates: { lat: 35.8347, lng: 129.2187 }, openingHours: '09:00-22:00', tags: ['cultural', 'romantic', 'walk'] },
+  { id: 'gyeongju-2', name: '황리단길 한옥 카페', category: 'cafe', address: '경북 경주시 포석로 1080', coordinates: { lat: 35.8389, lng: 129.2107 }, openingHours: '10:00-22:00', tags: ['cafe', 'village', 'romantic'] },
+  { id: 'gyeongju-3', name: '교리김밥 본점', category: 'restaurant', address: '경북 경주시 탑리3길 2', coordinates: { lat: 35.8429, lng: 129.2136 }, openingHours: '08:30-17:30', tags: ['korean', 'family', 'local'] },
+  { id: 'gyeongju-4', name: '불국사', category: 'attraction', address: '경북 경주시 불국로 385', coordinates: { lat: 35.7901, lng: 129.3321 }, openingHours: '09:00-18:00', tags: ['cultural', 'family', 'nature'] },
+  { id: 'gyeongju-5', name: '동궁과 월지', category: 'attraction', address: '경북 경주시 원화로 102', coordinates: { lat: 35.8349, lng: 129.2267 }, openingHours: '09:00-22:00', tags: ['cultural', 'romantic', 'city'] },
+  { id: 'gyeongju-6', name: '보문호 산책로', category: 'attraction', address: '경북 경주시 보문로 424-33', coordinates: { lat: 35.8526, lng: 129.2828 }, openingHours: '08:00-22:00', tags: ['nature', 'healing', 'walk'] },
+];
+
+const DEFAULT_SEEDS: SeedPlace[] = [
+  { id: 'default-1', name: '로컬 대표 전망 스팟', category: 'attraction', address: '도심 중심 관광지', coordinates: { lat: 37.5665, lng: 126.978 }, openingHours: '09:00-20:00', tags: ['city', 'healing'] },
+  { id: 'default-2', name: '로컬 브런치 카페', category: 'cafe', address: '메인 스트리트 12', coordinates: { lat: 37.5659, lng: 126.9827 }, openingHours: '10:00-21:00', tags: ['cafe', 'city'] },
+  { id: 'default-3', name: '로컬 시그니처 식당', category: 'restaurant', address: '맛집 골목 7', coordinates: { lat: 37.5644, lng: 126.977 }, openingHours: '11:00-21:00', tags: ['korean', 'family'] },
+  { id: 'default-4', name: '로컬 문화 공간', category: 'attraction', address: '문화광장 2', coordinates: { lat: 37.5701, lng: 126.9769 }, openingHours: '10:00-18:00', tags: ['cultural', 'city'] },
+  { id: 'default-5', name: '강변 산책 코스', category: 'attraction', address: '강변 산책로', coordinates: { lat: 37.5722, lng: 126.9911 }, openingHours: '08:00-22:00', tags: ['nature', 'walk'] },
+  { id: 'default-6', name: '야간 디저트 바', category: 'restaurant', address: '야간상권 19', coordinates: { lat: 37.5692, lng: 126.9855 }, openingHours: '17:00-23:00', tags: ['romantic', 'city', 'cafe'] },
+];
+
+const SEEDS_BY_REGION: Record<string, SeedPlace[]> = {
+  seoul: SEOUL_SEEDS,
+  busan: BUSAN_SEEDS,
+  jeju: JEJU_SEEDS,
+  gyeongju: GYEONGJU_SEEDS,
+  default: DEFAULT_SEEDS,
+};
+
+const TAG_HINTS: Array<[string, string[]]> = [
+  ['카페', ['cafe', 'healing']],
+  ['커피', ['cafe', 'healing']],
+  ['식당', ['korean', 'family']],
+  ['한식', ['korean', 'family']],
+  ['브런치', ['western', 'cafe']],
+  ['해변', ['beach', 'nature']],
+  ['바다', ['beach', 'nature']],
+  ['숲', ['nature', 'healing']],
+  ['산', ['mountain', 'nature']],
+  ['박물관', ['cultural', 'family']],
+  ['문화', ['cultural', 'city']],
+  ['마을', ['village', 'cultural']],
+  ['야경', ['romantic', 'city']],
+  ['산책', ['walk', 'healing']],
+];
+
+export function normalizeDestinationRegion(destination: string): string {
+  const normalized = destination.toLowerCase();
+  if (normalized.includes('서울') || normalized.includes('seoul')) return 'seoul';
+  if (normalized.includes('부산') || normalized.includes('busan')) return 'busan';
+  if (normalized.includes('제주') || normalized.includes('jeju')) return 'jeju';
+  if (normalized.includes('경주') || normalized.includes('gyeongju')) return 'gyeongju';
+  return 'default';
+}
+
+export function getSeedPlaces(destination: string): SeedPlace[] {
+  const region = normalizeDestinationRegion(destination);
+  return SEEDS_BY_REGION[region] ?? DEFAULT_SEEDS;
+}
+
+export function getSeedCandidates(destination: string): RawPlaceCandidate[] {
+  const region = normalizeDestinationRegion(destination);
+  return getSeedPlaces(destination).map((place) => ({
+    ...place,
+    source: 'seed',
+    destinationRegion: region,
+  }));
+}
+
+export function inferPlaceTags(place: Pick<PlaceDto, 'name' | 'category' | 'address'>): string[] {
+  const tags = new Set<string>();
+  const haystack = `${place.name} ${place.category} ${place.address}`;
+  for (const [keyword, hints] of TAG_HINTS) {
+    if (haystack.includes(keyword)) {
+      hints.forEach((hint) => tags.add(hint));
+    }
+  }
+
+  if (place.category === 'cafe') tags.add('cafe');
+  if (place.category === 'restaurant') tags.add('korean');
+  if (place.category === 'park') tags.add('nature');
+  if (place.category === 'attraction') tags.add('cultural');
+  if (tags.size === 0) tags.add('city');
+  return [...tags];
+}
+
+export function tasteTagsToKeywords(tasteTags?: TasteTagDto): string[] {
+  if (!tasteTags) return [];
+  return [
+    ...(tasteTags.food ?? []),
+    ...(tasteTags.mood ?? []),
+    ...(tasteTags.environment ?? []),
+  ];
+}
+
+export function buildPlaceEmbeddingText(place: SeedPlace | RawPlaceCandidate): string {
+  const tags = place.tags?.join(', ') ?? inferPlaceTags(place).join(', ');
+  return [place.name, place.category, place.address, tags].filter(Boolean).join(' | ');
+}

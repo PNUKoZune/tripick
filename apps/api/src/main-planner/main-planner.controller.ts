@@ -16,11 +16,11 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UserEntity } from '../users/user.entity';
 import { DestinationsService } from './destinations.service';
 import { MainPlannerService } from './main-planner.service';
-import type {
-  AddTripMemberRequestDto,
-  CreateTripRequestDto,
-  PlannerSwapRequestDto,
-} from '@tripick/types';
+import {
+  AddTripMemberRequestBodyDto,
+  CreateTripRequestBodyDto,
+  PlannerSwapRequestBodyDto,
+} from './dto/main-planner.dto';
 
 @ApiTags('Main Planner')
 @ApiBearerAuth()
@@ -46,7 +46,7 @@ export class MainPlannerController {
 
   @Post('trips')
   @ApiOperation({ summary: '신규 여행 생성 및 일정 생성' })
-  createTrip(@CurrentUser() user: UserEntity, @Body() dto: CreateTripRequestDto) {
+  createTrip(@CurrentUser() user: UserEntity, @Body() dto: CreateTripRequestBodyDto) {
     return this.mainPlannerService.createTrip(user, dto);
   }
 
@@ -77,7 +77,7 @@ export class MainPlannerController {
   addMember(
     @CurrentUser() user: UserEntity,
     @Param('tripId') tripId: string,
-    @Body() dto: AddTripMemberRequestDto,
+    @Body() dto: AddTripMemberRequestBodyDto,
   ) {
     return this.mainPlannerService.addMember(user, tripId, dto);
   }
@@ -119,7 +119,7 @@ export class MainPlannerController {
   swap(
     @CurrentUser() user: UserEntity,
     @Param('tripId') tripId: string,
-    @Body() dto: PlannerSwapRequestDto,
+    @Body() dto: PlannerSwapRequestBodyDto,
   ) {
     return this.mainPlannerService.swap(user, tripId, dto);
   }

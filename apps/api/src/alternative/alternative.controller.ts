@@ -4,7 +4,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserEntity } from '../users/user.entity';
 import { ReplanningService } from '../replanning/replanning.service';
-import type { ReplanRequestDto } from '@tripick/types';
+import { AlternativeReplanRequestBodyDto } from '../replanning/dto/replan-request.dto';
 
 @ApiTags('Alternative')
 @ApiBearerAuth()
@@ -15,7 +15,7 @@ export class AlternativeController {
 
   @Post('waiting')
   @ApiOperation({ summary: '웨이팅 신고 → 재계획 트리거' })
-  reportWaiting(@CurrentUser() user: UserEntity, @Body() dto: ReplanRequestDto) {
+  reportWaiting(@CurrentUser() user: UserEntity, @Body() dto: AlternativeReplanRequestBodyDto) {
     return this.replanningService.enqueue(user.id, {
       ...dto,
       trigger: 'waiting',
@@ -24,7 +24,7 @@ export class AlternativeController {
 
   @Post('deviation')
   @ApiOperation({ summary: '경로 이탈 신고 → 재계획 트리거' })
-  reportDeviation(@CurrentUser() user: UserEntity, @Body() dto: ReplanRequestDto) {
+  reportDeviation(@CurrentUser() user: UserEntity, @Body() dto: AlternativeReplanRequestBodyDto) {
     return this.replanningService.enqueue(user.id, {
       ...dto,
       trigger: 'deviation',

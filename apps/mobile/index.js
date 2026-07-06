@@ -1,5 +1,4 @@
 import { AppRegistry } from 'react-native';
-import { getMessaging, setBackgroundMessageHandler } from '@react-native-firebase/messaging';
 import notifee, { AndroidImportance } from '@notifee/react-native';
 import App from './src/App';
 import { name as appName } from './app.json';
@@ -11,20 +10,30 @@ import { name as appName } from './app.json';
  *
  * v22+ modular API 사용. (namespaced messaging().setBackgroundMessageHandler 는 deprecated)
  */
-setBackgroundMessageHandler(getMessaging(), async (remoteMessage) => {
-  const { notification, data } = remoteMessage ?? {};
-  if (notification?.title || notification?.body) return;
+if (!__DEV__) {
+  try {
+    const { getApps } = require('@react-native-firebase/app');
+    if (getApps().length > 0) {
+      const { getMessaging, setBackgroundMessageHandler } = require('@react-native-firebase/messaging');
+      setBackgroundMessageHandler(getMessaging(), async (remoteMessage) => {
+        const { notification, data } = remoteMessage ?? {};
+        if (notification?.title || notification?.body) return;
 
-  await notifee.displayNotification({
-    title: data?.title ? String(data.title) : 'TriPick',
-    body: data?.body ? String(data.body) : '',
-    android: {
-      channelId: 'tripick-default',
-      importance: AndroidImportance.HIGH,
-      smallIcon: 'ic_launcher',
-      pressAction: { id: 'default' },
-    },
-  });
-});
+        await notifee.displayNotification({
+          title: data?.title ? String(data.title) : 'TriPick',
+          body: data?.body ? String(data.body) : '',
+          android: {
+            channelId: 'tripick-default',
+            importance: AndroidImportance.HIGH,
+            smallIcon: 'ic_launcher',
+            pressAction: { id: 'default' },
+          },
+        });
+      });
+    }
+  } catch (error) {
+    console.warn('[TriPick] FCM 백그라운드 핸들러 생략:', error?.message ?? error);
+  }
+}
 
 AppRegistry.registerComponent(appName, () => App);

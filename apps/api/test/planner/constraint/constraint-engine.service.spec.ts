@@ -1,0 +1,99 @@
+/// <reference types="jest" />
+
+import { ConstraintEngine } from '../../../src/planner/constraint/constraint.engine';
+import { ScheduleConstraint } from '../../../src/planner/helpers/schedule.constraint';
+import type { ItineraryItemDto } from '@tripick/types';
+
+describe('ConstraintEngine', () => {
+  const routeHelper = {
+    getDrivingEta: jest.fn(),
+    getTransitEta: jest.fn(),
+  };
+  const engine = new ConstraintEngine(routeHelper as any, new ScheduleConstraint());
+
+  beforeEach(() => {
+    routeHelper.getDrivingEta.mockReset();
+    routeHelper.getTransitEta.mockReset();
+  });
+
+  it('marks visits outside opening hours as invalid', async () => {
+    const result = await engine.validate(
+      [
+        item({
+          name: '늦게 여는 카페',
+          scheduledAt: kst('2026-07-10', '09:00'),
+          durationMin: 60,
+          openingHours: '10:00-18:00',
+        }),
+      ],
+      { wakeTime: '08:00', sleepTime: '22:00', transportMode: 'transit' },
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.issues.join('\n')).toContain('영업시간 외');
+    expect(routeHelper.getTransitEta).not.toHaveBeenCalled();
+  });
+
+  it('marks schedules with insufficient route buffer as invalid', async () => {
+    routeHelper.getTransitEta.mockResolvedValue({ durationSec: 30 * 60, distanceM: 2500 });
+
+    const result = await engine.validate(
+      [
+        item({
+          id: 'first',
+          name: '첫 장소',
+          scheduledAt: kst('2026-07-10', '09:00'),
+          durationMin: 60,
+        }),
+        item({
+          id: 'second',
+          name: '다음 장소',
+          order: 2,
+          scheduledAt: kst('2026-07-10', '10:10'),
+          durationMin: 60,
+        }),
+      ],
+      { wakeTime: '08:00', sleepTime: '22:00', transportMode: 'transit' },
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.issues.join('\n')).toContain('이동 시간 부족');
+    expect(routeHelper.getTransitEta).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks visits outside wake and sleep bounds as invalid', async () => {
+    const result = await engine.validate(
+      [
+        item({
+          name: '너무 긴 일정',
+          scheduledAt: kst('2026-07-10', '09:00'),
+          durationMin: 14 * 60,
+        }),
+      ],
+      { wakeTime: '09:00', sleepTime: '21:00', transportMode: 'transit' },
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.issues.join('\n')).toContain('기상/취침 시간 범위 밖');
+  });
+});
+
+function item(overrides: Partial<ItineraryItemDto>): ItineraryItemDto {
+  return {
+    id: 'item-1',
+    tripId: 'trip-1',
+    day: 1,
+    order: 1,
+    type: 'cafe',
+    name: '기본 장소',
+    address: '부산 수영구 광안해변로 219',
+    coordinates: { lat: 35.1532, lng: 129.1185 },
+    scheduledAt: kst('2026-07-10', '09:00'),
+    durationMin: 60,
+    ...overrides,
+  };
+}
+
+function kst(date: string, time: string): string {
+  return new Date(`${date}T${time}:00+09:00`).toISOString();
+}

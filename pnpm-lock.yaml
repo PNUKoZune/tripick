@@ -162,6 +162,9 @@ importers:
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@25.6.0)(ts-node@10.9.2(@types/node@25.6.0)(typescript@6.0.3))
+      socket.io-client:
+        specifier: ^4.8.3
+        version: 4.8.3
       ts-jest:
         specifier: ^29.2.5
         version: 29.4.9(@babel/core@7.29.0)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.29.0))(jest-util@29.7.0)(jest@29.7.0(@types/node@25.6.0)(ts-node@10.9.2(@types/node@25.6.0)(typescript@6.0.3)))(typescript@6.0.3)
@@ -211,6 +214,9 @@ importers:
       '@babel/runtime':
         specifier: ^7.29.0
         version: 7.29.2
+      '@react-native-community/cli':
+        specifier: 14.1.0
+        version: 14.1.0(typescript@6.0.3)
       '@react-native/babel-preset':
         specifier: 0.85.2
         version: 0.85.2(@babel/core@7.29.0)
@@ -8688,13 +8694,11 @@ snapshots:
       yargs: 17.7.2
     optional: true
 
-  '@hapi/hoek@9.3.0':
-    optional: true
+  '@hapi/hoek@9.3.0': {}
 
   '@hapi/topo@5.1.0':
     dependencies:
       '@hapi/hoek': 9.3.0
-    optional: true
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -9132,7 +9136,6 @@ snapshots:
       '@types/node': 25.6.0
       '@types/yargs': 15.0.20
       chalk: 4.1.2
-    optional: true
 
   '@jest/types@29.6.3':
     dependencies:
@@ -9503,7 +9506,6 @@ snapshots:
       chalk: 4.1.2
       execa: 5.1.1
       fast-glob: 3.3.3
-    optional: true
 
   '@react-native-community/cli-config@14.1.0(typescript@6.0.3)':
     dependencies:
@@ -9515,14 +9517,12 @@ snapshots:
       joi: 17.13.3
     transitivePeerDependencies:
       - typescript
-    optional: true
 
   '@react-native-community/cli-debugger-ui@14.1.0':
     dependencies:
       serve-static: 1.16.3
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   '@react-native-community/cli-doctor@14.1.0(typescript@6.0.3)':
     dependencies:
@@ -9544,7 +9544,6 @@ snapshots:
       yaml: 2.8.4
     transitivePeerDependencies:
       - typescript
-    optional: true
 
   '@react-native-community/cli-platform-android@14.1.0':
     dependencies:
@@ -9554,7 +9553,6 @@ snapshots:
       fast-glob: 3.3.3
       fast-xml-parser: 4.5.6
       logkitty: 0.7.1
-    optional: true
 
   '@react-native-community/cli-platform-apple@14.1.0':
     dependencies:
@@ -9564,12 +9562,10 @@ snapshots:
       fast-glob: 3.3.3
       fast-xml-parser: 4.5.6
       ora: 5.4.1
-    optional: true
 
   '@react-native-community/cli-platform-ios@14.1.0':
     dependencies:
       '@react-native-community/cli-platform-apple': 14.1.0
-    optional: true
 
   '@react-native-community/cli-server-api@14.1.0':
     dependencies:
@@ -9586,7 +9582,6 @@ snapshots:
       - bufferutil
       - supports-color
       - utf-8-validate
-    optional: true
 
   '@react-native-community/cli-tools@14.1.0':
     dependencies:
@@ -9600,12 +9595,10 @@ snapshots:
       semver: 7.7.4
       shell-quote: 1.8.3
       sudo-prompt: 9.2.1
-    optional: true
 
   '@react-native-community/cli-types@14.1.0':
     dependencies:
       joi: 17.13.3
-    optional: true
 
   '@react-native-community/cli@14.1.0(typescript@6.0.3)':
     dependencies:
@@ -9630,7 +9623,6 @@ snapshots:
       - supports-color
       - typescript
       - utf-8-validate
-    optional: true
 
   '@react-native-firebase/app@24.0.0(react-native@0.85.2(@babel/core@7.29.0)(@react-native-community/cli@14.1.0(typescript@6.0.3))(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.5))(react@19.2.5)':
     dependencies:
@@ -9816,13 +9808,10 @@ snapshots:
   '@sideway/address@4.1.5':
     dependencies:
       '@hapi/hoek': 9.3.0
-    optional: true
 
-  '@sideway/formula@3.0.1':
-    optional: true
+  '@sideway/formula@3.0.1': {}
 
-  '@sideway/pinpoint@2.0.0':
-    optional: true
+  '@sideway/pinpoint@2.0.0': {}
 
   '@sinclair/typebox@0.27.10': {}
 
@@ -10200,7 +10189,6 @@ snapshots:
   '@types/yargs@15.0.20':
     dependencies:
       '@types/yargs-parser': 21.0.3
-    optional: true
 
   '@types/yargs@17.0.35':
     dependencies:
@@ -10615,10 +10603,8 @@ snapshots:
       colorette: 1.4.0
       slice-ansi: 2.1.0
       strip-ansi: 5.2.0
-    optional: true
 
-  ansi-regex@4.1.1:
-    optional: true
+  ansi-regex@4.1.1: {}
 
   ansi-regex@5.0.1: {}
 
@@ -10627,7 +10613,6 @@ snapshots:
   ansi-styles@3.2.1:
     dependencies:
       color-convert: 1.9.3
-    optional: true
 
   ansi-styles@4.3.0:
     dependencies:
@@ -10648,8 +10633,7 @@ snapshots:
 
   app-root-path@3.1.0: {}
 
-  appdirsjs@1.2.7:
-    optional: true
+  appdirsjs@1.2.7: {}
 
   append-field@1.0.0: {}
 
@@ -10739,13 +10723,11 @@ snapshots:
 
   ast-types-flow@0.0.8: {}
 
-  astral-regex@1.0.0:
-    optional: true
+  astral-regex@1.0.0: {}
 
   async-function@1.0.0: {}
 
-  async-limiter@1.0.1:
-    optional: true
+  async-limiter@1.0.1: {}
 
   async-retry@1.3.3:
     dependencies:
@@ -11064,7 +11046,6 @@ snapshots:
       string-width: 4.2.3
       strip-ansi: 6.0.1
       wrap-ansi: 6.2.0
-    optional: true
 
   cliui@8.0.1:
     dependencies:
@@ -11083,26 +11064,22 @@ snapshots:
   color-convert@1.9.3:
     dependencies:
       color-name: 1.1.3
-    optional: true
 
   color-convert@2.0.1:
     dependencies:
       color-name: 1.1.4
 
-  color-name@1.1.3:
-    optional: true
+  color-name@1.1.3: {}
 
   color-name@1.1.4: {}
 
-  colorette@1.4.0:
-    optional: true
+  colorette@1.4.0: {}
 
   combined-stream@1.0.8:
     dependencies:
       delayed-stream: 1.0.0
 
-  command-exists@1.2.9:
-    optional: true
+  command-exists@1.2.9: {}
 
   commander@12.1.0: {}
 
@@ -11110,8 +11087,7 @@ snapshots:
 
   commander@4.1.1: {}
 
-  commander@9.5.0:
-    optional: true
+  commander@9.5.0: {}
 
   comment-json@5.0.0:
     dependencies:
@@ -11121,7 +11097,6 @@ snapshots:
   compressible@2.0.18:
     dependencies:
       mime-db: 1.54.0
-    optional: true
 
   compression@1.8.1:
     dependencies:
@@ -11134,7 +11109,6 @@ snapshots:
       vary: 1.1.2
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   concat-map@0.0.1: {}
 
@@ -11192,7 +11166,6 @@ snapshots:
       parse-json: 5.2.0
     optionalDependencies:
       typescript: 6.0.3
-    optional: true
 
   create-jest@29.7.0(@types/node@25.6.0)(ts-node@10.9.2(@types/node@25.6.0)(typescript@6.0.3)):
     dependencies:
@@ -11261,8 +11234,7 @@ snapshots:
     dependencies:
       ms: 2.1.3
 
-  decamelize@1.2.0:
-    optional: true
+  decamelize@1.2.0: {}
 
   dedent@1.7.2: {}
 
@@ -11389,11 +11361,9 @@ snapshots:
       graceful-fs: 4.2.11
       tapable: 2.3.3
 
-  env-paths@2.2.1:
-    optional: true
+  env-paths@2.2.1: {}
 
-  envinfo@7.21.0:
-    optional: true
+  envinfo@7.21.0: {}
 
   error-ex@1.3.4:
     dependencies:
@@ -11407,7 +11377,6 @@ snapshots:
     dependencies:
       accepts: 1.3.8
       escape-html: 1.0.3
-    optional: true
 
   es-abstract@1.24.2:
     dependencies:
@@ -11886,7 +11855,6 @@ snapshots:
       glob-parent: 5.1.2
       merge2: 1.4.1
       micromatch: 4.0.8
-    optional: true
 
   fast-json-stable-stringify@2.1.0: {}
 
@@ -11904,7 +11872,6 @@ snapshots:
   fast-xml-parser@4.5.6:
     dependencies:
       strnum: 1.1.2
-    optional: true
 
   fast-xml-parser@5.7.3:
     dependencies:
@@ -12122,7 +12089,6 @@ snapshots:
       graceful-fs: 4.2.11
       jsonfile: 4.0.0
       universalify: 0.1.2
-    optional: true
 
   fs-monkey@1.1.0: {}
 
@@ -12585,8 +12551,7 @@ snapshots:
     dependencies:
       call-bound: 1.0.4
 
-  is-fullwidth-code-point@2.0.0:
-    optional: true
+  is-fullwidth-code-point@2.0.0: {}
 
   is-fullwidth-code-point@3.0.0: {}
 
@@ -12665,8 +12630,7 @@ snapshots:
       call-bound: 1.0.4
       get-intrinsic: 1.3.0
 
-  is-wsl@1.1.0:
-    optional: true
+  is-wsl@1.1.0: {}
 
   is-wsl@2.2.0:
     dependencies:
@@ -13058,7 +13022,6 @@ snapshots:
       '@sideway/address': 4.1.5
       '@sideway/formula': 3.0.1
       '@sideway/pinpoint': 2.0.0
-    optional: true
 
   jose@6.2.3: {}
 
@@ -13102,7 +13065,6 @@ snapshots:
   jsonfile@4.0.0:
     optionalDependencies:
       graceful-fs: 4.2.11
-    optional: true
 
   jsonfile@6.2.1:
     dependencies:
@@ -13286,7 +13248,6 @@ snapshots:
       ansi-fragments: 0.2.1
       dayjs: 1.11.20
       yargs: 15.4.1
-    optional: true
 
   long@5.3.2: {}
 
@@ -13540,8 +13501,7 @@ snapshots:
 
   mime@1.6.0: {}
 
-  mime@2.6.0:
-    optional: true
+  mime@2.6.0: {}
 
   mime@3.0.0:
     optional: true
@@ -13610,8 +13570,7 @@ snapshots:
 
   negotiator@0.6.3: {}
 
-  negotiator@0.6.4:
-    optional: true
+  negotiator@0.6.4: {}
 
   negotiator@1.0.0: {}
 
@@ -13642,8 +13601,7 @@ snapshots:
       - '@babel/core'
       - babel-plugin-macros
 
-  nocache@3.0.4:
-    optional: true
+  nocache@3.0.4: {}
 
   node-abort-controller@3.1.1: {}
 
@@ -13684,8 +13642,7 @@ snapshots:
 
   node-releases@2.0.38: {}
 
-  node-stream-zip@1.15.0:
-    optional: true
+  node-stream-zip@1.15.0: {}
 
   nodemailer@9.0.1: {}
 
@@ -13753,8 +13710,7 @@ snapshots:
     dependencies:
       ee-first: 1.1.1
 
-  on-headers@1.1.0:
-    optional: true
+  on-headers@1.1.0: {}
 
   once@1.4.0:
     dependencies:
@@ -13767,7 +13723,6 @@ snapshots:
   open@6.4.0:
     dependencies:
       is-wsl: 1.1.0
-    optional: true
 
   open@7.4.2:
     dependencies:
@@ -13958,7 +13913,6 @@ snapshots:
       ansi-regex: 5.0.1
       ansi-styles: 4.3.0
       react-is: 17.0.2
-    optional: true
 
   pretty-format@29.7.0:
     dependencies:
@@ -14058,8 +14012,7 @@ snapshots:
 
   react-is@16.13.1: {}
 
-  react-is@17.0.2:
-    optional: true
+  react-is@17.0.2: {}
 
   react-is@18.3.1: {}
 
@@ -14184,8 +14137,7 @@ snapshots:
 
   require-from-string@2.0.2: {}
 
-  require-main-filename@2.0.0:
-    optional: true
+  require-main-filename@2.0.0: {}
 
   resolve-cwd@3.0.0:
     dependencies:
@@ -14366,8 +14318,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  set-blocking@2.0.0:
-    optional: true
+  set-blocking@2.0.0: {}
 
   set-function-length@1.2.2:
     dependencies:
@@ -14480,7 +14431,6 @@ snapshots:
       ansi-styles: 3.2.1
       astral-regex: 1.0.0
       is-fullwidth-code-point: 2.0.0
-    optional: true
 
   socket.io-adapter@2.5.6:
     dependencies:
@@ -14656,7 +14606,6 @@ snapshots:
   strip-ansi@5.2.0:
     dependencies:
       ansi-regex: 4.1.1
-    optional: true
 
   strip-ansi@6.0.1:
     dependencies:
@@ -14674,8 +14623,7 @@ snapshots:
 
   strip-json-comments@3.1.1: {}
 
-  strnum@1.1.2:
-    optional: true
+  strnum@1.1.2: {}
 
   strnum@2.4.1:
     dependencies:
@@ -14693,8 +14641,7 @@ snapshots:
       client-only: 0.0.1
       react: 19.2.5
 
-  sudo-prompt@9.2.1:
-    optional: true
+  sudo-prompt@9.2.1: {}
 
   supports-color@7.2.0:
     dependencies:
@@ -14989,8 +14936,7 @@ snapshots:
 
   unicode-property-aliases-ecmascript@2.2.0: {}
 
-  universalify@0.1.2:
-    optional: true
+  universalify@0.1.2: {}
 
   universalify@2.0.1: {}
 
@@ -15156,8 +15102,7 @@ snapshots:
       is-weakmap: 2.0.2
       is-weakset: 2.0.4
 
-  which-module@2.0.1:
-    optional: true
+  which-module@2.0.1: {}
 
   which-typed-array@1.1.20:
     dependencies:
@@ -15205,7 +15150,6 @@ snapshots:
   ws@6.2.3:
     dependencies:
       async-limiter: 1.0.1
-    optional: true
 
   ws@7.5.10: {}
 
@@ -15217,8 +15161,7 @@ snapshots:
 
   xtend@4.0.2: {}
 
-  y18n@4.0.3:
-    optional: true
+  y18n@4.0.3: {}
 
   y18n@5.0.8: {}
 
@@ -15230,7 +15173,6 @@ snapshots:
     dependencies:
       camelcase: 5.3.1
       decamelize: 1.2.0
-    optional: true
 
   yargs-parser@21.1.1: {}
 
@@ -15247,7 +15189,6 @@ snapshots:
       which-module: 2.0.1
       y18n: 4.0.3
       yargs-parser: 18.1.3
-    optional: true
 
   yargs@17.7.2:
     dependencies:

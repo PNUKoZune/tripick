@@ -28,7 +28,6 @@
 	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-	  <!-- Do not change NSAllowsArbitraryLoads to true, or you will risk app rejection! -->
 		<key>NSAllowsArbitraryLoads</key>
 		<false/>
 		<key>NSAllowsLocalNetworking</key>
@@ -38,6 +37,8 @@
 	<string>여행 진행 중 경로 이탈을 감지하고 현재 위치를 지도에 표시하기 위해 위치를 사용해요.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>앱이 백그라운드에 있어도 여행 경로 이탈을 감지하기 위해 위치를 사용해요.</string>
+	<key>RCTNewArchEnabled</key>
+	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

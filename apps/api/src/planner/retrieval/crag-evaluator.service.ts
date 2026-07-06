@@ -1,0 +1,233 @@
+import { Injectable } from '@nestjs/common';
+import type { Coordinates } from '@tripick/types';
+import { inferPlaceTags, normalizeDestinationRegion, tasteTagsToKeywords } from './place-seeds';
+import type { CandidatePlace, CragScore, RawPlaceCandidate, RetrievalContext } from './types';
+
+const INDOOR_TAGS = new Set(['cafe', 'cultural', 'city', 'korean', 'family']);
+
+@Injectable()
+export class CragEvaluatorService {
+  rank(candidates: RawPlaceCandidate[], context: RetrievalContext): CandidatePlace[] {
+    return this.deduplicate(candidates)
+      .map((candidate) => this.evaluate(candidate, context))
+      .sort((a, b) => b.confidence - a.confidence);
+  }
+
+  selectTopDiverse(candidates: CandidatePlace[], limit: number): CandidatePlace[] {
+    const selected: CandidatePlace[] = [];
+    const categoryCount = new Map<string, number>();
+
+    for (const candidate of candidates) {
+      const count = categoryCount.get(candidate.category) ?? 0;
+      if (count >= 2 && selected.length < Math.min(limit, 6)) continue;
+      selected.push(candidate);
+      categoryCount.set(candidate.category, count + 1);
+      if (selected.length >= limit) return selected;
+    }
+
+    for (const candidate of candidates) {
+      if (selected.some((item) => item.id === candidate.id)) continue;
+      selected.push(candidate);
+      if (selected.length >= limit) break;
+    }
+
+    return selected;
+  }
+
+  private evaluate(candidate: RawPlaceCandidate, context: RetrievalContext): CandidatePlace {
+    const tags = candidate.tags?.length ? candidate.tags : inferPlaceTags(candidate);
+    const matchedTags = this.matchedTags(tags, context);
+    const penalties: string[] = [];
+    const retrieval = this.retrievalScore(candidate);
+    const taste = this.tasteScore(tags, context);
+    const locality = this.localityScore(candidate, context, penalties);
+    const contextScore = this.contextScore(candidate, tags, context);
+    const availability = this.availabilityScore(candidate, context, penalties);
+    const dataQuality = this.dataQualityScore(candidate, penalties);
+    const total = this.clamp(
+      retrieval * 0.27 +
+        taste * 0.23 +
+        locality * 0.18 +
+        contextScore * 0.15 +
+        availability * 0.1 +
+        dataQuality * 0.07,
+    );
+
+    const crag: CragScore = {
+      total,
+      retrieval,
+      taste,
+      locality,
+      context: contextScore,
+      availability,
+      dataQuality,
+      matchedTags,
+      penalties,
+    };
+
+    return {
+      ...candidate,
+      tags,
+      confidence: Number(total.toFixed(3)),
+      reason: this.reason(candidate, crag, context),
+      crag,
+    };
+  }
+
+  private retrievalScore(candidate: RawPlaceCandidate): number {
+    if (candidate.similarity !== undefined) {
+      return this.clamp((candidate.similarity + 1) / 2);
+    }
+    if (candidate.source === 'kakao') return 0.66;
+    return 0.58;
+  }
+
+  private tasteScore(tags: string[], context: RetrievalContext): number {
+    const preferred = tasteTagsToKeywords(context.tasteTags);
+    if (preferred.length === 0) return 0.56;
+    const matched = preferred.filter((tag) => tags.includes(tag)).length;
+    return this.clamp(0.35 + matched / preferred.length);
+  }
+
+  private localityScore(
+    candidate: RawPlaceCandidate,
+    context: RetrievalContext,
+    penalties: string[],
+  ): number {
+    const region = normalizeDestinationRegion(context.destination);
+    if (region === 'default') return 0.62;
+    const haystack = `${candidate.name} ${candidate.address} ${candidate.destinationRegion ?? ''}`.toLowerCase();
+    const regionMatches =
+      candidate.destinationRegion?.toLowerCase() === region ||
+      this.regionKeywords(region).some((keyword) => haystack.includes(keyword));
+    if (regionMatches) return 0.92;
+    penalties.push('destination-mismatch');
+    return 0.32;
+  }
+
+  private contextScore(
+    candidate: RawPlaceCandidate,
+    tags: string[],
+    context: RetrievalContext,
+  ): number {
+    const triggerScore = this.triggerScore(candidate, tags, context);
+    const distanceScore = context.currentLocation
+      ? this.distanceScore(candidate.coordinates, context.currentLocation)
+      : 0.62;
+    return this.clamp(triggerScore * 0.65 + distanceScore * 0.35);
+  }
+
+  private triggerScore(
+    candidate: RawPlaceCandidate,
+    tags: string[],
+    context: RetrievalContext,
+  ): number {
+    if (context.trigger === 'waiting') {
+      if (candidate.category === 'cafe') return 0.94;
+      if (tags.some((tag) => INDOOR_TAGS.has(tag))) return 0.78;
+      return 0.48;
+    }
+    if (context.trigger === 'weather') {
+      return tags.some((tag) => INDOOR_TAGS.has(tag)) ? 0.9 : 0.42;
+    }
+    if (context.trigger === 'deviation') {
+      return 0.72;
+    }
+    return 0.64;
+  }
+
+  private availabilityScore(
+    candidate: RawPlaceCandidate,
+    context: RetrievalContext,
+    penalties: string[],
+  ): number {
+    if (!candidate.openingHours) return 0.58;
+    if (!context.startAt) return 0.68;
+
+    const match = candidate.openingHours.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
+    if (!match) return 0.58;
+
+    const [, startHour, startMinute, endHour, endMinute] = match;
+    const visitMinutes = this.kstMinutes(context.startAt);
+    const start = Number(startHour) * 60 + Number(startMinute);
+    const end = Number(endHour) * 60 + Number(endMinute);
+    if (visitMinutes >= start && visitMinutes <= end) return 0.95;
+    penalties.push('closed-at-target-time');
+    return 0.25;
+  }
+
+  private dataQualityScore(candidate: RawPlaceCandidate, penalties: string[]): number {
+    let score = 0.35;
+    if (candidate.name) score += 0.15;
+    if (candidate.address) score += 0.15;
+    if (candidate.coordinates) score += 0.2;
+    if (candidate.category) score += 0.1;
+    if (candidate.kakaoPlaceId || candidate.tourismApiId) score += 0.05;
+    if (!candidate.address) penalties.push('missing-address');
+    return this.clamp(score);
+  }
+
+  private distanceScore(from: Coordinates, to: Coordinates): number {
+    const km = this.distanceKm(from, to);
+    if (km <= 0.5) return 0.95;
+    if (km <= 2) return 0.82;
+    if (km <= 5) return 0.62;
+    if (km <= 12) return 0.42;
+    return 0.25;
+  }
+
+  private matchedTags(tags: string[], context: RetrievalContext): string[] {
+    const preferred = new Set(tasteTagsToKeywords(context.tasteTags));
+    return tags.filter((tag) => preferred.has(tag));
+  }
+
+  private reason(candidate: RawPlaceCandidate, score: CragScore, context: RetrievalContext): string {
+    const matched = score.matchedTags.length > 0
+      ? `선호 태그 ${score.matchedTags.join(', ')} 일치`
+      : `${context.destination} 동선 후보`;
+    const confidence = Math.round(score.total * 100);
+    const sourceLabel = {
+      pgvector: 'pgvector',
+      kakao: 'Kakao Local',
+      seed: 'seed fallback',
+    }[candidate.source];
+    const fallback = candidate.source === 'pgvector' ? '' : ', 검색 보정 fallback 반영';
+    return `${matched}, ${sourceLabel} confidence ${confidence}%${fallback}`;
+  }
+
+  private deduplicate(candidates: RawPlaceCandidate[]): RawPlaceCandidate[] {
+    const seen = new Set<string>();
+    const unique: RawPlaceCandidate[] = [];
+    for (const candidate of candidates) {
+      const key = candidate.kakaoPlaceId ?? `${candidate.name}:${candidate.address}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(candidate);
+    }
+    return unique;
+  }
+
+  private regionKeywords(region: string): string[] {
+    return {
+      seoul: ['서울', 'seoul'],
+      busan: ['부산', 'busan'],
+      jeju: ['제주', 'jeju'],
+      gyeongju: ['경주', 'gyeongju'],
+      default: [],
+    }[region] ?? [];
+  }
+
+  private kstMinutes(date: Date): number {
+    return ((date.getUTCHours() * 60 + date.getUTCMinutes()) + 9 * 60) % (24 * 60);
+  }
+
+  private distanceKm(from: Coordinates, to: Coordinates): number {
+    const latDelta = (from.lat - to.lat) * 111;
+    const lngDelta = (from.lng - to.lng) * 88;
+    return Math.sqrt(latDelta ** 2 + lngDelta ** 2);
+  }
+
+  private clamp(value: number): number {
+    return Math.max(0, Math.min(1, value));
+  }
+}
