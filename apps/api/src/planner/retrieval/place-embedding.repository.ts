@@ -10,6 +10,17 @@ import {
 } from './place-seeds';
 import type { RawPlaceCandidate } from './types';
 
+export interface UpsertPlaceInput {
+  kakaoPlaceId?: string | null;
+  tourismApiId?: string | null;
+  name: string;
+  address?: string | null;
+  category?: string | null;
+  /** destination_region 컬럼에 저장할 지역 라벨 (예: '서울', 'seoul') */
+  region: string;
+  coordinates: Coordinates;
+}
+
 interface PlaceEmbeddingRow {
   id: string;
   kakao_place_id?: string | null;
@@ -95,46 +106,82 @@ export class PlaceEmbeddingRepository {
 
     for (const place of seeds) {
       const embedding = await embed(buildPlaceEmbeddingText(place));
-      const vector = `[${embedding.join(',')}]`;
-      const result: Array<{ inserted: number }> = await this.dataSource.query(
-        `
-        INSERT INTO place_embeddings (
-          kakao_place_id,
-          tourism_api_id,
-          name,
-          address,
-          category,
-          destination_region,
-          coordinates,
-          embedding
-        )
-        SELECT $1, $2, $3, $4, $5, $6, $7::jsonb, $8::vector
-        WHERE NOT EXISTS (
-          SELECT 1
-          FROM place_embeddings
-          WHERE lower(destination_region) = $6
-            AND name = $3
-        )
-        RETURNING 1 AS inserted
-        `,
-        [
-          place.kakaoPlaceId ?? place.id,
-          place.tourismApiId ?? null,
-          place.name,
-          place.address,
-          place.category,
+      const added = await this.upsertPlace(
+        {
+          kakaoPlaceId: place.kakaoPlaceId ?? place.id,
+          tourismApiId: place.tourismApiId ?? null,
+          name: place.name,
+          address: place.address,
+          category: place.category,
           region,
-          JSON.stringify(place.coordinates),
-          vector,
-        ],
+          coordinates: place.coordinates,
+        },
+        embedding,
       );
-      inserted += result[0]?.inserted ?? 0;
+      inserted += added ? 1 : 0;
     }
 
     if (inserted > 0) {
       this.logger.log(`Seeded ${inserted} ${region} place embeddings for local CRAG retrieval`);
     }
     return inserted;
+  }
+
+  /**
+   * 장소 1건을 place_embeddings 에 멱등 삽입한다.
+   * 중복 판정 우선순위: kakao_place_id > tourism_api_id > (destination_region, name).
+   * 이미 있으면 삽입하지 않고 false 를 반환한다.
+   */
+  async upsertPlace(place: UpsertPlaceInput, embedding: number[]): Promise<boolean> {
+    const vector = `[${embedding.join(',')}]`;
+    const region = place.region.toLowerCase();
+
+    const dedupeClause = place.kakaoPlaceId
+      ? { sql: 'kakao_place_id = $9', param: place.kakaoPlaceId }
+      : place.tourismApiId
+        ? { sql: 'tourism_api_id = $9', param: place.tourismApiId }
+        : { sql: 'lower(destination_region) = $9 AND name = $3', param: region };
+
+    const result: Array<{ inserted: number }> = await this.dataSource.query(
+      `
+      INSERT INTO place_embeddings (
+        kakao_place_id,
+        tourism_api_id,
+        name,
+        address,
+        category,
+        destination_region,
+        coordinates,
+        embedding
+      )
+      SELECT $1, $2, $3, $4, $5, $6, $7::jsonb, $8::vector
+      WHERE NOT EXISTS (
+        SELECT 1 FROM place_embeddings WHERE ${dedupeClause.sql}
+      )
+      RETURNING 1 AS inserted
+      `,
+      [
+        place.kakaoPlaceId ?? null,
+        place.tourismApiId ?? null,
+        place.name,
+        place.address ?? null,
+        place.category ?? null,
+        place.region,
+        JSON.stringify(place.coordinates),
+        vector,
+        dedupeClause.param,
+      ],
+    );
+
+    return (result[0]?.inserted ?? 0) > 0;
+  }
+
+  async countByRegion(region: string): Promise<number> {
+    const rows: Array<{ count: string }> = await this.dataSource.query(
+      'SELECT COUNT(*)::text AS count FROM place_embeddings WHERE lower(destination_region) = $1',
+      [region.toLowerCase()],
+    );
+    return Number(rows[0]?.count ?? 0);
   }
 
   private toCandidate(row: PlaceEmbeddingRow): RawPlaceCandidate[] {
