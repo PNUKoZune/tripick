@@ -1,5 +1,7 @@
 'use client';
 
+import { FiInfo } from 'react-icons/fi';
+
 import type { PlannerTripDto, PlannerTripMetaDto } from '@tripick/types';
 
 import { MemberAvatars } from '@/entities/member';
@@ -67,6 +69,9 @@ export function TripInfoPanel({ trip }: Props) {
                   {w.emoji}
                 </span>
                 <span className="text-[14px] font-semibold text-[#191F28]">{w.label}</span>
+                {!w.forecasted ? (
+                  <WeatherHint />
+                ) : null}
               </div>
               <span className="text-[13px] font-semibold text-[#6B7684]">{w.tempLabel}</span>
             </li>
@@ -74,6 +79,27 @@ export function TripInfoPanel({ trip }: Props) {
         </ul>
       </SurfaceCard>
     </div>
+  );
+}
+
+function WeatherHint() {
+  const message = '기상청 단기예보는 여행 3일 전부터 확인할 수 있어요.';
+  return (
+    <span className="group/hint relative inline-flex">
+      <button
+        type="button"
+        aria-label={message}
+        className="flex items-center justify-center text-[#8B95A1]"
+      >
+        <FiInfo aria-hidden className="h-[15px] w-[15px]" />
+      </button>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 z-10 w-[180px] -translate-x-1/2 rounded-[8px] bg-[#191F28] px-2.5 py-1.5 text-[11px] font-medium leading-[16px] text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/hint:opacity-100 group-focus-within/hint:opacity-100"
+      >
+        {message}
+      </span>
+    </span>
   );
 }
 

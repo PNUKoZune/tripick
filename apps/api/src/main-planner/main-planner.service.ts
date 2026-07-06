@@ -9,6 +9,8 @@ import { TripMembersService } from '../trip-members/trip-members.service';
 import { TripEntity } from '../trips/trip.entity';
 import { TripsService } from '../trips/trips.service';
 import { UserEntity } from '../users/user.entity';
+import { WeatherHelper } from '../planner/helpers/weather.helper';
+import type { ParsedForecast } from '@tripick/utils';
 import type {
   AddTripMemberRequestDto,
   CreateTripDto,
@@ -70,6 +72,7 @@ export class MainPlannerService {
     private readonly friendsService: FriendsService,
     private readonly preferencesService: PreferencesService,
     private readonly inboxService: InboxService,
+    private readonly weatherHelper: WeatherHelper,
   ) {}
 
   async listTrips(user: UserEntity): Promise<TripSummaryDto[]> {
@@ -314,12 +317,12 @@ export class MainPlannerService {
     };
   }
 
-  private toPlannerTrip(
+  private async toPlannerTrip(
     trip: TripEntity,
     members: TripMemberDto[],
     items: ItineraryItemEntity[],
     tasteTags?: PlannerTripDto['meta']['tasteTags'],
-  ): PlannerTripDto {
+  ): Promise<PlannerTripDto> {
     const days = this.buildDays(trip.startDate, trip.endDate);
     const markers = this.withNormalizedMarkerPositions(
       items.map((item, index) => this.toMarker(item, index, index === 0 ? 'current' : 'primary')),
@@ -350,14 +353,94 @@ export class MainPlannerService {
           waitingCount: items.filter((item) => item.type === 'restaurant').length,
           estimatedTravelKm: Math.round((totalTravelMin / 12) * 10) / 10,
         },
-        weather: days.map((day) => ({
-          day: day.day,
-          label: `${day.dateLabel} 날씨 확인 전`,
-          emoji: '☁️',
-          tempLabel: '-',
-        })),
+        weather: await this.buildWeather(center, days),
       },
     };
+  }
+
+  /**
+   * 기상청 단기예보를 일자별 PlannerWeatherDto 로 변환한다.
+   * - center 좌표로 예보를 1회 조회하고, 각 일자의 fcstDate 로 필터링해 매핑한다.
+   * - 예보 범위(~3일) 밖이거나 KMA_API_KEY 미설정 시 "확인 전" 폴백을 유지한다.
+   */
+  private async buildWeather(
+    center: PlannerTripDto['mapCenter'],
+    days: Array<{ day: number; dateLabel: string; iso: string }>,
+  ): Promise<PlannerTripDto['meta']['weather']> {
+    const fallback = (day: { day: number; dateLabel: string }) => ({
+      day: day.day,
+      label: `${day.dateLabel} 날씨 확인 전`,
+      emoji: '☁️',
+      tempLabel: '-',
+      forecasted: false,
+    });
+
+    let forecasts: Map<string, ParsedForecast>;
+    try {
+      forecasts = await this.weatherHelper.getForecast(center.lat, center.lng);
+    } catch {
+      return days.map(fallback);
+    }
+    if (forecasts.size === 0) {
+      return days.map(fallback);
+    }
+
+    return days.map((day) => {
+      const kmaDate = day.iso.replace(/-/g, '');
+      const slots = [...forecasts.values()].filter((f) => f.date === kmaDate);
+      if (slots.length === 0) {
+        return fallback(day);
+      }
+
+      const temps = slots
+        .map((s) => s.temperature)
+        .filter((t): t is number => typeof t === 'number');
+      const tempLabel =
+        temps.length > 0
+          ? `${Math.round(Math.min(...temps))}° / ${Math.round(Math.max(...temps))}°`
+          : '-';
+
+      // 낮(12~15시) 대표 슬롯 우선, 없으면 첫 슬롯으로 하늘/강수 상태 판정
+      const noon =
+        slots.find((s) => s.time === '1500' || s.time === '1200') ?? slots[0]!;
+      const { emoji, condition } = this.describeWeather(noon);
+
+      return {
+        day: day.day,
+        label: `${day.dateLabel} ${condition}`,
+        emoji,
+        tempLabel,
+        forecasted: true,
+      };
+    });
+  }
+
+  /**
+   * 강수형태(PTY) 우선, 없으면 하늘상태(SKY)로 emoji·한글 상태를 만든다.
+   * PTY: 0 없음 / 1 비 / 2 비·눈 / 3 눈 / 4 소나기
+   * SKY: 1 맑음 / 3 구름많음 / 4 흐림
+   */
+  private describeWeather(f: ParsedForecast): { emoji: string; condition: string } {
+    switch (f.precipitationType) {
+      case 1:
+        return { emoji: '🌧️', condition: '비' };
+      case 2:
+        return { emoji: '🌨️', condition: '비/눈' };
+      case 3:
+        return { emoji: '❄️', condition: '눈' };
+      case 4:
+        return { emoji: '🌦️', condition: '소나기' };
+    }
+    switch (f.skyCondition) {
+      case 1:
+        return { emoji: '☀️', condition: '맑음' };
+      case 3:
+        return { emoji: '⛅', condition: '구름많음' };
+      case 4:
+        return { emoji: '☁️', condition: '흐림' };
+      default:
+        return { emoji: '☁️', condition: '흐림' };
+    }
   }
 
   private toPlannerCoordination(coordination: PreferenceCoordinationDto): PlannerCoordinationDto {
@@ -580,6 +663,7 @@ export class MainPlannerService {
         day: index + 1,
         label: `${index + 1}일차`,
         dateLabel: this.dateLabel(iso),
+        iso,
       };
     });
   }

@@ -64,6 +64,8 @@ export interface PlannerWeatherDto {
   label: string;
   emoji: string;
   tempLabel: string;
+  /** 기상청 단기예보 실데이터가 채워졌는지 여부. false 면 예보 범위(~3일) 밖이라 "확인 전" 폴백. */
+  forecasted: boolean;
 }
 
 export interface PlannerTripMetaDto {
