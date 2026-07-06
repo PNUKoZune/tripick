@@ -22,10 +22,13 @@ export interface IngestRegionResult {
   deduped: number;
   inserted: number;
   skipped: number;
+  /** reseed 시 적재 전 삭제한 기존 벡터 수 */
+  deleted: number;
 }
 
 export interface IngestSummary {
   regions: IngestRegionResult[];
   totalFetched: number;
   totalInserted: number;
+  totalDeleted: number;
 }

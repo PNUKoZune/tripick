@@ -14,6 +14,11 @@ export interface IngestOptions {
   sources?: IngestSource[];
   /** 소스별 시도당 최대 수집 건수. */
   maxPerRegion?: number;
+  /**
+   * 적재 전 해당 지역의 기존 벡터를 삭제한다.
+   * 임베딩 모델 서버를 전환했을 때 place 벡터를 새 공간으로 재생성하기 위해 사용.
+   */
+  reseed?: boolean;
 }
 
 /**
@@ -48,18 +53,24 @@ export class PlaceIngestionService {
       this.logger.warn(`요청한 지역(${options.regions.join(', ')})에 해당하는 시도가 없습니다.`);
     }
 
+    const reseed = options.reseed ?? false;
+    if (reseed) {
+      this.logger.warn('reseed 모드: 적재 전 대상 지역의 기존 place 벡터를 삭제합니다.');
+    }
+
     const regions: IngestRegionResult[] = [];
     for (const sido of targets) {
-      regions.push(await this.ingestRegion(sido.code, sido.name, sources, maxPerRegion));
+      regions.push(await this.ingestRegion(sido.code, sido.name, sources, maxPerRegion, reseed));
     }
 
     const summary: IngestSummary = {
       regions,
       totalFetched: regions.reduce((sum, r) => sum + r.fetched, 0),
       totalInserted: regions.reduce((sum, r) => sum + r.inserted, 0),
+      totalDeleted: regions.reduce((sum, r) => sum + r.deleted, 0),
     };
     this.logger.log(
-      `적재 완료: ${regions.length}개 지역, 수집 ${summary.totalFetched}건 → 신규 ${summary.totalInserted}건`,
+      `적재 완료: ${regions.length}개 지역, 수집 ${summary.totalFetched}건 → 신규 ${summary.totalInserted}건 (삭제 ${summary.totalDeleted}건)`,
     );
     return summary;
   }
@@ -69,7 +80,13 @@ export class PlaceIngestionService {
     region: string,
     sources: IngestSource[],
     maxPerRegion: number,
+    reseed: boolean,
   ): Promise<IngestRegionResult> {
+    const deleted = reseed ? await this.repository.deleteRegion(region) : 0;
+    if (deleted > 0) {
+      this.logger.log(`[${region}] reseed: 기존 벡터 ${deleted}건 삭제`);
+    }
+
     const collected: IngestPlace[] = [];
 
     if (sources.includes('tour')) {
@@ -105,9 +122,10 @@ export class PlaceIngestionService {
       deduped: deduped.length,
       inserted,
       skipped: deduped.length - inserted,
+      deleted,
     };
     this.logger.log(
-      `[${region}] 수집 ${result.fetched} → dedupe ${result.deduped} → 신규 ${result.inserted} (skip ${result.skipped})`,
+      `[${region}] 수집 ${result.fetched} → dedupe ${result.deduped} → 신규 ${result.inserted} (skip ${result.skipped}, 삭제 ${result.deleted})`,
     );
     return result;
   }

@@ -9,8 +9,10 @@
  *   --regions=서울,부산   특정 시도만 적재 (미지정 시 전국 시도)
  *   --sources=tour,kakao  적재 소스 (기본: 둘 다)
  *   --max=100             소스별 시도당 최대 수집 건수 (기본 100)
+ *   --reseed              적재 전 대상 지역의 기존 벡터 삭제 (임베딩 서버 전환 시)
  *
  * 멱등성: kakao_place_id / tourism_api_id / (region,name) 중복은 삽입하지 않는다.
+ * --reseed 를 주면 해당 지역을 먼저 비우고 새 임베딩으로 다시 채운다.
  * AppModule 전체(BullMQ/Redis)를 띄우지 않고 경량 PlaceIngestionModule 로 동작한다.
  */
 import 'reflect-metadata';
@@ -25,6 +27,10 @@ function parseArgs(argv: string[]): IngestOptions {
   for (const arg of argv) {
     const [rawKey, rawValue] = arg.replace(/^--/, '').split('=');
     const value = rawValue?.trim();
+    if (rawKey === 'reseed') {
+      options.reseed = true;
+      continue;
+    }
     if (!value) continue;
     if (rawKey === 'regions') {
       options.regions = value.split(',').map((s) => s.trim()).filter(Boolean);
@@ -54,10 +60,12 @@ async function main() {
     console.log('\n=== 적재 요약 ===');
     for (const r of summary.regions) {
       console.log(
-        `${r.region.padEnd(8)} 수집 ${String(r.fetched).padStart(4)} | 신규 ${String(r.inserted).padStart(4)} | skip ${String(r.skipped).padStart(4)}`,
+        `${r.region.padEnd(8)} 수집 ${String(r.fetched).padStart(4)} | 신규 ${String(r.inserted).padStart(4)} | skip ${String(r.skipped).padStart(4)} | 삭제 ${String(r.deleted).padStart(4)}`,
       );
     }
-    console.log(`----\n총 수집 ${summary.totalFetched} | 총 신규 ${summary.totalInserted}`);
+    console.log(
+      `----\n총 수집 ${summary.totalFetched} | 총 신규 ${summary.totalInserted} | 총 삭제 ${summary.totalDeleted}`,
+    );
   } finally {
     await app.close();
   }

@@ -196,6 +196,23 @@ export class PlaceEmbeddingRepository {
     return Number(rows[0]?.count ?? 0);
   }
 
+  /**
+   * 지역 place_embeddings 를 삭제한다 (재적재/임베딩 서버 전환 시 사용).
+   * 적재가 저장한 원본 라벨(예: '서울특별시')과 seed catalog 의 정규화 라벨(예: 'seoul')을
+   * 모두 지워 임베딩 공간을 깨끗하게 재생성할 수 있게 한다.
+   */
+  async deleteRegion(region: string): Promise<number> {
+    const raw = region.toLowerCase();
+    const normalized = normalizeDestinationRegion(region);
+    const rows: Array<{ deleted: number }> = await this.dataSource.query(
+      `DELETE FROM place_embeddings
+       WHERE lower(destination_region) IN ($1, $2)
+       RETURNING 1 AS deleted`,
+      [raw, normalized],
+    );
+    return rows.length;
+  }
+
   private toCandidate(row: PlaceEmbeddingRow): RawPlaceCandidate[] {
     const coordinates = this.parseCoordinates(row.coordinates);
     if (!coordinates) return [];

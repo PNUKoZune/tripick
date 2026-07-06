@@ -94,6 +94,23 @@ pgvector 후보에만 벡터 유사도가 있으므로, kakao/seed fallback 후�
 - 임베딩 엔드포인트가 죽어도 `TextEmbeddingService`의 결정적 해시 임베딩으로 폴백 → place seed 와 동일 공간을 유지해 블렌딩·코사인이 성립한다.
 - 신규 프로필 필드는 `preferences.service.ts`의 `DEFAULT_PROFILE`·FE `DEFAULT_PREFERENCE_FORM`에서 기본값이 채워지므로, 기존 저장 데이터(jsonb)에 필드가 없어도 안전하게 병합된다.
 
+## 6.5 임베딩 공간 정합성 & 재시드
+
+취향 벡터와 place 벡터는 **같은 임베딩 공간**에 있어야 코사인·블렌딩이 의미를 갖는다. 둘 다 `TextEmbeddingService`를 타므로 원격 임베딩 서버가 있으면 실제 임베딩, 없으면 결정적 해시 임베딩으로 **일관되게** 만들어진다.
+
+문제는 place 적재 파이프라인(`upsertPlace`)이 **insert-only** 라서, 해시 임베딩으로 한 번 채운 뒤 임베딩 서버를 켜도 기존 place 행이 갱신되지 않는다는 점이다. 이 경우 취향 벡터만 실제 임베딩이 되어 공간이 어긋나고, 차원(1536)은 같아 에러 없이 품질만 저하된다.
+
+이를 위해 적재 CLI 에 `--reseed` 를 추가했다.
+
+```bash
+# 임베딩 서버를 켠 뒤, place 벡터를 새 공간으로 재생성
+cd apps/api && pnpm ingest:places -- --reseed --regions=서울,부산
+```
+
+- `PlaceEmbeddingRepository.deleteRegion(region)` 이 적재 저장 라벨(예: '서울특별시')과 seed catalog 정규화 라벨(예: 'seoul')을 **모두** 삭제한 뒤 다시 채운다.
+- `--reseed` 없이 실행하면 기존과 동일한 멱등 insert-only 동작(중복 skip).
+- 전체 테이블을 비우려면 `TRUNCATE place_embeddings` 후 재적재도 가능.
+
 ## 7. 설정값
 
 | 환경변수 | 기본값 | 설명 |
