@@ -14,7 +14,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UserEntity } from '../users/user.entity';
-import { searchDestinationFallbacks } from './destinations.fallback';
+import { DestinationsService } from './destinations.service';
 import { MainPlannerService } from './main-planner.service';
 import type {
   AddTripMemberRequestDto,
@@ -27,7 +27,10 @@ import type {
 @UseGuards(JwtAuthGuard)
 @Controller('main-planner')
 export class MainPlannerController {
-  constructor(private readonly mainPlannerService: MainPlannerService) {}
+  constructor(
+    private readonly mainPlannerService: MainPlannerService,
+    private readonly destinationsService: DestinationsService,
+  ) {}
 
   @Get('trips')
   @ApiOperation({ summary: '내 여행 목록' })
@@ -38,7 +41,7 @@ export class MainPlannerController {
   @Get('destinations')
   @ApiOperation({ summary: '여행 지역 자동완성' })
   searchDestinations(@Query('q') q?: string) {
-    return searchDestinationFallbacks(q ?? '');
+    return this.destinationsService.search(q ?? '');
   }
 
   @Post('trips')

@@ -11,7 +11,7 @@ import type { PlannerMemberDto } from '@tripick/types';
 
 import { SessionGuard } from '@/entities/session';
 import { createTrip } from '@/entities/trip-plan';
-import { DestinationSearchInput } from '@/features/destination-search';
+import { DestinationSearchInput, DestinationMapPicker } from '@/features/destination-search';
 import { queryKeys } from '@/shared/api/query-keys';
 import { Button } from '@/shared/ui';
 import { AppFrame } from '@/shared/ui/app-frame';
@@ -126,8 +126,13 @@ function TripCreateContent() {
         />
       </Field>
 
-      <Field label="여행 지역" hint="자동완성에서 선택하거나 직접 입력할 수 있어요">
-        <DestinationSearchInput value={destination} onChange={setDestination} />
+      <Field label="여행 지역" hint="자동완성·지도에서 선택하거나 직접 입력할 수 있어요">
+        <div className="flex items-start gap-2">
+          <div className="flex-1">
+            <DestinationSearchInput value={destination} onChange={setDestination} />
+          </div>
+          <DestinationMapPicker onSelect={setDestination} />
+        </div>
       </Field>
 
       <Field label="여행 기간" hint="달력에서 시작일과 종료일을 차례로 눌러주세요">

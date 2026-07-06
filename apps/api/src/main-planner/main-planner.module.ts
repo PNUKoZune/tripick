@@ -7,6 +7,7 @@ import { PreferencesModule } from '../preferences/preferences.module';
 import { TripMembersModule } from '../trip-members/trip-members.module';
 import { TripEntity } from '../trips/trip.entity';
 import { TripsModule } from '../trips/trips.module';
+import { DestinationsService } from './destinations.service';
 import { WeatherHelper } from '../planner/helpers/weather.helper';
 import { MainPlannerController } from './main-planner.controller';
 import { MainPlannerService } from './main-planner.service';
@@ -21,6 +22,6 @@ import { MainPlannerService } from './main-planner.service';
     InboxModule,
   ],
   controllers: [MainPlannerController],
-  providers: [MainPlannerService, WeatherHelper],
+  providers: [MainPlannerService, DestinationsService, WeatherHelper],
 })
 export class MainPlannerModule {}
