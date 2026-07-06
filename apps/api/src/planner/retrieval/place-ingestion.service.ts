@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { KakaoLocalService } from './kakao-local.service';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
-import { TextEmbeddingService } from './text-embedding.service';
+import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { TourApiService } from './tour-api.service';
 import { inferPlaceTags } from './place-seeds';
 import type { IngestPlace, IngestRegionResult, IngestSource, IngestSummary } from './ingestion.types';

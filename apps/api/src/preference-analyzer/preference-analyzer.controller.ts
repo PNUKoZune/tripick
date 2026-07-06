@@ -14,7 +14,6 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserEntity } from '../users/user.entity';
 import { VisionAnalyzer } from './vision.analyzer';
-import { EmbeddingService } from './embedding.service';
 import { PreferencesService } from '../preferences/preferences.service';
 
 type UploadedImageFile = {
@@ -29,7 +28,6 @@ type UploadedImageFile = {
 export class PreferenceAnalyzerController {
   constructor(
     private readonly visionAnalyzer: VisionAnalyzer,
-    private readonly embeddingService: EmbeddingService,
     private readonly preferencesService: PreferencesService,
   ) {}
 
@@ -51,9 +49,9 @@ export class PreferenceAnalyzerController {
   ) {
     const imageUrls = files.map((file) => `data:${file.mimetype};base64,${file.buffer.toString('base64')}`);
     const tasteTags = await this.visionAnalyzer.analyzeMultiple(imageUrls);
-    const embeddingId = await this.embeddingService.embedTasteTags(tasteTags);
-    const preference = await this.preferencesService.upsert(user.id, { tasteTags }, embeddingId);
+    // upsert 내부에서 취향 임베딩(preference_embeddings) 저장까지 처리
+    const preference = await this.preferencesService.upsert(user.id, { tasteTags });
 
-    return { tasteTags, embeddingId, preferenceId: preference.id };
+    return { tasteTags, embeddingId: preference.embeddingId ?? '', preferenceId: preference.id };
   }
 }

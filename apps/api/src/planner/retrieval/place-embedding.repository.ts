@@ -31,6 +31,7 @@ interface PlaceEmbeddingRow {
   destination_region?: string | null;
   coordinates?: Coordinates | string | null;
   similarity?: number | string | null;
+  preference_similarity?: number | string | null;
 }
 
 @Injectable()
@@ -43,10 +44,20 @@ export class PlaceEmbeddingRepository {
     embedding: number[],
     destination: string,
     limit: number,
+    preferenceVector?: number[],
   ): Promise<RawPlaceCandidate[]> {
     const region = normalizeDestinationRegion(destination);
     const destinationLike = `%${destination}%`;
     const vector = `[${embedding.join(',')}]`;
+    const hasPreference = Array.isArray(preferenceVector) && preferenceVector.length > 0;
+    // 취향 벡터가 있으면 후보별 취향 코사인을 SQL 에서 함께 계산해 리랭킹 신호로 사용
+    const preference = hasPreference ? `[${preferenceVector.join(',')}]` : null;
+    const preferenceSelect = hasPreference
+      ? '1 - (embedding <=> $5::vector) AS preference_similarity'
+      : 'NULL AS preference_similarity';
+    const params = hasPreference
+      ? [vector, region, destinationLike, limit, preference]
+      : [vector, region, destinationLike, limit];
 
     try {
       const rows: PlaceEmbeddingRow[] = await this.dataSource.query(
@@ -59,7 +70,8 @@ export class PlaceEmbeddingRepository {
                category,
                destination_region,
                coordinates,
-               1 - (embedding <=> $1::vector) AS similarity
+               1 - (embedding <=> $1::vector) AS similarity,
+               ${preferenceSelect}
         FROM place_embeddings
         WHERE embedding IS NOT NULL
           AND (
@@ -71,7 +83,7 @@ export class PlaceEmbeddingRepository {
         ORDER BY embedding <=> $1::vector
         LIMIT $4
         `,
-        [vector, region, destinationLike, limit],
+        params,
       );
 
       return rows.flatMap((row) => this.toCandidate(row));
@@ -199,6 +211,7 @@ export class PlaceEmbeddingRepository {
     };
 
     const similarity = this.numberOrUndefined(row.similarity);
+    const preferenceSimilarity = this.numberOrUndefined(row.preference_similarity);
     return [
       {
         ...place,
@@ -206,6 +219,7 @@ export class PlaceEmbeddingRepository {
         tags: inferPlaceTags(place),
         ...(row.destination_region ? { destinationRegion: row.destination_region } : {}),
         ...(similarity !== undefined ? { similarity } : {}),
+        ...(preferenceSimilarity !== undefined ? { preferenceSimilarity } : {}),
       },
     ];
   }

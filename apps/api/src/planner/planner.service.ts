@@ -79,6 +79,8 @@ export class PlannerService {
     this.assertTripWindow(trip);
     const preference = await this.preferencesService.findByUser(trip.userId);
     const tasteTags = preference?.tasteTags;
+    // 저장된 취향 벡터로 pgvector 검색을 개인화 (블렌딩 + 리랭킹)
+    const preferenceVector = await this.preferencesService.getPreferenceVector(trip.userId);
     const dayCount = this.getDayCount(trip.startDate, trip.endDate);
     const wakeTime = trip.wakeTime ?? '08:30';
     const sleepTime = trip.sleepTime ?? '22:00';
@@ -90,6 +92,7 @@ export class PlannerService {
       limit: Math.max(dayCount * itemsPerDay + 4, 12),
       startAt: this.makeDateTime(trip.startDate, wakeTime),
       ...(tasteTags !== undefined ? { tasteTags } : {}),
+      ...(preferenceVector ? { preferenceVector } : {}),
       ...(options.trigger !== undefined ? { trigger: options.trigger } : {}),
       ...(options.currentLocation !== undefined ? { currentLocation: options.currentLocation } : {}),
     });

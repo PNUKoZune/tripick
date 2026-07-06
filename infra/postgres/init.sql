@@ -2,13 +2,23 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 취향 임베딩 테이블 (pgvector)
+-- 취향 임베딩 테이블 (pgvector) : 유저당 1행, RAG 검색 개인화 벡터
 CREATE TABLE IF NOT EXISTS preference_embeddings (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id     UUID,
   embedding   vector(1536),  -- OpenAI text-embedding-3-small 차원 (조정 가능)
   tags_text   TEXT NOT NULL,
-  created_at  TIMESTAMPTZ DEFAULT NOW()
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 기존 볼륨 호환용 (CREATE TABLE 이 이미 존재하는 경우 컬럼 보강)
+ALTER TABLE preference_embeddings ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE preference_embeddings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 유저당 1개 취향 벡터만 유지 (upsert 대상)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_preference_embeddings_user
+  ON preference_embeddings (user_id);
 
 -- 장소 임베딩 테이블 (pgvector)
 CREATE TABLE IF NOT EXISTS place_embeddings (

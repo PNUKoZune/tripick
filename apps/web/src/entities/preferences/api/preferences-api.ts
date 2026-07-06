@@ -7,7 +7,7 @@ import type {
   UpdatePreferenceDto,
 } from '@tripick/types';
 import { api } from '@/shared/api/client';
-import { STYLE_TO_TASTE } from '../model/options';
+import { INTEREST_TO_TASTE, STYLE_TO_TASTE } from '../model/options';
 
 export type PreferenceFormState = PreferenceProfileDto;
 
@@ -17,6 +17,10 @@ export const DEFAULT_PREFERENCE_FORM: PreferenceFormState = {
   sleepTime: '23:00',
   wakeTime: '07:30',
   transportModes: ['transit', 'walk'],
+  interests: ['cafe', 'photo', 'nature'],
+  pace: 'balanced',
+  activityIntensity: 'moderate',
+  crowdPreference: 'balanced',
   instagramConnected: false,
   instagramTags: ['미식', '자연', '도시'],
 };
@@ -36,6 +40,13 @@ function buildPreferencePayload(profile: PreferenceFormState): UpdatePreferenceD
 
   for (const style of profile.travelStyles) {
     const taste = STYLE_TO_TASTE[style];
+    taste.food.forEach((item) => food.add(item));
+    taste.mood.forEach((item) => mood.add(item));
+    taste.environment.forEach((item) => environment.add(item));
+  }
+
+  for (const interest of profile.interests) {
+    const taste = INTEREST_TO_TASTE[interest];
     taste.food.forEach((item) => food.add(item));
     taste.mood.forEach((item) => mood.add(item));
     taste.environment.forEach((item) => environment.add(item));

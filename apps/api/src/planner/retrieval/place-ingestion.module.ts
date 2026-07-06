@@ -4,7 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { KakaoLocalService } from './kakao-local.service';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
 import { PlaceIngestionService } from './place-ingestion.service';
-import { TextEmbeddingService } from './text-embedding.service';
+import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { TourApiService } from './tour-api.service';
 
 /**
