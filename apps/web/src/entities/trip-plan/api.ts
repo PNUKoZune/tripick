@@ -7,6 +7,8 @@ import type {
   PlannerMemberDto,
   PlannerSwapResponseDto,
   PlannerTripDto,
+  ReplanJobDto,
+  ReplanRequestDto,
   TripSummaryDto,
 } from '@tripick/types';
 
@@ -63,4 +65,14 @@ export function rejectTripInvite(tripId: string, memberId: string) {
 
 export function fetchPlannerCoordination(tripId: string) {
   return api.get<PlannerCoordinationDto>(`/main-planner/trips/${tripId}/coordination`);
+}
+
+/** 웨이팅 신고 → 재계획 트리거 (BullMQ 잡 등록) */
+export function reportTripWaiting(body: ReplanRequestDto) {
+  return api.post<ReplanJobDto>('/alternative/waiting', body);
+}
+
+/** 경로 이탈 신고 → 재계획 트리거 (BullMQ 잡 등록) */
+export function reportTripDeviation(body: ReplanRequestDto) {
+  return api.post<ReplanJobDto>('/alternative/deviation', body);
 }

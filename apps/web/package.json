@@ -12,11 +12,13 @@
   "dependencies": {
     "@tanstack/react-query": "^5.100.11",
     "@tripick/types": "workspace:*",
+    "@tripick/utils": "workspace:*",
     "date-fns": "^4.2.1",
     "next": "^16.2.4",
     "react": "^19.2.5",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.5",
+    "react-icons": "^5.7.0",
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {

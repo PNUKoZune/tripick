@@ -7,6 +7,9 @@ import {
   StyleSheet,
   View,
   Linking,
+  NativeModules,
+  NativeEventEmitter,
+  type EmitterSubscription,
 } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { getApps } from '@react-native-firebase/app';
@@ -39,6 +42,8 @@ declare const require: <TModule>(moduleName: string) => TModule;
 
 type BridgeMessage =
   | { type: 'REQUEST_LOCATION' }
+  | { type: 'START_LOCATION_TRACKING' }
+  | { type: 'STOP_LOCATION_TRACKING' }
   | { type: 'OPEN_EXTERNAL'; url: string }
   | { type: 'NAV_STATE'; canGoBack: boolean };
 
@@ -50,6 +55,13 @@ const WEB_APP_ORIGIN = new URL(WEB_APP_URL).origin;
 
 // react-native-webview 13.x 타입 union 에서 Android 전용 onPermissionRequest 가 빠져있다.
 // Platform 분기로 prop 을 객체에 모아 spread 하면 타입 충돌 없이 안드로이드에만 적용된다.
+// Android 전용 백그라운드 위치 추적 네이티브 모듈 (foreground service).
+// iOS 는 모듈이 없어 undefined → watchPosition 폴백을 사용한다.
+type LocationTrackingNative = { start(): void; stop(): void };
+const LocationTracking = (NativeModules.LocationTracking ?? null) as LocationTrackingNative | null;
+const LOCATION_EVENT = 'TripickLocationUpdate';
+const LOCATION_ERROR_EVENT = 'TripickLocationError';
+
 const androidOnlyProps =
   Platform.OS === 'android'
     ? {
@@ -60,11 +72,16 @@ const androidOnlyProps =
 
 export default function App() {
   const webViewRef = useRef<InstanceType<typeof WebView>>(null);
+  const watchIdRef = useRef<number | null>(null);
+  const nativeSubsRef = useRef<EmitterSubscription[]>([]);
   const [canGoBack, setCanGoBack] = useState(false);
 
   useEffect(() => {
     requestPermissions();
     setupFcm();
+    // 앱 종료 시 위치 워치 정리
+    return () => stopTracking();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Android 하드웨어 백버튼 → WebView 히스토리 이동 (없으면 앱 종료)
@@ -88,7 +105,27 @@ export default function App() {
     ];
     const post = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
     if (post) required.push(post); // Android 13+ 만 존재
-    await PermissionsAndroid.requestMultiple(required);
+    const result = await PermissionsAndroid.requestMultiple(required);
+
+    // 백그라운드(항상 허용) 위치는 포그라운드 권한이 먼저 승인된 뒤에만 요청 가능.
+    // Android 11+(API 30+)은 이 요청이 곧장 설정 화면을 유도한다.
+    const fineGranted =
+      result[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] ===
+      PermissionsAndroid.RESULTS.GRANTED;
+    const background = PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION;
+    if (fineGranted && background) {
+      try {
+        await PermissionsAndroid.request(background, {
+          title: '백그라운드 위치 권한',
+          message:
+            '여행 진행 중 앱을 보고 있지 않을 때도 경로 이탈을 감지하려면 위치를 "항상 허용"으로 설정해 주세요.',
+          buttonPositive: '확인',
+          buttonNegative: '나중에',
+        });
+      } catch {
+        // 거부/미지원이어도 포그라운드 추적은 계속 동작하므로 무시한다.
+      }
+    }
   }, []);
 
   const setupFcm = useCallback(async () => {
@@ -164,6 +201,7 @@ export default function App() {
     }
   }, []);
 
+  // 단발 위치 조회 (이전 호환용 — 웹은 현재 START_LOCATION_TRACKING 을 보낸다)
   const injectLocation = useCallback(() => {
     Geolocation.getCurrentPosition(
       (pos) => {
@@ -182,6 +220,67 @@ export default function App() {
     );
   }, []);
 
+  /**
+   * 여행 진행(Live) 화면이 켜져 있는 동안 연속 위치 추적.
+   * 웹의 useCurrentLocation 이 START/STOP_LOCATION_TRACKING 으로 켜고 끈다.
+   * - Android: 네이티브 foreground service 모듈로 화면이 꺼져도 추적 유지
+   * - iOS: Always 권한 + UIBackgroundModes(location) 기반 watchPosition 폴백
+   *   (distanceFilter 10m 로 배터리·네트워크 절약)
+   */
+  const startTracking = useCallback(() => {
+    // Android: foreground service 네이티브 모듈 우선
+    if (LocationTracking) {
+      if (nativeSubsRef.current.length > 0) return; // 이미 추적 중
+      const emitter = new NativeEventEmitter(NativeModules.LocationTracking);
+      nativeSubsRef.current = [
+        emitter.addListener(LOCATION_EVENT, (e: { lat: number; lng: number; accuracy?: number; timestamp?: number }) => {
+          postToWeb({ type: 'LOCATION_UPDATE', ...e });
+        }),
+        emitter.addListener(LOCATION_ERROR_EVENT, (e: { code: number; message: string }) => {
+          postToWeb({ type: 'LOCATION_ERROR', code: e.code, message: e.message });
+        }),
+      ];
+      LocationTracking.start();
+      return;
+    }
+
+    // iOS / 폴백: watchPosition
+    if (watchIdRef.current !== null) return; // 이미 추적 중이면 중복 등록 방지
+    watchIdRef.current = Geolocation.watchPosition(
+      (pos) => {
+        postToWeb({
+          type: 'LOCATION_UPDATE',
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          timestamp: pos.timestamp,
+        });
+      },
+      (err) => {
+        postToWeb({ type: 'LOCATION_ERROR', code: err.code, message: err.message });
+      },
+      {
+        enableHighAccuracy: true,
+        distanceFilter: 10,
+        interval: 5000,
+        fastestInterval: 3000,
+        showsBackgroundLocationIndicator: true,
+      },
+    );
+  }, []);
+
+  const stopTracking = useCallback(() => {
+    if (LocationTracking) {
+      LocationTracking.stop();
+      nativeSubsRef.current.forEach((sub) => sub.remove());
+      nativeSubsRef.current = [];
+      return;
+    }
+    if (watchIdRef.current === null) return;
+    Geolocation.clearWatch(watchIdRef.current);
+    watchIdRef.current = null;
+  }, []);
+
   function postToWeb(payload: unknown) {
     const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const js = `window.postMessage('${json}', '${WEB_APP_ORIGIN}'); true;`;
@@ -198,6 +297,14 @@ export default function App() {
     if (!msg) return;
     if (msg.type === 'REQUEST_LOCATION') {
       injectLocation();
+      return;
+    }
+    if (msg.type === 'START_LOCATION_TRACKING') {
+      startTracking();
+      return;
+    }
+    if (msg.type === 'STOP_LOCATION_TRACKING') {
+      stopTracking();
       return;
     }
     if (msg.type === 'OPEN_EXTERNAL' && msg.url) {

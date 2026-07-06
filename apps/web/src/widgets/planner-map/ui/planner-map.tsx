@@ -22,6 +22,8 @@ type Props = {
   selectedMarkerId?: string | null;
   onMarkerClick?: (marker: PlannerMapMarkerDto) => void;
   showSearch?: boolean;
+  /** 값이 바뀔 때마다 현재 center 로 부드럽게 재이동한다 (현재 위치 버튼 등) */
+  recenterKey?: number;
 };
 
 const variantStyle: Record<PlannerMapMarkerDto['variant'], { dot: string; label: string }> = {
@@ -54,6 +56,7 @@ export function PlannerMap({
   selectedMarkerId = null,
   onMarkerClick,
   showSearch = true,
+  recenterKey,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<KakaoMapInstance | null>(null);
@@ -122,6 +125,16 @@ export function PlannerMap({
     mapRef.current.relayout();
   }, [sdkReady, center.lat, center.lng, center.level]);
 
+  // 현재 위치 버튼 등으로 재이동 요청 (같은 center 라도 매번 panTo)
+  useEffect(() => {
+    if (recenterKey === undefined) return;
+    if (!sdkReady || !mapRef.current || !window.kakao?.maps) return;
+    const maps = window.kakao.maps;
+    mapRef.current.setLevel(center.level);
+    mapRef.current.panTo(new maps.LatLng(center.lat, center.lng));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recenterKey]);
+
   // 마커/오버레이 동기화
   useEffect(() => {
     if (!sdkReady || !mapRef.current || !window.kakao?.maps) return;
@@ -173,7 +186,7 @@ export function PlannerMap({
         ) : null}
       </div>
       {showSearch ? (
-        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center gap-2 px-3 pt-3">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center gap-2 px-3 pt-3">
           <div className="pointer-events-auto flex h-9 flex-1 items-center rounded-[16px] border border-[#E5E8EB] bg-white px-3 text-[13px] text-[#8B95A1] shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
             <span aria-hidden className="mr-2">
               🔍

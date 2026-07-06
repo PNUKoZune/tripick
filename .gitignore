@@ -9,6 +9,12 @@ build
 .next
 out
 
+# 패키지 src 내 빌드 산출물 (outDir 은 dist, src 에는 .ts 만 둔다)
+packages/*/src/*.js
+packages/*/src/*.js.map
+packages/*/src/*.d.ts
+packages/*/src/*.d.ts.map
+
 # Turbo
 .turbo
 

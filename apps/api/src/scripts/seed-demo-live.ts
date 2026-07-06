@@ -1,0 +1,148 @@
+/**
+ * 데모 계정(kakaoId=demo-user)에 "여행 중(Live)" 화면 테스트용 데이터를 시드한다.
+ *
+ * 오늘 날짜의 당일 여행 + 시간대별 일정 6개를 생성한다.
+ * 진행 상태(done/current/upcoming)는 실행 시점의 현재 시각에 따라 자동으로 나뉜다.
+ *
+ * 실행: cd apps/api && pnpm seed:demo-live
+ * 멱등성: 같은 제목의 기존 데모 여행을 지우고 다시 만든다.
+ *
+ * AppModule 전체(BullMQ/Redis/synchronize)를 띄우지 않고, 필요한 엔티티만 등록한
+ * 경량 DataSource 로 동작한다.
+ */
+import 'reflect-metadata';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { DataSource } from 'typeorm';
+
+import { ItineraryItemEntity } from '../itinerary/itinerary-item.entity';
+import { TripEntity } from '../trips/trip.entity';
+import { UserEntity } from '../users/user.entity';
+import type { ItineraryItemType } from '@tripick/types';
+
+// 의존성 없이 apps/api/.env 의 값을 process.env 로 주입 (이미 설정된 값은 유지)
+function loadEnv() {
+  try {
+    const text = readFileSync(resolve(process.cwd(), '.env'), 'utf8');
+    for (const line of text.split('\n')) {
+      const match = line.match(/^\s*([\w.]+)\s*=\s*(.*)\s*$/);
+      if (match && match[1] && !process.env[match[1]]) {
+        process.env[match[1]] = (match[2] ?? '').replace(/^["']|["']$/g, '');
+      }
+    }
+  } catch {
+    // .env 없으면 fallback URL 사용
+  }
+}
+
+loadEnv();
+
+const SEED_TITLE = '성수·한강 당일 여행 (데모)';
+
+interface SeedPlace {
+  hour: number;
+  minute: number;
+  type: ItineraryItemType;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  durationMin: number;
+}
+
+const PLACES: SeedPlace[] = [
+  { hour: 9, minute: 30, type: 'attraction', name: '성수 서울숲', address: '서울 성동구 뚝섬로 273', lat: 37.5446, lng: 127.0375, durationMin: 90 },
+  { hour: 11, minute: 30, type: 'cafe', name: '성수 감도 카페', address: '서울 성동구 연무장길 45', lat: 37.5441, lng: 127.0541, durationMin: 60 },
+  { hour: 13, minute: 30, type: 'restaurant', name: '을지로 한식 다이닝', address: '서울 중구 수표로 48', lat: 37.5667, lng: 126.9913, durationMin: 80 },
+  { hour: 15, minute: 30, type: 'attraction', name: '국립중앙박물관', address: '서울 용산구 서빙고로 137', lat: 37.523, lng: 126.9804, durationMin: 90 },
+  { hour: 17, minute: 30, type: 'attraction', name: '한강 노들섬', address: '서울 용산구 양녕로 445', lat: 37.5177, lng: 126.9574, durationMin: 70 },
+  { hour: 19, minute: 30, type: 'restaurant', name: '북촌 골목 한정식', address: '서울 종로구 계동길 37', lat: 37.5826, lng: 126.9831, durationMin: 80 },
+];
+
+function ymd(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+async function main() {
+  const dataSource = new DataSource({
+    type: 'postgres',
+    url:
+      process.env.DATABASE_URL ??
+      'postgresql://tripick:tripick@localhost:5432/tripick',
+    entities: [UserEntity, TripEntity, ItineraryItemEntity],
+    synchronize: false,
+  });
+
+  await dataSource.initialize();
+
+  try {
+    const usersRepo = dataSource.getRepository(UserEntity);
+    const tripsRepo = dataSource.getRepository(TripEntity);
+    const itemsRepo = dataSource.getRepository(ItineraryItemEntity);
+
+    const demo = await usersRepo.findOneBy({ kakaoId: 'demo-user' });
+    if (!demo) {
+      throw new Error(
+        '데모 계정이 없습니다. 먼저 웹에서 "임시 세션으로 둘러보기"(데모 로그인)를 한 번 실행한 뒤 다시 시도하세요.',
+      );
+    }
+
+    // 기존 시드 여행 정리 (items 는 onDelete CASCADE 로 함께 삭제)
+    await tripsRepo.delete({ userId: demo.id, title: SEED_TITLE });
+
+    const today = new Date();
+    const trip = await tripsRepo.save(
+      tripsRepo.create({
+        userId: demo.id,
+        title: SEED_TITLE,
+        destination: '서울',
+        startDate: ymd(today),
+        endDate: ymd(today),
+        status: 'in_progress',
+        transportMode: 'transit',
+        wakeTime: '08:00',
+        sleepTime: '23:00',
+        notes: 'Live 화면 테스트용 데모 데이터',
+      }),
+    );
+
+    await itemsRepo.save(
+      PLACES.map((place, index) =>
+        itemsRepo.create({
+          tripId: trip.id,
+          day: 1,
+          order: index + 1,
+          type: place.type,
+          name: place.name,
+          address: place.address,
+          coordinates: { lat: place.lat, lng: place.lng },
+          scheduledAt: new Date(
+            today.getFullYear(),
+            today.getMonth(),
+            today.getDate(),
+            place.hour,
+            place.minute,
+          ),
+          durationMin: place.durationMin,
+        }),
+      ),
+    );
+
+    console.log(
+      `✅ 데모 Live 데이터 생성 완료\n` +
+        `   user: ${demo.nickname} (${demo.id})\n` +
+        `   trip: ${trip.title} (${trip.id})\n` +
+        `   날짜: ${ymd(today)} · 일정 ${PLACES.length}개`,
+    );
+  } finally {
+    await dataSource.destroy();
+  }
+}
+
+main().catch((err) => {
+  console.error('❌ 시드 실패:', err);
+  process.exit(1);
+});

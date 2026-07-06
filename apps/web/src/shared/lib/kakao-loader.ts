@@ -27,16 +27,67 @@ export interface KakaoMaps {
   Size: new (width: number, height: number) => unknown;
   Point: new (x: number, y: number) => unknown;
   load?: (cb: () => void) => void;
+  /** 이벤트 바인딩 (지도 클릭 등). autoload=false 로드 후 사용 가능 */
+  event?: KakaoEventNamespace;
+  /** libraries=services 로 로드했을 때만 존재 (Geocoder / Places) */
+  services?: KakaoServicesNamespace;
+}
+
+/** 지도 클릭 시 콜백으로 넘어오는 마우스 이벤트 */
+export interface KakaoMouseEvent {
+  latLng: { getLat(): number; getLng(): number };
+}
+
+export interface KakaoEventNamespace {
+  addListener(target: unknown, type: string, handler: (event: KakaoMouseEvent) => void): void;
+  removeListener(target: unknown, type: string, handler: (event: KakaoMouseEvent) => void): void;
+}
+
+/** coord2RegionCode 결과 (행정/법정 구역 1건) */
+export interface KakaoRegionCode {
+  region_type: 'H' | 'B';
+  region_1depth_name: string;
+  region_2depth_name: string;
+  region_3depth_name: string;
+  code: string;
+}
+
+/** keywordSearch 결과 (장소 1건) */
+export interface KakaoPlace {
+  place_name: string;
+  address_name: string;
+  road_address_name: string;
+  x: string;
+  y: string;
+}
+
+export interface KakaoServicesNamespace {
+  Status: { OK: string; ZERO_RESULT: string; ERROR: string };
+  Geocoder: new () => {
+    coord2RegionCode(
+      lng: number,
+      lat: number,
+      callback: (result: KakaoRegionCode[], status: string) => void,
+    ): void;
+  };
+  Places: new () => {
+    keywordSearch(
+      query: string,
+      callback: (result: KakaoPlace[], status: string) => void,
+    ): void;
+  };
 }
 
 export interface KakaoMapInstance {
   setCenter(latLng: unknown): void;
+  panTo(latLng: unknown): void;
   setLevel(level: number): void;
   relayout(): void;
 }
 
 export interface KakaoMarkerInstance {
   setMap(map: KakaoMapInstance | null): void;
+  setPosition(latLng: unknown): void;
 }
 
 export interface KakaoOverlayInstance {
