@@ -25,7 +25,9 @@ async function main() {
     const summary = await service.reembedAll();
 
     console.log('\n=== 취향 재임베딩 요약 ===');
-    console.log(`총 ${summary.total}건 | 갱신 ${summary.updated}건 | 실패 ${summary.failed}건`);
+    console.log(
+      `총 ${summary.total}건 | 갱신 ${summary.updated}건 | 건너뜀 ${summary.skipped}건 | 실패 ${summary.failed}건`,
+    );
   } finally {
     await app.close();
   }

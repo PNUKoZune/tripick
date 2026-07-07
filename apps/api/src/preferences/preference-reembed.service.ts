@@ -15,6 +15,7 @@ interface PreferenceRow {
 export interface ReembedSummary {
   total: number;
   updated: number;
+  skipped: number;
   failed: number;
 }
 
@@ -40,9 +41,15 @@ export class PreferenceReembedService {
     this.logger.log(`재임베딩 대상 취향 ${rows.length}건`);
 
     let updated = 0;
+    let skipped = 0;
     let failed = 0;
     for (const row of rows) {
       const text = buildPreferenceText(row.tasteTags ?? undefined, row.profile ?? undefined);
+      if (!text.trim()) {
+        // 취향 신호가 없는 유저는 제네릭 벡터를 만들지 않고 건너뛴다.
+        skipped += 1;
+        continue;
+      }
       const vector = await this.embeddings.embed(text);
       const embeddingId = await this.preferenceEmbeddings.upsertUserEmbedding(
         row.userId,
@@ -60,7 +67,7 @@ export class PreferenceReembedService {
       updated += 1;
     }
 
-    this.logger.log(`재임베딩 완료: ${updated}건 갱신, ${failed}건 실패`);
-    return { total: rows.length, updated, failed };
+    this.logger.log(`재임베딩 완료: ${updated}건 갱신, ${skipped}건 건너뜀, ${failed}건 실패`);
+    return { total: rows.length, updated, skipped, failed };
   }
 }

@@ -9,9 +9,36 @@ import type {
 } from '@tripick/types';
 
 /**
- * 취향 태그 + 프로필을 place_embeddings 와 같은 공간에서 검색되도록
- * 한국어 키워드 문장으로 직렬화한다. 이 텍스트가 임베딩되어 개인화 검색 벡터가 된다.
+ * 취향 태그 + 프로필을 place_embeddings 와 같은 공간에서 검색되도록 키워드 문장으로 직렬화한다.
+ * 이 텍스트가 임베딩되어 개인화 검색 벡터가 된다.
+ *
+ * place 태그(inferPlaceTags)는 영문 enum(cafe, nature, cultural...) 어휘를 쓰므로,
+ * 실제 임베딩 모델이 없을 때(해시 폴백)도 겹치도록 스타일/관심 테마를 **영문 태그로도** 병기하고
+ * (STYLE_TAGS/INTEREST_TAGS), 의미 보강용 한국어 키워드를 함께 넣는다.
  */
+
+// FE STYLE_TO_TASTE / INTEREST_TO_TASTE 와 동일한 place 태그 어휘. 해시 폴백 정합성 확보용.
+const STYLE_TAGS: Record<TravelStylePreference, string[]> = {
+  korean_vibe: ['korean', 'cultural', 'village'],
+  healing: ['cafe', 'healing', 'nature'],
+  food_trip: ['korean', 'cafe', 'city'],
+  nature: ['nature', 'mountain', 'healing'],
+  shopping: ['cafe', 'city'],
+  insta_spot: ['cafe', 'romantic', 'city'],
+};
+
+const INTEREST_TAGS: Record<InterestPreference, string[]> = {
+  history: ['cultural', 'village'],
+  art: ['cultural', 'cafe', 'city'],
+  nature: ['nature', 'mountain'],
+  nightview: ['romantic', 'city'],
+  photo: ['cafe', 'romantic', 'city'],
+  shopping: ['cafe', 'city'],
+  food: ['korean', 'western'],
+  activity: ['adventure', 'nature', 'beach'],
+  cafe: ['cafe', 'healing'],
+  local: ['korean', 'village', 'cultural'],
+};
 
 const STYLE_KEYWORDS: Record<TravelStylePreference, string[]> = {
   korean_vibe: ['한옥', '전통', '고즈넉한'],
@@ -35,21 +62,22 @@ const INTEREST_KEYWORDS: Record<InterestPreference, string[]> = {
   local: ['로컬', '골목', '동네'],
 };
 
+// 중립(기본) 값은 취향 신호가 아니므로 빈 배열 — 노이즈/제네릭 편향 방지.
 const PACE_KEYWORDS: Record<TravelPace, string[]> = {
   packed: ['알찬 일정', '많은 장소'],
-  balanced: ['적당한 일정'],
+  balanced: [],
   relaxed: ['여유로운 일정', '느긋한'],
 };
 
 const INTENSITY_KEYWORDS: Record<ActivityIntensity, string[]> = {
   active: ['활동적인', '액티비티 위주'],
-  moderate: ['적당한 활동'],
+  moderate: [],
   restful: ['휴식 위주', '편안한'],
 };
 
 const CROWD_KEYWORDS: Record<CrowdPreference, string[]> = {
   hotspot: ['핫플레이스', '인기 명소', '붐비는'],
-  balanced: ['적당한 분위기'],
+  balanced: [],
   quiet: ['한적한', '조용한', '숨은 명소'],
 };
 
@@ -64,9 +92,11 @@ export function buildPreferenceText(
   tokens.push(...(tasteTags?.environment ?? []));
 
   for (const style of profile?.travelStyles ?? []) {
+    tokens.push(...(STYLE_TAGS[style] ?? []));
     tokens.push(...(STYLE_KEYWORDS[style] ?? []));
   }
   for (const interest of profile?.interests ?? []) {
+    tokens.push(...(INTEREST_TAGS[interest] ?? []));
     tokens.push(...(INTEREST_KEYWORDS[interest] ?? []));
   }
   if (profile?.pace) tokens.push(...(PACE_KEYWORDS[profile.pace] ?? []));
@@ -76,5 +106,6 @@ export function buildPreferenceText(
   if (profile?.crowdPreference) tokens.push(...(CROWD_KEYWORDS[profile.crowdPreference] ?? []));
 
   const unique = [...new Set(tokens.filter(Boolean))];
-  return unique.length > 0 ? unique.join(', ') : '국내 여행 취향';
+  // 취향 신호가 전혀 없으면 빈 문자열 반환 → 호출부에서 제네릭 벡터 저장을 건너뛴다.
+  return unique.join(', ');
 }

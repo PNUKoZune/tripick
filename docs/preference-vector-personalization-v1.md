@@ -128,6 +128,12 @@ cd apps/api && pnpm reembed:preferences
 
 `place-retrieval.service.ts` 는 저장된 취향 벡터의 차원이 질의 벡터와 다르면 개인화를 **건너뛴다**(경고 로그). 예전 차원으로 만들어진 취향 벡터가 pgvector 코사인(`<=> ::vector`)을 통째로 실패시켜 place 검색 결과가 사라지는 것을 막는다. 이 경고가 뜨면 `reembed:preferences` 로 재임베딩하면 된다.
 
+## 6.6 검색 신호 품질
+
+- **어휘 정합성**: `buildPreferenceText` 는 스타일·관심 테마를 place 태그와 같은 **영문 enum**(`cafe`, `nature`, `cultural`...)으로도 병기한다(`STYLE_TAGS`/`INTEREST_TAGS`, FE 매핑과 동일). 실제 임베딩 모델뿐 아니라 해시 폴백에서도 취향↔place 토큰이 겹치게 한다. 한국어 키워드는 의미 보강용으로 함께 둔다.
+- **중립값/빈 취향**: 페이스·강도·분위기의 **중립 기본값**(balanced/moderate/balanced)은 신호가 아니므로 토큰을 만들지 않는다. 취향 신호가 전혀 없으면 `buildPreferenceText` 가 빈 문자열을 반환하고, 저장 단계에서 제네릭 벡터를 만들지 않아(개인화 skip) 편향을 피한다.
+- **교차 소스 중복**: 적재 dedupe 가 ID(kakao/tourism) 기준에 더해 **이름+좌표(≈100m)** 기준으로도 합쳐, 관광공사·카카오에 각각 잡힌 같은 장소가 중복 적재되지 않는다.
+
 ## 7. 설정값
 
 | 환경변수 | 기본값 | 설명 |
@@ -137,6 +143,7 @@ cd apps/api && pnpm reembed:preferences
 
 ## 8. 검증
 
-- API 유닛테스트: 6 suites / 17 tests 통과 (`pnpm --filter @tripick/api test`)
-  - CRAG evaluator 취향 벡터 리랭킹 테스트 신규 추가
+- API 유닛테스트: 7 suites / 22 tests 통과 (`pnpm --filter @tripick/api test`)
+  - CRAG evaluator 취향 벡터 리랭킹 테스트
+  - `buildPreferenceText` 어휘 정합성·빈 취향 테스트
 - API·web 타입체크 통과 (`tsc --noEmit`)

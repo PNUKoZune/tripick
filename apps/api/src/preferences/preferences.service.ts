@@ -114,6 +114,8 @@ export class PreferencesService {
     profile: PreferenceProfileDto,
   ): Promise<string> {
     const text = buildPreferenceText(tasteTags, profile);
+    // 취향 신호가 없으면 제네릭 벡터를 저장하지 않는다 (개인화 편향 방지)
+    if (!text.trim()) return '';
     const vector = await this.embeddings.embed(text);
     return this.preferenceEmbeddings.upsertUserEmbedding(userId, vector, text);
   }

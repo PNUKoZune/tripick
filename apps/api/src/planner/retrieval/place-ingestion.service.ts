@@ -153,20 +153,31 @@ export class PlaceIngestionService {
     });
   }
 
-  /** kakao_place_id > tourism_api_id > name+좌표(소수3자리) 순으로 중복 제거. */
+  /**
+   * ID(kakao_place_id / tourism_api_id) 기준 중복 제거에 더해,
+   * 이름+좌표(소수3자리, ≈100m) 기준 중복도 함께 제거한다.
+   * → 소스가 달라(관광공사 vs 카카오) ID 가 다른 같은 물리적 장소도 하나로 합친다.
+   */
   private dedupe(places: IngestPlace[]): IngestPlace[] {
-    const seen = new Set<string>();
+    const seenIds = new Set<string>();
+    const seenGeo = new Set<string>();
     const result: IngestPlace[] = [];
     for (const place of places) {
-      const key =
+      const idKey =
         (place.kakaoPlaceId && `k:${place.kakaoPlaceId}`) ||
         (place.tourismApiId && `t:${place.tourismApiId}`) ||
-        `n:${place.name}@${place.coordinates.lat.toFixed(3)},${place.coordinates.lng.toFixed(3)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+        '';
+      const geoKey = `g:${this.normalizeName(place.name)}@${place.coordinates.lat.toFixed(3)},${place.coordinates.lng.toFixed(3)}`;
+      if ((idKey && seenIds.has(idKey)) || seenGeo.has(geoKey)) continue;
+      if (idKey) seenIds.add(idKey);
+      seenGeo.add(geoKey);
       result.push(place);
     }
     return result;
+  }
+
+  private normalizeName(name: string): string {
+    return name.toLowerCase().replace(/\s+/g, '');
   }
 
   private buildText(place: IngestPlace): string {
