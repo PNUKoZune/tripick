@@ -87,7 +87,17 @@ cd apps/api
 pnpm ingest:places                                   # 전국 시도, 두 소스 모두
 pnpm ingest:places -- --regions=서울,부산 --sources=tour,kakao --max=100
 pnpm ingest:places -- --reseed --regions=서울         # 재시드(아래 7장)
+pnpm ingest:places -- --allow-hash                   # 임베딩 서버 없이 강행(아래 8장)
 ```
+
+### 3.5 임베딩 서버 안전장치
+
+임베딩 서버가 죽어 있거나 URL 이 틀리면 `TextEmbeddingService`가 **조용히 해시 폴백**으로 벡터를 만든다. 그대로 두면 해시 벡터가 실제 벡터와 섞여 검색 품질이 손상된다. 이를 막기 위해:
+
+- 적재 시작 전 **프리플라이트 헬스체크**: 실제 remote 임베딩이 오지 않으면 적재를 **중단**한다.
+- 적재 도중에도 각 임베딩이 해시로 폴백하면(1회 재시도 후에도) 중단한다 — 이미 적재된 실제 벡터 행은 유지되므로 서버 복구 후 재실행하면 된다.
+- 의도한 오프라인 적재는 `--allow-hash` 로 우회. 같은 안전장치가 `reembed:preferences` 에도 적용된다.
+- 판정 근거: `TextEmbeddingService.embedWithSource()` 가 벡터와 함께 출처(`remote`/`hash`)를 반환한다.
 
 ## 4. 개인화 검색 흐름 (런타임)
 
@@ -185,7 +195,7 @@ cd apps/api && pnpm reembed:preferences
 | `KAKAO_LOCAL_API_KEY` / `KAKAO_REST_API_KEY` | — | 카카오 로컬 키 (적재·런타임 fallback) |
 | `DATABASE_URL` | `postgresql://tripick:tripick@localhost:5432/tripick` | 적재 CLI DB 연결 |
 | `LLM_BASE_URL` / `LLM_API_KEY` | `http://localhost:8080/v1` / `local` | OpenAI 호환 임베딩 엔드포인트 |
-| `LLM_EMBEDDING_MODEL` | `text-embedding-model` | 임베딩 모델명 |
+| `LLM_EMBEDDING_MODEL` | `text-embedding-model` | 임베딩 모델명. place·취향 텍스트가 한국어이므로 **다국어/한국어 모델**(bge-m3, multilingual-e5 등) 권장 |
 | `LLM_EMBEDDING_DIMENSIONS` | `1536` | 임베딩 차원 (`place_embeddings.embedding` 컬럼과 일치해야 함) |
 | `PREFERENCE_BLEND_WEIGHT` | `0.6` | 질의 벡터 가중치. 1=순수 질의, 0=순수 취향 |
 | `PLACE_RETRIEVAL_AUTO_SEED` | `true` | 지역 후보가 없을 때 seed catalog 자동 적재 |
@@ -193,8 +203,9 @@ cd apps/api && pnpm reembed:preferences
 
 ## 11. 검증
 
-- API 유닛테스트: 7 suites / 22 tests 통과 (`pnpm --filter @tripick/api test`)
+- API 유닛테스트: 8 suites / 25 tests 통과 (`pnpm --filter @tripick/api test`)
   - CRAG evaluator 취향 벡터 리랭킹 테스트
   - `buildPreferenceText` 어휘 정합성·빈 취향 테스트
+  - `TextEmbeddingService.embedWithSource` remote/hash 출처 판정 테스트
 - API·web 타입체크 통과 (`tsc --noEmit`)
 - ⚠️ `ingest:places` / `reembed:preferences` 는 로컬 Postgres 실물 실행 미검증 (DB 구동 후 확인 권장)

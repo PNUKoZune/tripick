@@ -34,7 +34,11 @@ export class PreferenceReembedService {
     private readonly preferenceEmbeddings: PreferenceEmbeddingRepository,
   ) {}
 
-  async reembedAll(): Promise<ReembedSummary> {
+  async reembedAll(options: { allowHash?: boolean } = {}): Promise<ReembedSummary> {
+    const allowHash = options.allowHash ?? false;
+    // 안전장치: 재임베딩 전 임베딩 서버가 실제 벡터를 주는지 확인. 해시 폴백이면 중단.
+    await this.assertEmbeddingServerReady(allowHash);
+
     const rows: PreferenceRow[] = await this.dataSource.query(
       'SELECT "userId", "tasteTags", profile FROM preferences',
     );
@@ -50,7 +54,7 @@ export class PreferenceReembedService {
         skipped += 1;
         continue;
       }
-      const vector = await this.embeddings.embed(text);
+      const vector = await this.embedStrict(text, allowHash);
       const embeddingId = await this.preferenceEmbeddings.upsertUserEmbedding(
         row.userId,
         vector,
@@ -69,5 +73,30 @@ export class PreferenceReembedService {
 
     this.logger.log(`재임베딩 완료: ${updated}건 갱신, ${skipped}건 건너뜀, ${failed}건 실패`);
     return { total: rows.length, updated, skipped, failed };
+  }
+
+  /** 재임베딩 시작 전 임베딩 서버가 실제 벡터를 주는지 확인한다. 해시 폴백이면 중단. */
+  private async assertEmbeddingServerReady(allowHash: boolean): Promise<void> {
+    const probe = await this.embeddings.embedWithSource('임베딩 서버 헬스체크');
+    if (probe.source === 'remote') return;
+    if (allowHash) {
+      this.logger.warn('임베딩 서버 미가용 — 해시 폴백으로 재임베딩을 강행합니다(--allow-hash).');
+      return;
+    }
+    throw new Error(
+      '임베딩 서버에 연결할 수 없어(해시 폴백 감지) 취향 재임베딩을 중단합니다. ' +
+        'LLM_BASE_URL / LLM_EMBEDDING_MODEL 을 확인하거나, 의도한 것이면 --allow-hash 로 재실행하세요.',
+    );
+  }
+
+  /** 해시 폴백이 감지되면(allowHash=false) 1회 재시도 후 중단한다. */
+  private async embedStrict(text: string, allowHash: boolean): Promise<number[]> {
+    const first = await this.embeddings.embedWithSource(text);
+    if (first.source === 'remote' || allowHash) return first.vector;
+    const retry = await this.embeddings.embedWithSource(text);
+    if (retry.source === 'remote') return retry.vector;
+    throw new Error(
+      '재임베딩 중 임베딩 서버 응답 실패(해시 폴백)로 중단합니다. 서버 복구 후 재실행하세요.',
+    );
   }
 }

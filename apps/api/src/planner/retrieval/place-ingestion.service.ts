@@ -19,6 +19,11 @@ export interface IngestOptions {
    * 임베딩 모델 서버를 전환했을 때 place 벡터를 새 공간으로 재생성하기 위해 사용.
    */
   reseed?: boolean;
+  /**
+   * 임베딩 서버가 없어 해시 폴백이 감지돼도 적재를 강행한다.
+   * 기본은 false — 해시 벡터가 실제 벡터와 섞여 검색 품질을 해치는 것을 막기 위해 중단한다.
+   */
+  allowHash?: boolean;
 }
 
 /**
@@ -39,6 +44,10 @@ export class PlaceIngestionService {
   async ingest(options: IngestOptions = {}): Promise<IngestSummary> {
     const sources = options.sources ?? ['tour', 'kakao'];
     const maxPerRegion = options.maxPerRegion ?? 100;
+    const allowHash = options.allowHash ?? false;
+
+    // 안전장치: 적재 전 임베딩 서버가 실제 벡터를 주는지 확인. 해시 폴백이면 중단.
+    await this.assertEmbeddingServerReady(allowHash);
 
     const sidos = await this.tourApi.fetchSidoList();
     if (sidos.length === 0) {
@@ -60,7 +69,9 @@ export class PlaceIngestionService {
 
     const regions: IngestRegionResult[] = [];
     for (const sido of targets) {
-      regions.push(await this.ingestRegion(sido.code, sido.name, sources, maxPerRegion, reseed));
+      regions.push(
+        await this.ingestRegion(sido.code, sido.name, sources, maxPerRegion, reseed, allowHash),
+      );
     }
 
     const summary: IngestSummary = {
@@ -81,6 +92,7 @@ export class PlaceIngestionService {
     sources: IngestSource[],
     maxPerRegion: number,
     reseed: boolean,
+    allowHash: boolean,
   ): Promise<IngestRegionResult> {
     const deleted = reseed ? await this.repository.deleteRegion(region) : 0;
     if (deleted > 0) {
@@ -100,7 +112,7 @@ export class PlaceIngestionService {
 
     let inserted = 0;
     for (const place of deduped) {
-      const embedding = await this.embeddings.embed(this.buildText(place));
+      const embedding = await this.embedStrict(this.buildText(place), allowHash);
       const added = await this.repository.upsertPlace(
         {
           kakaoPlaceId: place.kakaoPlaceId ?? null,
@@ -178,6 +190,44 @@ export class PlaceIngestionService {
 
   private normalizeName(name: string): string {
     return name.toLowerCase().replace(/\s+/g, '');
+  }
+
+  /** 적재 시작 전 임베딩 서버가 실제 벡터를 주는지 확인한다. 해시 폴백이면 중단. */
+  private async assertEmbeddingServerReady(allowHash: boolean): Promise<void> {
+    const probe = await this.embeddings.embedWithSource('임베딩 서버 헬스체크');
+    if (probe.source === 'remote') {
+      this.logger.log('임베딩 서버 확인 완료 (remote embedding).');
+      return;
+    }
+    if (allowHash) {
+      this.logger.warn(
+        '임베딩 서버 미가용 — 해시 폴백으로 적재를 강행합니다(--allow-hash). 검색 품질이 낮아지고 실제 벡터와 공간이 어긋날 수 있습니다.',
+      );
+      return;
+    }
+    throw new Error(
+      '임베딩 서버에 연결할 수 없어(해시 폴백 감지) 적재를 중단합니다. ' +
+        '해시 벡터가 실제 벡터와 섞이면 검색 품질이 손상됩니다. ' +
+        'LLM_BASE_URL / LLM_EMBEDDING_MODEL 을 확인하거나, 의도한 것이면 --allow-hash 로 재실행하세요.',
+    );
+  }
+
+  /**
+   * 임베딩을 만들되, 해시 폴백이 감지되면(allowHash=false) 한 번 재시도 후 중단한다.
+   * 적재 도중 서버가 죽어 해시 벡터가 조용히 섞이는 것을 막는다.
+   */
+  private async embedStrict(text: string, allowHash: boolean): Promise<number[]> {
+    const first = await this.embeddings.embedWithSource(text);
+    if (first.source === 'remote' || allowHash) return first.vector;
+
+    // 일시적 타임아웃 흡수용 1회 재시도
+    const retry = await this.embeddings.embedWithSource(text);
+    if (retry.source === 'remote') return retry.vector;
+
+    throw new Error(
+      `적재 중 임베딩 서버 응답 실패(해시 폴백)로 중단합니다. 이미 적재된 행은 유지됩니다. ` +
+        `문제 텍스트="${text.slice(0, 40)}…". 서버 복구 후 재실행(필요 시 --reseed) 하세요.`,
+    );
   }
 
   private buildText(place: IngestPlace): string {

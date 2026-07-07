@@ -3,6 +3,9 @@
  *
  * 실행:
  *   cd apps/api && pnpm reembed:preferences
+ *   cd apps/api && pnpm reembed:preferences -- --allow-hash   # 임베딩 서버 없이 강행
+ *
+ * 안전장치: 기본적으로 임베딩 서버가 실제 벡터를 주지 못하면(해시 폴백) 중단한다. --allow-hash 로 우회.
  *
  * place 의 `ingest:places --reseed` 와 짝이 되는 취향 측 재시드 도구.
  * 임베딩 모델 서버를 전환했을 때(예: 해시 폴백 → 실제 임베딩) 취향 벡터를
@@ -16,13 +19,14 @@ import { PreferenceReembedModule } from '../preferences/preference-reembed.modul
 import { PreferenceReembedService } from '../preferences/preference-reembed.service';
 
 async function main() {
+  const allowHash = process.argv.slice(2).includes('--allow-hash');
   const app = await NestFactory.createApplicationContext(PreferenceReembedModule, {
     logger: ['log', 'warn', 'error'],
   });
 
   try {
     const service = app.get(PreferenceReembedService);
-    const summary = await service.reembedAll();
+    const summary = await service.reembedAll({ allowHash });
 
     console.log('\n=== 취향 재임베딩 요약 ===');
     console.log(
