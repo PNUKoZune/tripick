@@ -111,6 +111,23 @@ cd apps/api && pnpm ingest:places -- --reseed --regions=서울,부산
 - `--reseed` 없이 실행하면 기존과 동일한 멱등 insert-only 동작(중복 skip).
 - 전체 테이블을 비우려면 `TRUNCATE place_embeddings` 후 재적재도 가능.
 
+### 취향 벡터 재임베딩 (place `--reseed` 와 짝)
+
+place 만 재시드하면 취향 벡터는 여전히 예전(해시) 공간에 남아 **비대칭**이 된다. 취향 벡터는 사용자가 취향을 다시 저장할 때만 재생성되기 때문이다. 이를 위해 취향 측 재임베딩 CLI 를 추가했다.
+
+```bash
+# 임베딩 서버 전환 시 place 와 함께 실행
+cd apps/api && pnpm ingest:places -- --reseed
+cd apps/api && pnpm reembed:preferences
+```
+
+- `reembed:preferences` 는 `preferences` 테이블의 모든 취향(`tasteTags`+`profile`)을 [buildPreferenceText](../apps/api/src/preferences/preference-text.ts)로 재직렬화 → 현재 임베딩 소스로 재임베딩 → `preference_embeddings` 갱신 + `embeddingId` 갱신.
+- 경량 `PreferenceReembedModule`(BullMQ/Redis 없이 ConfigModule + DataSource)로 동작.
+
+### 차원 불일치 방어
+
+`place-retrieval.service.ts` 는 저장된 취향 벡터의 차원이 질의 벡터와 다르면 개인화를 **건너뛴다**(경고 로그). 예전 차원으로 만들어진 취향 벡터가 pgvector 코사인(`<=> ::vector`)을 통째로 실패시켜 place 검색 결과가 사라지는 것을 막는다. 이 경고가 뜨면 `reembed:preferences` 로 재임베딩하면 된다.
+
 ## 7. 설정값
 
 | 환경변수 | 기본값 | 설명 |

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "seed:demo-live": "ts-node -r tsconfig-paths/register src/scripts/seed-demo-live.ts",
     "ingest:places": "ts-node -r tsconfig-paths/register src/scripts/ingest-places.ts",
+    "reembed:preferences": "ts-node -r tsconfig-paths/register src/scripts/reembed-preferences.ts",
     "test": "jest",
     "test:e2e": "jest --config test/jest-e2e.json --runInBand --forceExit --silent"
   },

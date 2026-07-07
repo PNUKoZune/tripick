@@ -31,8 +31,18 @@ export class PlaceRetrievalService {
     const sources: RetrievalSource[] = [];
     const rawCandidates: RawPlaceCandidate[] = [];
     const queryEmbedding = await this.embeddings.embed(queryText);
+    // 차원이 맞는 취향 벡터만 사용 (차원 불일치 시 pgvector 코사인이 통째로 실패하는 것 방지)
+    const preferenceVector =
+      context.preferenceVector && context.preferenceVector.length === queryEmbedding.length
+        ? context.preferenceVector
+        : undefined;
+    if (context.preferenceVector && !preferenceVector) {
+      this.logger.warn(
+        `취향 벡터 차원(${context.preferenceVector.length})이 질의 벡터(${queryEmbedding.length})와 달라 개인화를 건너뜁니다. reembed:preferences 로 재임베딩이 필요합니다.`,
+      );
+    }
     // 목적지/이벤트 질의 벡터에 저장된 취향 벡터를 가중 결합해 검색 자체를 개인화
-    const searchEmbedding = this.blendPreference(queryEmbedding, context.preferenceVector);
+    const searchEmbedding = this.blendPreference(queryEmbedding, preferenceVector);
 
     await this.seedLocalCatalogIfNeeded(context.destination);
 
@@ -40,7 +50,7 @@ export class PlaceRetrievalService {
       searchEmbedding,
       context.destination,
       limit * 3,
-      context.preferenceVector,
+      preferenceVector,
     );
     if (pgvector.length > 0) {
       sources.push('pgvector');
