@@ -113,4 +113,25 @@ describe('CragEvaluatorService', () => {
     expect(selected.some((candidate) => candidate.category === 'attraction')).toBe(true);
     expect(selected.filter((candidate) => candidate.category === 'cafe')).toHaveLength(3);
   });
+
+  it('reranks by stored preference vector similarity when available', () => {
+    const base: RawPlaceCandidate = {
+      id: 'a',
+      name: '광안리 브런치 카페',
+      category: 'cafe',
+      address: '부산 수영구 광안해변로 219',
+      coordinates: { lat: 35.1532, lng: 129.1185 },
+      source: 'pgvector',
+      similarity: 0.85,
+      tags: ['cafe', 'beach', 'romantic'],
+      destinationRegion: 'busan',
+    };
+
+    const highPref = service.rank([{ ...base, preferenceSimilarity: 0.95 }], busanContext)[0]!;
+    const lowPref = service.rank([{ ...base, preferenceSimilarity: -0.5 }], busanContext)[0]!;
+
+    expect(highPref.crag.personalization).toBeGreaterThan(lowPref.crag.personalization!);
+    expect(highPref.crag.taste).toBeGreaterThan(lowPref.crag.taste);
+    expect(highPref.confidence).toBeGreaterThan(lowPref.confidence);
+  });
 });

@@ -74,6 +74,7 @@ function createHarness() {
         confidence: 0.9,
       },
     }),
+    getPreferenceVector: jest.fn().mockResolvedValue(null),
   };
   const plannerAgent = {
     plan: jest.fn().mockResolvedValue([

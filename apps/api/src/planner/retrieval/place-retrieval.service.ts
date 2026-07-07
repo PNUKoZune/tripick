@@ -4,7 +4,7 @@ import { getSeedCandidates, tasteTagsToKeywords } from './place-seeds';
 import { CragEvaluatorService } from './crag-evaluator.service';
 import { KakaoLocalService } from './kakao-local.service';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
-import { TextEmbeddingService } from './text-embedding.service';
+import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import type {
   CandidatePlace,
   RawPlaceCandidate,
@@ -30,14 +30,27 @@ export class PlaceRetrievalService {
     const queryText = this.buildQueryText(context);
     const sources: RetrievalSource[] = [];
     const rawCandidates: RawPlaceCandidate[] = [];
-    const embedding = await this.embeddings.embed(queryText);
+    const queryEmbedding = await this.embeddings.embed(queryText);
+    // 차원이 맞는 취향 벡터만 사용 (차원 불일치 시 pgvector 코사인이 통째로 실패하는 것 방지)
+    const preferenceVector =
+      context.preferenceVector && context.preferenceVector.length === queryEmbedding.length
+        ? context.preferenceVector
+        : undefined;
+    if (context.preferenceVector && !preferenceVector) {
+      this.logger.warn(
+        `취향 벡터 차원(${context.preferenceVector.length})이 질의 벡터(${queryEmbedding.length})와 달라 개인화를 건너뜁니다. reembed:preferences 로 재임베딩이 필요합니다.`,
+      );
+    }
+    // 목적지/이벤트 질의 벡터에 저장된 취향 벡터를 가중 결합해 검색 자체를 개인화
+    const searchEmbedding = this.blendPreference(queryEmbedding, preferenceVector);
 
     await this.seedLocalCatalogIfNeeded(context.destination);
 
     const pgvector = await this.placeEmbeddings.searchByEmbedding(
-      embedding,
+      searchEmbedding,
       context.destination,
       limit * 3,
+      preferenceVector,
     );
     if (pgvector.length > 0) {
       sources.push('pgvector');
@@ -96,6 +109,24 @@ export class PlaceRetrievalService {
         `Local place embedding seed skipped: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  /**
+   * 질의 벡터와 취향 벡터를 가중 결합한 뒤 L2 정규화.
+   * weight=1 이면 순수 질의 벡터, 0 이면 순수 취향 벡터.
+   */
+  private blendPreference(query: number[], preference?: number[]): number[] {
+    if (!preference || preference.length !== query.length) return query;
+    const weight = this.preferenceBlendWeight();
+    const blended = query.map((value, index) => value * weight + (preference[index] ?? 0) * (1 - weight));
+    const norm = Math.sqrt(blended.reduce((sum, value) => sum + value * value, 0));
+    if (norm === 0) return query;
+    return blended.map((value) => value / norm);
+  }
+
+  private preferenceBlendWeight(): number {
+    const weight = this.readNumber('PREFERENCE_BLEND_WEIGHT', 0.6);
+    return Math.max(0, Math.min(1, weight));
   }
 
   private buildQueryText(context: RetrievalContext): string {

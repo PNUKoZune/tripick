@@ -4,13 +4,21 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  ActivityIntensity,
   CompanionPreference,
+  CrowdPreference,
+  InterestPreference,
   TransportPreference,
+  TravelPace,
   TravelStylePreference,
 } from '@tripick/types';
 import {
+  ACTIVITY_INTENSITY_OPTIONS,
   COMPANION_OPTIONS,
+  CROWD_OPTIONS,
   INSTAGRAM_TAGS,
+  INTEREST_OPTIONS,
+  PACE_OPTIONS,
   TRANSPORT_OPTIONS,
   TRAVEL_STYLE_OPTIONS,
 } from '@/entities/preferences/model/options';
@@ -148,6 +156,19 @@ export function PreferenceSetupForm() {
         </div>
       </SetupBlock>
 
+      <SetupBlock title="관심 있는 테마를 모두 골라주세요">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+          {INTEREST_OPTIONS.map((option) => (
+            <SegmentedOption
+              key={option.value}
+              active={form.interests.includes(option.value)}
+              label={option.label}
+              onClick={() => toggleArray(option.value, 'interests')}
+            />
+          ))}
+        </div>
+      </SetupBlock>
+
       <SetupBlock title="누구와 여행하나요?">
         <div className="grid grid-cols-4 gap-2 lg:max-w-[520px]">
           {COMPANION_OPTIONS.map((option) => (
@@ -184,6 +205,48 @@ export function PreferenceSetupForm() {
               active={form.transportModes.includes(option.value)}
               label={option.label}
               onClick={() => toggleArray(option.value, 'transportModes')}
+            />
+          ))}
+        </div>
+      </SetupBlock>
+
+      <SetupBlock title="여행 페이스">
+        <div className="grid grid-cols-3 gap-2 lg:max-w-[520px]">
+          {PACE_OPTIONS.map((option) => (
+            <ChoiceCard
+              key={option.value}
+              active={form.pace === option.value}
+              label={option.label}
+              hint={option.hint}
+              onClick={() => setSingle('pace', option.value)}
+            />
+          ))}
+        </div>
+      </SetupBlock>
+
+      <SetupBlock title="활동 강도">
+        <div className="grid grid-cols-3 gap-2 lg:max-w-[520px]">
+          {ACTIVITY_INTENSITY_OPTIONS.map((option) => (
+            <ChoiceCard
+              key={option.value}
+              active={form.activityIntensity === option.value}
+              label={option.label}
+              hint={option.hint}
+              onClick={() => setSingle('activityIntensity', option.value)}
+            />
+          ))}
+        </div>
+      </SetupBlock>
+
+      <SetupBlock title="어떤 분위기를 선호하세요?">
+        <div className="grid grid-cols-3 gap-2 lg:max-w-[520px]">
+          {CROWD_OPTIONS.map((option) => (
+            <ChoiceCard
+              key={option.value}
+              active={form.crowdPreference === option.value}
+              label={option.label}
+              hint={option.hint}
+              onClick={() => setSingle('crowdPreference', option.value)}
             />
           ))}
         </div>
@@ -258,8 +321,8 @@ export function PreferenceSetupForm() {
   );
 
   function toggleArray(
-    value: TravelStylePreference | CompanionPreference | TransportPreference,
-    key: 'travelStyles' | 'companions' | 'transportModes',
+    value: TravelStylePreference | CompanionPreference | TransportPreference | InterestPreference,
+    key: 'travelStyles' | 'companions' | 'transportModes' | 'interests',
   ) {
     setForm((current) => {
       const values = current[key] as string[];
@@ -269,6 +332,40 @@ export function PreferenceSetupForm() {
       return { ...current, [key]: next };
     });
   }
+
+  function setSingle<K extends 'pace' | 'activityIntensity' | 'crowdPreference'>(
+    key: K,
+    value: PreferenceFormState[K],
+  ) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+}
+
+function ChoiceCard({
+  active,
+  label,
+  hint,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  hint: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex flex-col items-center justify-center gap-0.5 rounded-[16px] px-3 py-3 text-center transition ${
+        active
+          ? 'bg-[color:var(--blue-50)] text-[color:var(--blue-700)] ring-2 ring-[color:var(--blue-600)]'
+          : 'bg-[color:var(--soft-bg)] text-[color:var(--text-tertiary)]'
+      }`}
+    >
+      <span className="text-[14px] font-bold leading-5">{label}</span>
+      {hint ? <span className="text-[11px] font-medium leading-4 opacity-70">{hint}</span> : null}
+    </button>
+  );
 }
 
 function SetupBlock({ title, children }: { title: string; children: React.ReactNode }) {

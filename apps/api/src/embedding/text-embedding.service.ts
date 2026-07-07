@@ -2,6 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
+/** 임베딩 벡터 출처. 'hash' 는 원격 서버 실패 시 결정적 폴백을 의미. */
+export type EmbeddingSource = 'remote' | 'hash';
+
+export interface EmbeddingResult {
+  vector: number[];
+  source: EmbeddingSource;
+}
+
 @Injectable()
 export class TextEmbeddingService {
   private readonly logger = new Logger(TextEmbeddingService.name);
@@ -9,11 +17,19 @@ export class TextEmbeddingService {
   constructor(private readonly config: ConfigService) {}
 
   async embed(text: string): Promise<number[]> {
+    return (await this.embedWithSource(text)).vector;
+  }
+
+  /**
+   * 임베딩 벡터와 함께 출처(remote/hash)를 반환한다.
+   * 적재/재임베딩 파이프라인이 해시 폴백을 감지해 중단할 수 있게 하기 위함.
+   */
+  async embedWithSource(text: string): Promise<EmbeddingResult> {
     const vector = await this.tryRemoteEmbedding(text);
     if (vector.length > 0) {
-      return this.normalizeDimensions(vector);
+      return { vector: this.normalizeDimensions(vector), source: 'remote' };
     }
-    return this.buildHashEmbedding(text);
+    return { vector: this.buildHashEmbedding(text), source: 'hash' };
   }
 
   private async tryRemoteEmbedding(text: string): Promise<number[]> {

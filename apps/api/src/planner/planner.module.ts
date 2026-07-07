@@ -10,13 +10,20 @@ import { CragEvaluatorService } from './retrieval/crag-evaluator.service';
 import { KakaoLocalService } from './retrieval/kakao-local.service';
 import { PlaceEmbeddingRepository } from './retrieval/place-embedding.repository';
 import { PlaceRetrievalService } from './retrieval/place-retrieval.service';
-import { TextEmbeddingService } from './retrieval/text-embedding.service';
+import { TourApiService } from './retrieval/tour-api.service';
+import { PlaceIngestionService } from './retrieval/place-ingestion.service';
+import { EmbeddingModule } from '../embedding/embedding.module';
 import { ItineraryModule } from '../itinerary/itinerary.module';
 import { PreferencesModule } from '../preferences/preferences.module';
 import { TripEntity } from '../trips/trip.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([TripEntity]), ItineraryModule, PreferencesModule],
+  imports: [
+    TypeOrmModule.forFeature([TripEntity]),
+    ItineraryModule,
+    PreferencesModule,
+    EmbeddingModule,
+  ],
   providers: [
     PlannerService,
     PlannerAgentService,
@@ -24,11 +31,12 @@ import { TripEntity } from '../trips/trip.entity';
     RouteHelper,
     ScheduleConstraint,
     ConstraintEngine,
-    TextEmbeddingService,
     PlaceEmbeddingRepository,
     KakaoLocalService,
     CragEvaluatorService,
     PlaceRetrievalService,
+    TourApiService,
+    PlaceIngestionService,
   ],
   exports: [PlannerService],
 })

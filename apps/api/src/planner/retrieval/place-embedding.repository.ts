@@ -10,6 +10,17 @@ import {
 } from './place-seeds';
 import type { RawPlaceCandidate } from './types';
 
+export interface UpsertPlaceInput {
+  kakaoPlaceId?: string | null;
+  tourismApiId?: string | null;
+  name: string;
+  address?: string | null;
+  category?: string | null;
+  /** destination_region 컬럼에 저장할 지역 라벨 (예: '서울', 'seoul') */
+  region: string;
+  coordinates: Coordinates;
+}
+
 interface PlaceEmbeddingRow {
   id: string;
   kakao_place_id?: string | null;
@@ -20,6 +31,7 @@ interface PlaceEmbeddingRow {
   destination_region?: string | null;
   coordinates?: Coordinates | string | null;
   similarity?: number | string | null;
+  preference_similarity?: number | string | null;
 }
 
 @Injectable()
@@ -32,10 +44,20 @@ export class PlaceEmbeddingRepository {
     embedding: number[],
     destination: string,
     limit: number,
+    preferenceVector?: number[],
   ): Promise<RawPlaceCandidate[]> {
     const region = normalizeDestinationRegion(destination);
     const destinationLike = `%${destination}%`;
     const vector = `[${embedding.join(',')}]`;
+    const hasPreference = Array.isArray(preferenceVector) && preferenceVector.length > 0;
+    // 취향 벡터가 있으면 후보별 취향 코사인을 SQL 에서 함께 계산해 리랭킹 신호로 사용
+    const preference = hasPreference ? `[${preferenceVector.join(',')}]` : null;
+    const preferenceSelect = hasPreference
+      ? '1 - (embedding <=> $5::vector) AS preference_similarity'
+      : 'NULL AS preference_similarity';
+    const params = hasPreference
+      ? [vector, region, destinationLike, limit, preference]
+      : [vector, region, destinationLike, limit];
 
     try {
       const rows: PlaceEmbeddingRow[] = await this.dataSource.query(
@@ -48,7 +70,8 @@ export class PlaceEmbeddingRepository {
                category,
                destination_region,
                coordinates,
-               1 - (embedding <=> $1::vector) AS similarity
+               1 - (embedding <=> $1::vector) AS similarity,
+               ${preferenceSelect}
         FROM place_embeddings
         WHERE embedding IS NOT NULL
           AND (
@@ -60,7 +83,7 @@ export class PlaceEmbeddingRepository {
         ORDER BY embedding <=> $1::vector
         LIMIT $4
         `,
-        [vector, region, destinationLike, limit],
+        params,
       );
 
       return rows.flatMap((row) => this.toCandidate(row));
@@ -95,46 +118,99 @@ export class PlaceEmbeddingRepository {
 
     for (const place of seeds) {
       const embedding = await embed(buildPlaceEmbeddingText(place));
-      const vector = `[${embedding.join(',')}]`;
-      const result: Array<{ inserted: number }> = await this.dataSource.query(
-        `
-        INSERT INTO place_embeddings (
-          kakao_place_id,
-          tourism_api_id,
-          name,
-          address,
-          category,
-          destination_region,
-          coordinates,
-          embedding
-        )
-        SELECT $1, $2, $3, $4, $5, $6, $7::jsonb, $8::vector
-        WHERE NOT EXISTS (
-          SELECT 1
-          FROM place_embeddings
-          WHERE lower(destination_region) = $6
-            AND name = $3
-        )
-        RETURNING 1 AS inserted
-        `,
-        [
-          place.kakaoPlaceId ?? place.id,
-          place.tourismApiId ?? null,
-          place.name,
-          place.address,
-          place.category,
+      const added = await this.upsertPlace(
+        {
+          kakaoPlaceId: place.kakaoPlaceId ?? place.id,
+          tourismApiId: place.tourismApiId ?? null,
+          name: place.name,
+          address: place.address,
+          category: place.category,
           region,
-          JSON.stringify(place.coordinates),
-          vector,
-        ],
+          coordinates: place.coordinates,
+        },
+        embedding,
       );
-      inserted += result[0]?.inserted ?? 0;
+      inserted += added ? 1 : 0;
     }
 
     if (inserted > 0) {
       this.logger.log(`Seeded ${inserted} ${region} place embeddings for local CRAG retrieval`);
     }
     return inserted;
+  }
+
+  /**
+   * 장소 1건을 place_embeddings 에 멱등 삽입한다.
+   * 중복 판정 우선순위: kakao_place_id > tourism_api_id > (destination_region, name).
+   * 이미 있으면 삽입하지 않고 false 를 반환한다.
+   */
+  async upsertPlace(place: UpsertPlaceInput, embedding: number[]): Promise<boolean> {
+    const vector = `[${embedding.join(',')}]`;
+    const region = place.region.toLowerCase();
+
+    const dedupeClause = place.kakaoPlaceId
+      ? { sql: 'kakao_place_id = $9', param: place.kakaoPlaceId }
+      : place.tourismApiId
+        ? { sql: 'tourism_api_id = $9', param: place.tourismApiId }
+        : { sql: 'lower(destination_region) = $9 AND name = $3', param: region };
+
+    const result: Array<{ inserted: number }> = await this.dataSource.query(
+      `
+      INSERT INTO place_embeddings (
+        kakao_place_id,
+        tourism_api_id,
+        name,
+        address,
+        category,
+        destination_region,
+        coordinates,
+        embedding
+      )
+      SELECT $1, $2, $3, $4, $5, $6, $7::jsonb, $8::vector
+      WHERE NOT EXISTS (
+        SELECT 1 FROM place_embeddings WHERE ${dedupeClause.sql}
+      )
+      RETURNING 1 AS inserted
+      `,
+      [
+        place.kakaoPlaceId ?? null,
+        place.tourismApiId ?? null,
+        place.name,
+        place.address ?? null,
+        place.category ?? null,
+        place.region,
+        JSON.stringify(place.coordinates),
+        vector,
+        dedupeClause.param,
+      ],
+    );
+
+    return (result[0]?.inserted ?? 0) > 0;
+  }
+
+  async countByRegion(region: string): Promise<number> {
+    const rows: Array<{ count: string }> = await this.dataSource.query(
+      'SELECT COUNT(*)::text AS count FROM place_embeddings WHERE lower(destination_region) = $1',
+      [region.toLowerCase()],
+    );
+    return Number(rows[0]?.count ?? 0);
+  }
+
+  /**
+   * 지역 place_embeddings 를 삭제한다 (재적재/임베딩 서버 전환 시 사용).
+   * 적재가 저장한 원본 라벨(예: '서울특별시')과 seed catalog 의 정규화 라벨(예: 'seoul')을
+   * 모두 지워 임베딩 공간을 깨끗하게 재생성할 수 있게 한다.
+   */
+  async deleteRegion(region: string): Promise<number> {
+    const raw = region.toLowerCase();
+    const normalized = normalizeDestinationRegion(region);
+    const rows: Array<{ deleted: number }> = await this.dataSource.query(
+      `DELETE FROM place_embeddings
+       WHERE lower(destination_region) IN ($1, $2)
+       RETURNING 1 AS deleted`,
+      [raw, normalized],
+    );
+    return rows.length;
   }
 
   private toCandidate(row: PlaceEmbeddingRow): RawPlaceCandidate[] {
@@ -152,6 +228,7 @@ export class PlaceEmbeddingRepository {
     };
 
     const similarity = this.numberOrUndefined(row.similarity);
+    const preferenceSimilarity = this.numberOrUndefined(row.preference_similarity);
     return [
       {
         ...place,
@@ -159,6 +236,7 @@ export class PlaceEmbeddingRepository {
         tags: inferPlaceTags(place),
         ...(row.destination_region ? { destinationRegion: row.destination_region } : {}),
         ...(similarity !== undefined ? { similarity } : {}),
+        ...(preferenceSimilarity !== undefined ? { preferenceSimilarity } : {}),
       },
     ];
   }

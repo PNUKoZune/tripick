@@ -39,7 +39,8 @@ export class CragEvaluatorService {
     const matchedTags = this.matchedTags(tags, context);
     const penalties: string[] = [];
     const retrieval = this.retrievalScore(candidate);
-    const taste = this.tasteScore(tags, context);
+    const personalization = this.personalizationScore(candidate);
+    const taste = this.tasteScore(tags, context, personalization);
     const locality = this.localityScore(candidate, context, penalties);
     const contextScore = this.contextScore(candidate, tags, context);
     const availability = this.availabilityScore(candidate, context, penalties);
@@ -63,6 +64,7 @@ export class CragEvaluatorService {
       dataQuality,
       matchedTags,
       penalties,
+      ...(personalization !== undefined ? { personalization } : {}),
     };
 
     return {
@@ -82,11 +84,25 @@ export class CragEvaluatorService {
     return 0.58;
   }
 
-  private tasteScore(tags: string[], context: RetrievalContext): number {
+  private tasteScore(
+    tags: string[],
+    context: RetrievalContext,
+    personalization?: number,
+  ): number {
     const preferred = tasteTagsToKeywords(context.tasteTags);
-    if (preferred.length === 0) return 0.56;
-    const matched = preferred.filter((tag) => tags.includes(tag)).length;
-    return this.clamp(0.35 + matched / preferred.length);
+    const tagScore =
+      preferred.length === 0
+        ? 0.56
+        : this.clamp(0.35 + preferred.filter((tag) => tags.includes(tag)).length / preferred.length);
+    // 취향 벡터 유사도가 있으면 태그 매칭보다 우선해 리랭킹 (벡터 기반 개인화)
+    if (personalization === undefined) return tagScore;
+    return this.clamp(tagScore * 0.45 + personalization * 0.55);
+  }
+
+  /** 저장된 취향 벡터와의 코사인 유사도(-1~1)를 0~1 점수로 정규화 */
+  private personalizationScore(candidate: RawPlaceCandidate): number | undefined {
+    if (candidate.preferenceSimilarity === undefined) return undefined;
+    return this.clamp((candidate.preferenceSimilarity + 1) / 2);
   }
 
   private localityScore(
@@ -192,7 +208,11 @@ export class CragEvaluatorService {
       seed: 'seed fallback',
     }[candidate.source];
     const fallback = candidate.source === 'pgvector' ? '' : ', 검색 보정 fallback 반영';
-    return `${matched}, ${sourceLabel} confidence ${confidence}%${fallback}`;
+    const personalized =
+      score.personalization !== undefined && score.personalization >= 0.6
+        ? `, 취향 벡터 ${Math.round(score.personalization * 100)}% 부합`
+        : '';
+    return `${matched}, ${sourceLabel} confidence ${confidence}%${personalized}${fallback}`;
   }
 
   private deduplicate(candidates: RawPlaceCandidate[]): RawPlaceCandidate[] {
