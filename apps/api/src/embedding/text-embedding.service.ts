@@ -33,8 +33,14 @@ export class TextEmbeddingService {
   }
 
   private async tryRemoteEmbedding(text: string): Promise<number[]> {
-    const baseUrl = this.config.get<string>('LLM_BASE_URL', 'http://localhost:8080/v1');
-    const apiKey = this.config.get<string>('LLM_API_KEY', 'local');
+    // 임베딩 전용 서버를 별도 포트로 띄우는 경우 LLM_EMBEDDING_BASE_URL 로 분리.
+    // 미설정 시 chat 과 동일한 LLM_BASE_URL 로 폴백(하위호환).
+    const baseUrl =
+      this.config.get<string>('LLM_EMBEDDING_BASE_URL') ??
+      this.config.get<string>('LLM_BASE_URL', 'http://localhost:8080/v1');
+    const apiKey =
+      this.config.get<string>('LLM_EMBEDDING_API_KEY') ??
+      this.config.get<string>('LLM_API_KEY', 'local');
     const model = this.config.get<string>('LLM_EMBEDDING_MODEL', 'text-embedding-model');
 
     try {
@@ -100,8 +106,9 @@ export class TextEmbeddingService {
   }
 
   private dimensions(): number {
-    const raw = this.config.get<string | number>('LLM_EMBEDDING_DIMENSIONS', 1536);
+    // 기본값은 place_embeddings/preference_embeddings 컬럼 차원(BGE-m3-ko=1024)과 일치시킨다.
+    const raw = this.config.get<string | number>('LLM_EMBEDDING_DIMENSIONS', 1024);
     const parsed = Number(raw);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1536;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1024;
   }
 }

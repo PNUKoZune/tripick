@@ -6,7 +6,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS preference_embeddings (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id     UUID,
-  embedding   vector(1536),  -- OpenAI text-embedding-3-small 차원 (조정 가능)
+  embedding   vector(1024),  -- BGE-m3(-ko) 차원. 모델 교체 시 LLM_EMBEDDING_DIMENSIONS 와 함께 변경
   tags_text   TEXT NOT NULL,
   created_at  TIMESTAMPTZ DEFAULT NOW(),
   updated_at  TIMESTAMPTZ DEFAULT NOW()
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS place_embeddings (
   category            TEXT,
   destination_region  TEXT,
   coordinates         JSONB,
-  embedding           vector(1536),
+  embedding           vector(1024),  -- BGE-m3(-ko) 차원. preference_embeddings 와 반드시 동일
   created_at          TIMESTAMPTZ DEFAULT NOW()
 );
 

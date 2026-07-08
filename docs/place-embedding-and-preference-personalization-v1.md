@@ -194,9 +194,12 @@ cd apps/api && pnpm reembed:preferences
 | `KTO_API_KEY` | — | 한국관광공사 KorService2 키 (적재) |
 | `KAKAO_LOCAL_API_KEY` / `KAKAO_REST_API_KEY` | — | 카카오 로컬 키 (적재·런타임 fallback) |
 | `DATABASE_URL` | `postgresql://tripick:tripick@localhost:5432/tripick` | 적재 CLI DB 연결 |
-| `LLM_BASE_URL` / `LLM_API_KEY` | `http://localhost:8080/v1` / `local` | OpenAI 호환 임베딩 엔드포인트 |
-| `LLM_EMBEDDING_MODEL` | `text-embedding-model` | 임베딩 모델명. place·취향 텍스트가 한국어이므로 **다국어/한국어 모델**(bge-m3, multilingual-e5 등) 권장 |
-| `LLM_EMBEDDING_DIMENSIONS` | `1536` | 임베딩 차원 (`place_embeddings.embedding` 컬럼과 일치해야 함) |
+| `LLM_BASE_URL` / `LLM_API_KEY` | `http://localhost:8080/v1` / `local` | chat/planner LLM 엔드포인트 |
+| `LLM_EMBEDDING_BASE_URL` / `LLM_EMBEDDING_API_KEY` | (미설정 시 `LLM_BASE_URL`/`LLM_API_KEY` 폴백) | 임베딩 전용 서버. 별도 포트로 분리할 때 사용 (예: `http://localhost:8081/v1`) |
+| `LLM_EMBEDDING_MODEL` | `dragonkue/BGE-m3-ko` | 임베딩 모델명(서빙 스택에 등록된 이름과 일치). place·취향 텍스트가 한국어라 다국어/한국어 모델 권장 |
+| `LLM_EMBEDDING_DIMENSIONS` | `1024` | 임베딩 차원. `place_embeddings`/`preference_embeddings`의 `vector(N)` 컬럼과 **반드시 동일** (BGE-m3=1024) |
+
+> **차원 변경 주의**: `vector(N)` 컬럼 차원을 바꾸는 것이므로 `init.sql` 을 실행 중 DB 에 다시 흘려넣어도(`CREATE TABLE IF NOT EXISTS`) 반영되지 않는다. 볼륨을 재초기화(`docker compose down -v && docker compose up -d`)하거나, 임베딩 테이블을 비우고 컬럼 타입을 직접 바꿔야 한다(HNSW 인덱스 drop→ALTER→재생성). 이후 `ingest:places` + `reembed:preferences` 로 새 차원 벡터를 채운다.
 | `PREFERENCE_BLEND_WEIGHT` | `0.6` | 질의 벡터 가중치. 1=순수 질의, 0=순수 취향 |
 | `PLACE_RETRIEVAL_AUTO_SEED` | `true` | 지역 후보가 없을 때 seed catalog 자동 적재 |
 | `CRAG_MIN_CONFIDENCE` / `CRAG_TARGET_CONFIDENCE` | `0.52` / `0.64` | CRAG 후보 채택/충분성 임계값 |
