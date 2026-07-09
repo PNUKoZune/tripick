@@ -49,10 +49,13 @@ const CONTENT_TYPE_CATEGORY: Record<string, string> = {
   '15': 'attraction', // 축제공연행사
   '25': 'attraction', // 여행코스
   '28': 'attraction', // 레포츠
-  '32': 'accommodation', // 숙박
+  '32': 'accommodation', // 숙박 — 서비스 범위 밖, 적재에서 제외
   '38': 'attraction', // 쇼핑
   '39': 'restaurant', // 음식점
 };
+
+/** 적재에서 제외할 contentTypeId (숙박). 이 서비스는 숙박을 일정 후보로 다루지 않는다. */
+const EXCLUDED_CONTENT_TYPES = new Set(['32']);
 
 function toArray<T>(item: T | T[] | undefined): T[] {
   if (!item) return [];
@@ -161,7 +164,9 @@ export class TourApiService {
     const name = String(row.title ?? '').trim();
     if (!name) return null;
 
-    const category = CONTENT_TYPE_CATEGORY[String(row.contenttypeid ?? '')] ?? 'attraction';
+    const contentTypeId = String(row.contenttypeid ?? '');
+    if (EXCLUDED_CONTENT_TYPES.has(contentTypeId)) return null; // 숙박 제외
+    const category = CONTENT_TYPE_CATEGORY[contentTypeId] ?? 'attraction';
     const address = [row.addr1, row.addr2].filter(Boolean).join(' ').trim();
 
     return {
