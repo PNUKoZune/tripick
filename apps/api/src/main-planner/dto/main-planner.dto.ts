@@ -17,7 +17,7 @@ import type {
   CreateTripRequestDto,
   PlannerItemType,
   PlannerMemberDto,
-  PlannerResolveLinkRequestDto,
+  PlannerResolvePlaceRequestDto,
   PlannerSwapPlaceDto,
   PlannerSwapRequestDto,
 } from '@tripick/types';
@@ -125,11 +125,11 @@ export class PlannerSwapRequestBodyDto implements PlannerSwapRequestDto {
   place!: PlannerSwapPlaceBodyDto;
 }
 
-export class PlannerResolveLinkBodyDto implements PlannerResolveLinkRequestDto {
+export class PlannerResolvePlaceBodyDto implements PlannerResolvePlaceRequestDto {
   @IsString()
   @MinLength(1)
   @MaxLength(1000)
-  url!: string;
+  query!: string;
 }
 
 export class AddTripMemberRequestBodyDto {

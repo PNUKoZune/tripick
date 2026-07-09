@@ -156,12 +156,13 @@ export interface PlannerAlternativeResponseDto {
   mapMarkers: PlannerMapMarkerDto[];
 }
 
-/** 지도 링크(네이버/카카오) → 실제 장소 해석 요청 */
-export interface PlannerResolveLinkRequestDto {
-  url: string;
+/** 장소 이름 → 카카오 Local 로 실제 장소 1곳 해석 (사용자 확인 후 반영) */
+export interface PlannerResolvePlaceRequestDto {
+  /** 사용자가 입력한 장소 이름 (지도 링크도 허용) */
+  query: string;
 }
 
-export interface PlannerResolveLinkResponseDto {
+export interface PlannerResolvePlaceResponseDto {
   alternative: PlannerAlternativeDto;
   mapMarker: PlannerMapMarkerDto;
 }

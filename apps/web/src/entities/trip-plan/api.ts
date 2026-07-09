@@ -5,7 +5,7 @@ import type {
   PlannerAlternativeResponseDto,
   PlannerCoordinationDto,
   PlannerMemberDto,
-  PlannerResolveLinkResponseDto,
+  PlannerResolvePlaceResponseDto,
   PlannerSwapPlaceDto,
   PlannerSwapResponseDto,
   PlannerTripDto,
@@ -31,11 +31,11 @@ export function fetchPlannerAlternatives(tripId: string, itemId: string, query?:
   );
 }
 
-/** 네이버/카카오 지도 링크(또는 장소명) → 실제 장소 대안 해석 */
-export function resolvePlannerLink(tripId: string, itemId: string, url: string) {
-  return api.post<PlannerResolveLinkResponseDto>(
-    `/main-planner/trips/${tripId}/items/${itemId}/resolve-link`,
-    { url },
+/** 장소 이름(지도 링크도 허용) → 카카오 Local 실제 장소 1곳 해석 (확인용) */
+export function resolvePlannerPlace(tripId: string, itemId: string, query: string) {
+  return api.post<PlannerResolvePlaceResponseDto>(
+    `/main-planner/trips/${tripId}/items/${itemId}/resolve-place`,
+    { query },
   );
 }
 

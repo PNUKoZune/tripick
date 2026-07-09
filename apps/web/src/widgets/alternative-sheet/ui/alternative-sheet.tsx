@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { PlannerItineraryItemDto } from '@tripick/types';
+import type { PlannerItineraryItemDto, PlannerMapCenterDto } from '@tripick/types';
 
 import { AlternativeCard } from '@/entities/alternative';
 import { useAlternativeController } from '@/features/select-alternative';
 import { BottomSheet, Button, Chip } from '@/shared/ui';
 import { PlannerMap } from '@/widgets/planner-map';
+
+const FALLBACK_CENTER: PlannerMapCenterDto = { lat: 37.5665, lng: 126.978, level: 5 };
 
 type Props = {
   tripId: string;
@@ -20,18 +22,32 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
   const controller = useAlternativeController(tripId, open ? item?.id ?? null : null);
   const [keepOriginal, setKeepOriginal] = useState(false);
   const [requestText, setRequestText] = useState('');
-  const [linkText, setLinkText] = useState('');
+  const [placeName, setPlaceName] = useState('');
 
   // 시트를 새로 열 때마다 입력 초기화
   useEffect(() => {
     if (open) {
       setKeepOriginal(false);
       setRequestText('');
-      setLinkText('');
+      setPlaceName('');
     }
   }, [open, item?.id]);
 
   const readyData = controller.state.status === 'ready' ? controller.state.data : null;
+  const { pendingPlace, selectedId } = controller;
+
+  // 지도: 확인 대기 장소 > 선택한 대안 순으로 초점을 맞춘다
+  const baseMarkers = readyData?.mapMarkers ?? [];
+  const mapMarkers = pendingPlace ? [...baseMarkers, pendingPlace.mapMarker] : baseMarkers;
+  const activeMarkerId = pendingPlace
+    ? pendingPlace.mapMarker.id
+    : selectedId
+      ? `marker-${selectedId}`
+      : null;
+  const activeMarker = mapMarkers.find((m) => m.id === activeMarkerId) ?? null;
+  const mapCenter: PlannerMapCenterDto = activeMarker
+    ? { lat: activeMarker.lat, lng: activeMarker.lng, level: 4 }
+    : readyData?.mapCenter ?? FALLBACK_CENTER;
 
   const topSlot = (
     <div className="relative aspect-[16/9] w-full overflow-hidden bg-[#F2F4F6]">
@@ -39,8 +55,9 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
         <div className="absolute inset-0">
           <PlannerMap
             placeholder="대안 위치 확인"
-            center={readyData.mapCenter}
-            markers={readyData.mapMarkers}
+            center={mapCenter}
+            markers={mapMarkers}
+            selectedMarkerId={activeMarkerId}
             showCurrentDot={false}
             aspect="aspect-[16/9]"
             showSearch={false}
@@ -65,7 +82,7 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
           </div>
         ) : null}
 
-        {controller.state.status === 'ready' ? (
+        {readyData ? (
           <>
             <div className="flex items-start gap-3">
               <div className="flex size-9 items-center justify-center rounded-[10px] bg-[#FFECEE] text-[18px] font-bold text-[#F04452]">
@@ -73,12 +90,12 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
               </div>
               <div className="flex-1">
                 <div className="text-[18px] font-bold leading-[26px] text-[#191F28]">
-                  {controller.state.data.waitingMinutes > 0 ? '웨이팅이 길어요' : '비슷한 다른 장소'}
+                  {readyData.waitingMinutes > 0 ? '웨이팅이 길어요' : '비슷한 다른 장소'}
                 </div>
                 <div className="mt-1 text-[14px] leading-[20px] text-[#6B7684]">
-                  {controller.state.data.itemName}
-                  {controller.state.data.waitingMinutes > 0
-                    ? ` 현재 예상 대기: 약 ${controller.state.data.waitingMinutes}분`
+                  {readyData.itemName}
+                  {readyData.waitingMinutes > 0
+                    ? ` 현재 예상 대기: 약 ${readyData.waitingMinutes}분`
                     : ' 주변에서 골라볼 수 있어요'}
                 </div>
               </div>
@@ -86,12 +103,12 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
 
             <div className="mt-3 flex flex-wrap gap-2">
               <Chip tone="primary" size="md">
-                카카오맵 기준 반경 {controller.state.data.radiusMeters}m 내
+                카카오맵 기준 반경 {readyData.radiusMeters}m 내
               </Chip>
-              {controller.state.data.realtime ? <Chip tone="success">실시간 반영</Chip> : null}
+              {readyData.realtime ? <Chip tone="success">실시간 반영</Chip> : null}
             </div>
 
-            {/* 사용자 직접 요청: 자유 텍스트 + 지도 링크 */}
+            {/* 사용자 직접 요청: 자유 텍스트 추천 + 장소 이름 지정 */}
             <div className="mt-5 space-y-3 rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] p-4">
               <div className="text-[13px] font-bold text-[#4E5968]">
                 원하는 곳이 없나요? 직접 요청해보세요
@@ -124,29 +141,27 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
                 className="flex gap-2"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  void controller.resolveLink(linkText).then((ok) => {
-                    if (ok) setLinkText('');
-                  });
+                  void controller.searchPlace(placeName);
                 }}
               >
                 <input
-                  value={linkText}
-                  onChange={(e) => setLinkText(e.target.value)}
-                  placeholder="네이버/카카오 지도 링크 붙여넣기"
+                  value={placeName}
+                  onChange={(e) => setPlaceName(e.target.value)}
+                  placeholder="가고 싶은 장소 이름 입력 (예: 성수 대림창고)"
                   className="h-11 flex-1 rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[14px] text-[#191F28] outline-none placeholder:text-[#B0B8C1] focus:border-[#3182F6]"
                 />
                 <Button
                   type="submit"
                   variant="secondary"
                   className="h-11 shrink-0 px-4 text-[14px]"
-                  disabled={controller.resolving || !linkText.trim()}
+                  disabled={controller.searchingPlace || !placeName.trim()}
                 >
-                  {controller.resolving ? '불러오는 중…' : '불러오기'}
+                  {controller.searchingPlace ? '찾는 중…' : '찾기'}
                 </Button>
               </form>
 
-              {controller.resolveError ? (
-                <div className="text-[12px] text-[#F04452]">{controller.resolveError}</div>
+              {controller.searchPlaceError ? (
+                <div className="text-[12px] text-[#F04452]">{controller.searchPlaceError}</div>
               ) : null}
               {controller.query ? (
                 <div className="text-[12px] text-[#6B7684]">
@@ -154,6 +169,48 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
                 </div>
               ) : null}
             </div>
+
+            {/* 장소 이름 검색 결과 — "이 장소가 맞나요?" 확인 */}
+            {pendingPlace ? (
+              <div className="mt-4 rounded-[16px] border border-[#3182F6] bg-[#EAF2FF] p-4">
+                <div className="text-[13px] font-bold text-[#1B64DA]">이 장소가 맞나요?</div>
+                <div className="mt-1 text-[16px] font-bold text-[#191F28]">
+                  {pendingPlace.alternative.name}
+                </div>
+                {pendingPlace.alternative.address ? (
+                  <div className="mt-0.5 text-[13px] text-[#6B7684]">
+                    {pendingPlace.alternative.address}
+                  </div>
+                ) : null}
+                <div className="mt-1 text-[12px] text-[#8B95A1]">
+                  위쪽 지도에서 위치를 확인해보세요.
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    variant="secondary"
+                    className="h-10 flex-1 text-[14px]"
+                    onClick={controller.cancelPending}
+                  >
+                    아니요
+                  </Button>
+                  <Button
+                    variant="primary"
+                    className="h-10 flex-1 text-[14px]"
+                    disabled={controller.submitting}
+                    onClick={async () => {
+                      if (!item) return;
+                      const result = await controller.confirmPending();
+                      if (result) {
+                        onApplied(result.newItemName, item.id);
+                        onClose();
+                      }
+                    }}
+                  >
+                    {controller.submitting ? '변경 중…' : '이 장소로 변경'}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-5 border-t border-[#E5E8EB] pt-4">
               <div className="flex items-center justify-between">
@@ -177,7 +234,7 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
                     <AlternativeCard
                       key={alt.id}
                       alternative={alt}
-                      selected={controller.selectedId === alt.id && !keepOriginal}
+                      selected={selectedId === alt.id && !keepOriginal}
                       onSelect={() => {
                         controller.setSelectedId(alt.id);
                         setKeepOriginal(false);
@@ -202,7 +259,7 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
               <Button
                 variant="primary"
                 fullWidth
-                disabled={controller.submitting || !controller.selectedId}
+                disabled={controller.submitting || !selectedId}
                 onClick={async () => {
                   if (!item) return;
                   const result = await controller.apply();

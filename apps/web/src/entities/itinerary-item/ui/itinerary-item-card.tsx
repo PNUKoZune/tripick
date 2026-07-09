@@ -2,7 +2,7 @@
 
 import type { PlannerItineraryItemDto } from '@tripick/types';
 
-import { Chip } from '@/shared/ui';
+import { ChangeScheduleButton, Chip } from '@/shared/ui';
 
 const typeToneMap = {
   attraction: 'primary',
@@ -38,9 +38,9 @@ export function ItineraryItemCard({ item, onClick, onSwitch, selected = false }:
         <button type="button" onClick={onClick} className="block w-full text-left">
           <div className="flex items-center justify-between gap-2">
             <Chip tone={tone}>{item.typeLabel}</Chip>
-            {onSwitch ? <span className="h-6" /> : <span className="text-[#8B95A1]">&gt;</span>}
+            {onSwitch ? <span className="h-8" /> : <span className="text-[#8B95A1]">&gt;</span>}
           </div>
-          <div className="mt-2 pr-16 text-[16px] font-semibold leading-[24px] text-[#191F28]">
+          <div className="mt-2 pr-10 text-[16px] font-semibold leading-[24px] text-[#191F28]">
             {item.name}
           </div>
           <div className="mt-1 flex items-center gap-2 text-[13px] leading-[18px] text-[#6B7684]">
@@ -56,17 +56,9 @@ export function ItineraryItemCard({ item, onClick, onSwitch, selected = false }:
           </div>
         </button>
         {onSwitch ? (
-          <button
-            type="button"
-            onClick={onSwitch}
-            className={`absolute right-3 top-3 flex h-8 items-center gap-1 rounded-full px-3 text-[13px] font-bold transition active:translate-y-px ${
-              item.hasWaiting
-                ? 'bg-[#F04452] text-white hover:bg-[#E0303E]'
-                : 'bg-[#3182F6] text-white hover:bg-[#1B64DA]'
-            }`}
-          >
-            전환
-          </button>
+          <div className="absolute right-3 top-3">
+            <ChangeScheduleButton onClick={onSwitch} urgent={item.hasWaiting} />
+          </div>
         ) : null}
       </div>
     </div>

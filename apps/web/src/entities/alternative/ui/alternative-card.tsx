@@ -28,8 +28,17 @@ type Props = {
 export function AlternativeCard({ alternative, selected, onSelect }: Props) {
   return (
     <div
-      className={`rounded-[16px] border p-3 transition ${
-        selected ? 'border-[#3182F6] bg-[#EAF2FF]' : 'border-[#E5E8EB] bg-white'
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      className={`cursor-pointer rounded-[16px] border p-3 transition ${
+        selected ? 'border-[#3182F6] bg-[#EAF2FF]' : 'border-[#E5E8EB] bg-white hover:border-[#C7DCFF]'
       }`}
     >
       <div className="flex items-stretch gap-3">
@@ -70,6 +79,7 @@ export function AlternativeCard({ alternative, selected, onSelect }: Props) {
                 href={alternative.mapHref}
                 target="_blank"
                 rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
                 className="rounded-full border border-[#E5E8EB] bg-[#FAFBFC] px-2 py-1 text-[12px] font-semibold text-[#6B7684]"
               >
                 카카오맵 보기

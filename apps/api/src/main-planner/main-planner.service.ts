@@ -29,7 +29,7 @@ import type {
   PlannerItineraryItemDto,
   PlannerMapMarkerDto,
   PlannerMemberDto,
-  PlannerResolveLinkResponseDto,
+  PlannerResolvePlaceResponseDto,
   PlannerSwapRequestDto,
   PlannerSwapResponseDto,
   PlannerTripDto,
@@ -238,23 +238,21 @@ export class MainPlannerService {
   }
 
   /**
-   * 네이버/카카오 지도 링크(또는 장소명 텍스트)를 실제 장소로 해석해 대안 후보 하나를 돌려준다.
-   * 프론트는 이 후보를 시트에 추가·선택한 뒤 swap 으로 확정한다.
+   * 사용자가 입력한 장소 이름(지도 링크도 허용)을 카카오 Local 로 실제 장소 1곳으로 해석한다.
+   * 프론트는 이 후보를 지도에 띄워 "이 장소가 맞나요?" 확인을 받은 뒤 swap 으로 확정한다.
    */
-  async resolveLink(
+  async resolvePlace(
     user: UserEntity,
     tripId: string,
     itemId: string,
-    url: string,
-  ): Promise<PlannerResolveLinkResponseDto> {
+    query: string,
+  ): Promise<PlannerResolvePlaceResponseDto> {
     await this.tripsService.findOne(tripId, user.id);
     const item = await this.findItem(tripId, itemId);
 
-    const keyword = await this.extractKeywordFromMapLink(url);
+    const keyword = await this.extractSearchKeyword(query);
     if (!keyword) {
-      throw new BadRequestException(
-        '링크에서 장소를 찾지 못했어요. 장소명이 포함된 지도 링크나 장소 이름을 입력해 주세요.',
-      );
+      throw new BadRequestException('장소 이름을 입력해 주세요.');
     }
 
     const results = await this.kakaoLocal.searchByText(
@@ -868,11 +866,11 @@ export class MainPlannerService {
   }
 
   /**
-   * 지도 링크에서 장소명/키워드를 뽑는다.
-   * - http(s) 링크: 단축링크면 리다이렉트를 따라간 뒤 q/query/keyword 파라미터나 검색 경로 세그먼트에서 추출
-   * - URL 이 아니면 입력 텍스트 자체를 장소명으로 사용
+   * 사용자 입력을 카카오 Local 검색 키워드로 정규화한다.
+   * - 일반 장소 이름: 입력 텍스트 그대로 사용
+   * - http(s) 링크(붙여넣기 허용): 단축링크면 리다이렉트를 따라간 뒤 q/query/keyword 파라미터나 검색 경로 세그먼트에서 추출
    */
-  private async extractKeywordFromMapLink(input: string): Promise<string | null> {
+  private async extractSearchKeyword(input: string): Promise<string | null> {
     const raw = input.trim();
     if (!raw) return null;
     if (!/^https?:\/\//i.test(raw)) {

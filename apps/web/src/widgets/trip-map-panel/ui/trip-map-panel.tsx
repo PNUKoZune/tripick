@@ -7,7 +7,7 @@ import type {
   PlannerTripDto,
 } from '@tripick/types';
 
-import { Chip } from '@/shared/ui';
+import { ChangeScheduleButton, Chip } from '@/shared/ui';
 import { PlannerMap } from '@/widgets/planner-map';
 
 type Props = {
@@ -97,13 +97,11 @@ export function TripMapPanel({ trip, items, onSelectItem }: Props) {
                   </div>
                 </button>
                 {item.hasWaiting ? <Chip tone="error">웨이팅</Chip> : null}
-                <button
-                  type="button"
+                <ChangeScheduleButton
                   onClick={() => onSelectItem(item)}
-                  className="h-8 shrink-0 rounded-full bg-[#3182F6] px-3 text-[13px] font-bold text-white transition hover:bg-[#1B64DA] active:translate-y-px"
-                >
-                  전환
-                </button>
+                  urgent={item.hasWaiting}
+                  className="shrink-0"
+                />
               </div>
             </li>
           );
@@ -116,7 +114,7 @@ export function TripMapPanel({ trip, items, onSelectItem }: Props) {
       </ul>
 
       <p className="text-center text-[12px] text-[#8B95A1]">
-        카드 탭 → 지도 이동 · ‘전환’ 버튼 → 대안 보기
+        카드 탭 → 지도 이동 · 변경 아이콘 → 대안 보기
       </p>
     </div>
   );

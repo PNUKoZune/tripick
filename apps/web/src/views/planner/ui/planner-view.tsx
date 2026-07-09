@@ -254,7 +254,7 @@ function PlannerContent({ tripId }: { tripId?: string }) {
                   </span>
                 </div>
                 <p className="mt-1 text-[13px] leading-[20px] text-[#6B7684]">
-                  일정을 클릭하면 지도가 이동하고, ‘전환’ 버튼으로 대안을 볼 수 있어요.
+                  일정을 클릭하면 지도가 이동하고, 변경 아이콘으로 대안을 볼 수 있어요.
                 </p>
                 {trip ? (
                   <div className="mt-3">
@@ -279,7 +279,7 @@ function PlannerContent({ tripId }: { tripId?: string }) {
                 )}
               </div>
               <div className="border-t border-[#E5E8EB] bg-[#FAFBFC] px-5 py-3 text-[12px] text-[#6B7684]">
-                일정을 클릭하면 지도에서 초점이 맞춰지고, ‘전환’ 버튼을 누르면 대안 시트가 열립니다.
+                일정을 클릭하면 지도에서 초점이 맞춰지고, 변경 아이콘을 누르면 대안 시트가 열립니다.
               </div>
             </aside>
 
