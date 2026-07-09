@@ -53,6 +53,7 @@ interface PlaceEmbeddingRow {
   category?: string | null;
   destination_region?: string | null;
   coordinates?: Coordinates | string | null;
+  image_url?: string | null;
   similarity?: number | string | null;
   preference_similarity?: number | string | null;
 }
@@ -96,6 +97,7 @@ export class PlaceEmbeddingRepository {
                category,
                destination_region,
                coordinates,
+               image_url,
                1 - (embedding <=> $1::vector) AS similarity,
                ${preferenceSelect}
         FROM place_embeddings
@@ -293,22 +295,27 @@ export class PlaceEmbeddingRepository {
 
   /**
    * 지역 place_embeddings 를 삭제한다 (재적재/임베딩 서버 전환 시 사용).
-   * 적재가 저장한 원본 라벨(예: '서울특별시')과 seed catalog 의 정규화 라벨(예: 'seoul')을
-   * 모두 지워 임베딩 공간을 깨끗하게 재생성할 수 있게 한다.
+   * 라벨 표기가 섞여 있어도(옛 단축명 '대구' vs 새 법정동 풀네임 '대구광역시' vs seed 슬러그 'daegu')
+   * 어간 프리픽스로 함께 지워 임베딩 공간을 깨끗하게 재생성한다.
+   * 예: region='대구광역시' → 어간 '대구' → '대구%' 로 '대구'·'대구광역시' 모두 삭제.
    */
   async deleteRegion(region: string): Promise<number> {
     const raw = region.toLowerCase();
     const normalized = normalizeDestinationRegion(region);
+    const stem = regionStem(region).toLowerCase();
+    const stemLike = stem ? `${stem}%` : null; // 어간이 비면(비정상 입력) 전체 삭제 방지 위해 미적용
     // CTE 로 삭제 후 개수를 SELECT 한다. DELETE ... RETURNING 을 dataSource.query 로 직접 받으면
     // 드라이버가 [rows, affected] 형태를 돌려줘 rows.length 가 실제 삭제 수와 어긋난다.
     const rows: Array<{ count: string }> = await this.dataSource.query(
       `WITH deleted AS (
          DELETE FROM place_embeddings
-         WHERE lower(destination_region) IN ($1, $2)
+         WHERE lower(destination_region) = $1
+            OR lower(destination_region) = $2
+            OR ($3::text IS NOT NULL AND lower(destination_region) LIKE $3)
          RETURNING 1
        )
        SELECT COUNT(*)::text AS count FROM deleted`,
-      [raw, normalized],
+      [raw, normalized, stemLike],
     );
     return Number(rows[0]?.count ?? 0);
   }
@@ -325,6 +332,7 @@ export class PlaceEmbeddingRepository {
       category: row.category ?? 'attraction',
       address: row.address ?? '',
       coordinates,
+      ...(row.image_url ? { imageUrl: row.image_url } : {}),
     };
 
     const similarity = this.numberOrUndefined(row.similarity);

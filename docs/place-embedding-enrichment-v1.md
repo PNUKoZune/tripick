@@ -49,7 +49,7 @@
 
 - `findProvenance(dedupe)`로 기존 행의 `id·text_hash·embedding_model` 조회.
 - 적재 루프: 텍스트 해시(sha256) + 현재 모델이 **기존과 동일하면 재임베딩 없이 유지(unchanged)**, 다르면 `upsertPlace(…, existingId)`로 **갱신(updated)**, 없으면 **신규(inserted)**.
-- 효과: `--reseed` 없이 텍스트/모델 변경분만 증분 반영, 모델 이관 자동. 재실행 비용(임베딩 호출) 대폭 절감. 버려지던 KTO `firstimage`를 `image_url`로 저장.
+- 효과: `--reseed` 없이 텍스트/모델 변경분만 증분 반영, 모델 이관 자동. 재실행 비용(임베딩 호출) 대폭 절감. 버려지던 KTO `firstimage`를 `image_url`로 저장하고, **런타임 검색(`searchByEmbedding` SELECT → `toCandidate` → `PlaceDto.imageUrl`)에서 노출**해 실제 사용되게 했다.
 
 ### 3.5 KTO 법정동 코드 마이그레이션
 
@@ -59,6 +59,7 @@ KTO 가 `areaCode`·`sigunguCode`·`cat1~3` 파라미터를 폐기하고 법정�
 - `areaBasedList2` 요청 파라미터: `areaCode` → **`lDongRegnCd`**.
 - 시군구는 `sigunguCode`(폐기) 대신 주소 파싱(`parseSigungu`), 카테고리는 폐기 대상이 아닌 `contentTypeId` 매핑을 그대로 사용 → 추가 변경 불필요.
 - 부수 수정: `deleteRegion` 이 `DELETE … RETURNING` 결과를 `dataSource.query` 로 받을 때 드라이버가 `[rows, affected]` 를 돌려줘 삭제 카운트가 항상 2로 잘못 집계되던 버그를, CTE(`WITH deleted AS (DELETE … RETURNING 1) SELECT count(*)`)로 수정.
+- 라벨 정합: `ldongCode2`가 풀네임('대구광역시')을 주는데 기존 DB는 옛 단축명('대구')이라, `deleteRegion`을 어간 프리픽스(`lower(destination_region) LIKE '대구%'`)로 확장해 **옛/새 라벨을 함께 삭제**한다. 덕분에 전국 재적재 시 TRUNCATE 없이도 옛 라벨 orphan 이 남지 않는다(시도 라벨이라 인접 시도 오삭제 없음: '경상북%'는 경상남도 미포함).
 
 ## 4. 스키마 변경 (`infra/postgres/init.sql`)
 
