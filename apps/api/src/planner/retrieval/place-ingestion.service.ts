@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Coordinates } from '@tripick/types';
 import { KAKAO_CATEGORY_CODES, KakaoLocalService } from './kakao-local.service';
+import { IngestCursorRepository } from './ingest-cursor.repository';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { TourApiService } from './tour-api.service';
@@ -26,6 +27,12 @@ export interface IngestOptions {
    * 기본은 false — 해시 벡터가 실제 벡터와 섞여 검색 품질을 해치는 것을 막기 위해 중단한다.
    */
   allowHash?: boolean;
+  /**
+   * append 모드: 지역·소스별 페이지 커서를 이어받아 매 실행 다른 페이지를 적재한다.
+   * 크론 등으로 반복 실행하면 이전에 안 읽은 새 장소가 계속 누적된다.
+   * (미지정 시 항상 page 1 부터 → 같은 상위 N개만 재확인되고 신규는 안 늘어남)
+   */
+  append?: boolean;
 }
 
 /**
@@ -42,6 +49,7 @@ export class PlaceIngestionService {
     private readonly kakaoLocal: KakaoLocalService,
     private readonly embeddings: TextEmbeddingService,
     private readonly repository: PlaceEmbeddingRepository,
+    private readonly cursors: IngestCursorRepository,
   ) {}
 
   async ingest(options: IngestOptions = {}): Promise<IngestSummary> {
@@ -69,11 +77,15 @@ export class PlaceIngestionService {
     if (reseed) {
       this.logger.warn('reseed 모드: 적재 전 대상 지역의 기존 place 벡터를 삭제합니다.');
     }
+    const append = options.append ?? false;
+    if (append) {
+      this.logger.log('append 모드: 지역별 페이지 커서를 이어받아 새 페이지부터 적재합니다.');
+    }
 
     const regions: IngestRegionResult[] = [];
     for (const sido of targets) {
       regions.push(
-        await this.ingestRegion(sido.code, sido.name, sources, maxPerRegion, reseed, allowHash),
+        await this.ingestRegion(sido.code, sido.name, sources, maxPerRegion, reseed, allowHash, append),
       );
     }
 
@@ -99,6 +111,7 @@ export class PlaceIngestionService {
     maxPerRegion: number,
     reseed: boolean,
     allowHash: boolean,
+    append: boolean,
   ): Promise<IngestRegionResult> {
     const deleted = reseed ? await this.repository.deleteRegion(region) : 0;
     if (deleted > 0) {
@@ -109,10 +122,22 @@ export class PlaceIngestionService {
 
     // 관광공사를 먼저 수집한다. 그 좌표들이 카카오 검색의 앵커가 되어
     // 소스 비중을 균형 있게(반반) 맞추고 위치 정확도를 확보한다.
+    // append 모드에서 카카오도 이 배치(다른 페이지) 좌표를 따라가 새 지역을 탐색한다.
     let tourPlaces: IngestPlace[] = [];
     if (sources.includes('tour')) {
-      tourPlaces = await this.tourApi.fetchByArea(areaCode, region, maxPerRegion);
+      // reseed 는 항상 처음부터. append 는 커서를 이어받되 reseed 와 겹치면 처음부터.
+      const startPage = append && !reseed ? await this.cursors.getNextPage(region, 'tour') : 1;
+      const res = await this.tourApi.fetchByArea(areaCode, region, maxPerRegion, startPage);
+      tourPlaces = res.places;
       collected.push(...tourPlaces);
+      if (append) {
+        await this.cursors.setNextPage(region, 'tour', res.nextPage);
+        if (res.nextPage === 1 && startPage !== 1) {
+          this.logger.log(`[${region}] tour 마지막 페이지 도달 → 커서 리셋(다음 실행은 상단부터 재확인)`);
+        } else {
+          this.logger.log(`[${region}] tour append: page ${startPage} → 다음 커서 ${res.nextPage}`);
+        }
+      }
     }
     if (sources.includes('kakao')) {
       collected.push(...(await this.fetchKakao(region, maxPerRegion, tourPlaces)));

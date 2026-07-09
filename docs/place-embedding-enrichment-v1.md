@@ -23,6 +23,7 @@
 | 3 | 임베딩 텍스트 강화 | 텍스트에 원본 카테고리 상세(카카오 `category_name` 경로 / KTO 유형명)와 지역(시도·시군구)을 명시 (포맷은 3.3 참고) |
 | 4 | 증분 UPSERT + provenance | `text_hash`·`embedding_model`·`image_url`·`updated_at` 추가. insert-only → insert/update. 해시·모델 동일하면 재임베딩 생략(유지), 다르면 갱신 |
 | 5 | KTO 법정동 코드 마이그레이션 | 폐기 예정인 `areaCode2`/`areaCode`를 `ldongCode2`/`lDongRegnCd`(법정동 코드)로 교체. `deleteRegion` 삭제 카운트 버그 수정 |
+| 6 | append 모드 (페이지 커서) | `ingest_cursors` 테이블에 지역·소스별 다음 페이지 저장. `--append` 로 반복 실행 시 안 읽은 새 페이지부터 이어 적재 → 크론 누적 |
 
 ## 3. 상세
 
@@ -61,6 +62,17 @@ KTO 가 `areaCode`·`sigunguCode`·`cat1~3` 파라미터를 폐기하고 법정�
 - 부수 수정: `deleteRegion` 이 `DELETE … RETURNING` 결과를 `dataSource.query` 로 받을 때 드라이버가 `[rows, affected]` 를 돌려줘 삭제 카운트가 항상 2로 잘못 집계되던 버그를, CTE(`WITH deleted AS (DELETE … RETURNING 1) SELECT count(*)`)로 수정.
 - 라벨 정합: `ldongCode2`가 풀네임('대구광역시')을 주는데 기존 DB는 옛 단축명('대구')이라, `deleteRegion`을 어간 프리픽스(`lower(destination_region) LIKE '대구%'`)로 확장해 **옛/새 라벨을 함께 삭제**한다. 덕분에 전국 재적재 시 TRUNCATE 없이도 옛 라벨 orphan 이 남지 않는다(시도 라벨이라 인접 시도 오삭제 없음: '경상북%'는 경상남도 미포함).
 
+### 3.6 append 모드 (페이지 커서로 반복 실행 = 누적)
+
+기본(비-append) 실행은 KTO `areaBasedList2`를 항상 **page 1부터** 읽어(정렬 `arrange=O` 고정) 매번 같은 상위 N개만 재확인한다 → provenance 가 "유지"로 처리해 **신규가 안 늘어난다**. 카탈로그를 키우려면 `--max`를 올리거나, `--append`로 페이지를 이어 읽어야 한다.
+
+- `ingest_cursors(region, source, next_page)`에 지역·소스별 다음 페이지를 저장.
+- `--append`: `fetchByArea`가 커서 페이지부터 `numOfRows=min(max,100)`로 읽고, 다음 커서를 저장한다. 끝에 도달하면 `next_page=1`로 wrap(다음 실행은 상단부터 재확인).
+- 카카오는 별도 커서가 없다 — append 시 tour 배치(다른 페이지)의 좌표가 앵커가 되므로 자연히 새 지역을 탐색한다.
+- 증분 UPSERT 와 결합돼 겹치는 장소는 재임베딩 없이 유지, 새 페이지의 신규만 임베딩·삽입된다.
+
+**검증**(경상북도, `--max=40 --append` 2회): RUN1 page1→커서2(신규 6/유지 69), RUN2 page2→커서3(신규 39/유지 36). 행수 167→173→212로 **반복 실행마다 누적** 확인.
+
 ## 4. 스키마 변경 (`infra/postgres/init.sql`)
 
 `place_embeddings`에 컬럼 추가 (모두 `ALTER TABLE … ADD COLUMN IF NOT EXISTS`로 기존 볼륨 안전):
@@ -72,6 +84,8 @@ KTO 가 `areaCode`·`sigunguCode`·`cat1~3` 파라미터를 폐기하고 법정�
 | `text_hash` | 임베딩 대상 텍스트 해시 → 재임베딩 생략 판정 |
 | `embedding_model` | 임베딩 모델 → 모델 전환 감지 |
 | `updated_at` | 갱신 시각 |
+
+신규 테이블 `ingest_cursors(region, source, next_page)` — append 모드 페이지 커서.
 
 기존 실행 중 DB 반영:
 
@@ -95,9 +109,13 @@ docker exec -i tripick-postgres psql -U tripick -d tripick < infra/postgres/init
 cd apps/api
 # 신규 포맷 + 시군구 + provenance 로 재적재 (지역별 권장)
 pnpm ingest:places -- --reseed --regions=경상북도
-# 이후 재실행은 --reseed 없이 증분(변경분만 갱신, 나머지 유지)
-pnpm ingest:places -- --regions=경상북도
+# 카탈로그 확장: --max 를 키우면 더 깊은 페이지의 신규만 증분 삽입
+pnpm ingest:places -- --max=500
+# 크론 누적: --append 로 반복 실행하면 매번 다음 페이지를 이어 적재
+pnpm ingest:places -- --append --max=100
 ```
+
+> **누적 방식**: 같은 `--max`로 비-append 재실행은 신규가 안 늘어난다(항상 상위 N개 재확인). 늘리려면 `--max`를 키우거나 `--append`(페이지 커서)로 돌린다. 라벨 정합 덕에 전국 재적재도 TRUNCATE 없이 안전하다.
 
 ## 7. 검증
 
@@ -117,7 +135,9 @@ pnpm ingest:places -- --regions=경상북도
 | `kakao-local.service.ts` | `searchAround`(카테고리 검색)·`resolveCenter`·키워드 x/y/radius·category_group_code |
 | `tour-api.service.ts` | 법정동 코드(ldongCode2·lDongRegnCd) 이전, 숙박 제외, 유형명(categoryDetail)·시군구(parseSigungu) |
 | `place-ingestion.service.ts` | 앵커 도출·반반 분배, 텍스트 강화, 증분 UPSERT 루프 |
-| `place-embedding.repository.ts` | 지역 어간/시군구 검색 필터, `findProvenance`, insert/update `upsertPlace` |
+| `place-embedding.repository.ts` | 지역 어간/시군구 검색 필터, `findProvenance`, insert/update `upsertPlace`, image_url 노출, deleteRegion 라벨 정합 |
+| `ingest-cursor.repository.ts` | (신규) append 페이지 커서 저장소 |
+| `place-ingestion.module.ts` | IngestCursorRepository 등록 |
 | `place-seeds.ts` | `regionStem`·`parseSigungu`, `inferPlaceTags` categoryDetail |
 | `ingestion.types.ts` / `types.ts` | `sigungu`·`categoryDetail`·`updated`/`unchanged` 필드 |
 | `ingest-places.ts` | 요약 신규/갱신/유지 출력 |

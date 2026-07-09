@@ -69,3 +69,12 @@ CREATE INDEX IF NOT EXISTS idx_place_embeddings_region_name
 
 CREATE INDEX IF NOT EXISTS idx_place_embeddings_kakao_place_id
   ON place_embeddings (kakao_place_id);
+
+-- 적재 페이지 커서 (append 모드: 반복 실행 시 지역·소스별로 다음 페이지부터 이어 적재)
+CREATE TABLE IF NOT EXISTS ingest_cursors (
+  region     TEXT NOT NULL,      -- 시도 라벨 (예: 경상북도)
+  source     TEXT NOT NULL,      -- 'tour' 등 소스
+  next_page  INTEGER NOT NULL DEFAULT 1,  -- 다음 실행이 읽을 페이지. 끝에 도달하면 1로 wrap
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (region, source)
+);

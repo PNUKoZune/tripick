@@ -113,33 +113,44 @@ export class TourApiService {
   }
 
   /**
-   * 특정 법정동 시도(lDongRegnCd)의 관광 장소를 최대 maxItems 건 수집한다.
-   * region 라벨(시도명)을 각 장소에 부여한다.
+   * 특정 법정동 시도(lDongRegnCd)의 관광 장소를 startPage 부터 최대 maxItems 건 수집한다.
+   * numOfRows=maxItems(≤100)로 페이지를 나눠, append 모드가 커서(nextPage)를 이어받아
+   * 매 실행 다른 페이지를 읽게 한다. 끝에 도달하면 nextPage=1 로 wrap.
+   * @returns places 와 다음 실행이 읽을 페이지(nextPage)
    */
   async fetchByArea(
     lDongRegnCd: string,
     region: string,
     maxItems: number,
-  ): Promise<IngestPlace[]> {
+    startPage = 1,
+  ): Promise<{ places: IngestPlace[]; nextPage: number }> {
     const apiKey = this.apiKey();
-    if (!apiKey) return [];
+    if (!apiKey) return { places: [], nextPage: startPage };
 
-    const pageSize = 100;
+    const batchSize = Math.min(Math.max(1, maxItems), 100); // KTO numOfRows 상한 100
+    const pagesToFetch = Math.max(1, Math.ceil(maxItems / batchSize));
     const collected: IngestPlace[] = [];
-    const totalPages = Math.ceil(maxItems / pageSize);
+    let page = startPage;
+    let ended = false;
 
-    for (let page = 1; page <= totalPages; page += 1) {
-      const rows = await this.fetchPage(apiKey, lDongRegnCd, page, pageSize);
-      if (rows.length === 0) break;
+    for (let i = 0; i < pagesToFetch; i += 1) {
+      const rows = await this.fetchPage(apiKey, lDongRegnCd, page, batchSize);
+      page += 1;
+      if (rows.length === 0) {
+        ended = true;
+        break;
+      }
       for (const row of rows) {
         const place = this.toIngestPlace(row, region);
         if (place) collected.push(place);
-        if (collected.length >= maxItems) return collected;
       }
-      if (rows.length < pageSize) break;
+      if (rows.length < batchSize) {
+        ended = true;
+        break;
+      }
     }
 
-    return collected;
+    return { places: collected, nextPage: ended ? 1 : page };
   }
 
   private async fetchPage(

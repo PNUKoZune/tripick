@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { IngestCursorRepository } from './ingest-cursor.repository';
 import { KakaoLocalService } from './kakao-local.service';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
 import { PlaceIngestionService } from './place-ingestion.service';
@@ -33,6 +34,7 @@ import { TourApiService } from './tour-api.service';
     KakaoLocalService,
     TextEmbeddingService,
     PlaceEmbeddingRepository,
+    IngestCursorRepository,
     PlaceIngestionService,
   ],
 })
