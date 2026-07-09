@@ -67,11 +67,11 @@ async function main() {
     console.log('\n=== 적재 요약 ===');
     for (const r of summary.regions) {
       console.log(
-        `${r.region.padEnd(8)} 수집 ${String(r.fetched).padStart(4)} | 신규 ${String(r.inserted).padStart(4)} | skip ${String(r.skipped).padStart(4)} | 삭제 ${String(r.deleted).padStart(4)}`,
+        `${r.region.padEnd(8)} 수집 ${String(r.fetched).padStart(4)} | 신규 ${String(r.inserted).padStart(4)} | 갱신 ${String(r.updated).padStart(4)} | 유지 ${String(r.unchanged).padStart(4)} | 삭제 ${String(r.deleted).padStart(4)}`,
       );
     }
     console.log(
-      `----\n총 수집 ${summary.totalFetched} | 총 신규 ${summary.totalInserted} | 총 삭제 ${summary.totalDeleted}`,
+      `----\n총 수집 ${summary.totalFetched} | 총 신규 ${summary.totalInserted} | 총 갱신 ${summary.totalUpdated} | 총 유지 ${summary.totalUnchanged} | 총 삭제 ${summary.totalDeleted}`,
     );
   } finally {
     await app.close();

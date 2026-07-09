@@ -24,8 +24,12 @@ export interface IngestRegionResult {
   region: string;
   fetched: number;
   deduped: number;
+  /** 신규 삽입 */
   inserted: number;
-  skipped: number;
+  /** 내용/모델이 바뀌어 재임베딩·갱신 */
+  updated: number;
+  /** 텍스트 해시·모델 동일해 재임베딩 없이 유지 */
+  unchanged: number;
   /** reseed 시 적재 전 삭제한 기존 벡터 수 */
   deleted: number;
 }
@@ -34,5 +38,7 @@ export interface IngestSummary {
   regions: IngestRegionResult[];
   totalFetched: number;
   totalInserted: number;
+  totalUpdated: number;
+  totalUnchanged: number;
   totalDeleted: number;
 }

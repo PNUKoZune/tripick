@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Coordinates } from '@tripick/types';
@@ -80,10 +81,13 @@ export class PlaceIngestionService {
       regions,
       totalFetched: regions.reduce((sum, r) => sum + r.fetched, 0),
       totalInserted: regions.reduce((sum, r) => sum + r.inserted, 0),
+      totalUpdated: regions.reduce((sum, r) => sum + r.updated, 0),
+      totalUnchanged: regions.reduce((sum, r) => sum + r.unchanged, 0),
       totalDeleted: regions.reduce((sum, r) => sum + r.deleted, 0),
     };
     this.logger.log(
-      `적재 완료: ${regions.length}개 지역, 수집 ${summary.totalFetched}건 → 신규 ${summary.totalInserted}건 (삭제 ${summary.totalDeleted}건)`,
+      `적재 완료: ${regions.length}개 지역, 수집 ${summary.totalFetched}건 → ` +
+        `신규 ${summary.totalInserted} / 갱신 ${summary.totalUpdated} / 유지 ${summary.totalUnchanged} (삭제 ${summary.totalDeleted})`,
     );
     return summary;
   }
@@ -115,11 +119,29 @@ export class PlaceIngestionService {
     }
 
     const deduped = this.dedupe(collected);
+    const model = this.embeddingModelId();
 
     let inserted = 0;
+    let updated = 0;
+    let unchanged = 0;
     for (const place of deduped) {
-      const embedding = await this.embedStrict(this.buildText(place), allowHash);
-      const added = await this.repository.upsertPlace(
+      const text = this.buildText(place);
+      const textHash = createHash('sha256').update(text).digest('hex');
+      const existing = await this.repository.findProvenance({
+        kakaoPlaceId: place.kakaoPlaceId ?? null,
+        tourismApiId: place.tourismApiId ?? null,
+        region: place.region,
+        name: place.name,
+      });
+
+      // 텍스트·모델이 모두 동일하면 재임베딩 없이 유지 (증분 적재의 핵심)
+      if (existing && existing.textHash === textHash && existing.embeddingModel === model) {
+        unchanged += 1;
+        continue;
+      }
+
+      const { vector, source } = await this.embedStrict(text, allowHash);
+      await this.repository.upsertPlace(
         {
           kakaoPlaceId: place.kakaoPlaceId ?? null,
           tourismApiId: place.tourismApiId ?? null,
@@ -129,10 +151,15 @@ export class PlaceIngestionService {
           region: place.region,
           regionSigungu: place.sigungu ?? null,
           coordinates: place.coordinates,
+          imageUrl: place.imageUrl ?? null,
+          textHash,
+          embeddingModel: source === 'remote' ? model : 'hash',
         },
-        embedding,
+        vector,
+        existing?.id,
       );
-      if (added) inserted += 1;
+      if (existing) updated += 1;
+      else inserted += 1;
     }
 
     const result: IngestRegionResult = {
@@ -140,11 +167,12 @@ export class PlaceIngestionService {
       fetched: collected.length,
       deduped: deduped.length,
       inserted,
-      skipped: deduped.length - inserted,
+      updated,
+      unchanged,
       deleted,
     };
     this.logger.log(
-      `[${region}] 수집 ${result.fetched} → dedupe ${result.deduped} → 신규 ${result.inserted} (skip ${result.skipped}, 삭제 ${result.deleted})`,
+      `[${region}] 수집 ${result.fetched} → dedupe ${result.deduped} → 신규 ${inserted} / 갱신 ${updated} / 유지 ${unchanged} (삭제 ${deleted})`,
     );
     return result;
   }
@@ -296,18 +324,28 @@ export class PlaceIngestionService {
    * 임베딩을 만들되, 해시 폴백이 감지되면(allowHash=false) 한 번 재시도 후 중단한다.
    * 적재 도중 서버가 죽어 해시 벡터가 조용히 섞이는 것을 막는다.
    */
-  private async embedStrict(text: string, allowHash: boolean): Promise<number[]> {
+  private async embedStrict(
+    text: string,
+    allowHash: boolean,
+  ): Promise<{ vector: number[]; source: 'remote' | 'hash' }> {
     const first = await this.embeddings.embedWithSource(text);
-    if (first.source === 'remote' || allowHash) return first.vector;
+    if (first.source === 'remote' || allowHash) {
+      return { vector: first.vector, source: first.source };
+    }
 
     // 일시적 타임아웃 흡수용 1회 재시도
     const retry = await this.embeddings.embedWithSource(text);
-    if (retry.source === 'remote') return retry.vector;
+    if (retry.source === 'remote') return { vector: retry.vector, source: retry.source };
 
     throw new Error(
       `적재 중 임베딩 서버 응답 실패(해시 폴백)로 중단합니다. 이미 적재된 행은 유지됩니다. ` +
         `문제 텍스트="${text.slice(0, 40)}…". 서버 복구 후 재실행(필요 시 --reseed) 하세요.`,
     );
+  }
+
+  /** provenance 에 기록할 임베딩 모델 식별자 (embedding_model 컬럼). */
+  private embeddingModelId(): string {
+    return this.config.get<string>('LLM_EMBEDDING_MODEL', 'text-embedding-model');
   }
 
   /**

@@ -22,6 +22,26 @@ export interface UpsertPlaceInput {
   /** region_sigungu 컬럼에 저장할 시군구 라벨 (예: '경주시') */
   regionSigungu?: string | null;
   coordinates: Coordinates;
+  imageUrl?: string | null;
+  /** 임베딩 대상 텍스트 해시 (증분 upsert 판정용) */
+  textHash?: string | null;
+  /** 임베딩에 사용한 모델 식별자 */
+  embeddingModel?: string | null;
+}
+
+/** 멱등/증분 판정을 위한 기존 행 조회 결과. */
+export interface PlaceProvenance {
+  id: string;
+  textHash: string | null;
+  embeddingModel: string | null;
+}
+
+/** upsertPlace 시 중복/기존 행을 찾기 위한 키. */
+export interface PlaceDedupeKey {
+  kakaoPlaceId?: string | null;
+  tourismApiId?: string | null;
+  region: string;
+  name: string;
 }
 
 interface PlaceEmbeddingRow {
@@ -123,10 +143,20 @@ export class PlaceEmbeddingRepository {
     let inserted = 0;
 
     for (const place of seeds) {
+      const kakaoPlaceId = place.kakaoPlaceId ?? place.id;
+      // seed 는 insert-only: 이미 있으면 건너뛴다.
+      const existing = await this.findProvenance({
+        kakaoPlaceId,
+        tourismApiId: place.tourismApiId ?? null,
+        region,
+        name: place.name,
+      });
+      if (existing) continue;
+
       const embedding = await embed(buildPlaceEmbeddingText(place));
-      const added = await this.upsertPlace(
+      await this.upsertPlace(
         {
-          kakaoPlaceId: place.kakaoPlaceId ?? place.id,
+          kakaoPlaceId,
           tourismApiId: place.tourismApiId ?? null,
           name: place.name,
           address: place.address,
@@ -136,7 +166,7 @@ export class PlaceEmbeddingRepository {
         },
         embedding,
       );
-      inserted += added ? 1 : 0;
+      inserted += 1;
     }
 
     if (inserted > 0) {
@@ -146,21 +176,78 @@ export class PlaceEmbeddingRepository {
   }
 
   /**
-   * 장소 1건을 place_embeddings 에 멱등 삽입한다.
-   * 중복 판정 우선순위: kakao_place_id > tourism_api_id > (destination_region, name).
-   * 이미 있으면 삽입하지 않고 false 를 반환한다.
+   * 중복 판정 우선순위(kakao_place_id > tourism_api_id > (destination_region, name))로
+   * 기존 행의 provenance(id·text_hash·embedding_model)를 조회한다. 없으면 null.
+   * 적재 시 재임베딩 여부를 텍스트 해시·모델로 판단하는 데 쓴다.
    */
-  async upsertPlace(place: UpsertPlaceInput, embedding: number[]): Promise<boolean> {
+  async findProvenance(dedupe: PlaceDedupeKey): Promise<PlaceProvenance | null> {
+    const clause = dedupe.kakaoPlaceId
+      ? { sql: 'kakao_place_id = $1', params: [dedupe.kakaoPlaceId] }
+      : dedupe.tourismApiId
+        ? { sql: 'tourism_api_id = $1', params: [dedupe.tourismApiId] }
+        : {
+            sql: 'lower(destination_region) = $1 AND name = $2',
+            params: [dedupe.region.toLowerCase(), dedupe.name],
+          };
+
+    const rows: Array<{ id: string; text_hash: string | null; embedding_model: string | null }> =
+      await this.dataSource.query(
+        `SELECT id, text_hash, embedding_model FROM place_embeddings WHERE ${clause.sql} LIMIT 1`,
+        clause.params,
+      );
+    const row = rows[0];
+    return row
+      ? { id: row.id, textHash: row.text_hash, embeddingModel: row.embedding_model }
+      : null;
+  }
+
+  /**
+   * 장소 1건을 삽입하거나(existingId 없음) 갱신한다(existingId 있음).
+   * 갱신 시 메타데이터·임베딩·provenance(text_hash·embedding_model·updated_at)를 모두 새로 쓴다.
+   * → insert-only 였던 이전과 달리 텍스트/모델이 바뀐 행을 --reseed 없이 증분 갱신할 수 있다.
+   */
+  async upsertPlace(
+    place: UpsertPlaceInput,
+    embedding: number[],
+    existingId?: string,
+  ): Promise<void> {
     const vector = `[${embedding.join(',')}]`;
-    const region = place.region.toLowerCase();
 
-    const dedupeClause = place.kakaoPlaceId
-      ? { sql: 'kakao_place_id = $10', param: place.kakaoPlaceId }
-      : place.tourismApiId
-        ? { sql: 'tourism_api_id = $10', param: place.tourismApiId }
-        : { sql: 'lower(destination_region) = $10 AND name = $3', param: region };
+    if (existingId) {
+      await this.dataSource.query(
+        `
+        UPDATE place_embeddings SET
+          name = $2,
+          address = $3,
+          category = $4,
+          destination_region = $5,
+          region_sigungu = $6,
+          coordinates = $7::jsonb,
+          image_url = $8,
+          embedding = $9::vector,
+          text_hash = $10,
+          embedding_model = $11,
+          updated_at = NOW()
+        WHERE id = $1
+        `,
+        [
+          existingId,
+          place.name,
+          place.address ?? null,
+          place.category ?? null,
+          place.region,
+          place.regionSigungu ?? null,
+          JSON.stringify(place.coordinates),
+          place.imageUrl ?? null,
+          vector,
+          place.textHash ?? null,
+          place.embeddingModel ?? null,
+        ],
+      );
+      return;
+    }
 
-    const result: Array<{ inserted: number }> = await this.dataSource.query(
+    await this.dataSource.query(
       `
       INSERT INTO place_embeddings (
         kakao_place_id,
@@ -171,13 +258,13 @@ export class PlaceEmbeddingRepository {
         destination_region,
         region_sigungu,
         coordinates,
-        embedding
+        image_url,
+        embedding,
+        text_hash,
+        embedding_model,
+        updated_at
       )
-      SELECT $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::vector
-      WHERE NOT EXISTS (
-        SELECT 1 FROM place_embeddings WHERE ${dedupeClause.sql}
-      )
-      RETURNING 1 AS inserted
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::vector, $11, $12, NOW())
       `,
       [
         place.kakaoPlaceId ?? null,
@@ -188,12 +275,12 @@ export class PlaceEmbeddingRepository {
         place.region,
         place.regionSigungu ?? null,
         JSON.stringify(place.coordinates),
+        place.imageUrl ?? null,
         vector,
-        dedupeClause.param,
+        place.textHash ?? null,
+        place.embeddingModel ?? null,
       ],
     );
-
-    return (result[0]?.inserted ?? 0) > 0;
   }
 
   async countByRegion(region: string): Promise<number> {
