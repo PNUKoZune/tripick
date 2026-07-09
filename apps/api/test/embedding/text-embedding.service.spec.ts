@@ -22,6 +22,7 @@ describe('TextEmbeddingService.embedWithSource', () => {
     const result = await makeService().embedWithSource('테스트');
     expect(result.source).toBe('remote');
     expect(result.vector).toHaveLength(1024); // normalizeDimensions 패딩 (기본 차원)
+    expect(result.remoteDimensions).toBe(3); // 정규화 전 원본 차원 (차원 불일치 감지용)
   });
 
   it('falls back to source=hash when the embedding server is unavailable', async () => {
@@ -29,6 +30,7 @@ describe('TextEmbeddingService.embedWithSource', () => {
     const result = await makeService().embedWithSource('테스트');
     expect(result.source).toBe('hash');
     expect(result.vector).toHaveLength(1024);
+    expect(result.remoteDimensions).toBeUndefined(); // hash 폴백은 원본 차원 없음
   });
 
   it('embed() still returns just the vector', async () => {
