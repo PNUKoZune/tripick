@@ -56,7 +56,8 @@ flowchart TD
   A["pnpm ingest:places (--regions/--sources/--max/--reseed)"] --> B["TourApiService.fetchSidoList"]
   B --> C{"지역별 반복"}
   C --> D["TourApiService.fetchByArea (KorService2)"]
-  C --> E["KakaoLocalService.search"]
+  D --> D2["관광공사 좌표로 앵커 클러스터 도출"]
+  D2 --> E["KakaoLocalService.searchAround<br/>(앵커별 카테고리 검색 CT1·AT4·FD6·CE7)"]
   D --> F["정규화 IngestPlace"]
   E --> F
   F --> G["dedupe: ID + 이름·좌표(≈100m)"]
@@ -67,7 +68,10 @@ flowchart TD
 ### 3.1 소스 수집
 
 - **한국관광공사 KorService2** (`TourApiService`): `areaCode2`로 시도 코드 목록, `areaBasedList2`로 시도별 장소(contentid, 좌표, 주소, contentTypeId→category). `KTO_API_KEY` 필요, 페이지네이션(numOfRows=100), 좌표 0/비유효·제목 없음은 제외.
-- **카카오 로컬** (`KakaoLocalService`): 지역명 키워드 검색. `KAKAO_LOCAL_API_KEY`(또는 `KAKAO_REST_API_KEY`) 필요. 런타임 fallback과 적재 소스로 공용.
+- **카카오 로컬** (`KakaoLocalService.searchAround`): **위치+카테고리 기반 카테고리 검색**(`search/category.json`). 관광공사가 먼저 수집한 좌표를 격자(≈0.1°)로 버킷팅해 밀집 순 **앵커**(관광 중심지)를 뽑고, 앵커별로 4개 `category_group_code`(CT1 문화시설·AT4 관광명소·FD6 음식점·CE7 카페)를 반경(`KAKAO_INGEST_RADIUS_M`) 안에서 순회한다. 키워드 검색과 달리 x/y/radius 로 지역이 묶여 **타지역 동명 장소(예: 경주 밖 "경주식당")가 섞이지 않는다**. `KAKAO_LOCAL_API_KEY`(또는 `KAKAO_REST_API_KEY`) 필요.
+  - **소스 비중(반반)**: 카카오 budget 을 관광공사와 동일한 `--max` 상한으로 두고 앵커·카테고리에 고르게 분배해, 그동안 키워드 검색 단일 페이지로 소수만 수집돼 관광공사에 치우치던 문제를 해소한다.
+  - **관광공사 좌표가 없을 때**(`--sources=kakao` 등): `resolveCenter`로 지역명을 지오코딩해 중심 1곳(반경 내)만으로 폴백하며, 커버리지 제한을 경고 로그로 남긴다.
+  - **런타임 fallback** `KakaoLocalService.search`는 키워드 검색을 유지하되, `currentLocation`이 있으면 x/y/radius(`KAKAO_SEARCH_RADIUS_M`)로 묶어 이탈·웨이팅 재계획 시 타지역 누수를 막는다.
 
 ### 3.2 정규화·중복 제거
 
@@ -193,6 +197,9 @@ cd apps/api && pnpm reembed:preferences
 | --- | --- | --- |
 | `KTO_API_KEY` | — | 한국관광공사 KorService2 키 (적재) |
 | `KAKAO_LOCAL_API_KEY` / `KAKAO_REST_API_KEY` | — | 카카오 로컬 키 (적재·런타임 fallback) |
+| `KAKAO_SEARCH_RADIUS_M` | `20000` | 런타임 키워드 검색 반경(m). `currentLocation` 있을 때만 적용. 최대 20000 |
+| `KAKAO_INGEST_RADIUS_M` | `10000` | 적재 카테고리 검색 반경(m). 앵커 1곳 커버 범위. 최대 20000 |
+| `KAKAO_INGEST_MAX_ANCHORS` | `8` | 적재 시 시도별 카카오 앵커(관광공사 좌표 클러스터 중심) 최대 개수 |
 | `DATABASE_URL` | `postgresql://tripick:tripick@localhost:5432/tripick` | 적재 CLI DB 연결 |
 | `LLM_BASE_URL` / `LLM_API_KEY` | `http://localhost:8080/v1` / `local` | chat/planner LLM 엔드포인트 |
 | `LLM_EMBEDDING_BASE_URL` / `LLM_EMBEDDING_API_KEY` | (미설정 시 `LLM_BASE_URL`/`LLM_API_KEY` 폴백) | 임베딩 전용 서버. 별도 포트로 분리할 때 사용 (예: `http://localhost:8081/v1`) |

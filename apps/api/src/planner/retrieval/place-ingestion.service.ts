@@ -1,11 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { KakaoLocalService } from './kakao-local.service';
+import { ConfigService } from '@nestjs/config';
+import type { Coordinates } from '@tripick/types';
+import { KAKAO_CATEGORY_CODES, KakaoLocalService } from './kakao-local.service';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { TourApiService } from './tour-api.service';
 import { inferPlaceTags } from './place-seeds';
 import type { IngestPlace, IngestRegionResult, IngestSource, IngestSummary } from './ingestion.types';
-import type { RetrievalContext } from './types';
 
 export interface IngestOptions {
   /** 특정 시도명만 적재 (예: '서울'). 미지정 시 전국 시도. */
@@ -35,6 +36,7 @@ export class PlaceIngestionService {
   private readonly logger = new Logger(PlaceIngestionService.name);
 
   constructor(
+    private readonly config: ConfigService,
     private readonly tourApi: TourApiService,
     private readonly kakaoLocal: KakaoLocalService,
     private readonly embeddings: TextEmbeddingService,
@@ -101,11 +103,15 @@ export class PlaceIngestionService {
 
     const collected: IngestPlace[] = [];
 
+    // 관광공사를 먼저 수집한다. 그 좌표들이 카카오 검색의 앵커가 되어
+    // 소스 비중을 균형 있게(반반) 맞추고 위치 정확도를 확보한다.
+    let tourPlaces: IngestPlace[] = [];
     if (sources.includes('tour')) {
-      collected.push(...(await this.tourApi.fetchByArea(areaCode, region, maxPerRegion)));
+      tourPlaces = await this.tourApi.fetchByArea(areaCode, region, maxPerRegion);
+      collected.push(...tourPlaces);
     }
     if (sources.includes('kakao')) {
-      collected.push(...(await this.fetchKakao(region, maxPerRegion)));
+      collected.push(...(await this.fetchKakao(region, maxPerRegion, tourPlaces)));
     }
 
     const deduped = this.dedupe(collected);
@@ -142,17 +148,43 @@ export class PlaceIngestionService {
     return result;
   }
 
-  /** 기존 KakaoLocalService.search() 를 재사용해 지역 장소를 수집한다. */
-  private async fetchKakao(region: string, maxItems: number): Promise<IngestPlace[]> {
-    const context: RetrievalContext = {
-      userId: 'ingestion',
-      destination: region,
-    };
-    const candidates = await this.kakaoLocal.search(context, maxItems);
-    return candidates.flatMap((c) => {
-      if (!c.kakaoPlaceId) return [];
-      return [
-        {
+  /**
+   * 관광공사 좌표에서 뽑은 앵커들을 중심으로 카카오 카테고리 검색(위치+category_group_code)을 돌려
+   * 지역 장소를 수집한다. budget(=관광공사와 동일 상한)을 앵커·카테고리에 고르게 분배해
+   * 소스 비중을 반반으로 맞춘다. 관광공사 좌표가 없으면 지역 중심 1곳으로 폴백한다.
+   */
+  private async fetchKakao(
+    region: string,
+    budget: number,
+    tourPlaces: IngestPlace[],
+  ): Promise<IngestPlace[]> {
+    const radius = this.ingestRadius();
+    let centers = this.deriveAnchors(tourPlaces, this.maxAnchors());
+
+    if (centers.length === 0) {
+      const center = await this.kakaoLocal.resolveCenter(region);
+      if (!center) {
+        this.logger.warn(`[${region}] 카카오 앵커 좌표를 찾지 못해 카카오 수집을 건너뜁니다.`);
+        return [];
+      }
+      this.logger.warn(
+        `[${region}] 관광공사 좌표가 없어 지역 중심 1곳(반경 ${radius}m)만으로 카카오 수집 — 커버리지가 제한적입니다.`,
+      );
+      centers = [center];
+    }
+
+    const perAnchor = Math.max(1, Math.ceil(budget / centers.length));
+    const perCategory = Math.max(1, Math.ceil(perAnchor / KAKAO_CATEGORY_CODES.length));
+
+    const collected: IngestPlace[] = [];
+    const seen = new Set<string>();
+    for (const center of centers) {
+      if (collected.length >= budget) break;
+      const candidates = await this.kakaoLocal.searchAround(center, radius, perCategory);
+      for (const c of candidates) {
+        if (!c.kakaoPlaceId || seen.has(c.kakaoPlaceId)) continue;
+        seen.add(c.kakaoPlaceId);
+        collected.push({
           kakaoPlaceId: c.kakaoPlaceId,
           name: c.name,
           category: c.category,
@@ -160,9 +192,43 @@ export class PlaceIngestionService {
           coordinates: c.coordinates,
           region,
           source: 'kakao' as const,
-        },
-      ];
-    });
+        });
+        if (collected.length >= budget) break;
+      }
+    }
+    return collected;
+  }
+
+  /**
+   * 관광공사 장소 좌표를 격자(≈0.1°, 약 10km)로 버킷팅해 밀집 순으로 앵커(버킷 중심)를 뽑는다.
+   * 장소가 실제로 몰린 지역(관광 중심지)을 카카오 검색의 중심으로 삼아 시도 전역을 고르게 훑는다.
+   */
+  private deriveAnchors(places: IngestPlace[], maxAnchors: number): Coordinates[] {
+    if (places.length === 0) return [];
+    const buckets = new Map<string, { latSum: number; lngSum: number; count: number }>();
+    for (const place of places) {
+      const { lat, lng } = place.coordinates;
+      const key = `${lat.toFixed(1)},${lng.toFixed(1)}`;
+      const bucket = buckets.get(key) ?? { latSum: 0, lngSum: 0, count: 0 };
+      bucket.latSum += lat;
+      bucket.lngSum += lng;
+      bucket.count += 1;
+      buckets.set(key, bucket);
+    }
+    return [...buckets.values()]
+      .sort((a, b) => b.count - a.count)
+      .slice(0, Math.max(1, maxAnchors))
+      .map((b) => ({ lat: b.latSum / b.count, lng: b.lngSum / b.count }));
+  }
+
+  private ingestRadius(): number {
+    const value = Number(this.config.get<string | number>('KAKAO_INGEST_RADIUS_M', 10000));
+    return Number.isFinite(value) && value > 0 ? Math.min(value, 20000) : 10000;
+  }
+
+  private maxAnchors(): number {
+    const value = Number(this.config.get<string | number>('KAKAO_INGEST_MAX_ANCHORS', 8));
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 8;
   }
 
   /**
