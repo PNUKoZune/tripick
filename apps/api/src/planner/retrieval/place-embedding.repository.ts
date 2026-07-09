@@ -299,13 +299,18 @@ export class PlaceEmbeddingRepository {
   async deleteRegion(region: string): Promise<number> {
     const raw = region.toLowerCase();
     const normalized = normalizeDestinationRegion(region);
-    const rows: Array<{ deleted: number }> = await this.dataSource.query(
-      `DELETE FROM place_embeddings
-       WHERE lower(destination_region) IN ($1, $2)
-       RETURNING 1 AS deleted`,
+    // CTE 로 삭제 후 개수를 SELECT 한다. DELETE ... RETURNING 을 dataSource.query 로 직접 받으면
+    // 드라이버가 [rows, affected] 형태를 돌려줘 rows.length 가 실제 삭제 수와 어긋난다.
+    const rows: Array<{ count: string }> = await this.dataSource.query(
+      `WITH deleted AS (
+         DELETE FROM place_embeddings
+         WHERE lower(destination_region) IN ($1, $2)
+         RETURNING 1
+       )
+       SELECT COUNT(*)::text AS count FROM deleted`,
       [raw, normalized],
     );
-    return rows.length;
+    return Number(rows[0]?.count ?? 0);
   }
 
   private toCandidate(row: PlaceEmbeddingRow): RawPlaceCandidate[] {

@@ -22,6 +22,7 @@
 | 3 | 지역 라벨 granularity | `region_sigungu` 컬럼 추가(주소 파싱). 런타임 검색을 목적지 어간(`regionStem`) 기반 `region_sigungu`/`destination_region` 매칭으로 교체 |
 | 3 | 임베딩 텍스트 강화 | 텍스트에 원본 카테고리 상세(카카오 `category_name` 경로 / KTO 유형명)와 지역(시도·시군구)을 명시 (포맷은 3.3 참고) |
 | 4 | 증분 UPSERT + provenance | `text_hash`·`embedding_model`·`image_url`·`updated_at` 추가. insert-only → insert/update. 해시·모델 동일하면 재임베딩 생략(유지), 다르면 갱신 |
+| 5 | KTO 법정동 코드 마이그레이션 | 폐기 예정인 `areaCode2`/`areaCode`를 `ldongCode2`/`lDongRegnCd`(법정동 코드)로 교체. `deleteRegion` 삭제 카운트 버그 수정 |
 
 ## 3. 상세
 
@@ -49,6 +50,15 @@
 - `findProvenance(dedupe)`로 기존 행의 `id·text_hash·embedding_model` 조회.
 - 적재 루프: 텍스트 해시(sha256) + 현재 모델이 **기존과 동일하면 재임베딩 없이 유지(unchanged)**, 다르면 `upsertPlace(…, existingId)`로 **갱신(updated)**, 없으면 **신규(inserted)**.
 - 효과: `--reseed` 없이 텍스트/모델 변경분만 증분 반영, 모델 이관 자동. 재실행 비용(임베딩 호출) 대폭 절감. 버려지던 KTO `firstimage`를 `image_url`로 저장.
+
+### 3.5 KTO 법정동 코드 마이그레이션
+
+KTO 가 `areaCode`·`sigunguCode`·`cat1~3` 파라미터를 폐기하고 법정동 코드(`lDongRegnCd`·`lDongSignguCd`)·분류체계(`lclsSystm1~3`)로 대체함에 따라, `TourApiService`가 실제로 쓰던 부분을 이전했다.
+
+- `fetchSidoList`: `areaCode2` → **`ldongCode2`** (반환 `code`=`lDongRegnCd`, 예: 서울=11, 경북=47).
+- `areaBasedList2` 요청 파라미터: `areaCode` → **`lDongRegnCd`**.
+- 시군구는 `sigunguCode`(폐기) 대신 주소 파싱(`parseSigungu`), 카테고리는 폐기 대상이 아닌 `contentTypeId` 매핑을 그대로 사용 → 추가 변경 불필요.
+- 부수 수정: `deleteRegion` 이 `DELETE … RETURNING` 결과를 `dataSource.query` 로 받을 때 드라이버가 `[rows, affected]` 를 돌려줘 삭제 카운트가 항상 2로 잘못 집계되던 버그를, CTE(`WITH deleted AS (DELETE … RETURNING 1) SELECT count(*)`)로 수정.
 
 ## 4. 스키마 변경 (`infra/postgres/init.sql`)
 
@@ -104,7 +114,7 @@ pnpm ingest:places -- --regions=경상북도
 | 파일 | 변경 |
 | --- | --- |
 | `kakao-local.service.ts` | `searchAround`(카테고리 검색)·`resolveCenter`·키워드 x/y/radius·category_group_code |
-| `tour-api.service.ts` | 숙박 제외, 유형명(categoryDetail)·시군구(parseSigungu) |
+| `tour-api.service.ts` | 법정동 코드(ldongCode2·lDongRegnCd) 이전, 숙박 제외, 유형명(categoryDetail)·시군구(parseSigungu) |
 | `place-ingestion.service.ts` | 앵커 도출·반반 분배, 텍스트 강화, 증분 UPSERT 루프 |
 | `place-embedding.repository.ts` | 지역 어간/시군구 검색 필터, `findProvenance`, insert/update `upsertPlace` |
 | `place-seeds.ts` | `regionStem`·`parseSigungu`, `inferPlaceTags` categoryDetail |

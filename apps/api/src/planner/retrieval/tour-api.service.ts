@@ -4,16 +4,16 @@ import axios from 'axios';
 import { parseSigungu } from './place-seeds';
 import type { IngestPlace } from './ingestion.types';
 
-/** areaCode2 응답 아이템 (시도 / 시군구 공통) */
-interface AreaCodeItem {
+/** ldongCode2 응답 아이템 (법정동 시도 / 시군구 공통). code=lDongRegnCd/lDongSignguCd */
+interface LdongCodeItem {
   code: string | number;
   name: string;
 }
 
-interface AreaCodeResponse {
+interface LdongCodeResponse {
   response?: {
     body?: {
-      items?: '' | { item?: AreaCodeItem | AreaCodeItem[] };
+      items?: '' | { item?: LdongCodeItem | LdongCodeItem[] };
     };
   };
 }
@@ -76,8 +76,12 @@ function toArray<T>(item: T | T[] | undefined): T[] {
 
 /**
  * 한국관광공사 국문관광정보(KorService2)에서 지역 기반 관광 장소를 수집한다.
- * - areaCode2: 시도 코드 목록
- * - areaBasedList2: 시도별 장소 목록 (contentid, 좌표, 주소, 카테고리)
+ * - ldongCode2: 법정동 시도 코드(lDongRegnCd) 목록
+ * - areaBasedList2: 시도별 장소 목록 (contentid, 좌표, 주소, contentTypeId)
+ *
+ * 지역 필터는 폐기 예정인 areaCode/sigunguCode 대신 **법정동 코드(lDongRegnCd)**를 쓴다
+ * (KTO 가 areaCode·sigunguCode·cat1~3 을 lDongRegnCd·lDongSignguCd·lclsSystm1~3 으로 대체).
+ * 카테고리는 폐기 대상이 아닌 contentTypeId 로 매핑하고, 시군구는 주소에서 파싱한다.
  * 적재 파이프라인(PlaceIngestionService) 전용. 런타임 조회에는 사용하지 않는다.
  */
 @Injectable()
@@ -87,11 +91,11 @@ export class TourApiService {
 
   constructor(private readonly config: ConfigService) {}
 
-  /** 전국 시도 코드 목록 (areaCode 미지정 시 시도 반환). */
+  /** 전국 법정동 시도 목록 (code=lDongRegnCd). lDongRegnCd 미지정 시 시도 반환. */
   async fetchSidoList(): Promise<Array<{ code: string; name: string }>> {
     const apiKey = this.apiKey();
     if (!apiKey) return [];
-    const res = await axios.get<AreaCodeResponse>(`${this.BASE}/areaCode2`, {
+    const res = await axios.get<LdongCodeResponse>(`${this.BASE}/ldongCode2`, {
       params: {
         serviceKey: apiKey,
         numOfRows: 100,
@@ -100,6 +104,7 @@ export class TourApiService {
         MobileApp: 'TriPick',
         _type: 'json',
       },
+      timeout: 15000,
     });
     const items = res.data.response?.body?.items;
     return toArray(items && typeof items !== 'string' ? items.item : undefined).map(
@@ -108,11 +113,11 @@ export class TourApiService {
   }
 
   /**
-   * 특정 시도(areaCode)의 관광 장소를 최대 maxItems 건 수집한다.
+   * 특정 법정동 시도(lDongRegnCd)의 관광 장소를 최대 maxItems 건 수집한다.
    * region 라벨(시도명)을 각 장소에 부여한다.
    */
   async fetchByArea(
-    areaCode: string,
+    lDongRegnCd: string,
     region: string,
     maxItems: number,
   ): Promise<IngestPlace[]> {
@@ -124,7 +129,7 @@ export class TourApiService {
     const totalPages = Math.ceil(maxItems / pageSize);
 
     for (let page = 1; page <= totalPages; page += 1) {
-      const rows = await this.fetchPage(apiKey, areaCode, page, pageSize);
+      const rows = await this.fetchPage(apiKey, lDongRegnCd, page, pageSize);
       if (rows.length === 0) break;
       for (const row of rows) {
         const place = this.toIngestPlace(row, region);
@@ -139,7 +144,7 @@ export class TourApiService {
 
   private async fetchPage(
     apiKey: string,
-    areaCode: string,
+    lDongRegnCd: string,
     pageNo: number,
     numOfRows: number,
   ): Promise<TourAreaItem[]> {
@@ -153,7 +158,7 @@ export class TourApiService {
           MobileApp: 'TriPick',
           _type: 'json',
           arrange: 'O', // 대표이미지 있는 순 정렬
-          areaCode,
+          lDongRegnCd, // 폐기 예정인 areaCode 대체 (법정동 시도 코드)
         },
         timeout: 10000,
       });
@@ -161,7 +166,7 @@ export class TourApiService {
       return toArray(items && typeof items !== 'string' ? items.item : undefined);
     } catch (error) {
       this.logger.warn(
-        `KTO areaBasedList2 실패 (areaCode=${areaCode}, page=${pageNo}): ${error instanceof Error ? error.message : String(error)}`,
+        `KTO areaBasedList2 실패 (lDongRegnCd=${lDongRegnCd}, page=${pageNo}): ${error instanceof Error ? error.message : String(error)}`,
       );
       return [];
     }

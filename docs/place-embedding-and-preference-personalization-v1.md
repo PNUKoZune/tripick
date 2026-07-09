@@ -67,7 +67,7 @@ flowchart TD
 
 ### 3.1 소스 수집
 
-- **한국관광공사 KorService2** (`TourApiService`): `areaCode2`로 시도 코드 목록, `areaBasedList2`로 시도별 장소(contentid, 좌표, 주소, contentTypeId→category). `KTO_API_KEY` 필요, 페이지네이션(numOfRows=100), 좌표 0/비유효·제목 없음은 제외.
+- **한국관광공사 KorService2** (`TourApiService`): `ldongCode2`로 법정동 시도 코드(`lDongRegnCd`) 목록, `areaBasedList2`로 시도별 장소(contentid, 좌표, 주소, contentTypeId→category). 지역 필터는 폐기 예정인 `areaCode`/`sigunguCode` 대신 **법정동 코드 `lDongRegnCd`**를 쓴다(KTO 가 `areaCode`·`sigunguCode`·`cat1~3`을 `lDongRegnCd`·`lDongSignguCd`·`lclsSystm1~3`으로 대체). `KTO_API_KEY` 필요, 페이지네이션(numOfRows=100), 좌표 0/비유효·제목 없음·숙박(contentTypeId=32)은 제외.
 - **카카오 로컬** (`KakaoLocalService.searchAround`): **위치+카테고리 기반 카테고리 검색**(`search/category.json`). 관광공사가 먼저 수집한 좌표를 격자(≈0.1°)로 버킷팅해 밀집 순 **앵커**(관광 중심지)를 뽑고, 앵커별로 4개 `category_group_code`(CT1 문화시설·AT4 관광명소·FD6 음식점·CE7 카페)를 반경(`KAKAO_INGEST_RADIUS_M`) 안에서 순회한다. 키워드 검색과 달리 x/y/radius 로 지역이 묶여 **타지역 동명 장소(예: 경주 밖 "경주식당")가 섞이지 않는다**. `KAKAO_LOCAL_API_KEY`(또는 `KAKAO_REST_API_KEY`) 필요.
   - **소스 비중(반반)**: 카카오 budget 을 관광공사와 동일한 `--max` 상한으로 두고 앵커·카테고리에 고르게 분배해, 그동안 키워드 검색 단일 페이지로 소수만 수집돼 관광공사에 치우치던 문제를 해소한다.
   - **관광공사 좌표가 없을 때**(`--sources=kakao` 등): `resolveCenter`로 지역명을 지오코딩해 중심 1곳(반경 내)만으로 폴백하며, 커버리지 제한을 경고 로그로 남긴다.
