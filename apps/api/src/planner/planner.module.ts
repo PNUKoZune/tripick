@@ -7,6 +7,7 @@ import { RouteHelper } from './helpers/route.helper';
 import { ScheduleConstraint } from './helpers/schedule.constraint';
 import { ConstraintEngine } from './constraint/constraint.engine';
 import { CragEvaluatorService } from './retrieval/crag-evaluator.service';
+import { IngestCursorRepository } from './retrieval/ingest-cursor.repository';
 import { KakaoLocalService } from './retrieval/kakao-local.service';
 import { PlaceEmbeddingRepository } from './retrieval/place-embedding.repository';
 import { PlaceRetrievalService } from './retrieval/place-retrieval.service';
@@ -32,6 +33,7 @@ import { TripEntity } from '../trips/trip.entity';
     ScheduleConstraint,
     ConstraintEngine,
     PlaceEmbeddingRepository,
+    IngestCursorRepository,
     KakaoLocalService,
     CragEvaluatorService,
     PlaceRetrievalService,
