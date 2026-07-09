@@ -2,6 +2,7 @@ export {
   fetchPlannerTrips,
   fetchPlannerTrip,
   fetchPlannerAlternatives,
+  resolvePlannerLink,
   swapPlannerItem,
   fetchDestinationSuggestions,
   createTrip,

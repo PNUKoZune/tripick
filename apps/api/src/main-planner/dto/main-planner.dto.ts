@@ -2,6 +2,9 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsIn,
+  IsLatitude,
+  IsLongitude,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -12,7 +15,10 @@ import {
 } from 'class-validator';
 import type {
   CreateTripRequestDto,
+  PlannerItemType,
   PlannerMemberDto,
+  PlannerResolveLinkRequestDto,
+  PlannerSwapPlaceDto,
   PlannerSwapRequestDto,
 } from '@tripick/types';
 
@@ -81,13 +87,49 @@ export class CreateTripRequestBodyDto implements CreateTripRequestDto {
   notes?: string;
 }
 
+class PlannerSwapPlaceBodyDto implements PlannerSwapPlaceDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  name!: string;
+
+  @IsOptional()
+  @IsIn(['attraction', 'restaurant', 'cafe', 'transport'])
+  category?: PlannerItemType;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  address?: string;
+
+  @IsNumber()
+  @IsLatitude()
+  lat!: number;
+
+  @IsNumber()
+  @IsLongitude()
+  lng!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  mapHref?: string;
+}
+
 export class PlannerSwapRequestBodyDto implements PlannerSwapRequestDto {
   @IsUUID()
   itemId!: string;
 
+  @ValidateNested()
+  @Type(() => PlannerSwapPlaceBodyDto)
+  place!: PlannerSwapPlaceBodyDto;
+}
+
+export class PlannerResolveLinkBodyDto implements PlannerResolveLinkRequestDto {
   @IsString()
   @MinLength(1)
-  alternativeId!: string;
+  @MaxLength(1000)
+  url!: string;
 }
 
 export class AddTripMemberRequestBodyDto {

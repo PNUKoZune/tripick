@@ -64,37 +64,47 @@ export function TripMapPanel({ trip, items, onSelectItem }: Props) {
           const isSelected = item.id === selectedItemId;
           return (
             <li key={item.id}>
-              <button
-                type="button"
-                onClick={() => setSelectedItemId(item.id)}
-                onDoubleClick={() => onSelectItem(item)}
+              <div
                 className={`flex w-full items-center gap-3 rounded-[14px] border px-3 py-2 text-left transition ${
                   isSelected
                     ? 'border-[#3182F6] bg-[#EAF2FF]'
                     : 'border-[#E5E8EB] bg-white hover:bg-[#FAFBFC]'
                 }`}
               >
-                <span
-                  className={`flex size-7 shrink-0 items-center justify-center rounded-full border text-[12px] font-bold ${
-                    isSelected
-                      ? 'bg-[#1B64DA] text-white border-[#1B64DA]'
-                      : 'bg-[#3182F6] text-white border-[#1B64DA]'
-                  }`}
+                <button
+                  type="button"
+                  onClick={() => setSelectedItemId(item.id)}
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
                 >
-                  {markerIdByItemId.get(item.id) ? items.findIndex((i) => i.id === item.id) + 1 : '·'}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-[12px] text-[#6B7684]">
-                    <span>{item.scheduledAt}</span>
-                    <span>·</span>
-                    <span>{item.typeLabel}</span>
+                  <span
+                    className={`flex size-7 shrink-0 items-center justify-center rounded-full border text-[12px] font-bold ${
+                      isSelected
+                        ? 'bg-[#1B64DA] text-white border-[#1B64DA]'
+                        : 'bg-[#3182F6] text-white border-[#1B64DA]'
+                    }`}
+                  >
+                    {markerIdByItemId.get(item.id) ? items.findIndex((i) => i.id === item.id) + 1 : '·'}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 text-[12px] text-[#6B7684]">
+                      <span>{item.scheduledAt}</span>
+                      <span>·</span>
+                      <span>{item.typeLabel}</span>
+                    </div>
+                    <div className="truncate text-[14px] font-semibold text-[#191F28]">
+                      {item.name}
+                    </div>
                   </div>
-                  <div className="truncate text-[14px] font-semibold text-[#191F28]">
-                    {item.name}
-                  </div>
-                </div>
+                </button>
                 {item.hasWaiting ? <Chip tone="error">웨이팅</Chip> : null}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => onSelectItem(item)}
+                  className="h-8 shrink-0 rounded-full bg-[#3182F6] px-3 text-[13px] font-bold text-white transition hover:bg-[#1B64DA] active:translate-y-px"
+                >
+                  전환
+                </button>
+              </div>
             </li>
           );
         })}
@@ -106,7 +116,7 @@ export function TripMapPanel({ trip, items, onSelectItem }: Props) {
       </ul>
 
       <p className="text-center text-[12px] text-[#8B95A1]">
-        카드 한 번 탭 → 지도 이동 · 더블 탭 → 대안 보기
+        카드 탭 → 지도 이동 · ‘전환’ 버튼 → 대안 보기
       </p>
     </div>
   );

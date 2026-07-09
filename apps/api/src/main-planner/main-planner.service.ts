@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import axios from 'axios';
 import { FriendsService } from '../friends/friends.service';
 import { InboxService } from '../inbox/inbox.service';
 import { ItineraryItemEntity } from '../itinerary/itinerary-item.entity';
@@ -10,18 +11,25 @@ import { TripEntity } from '../trips/trip.entity';
 import { TripsService } from '../trips/trips.service';
 import { UserEntity } from '../users/user.entity';
 import { WeatherHelper } from '../planner/helpers/weather.helper';
+import { KakaoLocalService } from '../planner/retrieval/kakao-local.service';
+import type { KakaoCategoryCode } from '../planner/retrieval/kakao-local.service';
+import { PlaceRetrievalService } from '../planner/retrieval/place-retrieval.service';
+import type { CandidatePlace, RawPlaceCandidate } from '../planner/retrieval/types';
 import type { ParsedForecast } from '@tripick/utils';
 import type {
   AddTripMemberRequestDto,
   CreateTripDto,
   CreateTripRequestDto,
   PlannerAlternativeDto,
+  PlannerAlternativeOrigin,
   PlannerAlternativeResponseDto,
   PlannerCoordinationDto,
   PlannerCoordinationVoteRowDto,
+  PlannerItemType,
   PlannerItineraryItemDto,
   PlannerMapMarkerDto,
   PlannerMemberDto,
+  PlannerResolveLinkResponseDto,
   PlannerSwapRequestDto,
   PlannerSwapResponseDto,
   PlannerTripDto,
@@ -73,6 +81,8 @@ export class MainPlannerService {
     private readonly preferencesService: PreferencesService,
     private readonly inboxService: InboxService,
     private readonly weatherHelper: WeatherHelper,
+    private readonly kakaoLocal: KakaoLocalService,
+    private readonly placeRetrieval: PlaceRetrievalService,
   ) {}
 
   async listTrips(user: UserEntity): Promise<TripSummaryDto[]> {
@@ -178,27 +188,45 @@ export class MainPlannerService {
     return this.listPlannerMembers(user, tripId);
   }
 
+  private static readonly ALTERNATIVE_RADIUS_M = 1200;
+
   async getAlternatives(
     user: UserEntity,
     tripId: string,
     itemId: string,
+    query?: string,
   ): Promise<PlannerAlternativeResponseDto> {
-    await this.tripsService.findOne(tripId, user.id);
+    const trip = await this.tripsService.findOne(tripId, user.id);
     const item = await this.findItem(tripId, itemId);
-    const alternatives = this.buildAlternatives(item);
+    const trimmedQuery = query?.trim() ?? '';
+    const isCustom = trimmedQuery.length > 0;
+
+    // 기본 추천 → CRAG/임베딩(취향 개인화) · 커스텀 요청 → 카카오 키워드 직검색
+    let alternatives = isCustom
+      ? await this.buildCustomAlternatives(item, MainPlannerService.ALTERNATIVE_RADIUS_M, trimmedQuery)
+      : await this.buildRecommendedAlternatives(trip, item);
+    const realCount = alternatives.length;
+
+    // 커스텀 검색이 아닌 기본 추천은 최소 3개가 되도록 mock 후보로 보충 (오프라인/키 미설정 대비)
+    if (!isCustom && realCount < 3) {
+      const filler = this.buildAlternatives(item)
+        .slice(0, 3 - realCount)
+        .map((alt, index) => ({ ...alt, id: `${item.id}:fill-${index + 1}` }));
+      alternatives = [...alternatives, ...filler].slice(0, 5);
+    }
+
     const markers = [
       this.toMarker(item, 0, 'current'),
-      ...alternatives.map((alternative, index) =>
-        this.toAlternativeMarker(item, alternative, index + 1),
-      ),
+      ...alternatives.map((alternative, index) => this.toAlternativeMarker(alternative, index + 1)),
     ];
 
     return {
       itemId,
       itemName: item.name,
       waitingMinutes: item.type === 'restaurant' ? 15 : 0,
-      radiusMeters: 900,
-      realtime: false,
+      radiusMeters: MainPlannerService.ALTERNATIVE_RADIUS_M,
+      realtime: realCount > 0,
+      ...(isCustom ? { query: trimmedQuery } : {}),
       alternatives,
       mapCenter: {
         lat: item.coordinates.lat,
@@ -209,6 +237,44 @@ export class MainPlannerService {
     };
   }
 
+  /**
+   * 네이버/카카오 지도 링크(또는 장소명 텍스트)를 실제 장소로 해석해 대안 후보 하나를 돌려준다.
+   * 프론트는 이 후보를 시트에 추가·선택한 뒤 swap 으로 확정한다.
+   */
+  async resolveLink(
+    user: UserEntity,
+    tripId: string,
+    itemId: string,
+    url: string,
+  ): Promise<PlannerResolveLinkResponseDto> {
+    await this.tripsService.findOne(tripId, user.id);
+    const item = await this.findItem(tripId, itemId);
+
+    const keyword = await this.extractKeywordFromMapLink(url);
+    if (!keyword) {
+      throw new BadRequestException(
+        '링크에서 장소를 찾지 못했어요. 장소명이 포함된 지도 링크나 장소 이름을 입력해 주세요.',
+      );
+    }
+
+    const results = await this.kakaoLocal.searchByText(
+      keyword,
+      1,
+      item.coordinates,
+      MainPlannerService.ALTERNATIVE_RADIUS_M * 8,
+    );
+    const place = results[0];
+    if (!place) {
+      throw new NotFoundException(`"${keyword}" 장소를 찾지 못했어요. 다른 링크로 시도해 주세요.`);
+    }
+
+    const alternative = this.toRealAlternative(item, place, 0, 'link');
+    return {
+      alternative,
+      mapMarker: this.toAlternativeMarker(alternative, 1),
+    };
+  }
+
   async swap(
     user: UserEntity,
     tripId: string,
@@ -216,30 +282,26 @@ export class MainPlannerService {
   ): Promise<PlannerSwapResponseDto> {
     await this.tripsService.findOne(tripId, user.id);
     const item = await this.findItem(tripId, dto.itemId);
-    const alternative = this.buildAlternatives(item).find((alt) => alt.id === dto.alternativeId);
-    if (!alternative) {
-      throw new NotFoundException('alternative not found');
-    }
 
-    const marker = this.toAlternativeMarker(item, alternative, 1);
+    const place = dto.place;
     const previousName = item.name;
-    item.name = alternative.name;
-    item.address = `${alternative.name} 인근`;
-    item.coordinates = { lat: marker.lat, lng: marker.lng };
+    item.name = place.name;
+    item.address = place.address?.trim() || `${place.name} 인근`;
+    item.coordinates = { lat: place.lat, lng: place.lng };
     await this.itemsRepo.save(item);
 
     await this.inboxService.create({
       userId: user.id,
       category: 'replan_ready',
       title: '대안 일정 반영 완료',
-      body: `"${previousName}" 일정이 "${alternative.name}"(으)로 바뀌었어요.`,
+      body: `"${previousName}" 일정이 "${place.name}"(으)로 바뀌었어요.`,
       payload: { tripId, itemId: dto.itemId },
     });
 
     return {
       tripId,
       swappedItemId: dto.itemId,
-      newItemName: alternative.name,
+      newItemName: place.name,
     };
   }
 
@@ -544,6 +606,177 @@ export class MainPlannerService {
     return item;
   }
 
+  /**
+   * 기본 추천: CRAG/임베딩 파이프라인(PlaceRetrievalService)으로 취향을 반영한 대안을 만든다.
+   * - 저장된 취향 벡터(preference_embeddings) 로 pgvector 검색을 개인화
+   * - CRAG 평가로 confidence 채점 후 상위 다양성 선별
+   * 같은 카테고리 후보를 우선하되, 3개 미만이면 카테고리 무관 후보로 채운다.
+   * 결과가 없으면(임베딩/키 미설정 등) 빈 배열 → 호출부가 mock 으로 폴백.
+   */
+  private async buildRecommendedAlternatives(
+    trip: TripEntity,
+    item: ItineraryItemEntity,
+  ): Promise<PlannerAlternativeDto[]> {
+    const preference = await this.preferencesService.findByUser(trip.userId);
+    const tasteTags = preference?.tasteTags;
+    const preferenceVector = await this.preferencesService.getPreferenceVector(trip.userId);
+    const waiting = item.type === 'restaurant';
+
+    let retrieval;
+    try {
+      retrieval = await this.placeRetrieval.retrieve({
+        userId: trip.userId,
+        destination: trip.destination,
+        notes: trip.notes,
+        limit: 14,
+        currentLocation: item.coordinates,
+        ...(tasteTags !== undefined ? { tasteTags } : {}),
+        ...(preferenceVector ? { preferenceVector } : {}),
+        ...(waiting ? { trigger: 'waiting' as const } : {}),
+      });
+    } catch {
+      return [];
+    }
+
+    const itemType = this.toPlannerItemType(item.type);
+    const seen = new Set<string>();
+    const deduped = retrieval.places.filter((place) => {
+      if (place.name === item.name) return false; // 현재 장소 자기 자신 제외
+      const key = place.kakaoPlaceId ?? `${place.name}:${place.address}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // 같은 카테고리 우선, 3개 미만이면 전체 후보 사용 (CRAG 순위 보존)
+    const sameCategory = deduped.filter((place) => this.toPlannerItemType(place.category) === itemType);
+    const pool = sameCategory.length >= 3 ? sameCategory : deduped;
+
+    return pool.slice(0, 5).map((place, index) => this.toRetrievedAlternative(item, place, index));
+  }
+
+  /**
+   * 커스텀 요청/링크: 카카오 로컬 실데이터로 항목 주변 대안을 만든다.
+   * query 가 있으면 자유 텍스트 키워드 검색, 없으면 같은 카테고리 주변 검색.
+   * 카카오 키가 없거나 결과가 없으면 빈 배열.
+   */
+  private async buildCustomAlternatives(
+    item: ItineraryItemEntity,
+    radius: number,
+    query?: string,
+  ): Promise<PlannerAlternativeDto[]> {
+    const center = item.coordinates;
+    let raw: RawPlaceCandidate[];
+    let origin: PlannerAlternativeOrigin;
+    if (query) {
+      raw = await this.kakaoLocal.searchNearbyKeyword(query, center, radius, 10);
+      origin = 'custom';
+    } else {
+      raw = await this.kakaoLocal.searchNearbyByCategories(
+        center,
+        radius,
+        this.categoryCodesForItem(item.type),
+        6,
+      );
+      origin = 'recommend';
+    }
+
+    const seen = new Set<string>();
+    const filtered = raw.filter((place) => {
+      if (place.name === item.name) return false; // 현재 장소 자기 자신 제외
+      const key = place.kakaoPlaceId ?? `${place.name}:${place.address}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    filtered.sort(
+      (a, b) =>
+        this.distanceMeters(center, a.coordinates) - this.distanceMeters(center, b.coordinates),
+    );
+
+    return filtered.slice(0, 5).map((place, index) => this.toRealAlternative(item, place, index, origin));
+  }
+
+  /** CRAG CandidatePlace → 화면용 대안 DTO (취향 근거 reason 표시) */
+  private toRetrievedAlternative(
+    item: ItineraryItemEntity,
+    place: CandidatePlace,
+    index: number,
+  ): PlannerAlternativeDto {
+    const category = this.toPlannerItemType(place.category);
+    const secondary = place.reason?.trim()
+      ? place.reason.trim().slice(0, 28)
+      : this.categoryLabel(category);
+    const badge =
+      index === 0
+        ? { badge: '취향 1순위', badgeTone: 'recommend' as const }
+        : index === 1
+          ? { badge: '취향 추천', badgeTone: 'local' as const }
+          : { badge: '후보', badgeTone: 'urgent' as const };
+
+    return {
+      id: `${item.id}:crag-${place.kakaoPlaceId ?? place.id ?? index}`,
+      categoryEmoji: this.categoryEmoji(category),
+      categoryTone: index === 0 ? 'primary' : index === 1 ? 'success' : 'neutral',
+      name: place.name,
+      walkLabel: this.distanceLabel(item.coordinates, place.coordinates),
+      waitLabel: secondary,
+      rating: place.rating ?? this.syntheticRating(place.kakaoPlaceId ?? place.name),
+      mapHref: place.kakaoPlaceId
+        ? `https://place.map.kakao.com/${place.kakaoPlaceId}`
+        : `https://map.kakao.com/?q=${encodeURIComponent(place.name)}`,
+      ...badge,
+      lat: place.coordinates.lat,
+      lng: place.coordinates.lng,
+      ...(place.address ? { address: place.address } : {}),
+      category,
+      origin: 'recommend',
+      realPlace: true,
+    };
+  }
+
+  /** 카카오 RawPlaceCandidate → 화면용 대안 DTO */
+  private toRealAlternative(
+    item: ItineraryItemEntity,
+    place: RawPlaceCandidate,
+    index: number,
+    origin: PlannerAlternativeOrigin,
+  ): PlannerAlternativeDto {
+    const category = this.toPlannerItemType(place.category);
+    const secondary = place.categoryDetail
+      ? place.categoryDetail.split('>').pop()?.trim() || this.categoryLabel(category)
+      : this.categoryLabel(category);
+    const badge =
+      origin === 'custom'
+        ? { badge: '요청 반영', badgeTone: 'recommend' as const }
+        : origin === 'link'
+          ? { badge: '내가 지정', badgeTone: 'recommend' as const }
+          : index === 0
+            ? { badge: '가장 가까움', badgeTone: 'local' as const }
+            : { badge: '주변 추천', badgeTone: 'urgent' as const };
+
+    return {
+      id: `${item.id}:kakao-${place.kakaoPlaceId ?? index}`,
+      categoryEmoji: this.categoryEmoji(category),
+      categoryTone: index === 0 ? 'primary' : index === 1 ? 'success' : 'neutral',
+      name: place.name,
+      walkLabel: this.distanceLabel(item.coordinates, place.coordinates),
+      waitLabel: secondary,
+      rating: this.syntheticRating(place.kakaoPlaceId ?? place.name),
+      mapHref: place.kakaoPlaceId
+        ? `https://place.map.kakao.com/${place.kakaoPlaceId}`
+        : `https://map.kakao.com/?q=${encodeURIComponent(place.name)}`,
+      ...badge,
+      lat: place.coordinates.lat,
+      lng: place.coordinates.lng,
+      ...(place.address ? { address: place.address } : {}),
+      category,
+      origin,
+      realPlace: true,
+    };
+  }
+
   private buildAlternatives(item: ItineraryItemEntity): PlannerAlternativeDto[] {
     const baseNames =
       item.type === 'restaurant'
@@ -551,19 +784,149 @@ export class MainPlannerService {
         : item.type === 'cafe'
           ? ['조용한 로컬 카페', '뷰 좋은 카페', '디저트 카페']
           : ['근처 산책 스팟', '실내 문화 공간', '사진 찍기 좋은 장소'];
+    const category = this.toPlannerItemType(item.type);
 
-    return baseNames.map((name, index) => ({
-      id: `${item.id}:alt-${index + 1}`,
-      categoryEmoji: item.type === 'restaurant' ? '🍚' : item.type === 'cafe' ? '☕' : '📍',
-      categoryTone: index === 0 ? 'primary' : index === 1 ? 'success' : 'neutral',
-      name: `${item.name} 대안 ${name}`,
-      walkLabel: `도보 ${8 + index * 4}분`,
-      waitLabel: item.type === 'restaurant' ? `대기 ${Math.max(0, 10 - index * 5)}분` : '바로 입장',
-      rating: Math.round((4.6 - index * 0.1) * 10) / 10,
-      mapHref: `https://map.kakao.com/?q=${encodeURIComponent(`${item.name} ${name}`)}`,
-      badge: index === 0 ? '추천' : index === 1 ? '빠름' : '근처',
-      badgeTone: index === 0 ? 'recommend' : index === 1 ? 'local' : 'urgent',
-    }));
+    return baseNames.map((name, index) => {
+      const latOffset = (index % 2 === 0 ? -1 : 1) * (0.003 + index * 0.001);
+      const lngOffset = (index % 2 === 0 ? 1 : -1) * (0.0035 + index * 0.001);
+      return {
+        id: `${item.id}:alt-${index + 1}`,
+        categoryEmoji: this.categoryEmoji(category),
+        categoryTone: index === 0 ? 'primary' : index === 1 ? 'success' : 'neutral',
+        name: `${item.name} 대안 ${name}`,
+        walkLabel: `도보 ${8 + index * 4}분`,
+        waitLabel: item.type === 'restaurant' ? `대기 ${Math.max(0, 10 - index * 5)}분` : '바로 입장',
+        rating: Math.round((4.6 - index * 0.1) * 10) / 10,
+        mapHref: `https://map.kakao.com/?q=${encodeURIComponent(`${item.name} ${name}`)}`,
+        badge: index === 0 ? '추천' : index === 1 ? '빠름' : '근처',
+        badgeTone: (index === 0 ? 'recommend' : index === 1 ? 'local' : 'urgent') as PlannerAlternativeDto['badgeTone'],
+        lat: item.coordinates.lat + latOffset,
+        lng: item.coordinates.lng + lngOffset,
+        category,
+        origin: 'recommend' as const,
+        realPlace: false,
+      };
+    });
+  }
+
+  private categoryCodesForItem(type: ItineraryItemEntity['type']): KakaoCategoryCode[] {
+    switch (type) {
+      case 'restaurant':
+        return ['FD6'];
+      case 'cafe':
+        return ['CE7'];
+      default:
+        return ['AT4', 'CT1'];
+    }
+  }
+
+  private toPlannerItemType(category: string): PlannerItemType {
+    if (category === 'restaurant' || category === 'cafe' || category === 'transport') {
+      return category;
+    }
+    return 'attraction';
+  }
+
+  private categoryEmoji(category: PlannerItemType): string {
+    return category === 'restaurant' ? '🍚' : category === 'cafe' ? '☕' : category === 'transport' ? '🚉' : '📍';
+  }
+
+  private categoryLabel(category: PlannerItemType): string {
+    return category === 'restaurant' ? '음식점' : category === 'cafe' ? '카페' : category === 'transport' ? '이동' : '관광';
+  }
+
+  /** 카카오는 평점을 주지 않아 장소 식별자 기반으로 4.0~4.8 사이 결정적 값을 만든다 (표시용). */
+  private syntheticRating(seed: string): number {
+    let hash = 0;
+    for (let i = 0; i < seed.length; i += 1) {
+      hash = (hash * 31 + seed.charCodeAt(i)) % 9973;
+    }
+    return Math.round((4.0 + (hash % 9) / 10) * 10) / 10;
+  }
+
+  /** 항목 기준 거리 표시: 가까우면 도보 분, 멀면 km. */
+  private distanceLabel(
+    from: { lat: number; lng: number },
+    to: { lat: number; lng: number },
+  ): string {
+    const meters = this.distanceMeters(from, to);
+    if (meters <= 1500) {
+      return `도보 ${Math.max(1, Math.round(meters / 67))}분`;
+    }
+    return `${(meters / 1000).toFixed(1)}km`;
+  }
+
+  private distanceMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+    const R = 6371000;
+    const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+    const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+    const lat1 = (a.lat * Math.PI) / 180;
+    const lat2 = (b.lat * Math.PI) / 180;
+    const h =
+      Math.sin(dLat / 2) ** 2 + Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+
+  /**
+   * 지도 링크에서 장소명/키워드를 뽑는다.
+   * - http(s) 링크: 단축링크면 리다이렉트를 따라간 뒤 q/query/keyword 파라미터나 검색 경로 세그먼트에서 추출
+   * - URL 이 아니면 입력 텍스트 자체를 장소명으로 사용
+   */
+  private async extractKeywordFromMapLink(input: string): Promise<string | null> {
+    const raw = input.trim();
+    if (!raw) return null;
+    if (!/^https?:\/\//i.test(raw)) {
+      return raw.length <= 60 ? raw : raw.slice(0, 60);
+    }
+
+    let finalUrl = raw;
+    try {
+      const res = await axios.get(raw, {
+        maxRedirects: 5,
+        timeout: 5000,
+        // 본문은 필요 없고 최종 URL 만 확인 — 일부 서버는 HEAD 를 막아 GET 사용
+        validateStatus: () => true,
+      });
+      const responseUrl = (res.request?.res?.responseUrl ?? res.request?.responseURL) as
+        | string
+        | undefined;
+      if (responseUrl) finalUrl = responseUrl;
+    } catch {
+      // 리다이렉트 해석 실패 시 원본 URL 로 파싱 시도
+    }
+
+    return this.keywordFromUrl(finalUrl);
+  }
+
+  private keywordFromUrl(url: string): string | null {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return null;
+    }
+
+    for (const key of ['q', 'query', 'keyword', 'name']) {
+      const value = parsed.searchParams.get(key);
+      if (value && value.trim()) return value.trim();
+    }
+
+    // 검색형 경로 (예: map.naver.com/p/search/<장소명>) 의 마지막 한글 포함 세그먼트
+    const segments = parsed.pathname
+      .split('/')
+      .map((segment) => {
+        try {
+          return decodeURIComponent(segment);
+        } catch {
+          return segment;
+        }
+      })
+      .filter(Boolean);
+    for (let i = segments.length - 1; i >= 0; i -= 1) {
+      const segment = segments[i];
+      if (segment && /[가-힣]/.test(segment) && !/^\d+$/.test(segment)) return segment;
+    }
+    return null;
   }
 
   private toMarker(
@@ -585,18 +948,15 @@ export class MainPlannerService {
   }
 
   private toAlternativeMarker(
-    item: ItineraryItemEntity,
     alternative: PlannerAlternativeDto,
     index: number,
   ): PlannerMapMarkerDto {
-    const latOffset = (index % 2 === 0 ? -1 : 1) * (0.003 + index * 0.001);
-    const lngOffset = (index % 2 === 0 ? 1 : -1) * (0.0035 + index * 0.001);
     return {
       id: `marker-${alternative.id}`,
       label: alternative.name,
       order: index + 1,
-      lat: item.coordinates.lat + latOffset,
-      lng: item.coordinates.lng + lngOffset,
+      lat: alternative.lat,
+      lng: alternative.lng,
       x: 0.5,
       y: 0.5,
       variant: 'alternative',

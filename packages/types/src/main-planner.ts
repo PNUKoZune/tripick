@@ -116,6 +116,9 @@ export interface PlannerTripDto {
   progress: PlannerTripProgressDto;
 }
 
+/** 대안이 어디서 왔는지: AI 추천 · 사용자 자유 텍스트 검색 · 지도 링크 붙여넣기 */
+export type PlannerAlternativeOrigin = 'recommend' | 'custom' | 'link';
+
 export interface PlannerAlternativeDto {
   id: string;
   categoryEmoji: string;
@@ -128,6 +131,16 @@ export interface PlannerAlternativeDto {
   mapHref: string;
   badge: string;
   badgeTone: PlannerBadgeTone;
+  /** swap 시 재조회 없이 바로 반영하기 위한 실제 장소 좌표 */
+  lat: number;
+  lng: number;
+  /** 실제 장소 주소 (있을 때) */
+  address?: string;
+  /** 실제 장소의 일정 카테고리 */
+  category: PlannerItemType;
+  origin: PlannerAlternativeOrigin;
+  /** 카카오 실데이터 여부. false 면 폴백(mock) 후보 */
+  realPlace: boolean;
 }
 
 export interface PlannerAlternativeResponseDto {
@@ -136,14 +149,36 @@ export interface PlannerAlternativeResponseDto {
   waitingMinutes: number;
   radiusMeters: number;
   realtime: boolean;
+  /** 사용자가 입력한 자유 텍스트 요청 (있을 때 그대로 에코) */
+  query?: string;
   alternatives: PlannerAlternativeDto[];
   mapCenter: PlannerMapCenterDto;
   mapMarkers: PlannerMapMarkerDto[];
 }
 
+/** 지도 링크(네이버/카카오) → 실제 장소 해석 요청 */
+export interface PlannerResolveLinkRequestDto {
+  url: string;
+}
+
+export interface PlannerResolveLinkResponseDto {
+  alternative: PlannerAlternativeDto;
+  mapMarker: PlannerMapMarkerDto;
+}
+
+/** swap 대상 장소. 추천/커스텀/링크 어디서 왔든 동일한 형태로 반영 */
+export interface PlannerSwapPlaceDto {
+  name: string;
+  category?: PlannerItemType;
+  address?: string;
+  lat: number;
+  lng: number;
+  mapHref?: string;
+}
+
 export interface PlannerSwapRequestDto {
   itemId: string;
-  alternativeId: string;
+  place: PlannerSwapPlaceDto;
 }
 
 export interface PlannerSwapResponseDto {

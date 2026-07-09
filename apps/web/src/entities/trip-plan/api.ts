@@ -5,6 +5,8 @@ import type {
   PlannerAlternativeResponseDto,
   PlannerCoordinationDto,
   PlannerMemberDto,
+  PlannerResolveLinkResponseDto,
+  PlannerSwapPlaceDto,
   PlannerSwapResponseDto,
   PlannerTripDto,
   ReplanJobDto,
@@ -22,15 +24,24 @@ export function fetchPlannerTrip(tripId: string) {
   return api.get<PlannerTripDto>(`/main-planner/trips/${tripId}`);
 }
 
-export function fetchPlannerAlternatives(tripId: string, itemId: string) {
+export function fetchPlannerAlternatives(tripId: string, itemId: string, query?: string) {
+  const search = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
   return api.get<PlannerAlternativeResponseDto>(
-    `/main-planner/trips/${tripId}/items/${itemId}/alternatives`,
+    `/main-planner/trips/${tripId}/items/${itemId}/alternatives${search}`,
+  );
+}
+
+/** 네이버/카카오 지도 링크(또는 장소명) → 실제 장소 대안 해석 */
+export function resolvePlannerLink(tripId: string, itemId: string, url: string) {
+  return api.post<PlannerResolveLinkResponseDto>(
+    `/main-planner/trips/${tripId}/items/${itemId}/resolve-link`,
+    { url },
   );
 }
 
 export function swapPlannerItem(
   tripId: string,
-  body: { itemId: string; alternativeId: string },
+  body: { itemId: string; place: PlannerSwapPlaceDto },
 ) {
   return api.post<PlannerSwapResponseDto>(`/main-planner/trips/${tripId}/swap`, body);
 }
