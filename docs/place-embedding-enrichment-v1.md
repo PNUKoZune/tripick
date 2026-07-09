@@ -1,0 +1,121 @@
+# TriPick 장소 임베딩 데이터 강화 v1
+
+작업 브랜치: `feat/place-embedding-enrichment`
+작성일: 2026-07-09
+관련 문서: [`place-embedding-and-preference-personalization-v1.md`](./place-embedding-and-preference-personalization-v1.md) (기반 적재 파이프라인), [`rag-crag-v1.md`](./rag-crag-v1.md)
+
+## 1. 배경 / 문제
+
+기존 적재 파이프라인([place-embedding-and-preference-personalization-v1.md](./place-embedding-and-preference-personalization-v1.md))의 `place_embeddings`에서 네 가지 문제를 발견해 개선했다.
+
+1. **소스 편중.** 카카오는 런타임 `KakaoLocalService.search()`(키워드 1페이지 ≤10건)를 재사용해 수집량이 적어, 관광공사(KTO)에 크게 치우쳐 있었다.
+2. **카카오 타지역 누수.** 키워드 검색이 위치 필터 없이 지역명("경주")만 사용해 타지역 동명 장소("경주 밖 경주식당")가 섞였다.
+3. **지역 필터 무력화.** 적재는 `destination_region`에 한글 시도명(경상북도)을 저장하는데, 런타임은 `lower(destination_region) = normalizeDestinationRegion()`(영문 슬러그 `gyeongju`)로 비교해 **사실상 매칭이 안 됐고** `name/address ILIKE`에만 의존했다. 시군구 granularity도 없어 "경주" 정밀 필터가 불가능했다.
+4. **Insert-only 정체.** `upsertPlace`가 insert-only라 재실행해도 기존 행이 갱신되지 않았다(모델/텍스트 변경은 전체 `--reseed`로만 반영). 임베딩 텍스트 신호도 `name | category | address | tags`로 빈약했고, 이미 가져온 이미지도 버려졌다.
+
+## 2. 변경 요약
+
+| # | 영역 | 내용 |
+| --- | --- | --- |
+| 1 | 카카오 위치·카테고리 정합 + 반반 | 카카오 적재를 **위치+카테고리 검색**(`search/category`)으로 교체. KTO 좌표 클러스터에서 앵커를 뽑아 반경 내 CT1·AT4·FD6·CE7 순회. budget 을 KTO 와 동일 상한으로 분배해 소스 비중 반반 |
+| 2 | 숙박 제외 | KTO `contentTypeId=32`(숙박)은 정규화 단계에서 제외. 카카오는 AD5 미순회 |
+| 3 | 지역 라벨 granularity | `region_sigungu` 컬럼 추가(주소 파싱). 런타임 검색을 목적지 어간(`regionStem`) 기반 `region_sigungu`/`destination_region` 매칭으로 교체 |
+| 3 | 임베딩 텍스트 강화 | 텍스트에 원본 카테고리 상세(카카오 `category_name` 경로 / KTO 유형명)와 지역(시도·시군구)을 명시 (포맷은 3.3 참고) |
+| 4 | 증분 UPSERT + provenance | `text_hash`·`embedding_model`·`image_url`·`updated_at` 추가. insert-only → insert/update. 해시·모델 동일하면 재임베딩 생략(유지), 다르면 갱신 |
+
+## 3. 상세
+
+### 3.1 카카오 위치+카테고리 검색 (반반 + 누수 차단)
+
+- `KakaoLocalService.searchAround(center, radius, limitPerCategory)`: 앵커 좌표를 중심으로 4개 `category_group_code`(CT1 문화시설·AT4 관광명소·FD6 음식점·CE7 카페)를 `search/category.json`으로 순회. 위치+카테고리 기반이라 키워드 누수가 **구조적으로 불가능**.
+- **앵커 도출**: `PlaceIngestionService.deriveAnchors` 가 KTO 장소 좌표를 격자(≈0.1°)로 버킷팅해 밀집 순으로 앵커(관광 중심지)를 뽑는다. KTO 를 먼저 수집하고 그 좌표를 카카오 검색의 중심으로 재사용한다.
+- **반반**: 카카오 budget = KTO 와 동일한 `--max`. 앵커·카테고리에 고르게 분배.
+- **폴백**: KTO 좌표가 없으면(`--sources=kakao`) `resolveCenter`로 지역명 지오코딩 → 중심 1곳(제한적 커버리지, 경고 로그).
+- **런타임 fallback** `search()`는 키워드 검색을 유지하되 `currentLocation`이 있으면 x/y/radius(`KAKAO_SEARCH_RADIUS_M`)로 묶어 이탈·웨이팅 재계획 시 누수 방지.
+
+> 참고: 한국관광공사 **관광지별 연관 관광지(TarRlteTarService1)** API 도입을 검토했으나, (a) 현재 키가 미구독(Forbidden), (b) 응답에 좌표·주소가 없어 적재 소스로 부적합해 이번 범위에서 제외. 향후 AlternativeModule(재계획 대안 후보)에 더 적합.
+
+### 3.2 지역 라벨 granularity (시도 + 시군구)
+
+- `region_sigungu`(예: 경주시)를 주소 파싱(`parseSigungu` — 첫 토큰=시도 건너뛰고 시/군/구 토큰)으로 채운다.
+- 런타임 검색은 목적지 어간(`regionStem` — 행정 접미사 제거: '경주'→'경주', '경상북도'→'경상북')으로 `region_sigungu`(프리픽스) 또는 `destination_region` 매칭. "경주"가 우연한 substring 이 아니라 시군구 필터로 정확히 걸린다.
+
+### 3.3 임베딩 텍스트 강화
+
+- 코스 카테고리(attraction) 대신 **원본 카테고리 상세**(카카오 "음식점 > 한식 > 국밥", KTO "문화시설")와 **지역(시도·시군구)**을 텍스트에 명시 → 질의(`destination:… taste:…`)와 토큰이 겹쳐 의미 검색 품질↑. `inferPlaceTags`도 `categoryDetail`을 함께 훑어 태그 신호 확장.
+
+### 3.4 증분 UPSERT + provenance
+
+- `findProvenance(dedupe)`로 기존 행의 `id·text_hash·embedding_model` 조회.
+- 적재 루프: 텍스트 해시(sha256) + 현재 모델이 **기존과 동일하면 재임베딩 없이 유지(unchanged)**, 다르면 `upsertPlace(…, existingId)`로 **갱신(updated)**, 없으면 **신규(inserted)**.
+- 효과: `--reseed` 없이 텍스트/모델 변경분만 증분 반영, 모델 이관 자동. 재실행 비용(임베딩 호출) 대폭 절감. 버려지던 KTO `firstimage`를 `image_url`로 저장.
+
+## 4. 스키마 변경 (`infra/postgres/init.sql`)
+
+`place_embeddings`에 컬럼 추가 (모두 `ALTER TABLE … ADD COLUMN IF NOT EXISTS`로 기존 볼륨 안전):
+
+| 컬럼 | 용도 |
+| --- | --- |
+| `region_sigungu` | 시군구 정밀 필터 (+ 인덱스) |
+| `image_url` | 대표 이미지 (KTO firstimage) |
+| `text_hash` | 임베딩 대상 텍스트 해시 → 재임베딩 생략 판정 |
+| `embedding_model` | 임베딩 모델 → 모델 전환 감지 |
+| `updated_at` | 갱신 시각 |
+
+기존 실행 중 DB 반영:
+
+```bash
+docker exec -i tripick-postgres psql -U tripick -d tripick < infra/postgres/init.sql
+```
+
+## 5. 설정값 (신규)
+
+| 환경변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `KAKAO_SEARCH_RADIUS_M` | `20000` | 런타임 키워드 검색 반경(m). `currentLocation` 있을 때만. 최대 20000 |
+| `KAKAO_INGEST_RADIUS_M` | `10000` | 적재 카테고리 검색 반경(m). 앵커 1곳 커버 범위 |
+| `KAKAO_INGEST_MAX_ANCHORS` | `8` | 적재 시 시도별 카카오 앵커 최대 개수 |
+
+## 6. 실행 / 재적재
+
+임베딩 텍스트 포맷·스키마가 바뀌었으므로 기존 행 반영은 재적재가 필요하다.
+
+```bash
+cd apps/api
+# 신규 포맷 + 시군구 + provenance 로 재적재 (지역별 권장)
+pnpm ingest:places -- --reseed --regions=경상북도
+# 이후 재실행은 --reseed 없이 증분(변경분만 갱신, 나머지 유지)
+pnpm ingest:places -- --regions=경상북도
+```
+
+## 7. 검증
+
+- **유닛테스트**: 9 suites / 33 tests 통과 (`pnpm --filter @tripick/api test`). 신규 `place-seeds.spec.ts`(regionStem·parseSigungu·inferPlaceTags 6개).
+- **타입체크**: `tsc --noEmit` 통과.
+- **로컬 실적재(경상북도, max=30)**:
+  - 소스 반반: 카카오 29 / KTO 30
+  - `region_sigungu` 57/59 채움 (경주시 24 외 도 전역 분산)
+  - "경주" 매칭 24건 **전부 주소에 경주 포함 — 누수 0**
+  - e2e 코사인: "경주 한옥 감성 카페" → 상위 전부 경주시 카페(투썸·카페363·청수당·스타벅스)
+  - 증분 UPSERT: 재실행 시 59건 전부 '갱신'(provenance 채움) → 한 번 더 실행 시 59건 전부 '유지'(재임베딩 0). provenance·image_url 채워짐 확인.
+
+## 8. 변경 파일
+
+| 파일 | 변경 |
+| --- | --- |
+| `kakao-local.service.ts` | `searchAround`(카테고리 검색)·`resolveCenter`·키워드 x/y/radius·category_group_code |
+| `tour-api.service.ts` | 숙박 제외, 유형명(categoryDetail)·시군구(parseSigungu) |
+| `place-ingestion.service.ts` | 앵커 도출·반반 분배, 텍스트 강화, 증분 UPSERT 루프 |
+| `place-embedding.repository.ts` | 지역 어간/시군구 검색 필터, `findProvenance`, insert/update `upsertPlace` |
+| `place-seeds.ts` | `regionStem`·`parseSigungu`, `inferPlaceTags` categoryDetail |
+| `ingestion.types.ts` / `types.ts` | `sigungu`·`categoryDetail`·`updated`/`unchanged` 필드 |
+| `ingest-places.ts` | 요약 신규/갱신/유지 출력 |
+| `infra/postgres/init.sql` | 컬럼·인덱스 추가 |
+| `.env.example` | 카카오 반경·앵커 설정 |
+
+## 9. 후속 과제 (미포함)
+
+- **영업시간 등 제약 데이터 적재**(KTO `detailIntro2`) → Constraint Engine 이 실데이터로 동작 (Tier 1)
+- **검색 품질 평가 하네스**(golden set) → blend weight·radius·카테고리 비중 튜닝 (Tier 3)
+- **ANN 스케일**: 대규모에서 `ILIKE OR NULL` 필터가 HNSW 활용 저해 → 정규화 region 코드 pre-filter (Tier 3)
+- 전국 재적재 (현재 경상북도만 실적재 검증)
