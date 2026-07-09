@@ -28,11 +28,23 @@ CREATE TABLE IF NOT EXISTS place_embeddings (
   name                TEXT NOT NULL,
   address             TEXT,
   category            TEXT,
-  destination_region  TEXT,
+  destination_region  TEXT,           -- 시도 라벨 (예: 서울, 경상북도)
+  region_sigungu      TEXT,           -- 시군구 라벨 (예: 경주시, 해운대구). 시/군 단위 정밀 필터용
   coordinates         JSONB,
+  image_url           TEXT,           -- 대표 이미지 (KTO firstimage 등)
   embedding           vector(1024),  -- BGE-m3(-ko) 차원. preference_embeddings 와 반드시 동일
-  created_at          TIMESTAMPTZ DEFAULT NOW()
+  text_hash           TEXT,           -- 임베딩 대상 텍스트 해시. 동일하면 재임베딩 생략(증분 upsert)
+  embedding_model     TEXT,           -- 임베딩에 사용한 모델. 모델 전환 감지 → 재임베딩 트리거
+  created_at          TIMESTAMPTZ DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 기존 볼륨에 이미 테이블이 있는 경우를 위한 증분 컬럼 추가 (재실행 안전)
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS region_sigungu  TEXT;
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS image_url       TEXT;
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS text_hash       TEXT;
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS embedding_model TEXT;
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS updated_at      TIMESTAMPTZ DEFAULT NOW();
 
 -- pgvector HNSW 인덱스 (코사인 유사도 검색)
 CREATE INDEX IF NOT EXISTS idx_preference_embeddings_hnsw
@@ -47,9 +59,22 @@ CREATE INDEX IF NOT EXISTS idx_place_embeddings_hnsw
 CREATE INDEX IF NOT EXISTS idx_place_embeddings_region
   ON place_embeddings (destination_region);
 
+-- 시군구 정밀 필터 인덱스
+CREATE INDEX IF NOT EXISTS idx_place_embeddings_sigungu
+  ON place_embeddings (region_sigungu);
+
 -- 로컬 seed 및 외부 API 후보 중복 방지/조회 최적화용 보조 인덱스
 CREATE INDEX IF NOT EXISTS idx_place_embeddings_region_name
   ON place_embeddings (destination_region, name);
 
 CREATE INDEX IF NOT EXISTS idx_place_embeddings_kakao_place_id
   ON place_embeddings (kakao_place_id);
+
+-- 적재 페이지 커서 (append 모드: 반복 실행 시 지역·소스별로 다음 페이지부터 이어 적재)
+CREATE TABLE IF NOT EXISTS ingest_cursors (
+  region     TEXT NOT NULL,      -- 시도 라벨 (예: 경상북도)
+  source     TEXT NOT NULL,      -- 'tour' 등 소스
+  next_page  INTEGER NOT NULL DEFAULT 1,  -- 다음 실행이 읽을 페이지. 끝에 도달하면 1로 wrap
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (region, source)
+);

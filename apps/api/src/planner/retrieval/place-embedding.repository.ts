@@ -7,6 +7,7 @@ import {
   getSeedPlaces,
   inferPlaceTags,
   normalizeDestinationRegion,
+  regionStem,
 } from './place-seeds';
 import type { RawPlaceCandidate } from './types';
 
@@ -18,7 +19,29 @@ export interface UpsertPlaceInput {
   category?: string | null;
   /** destination_region 컬럼에 저장할 지역 라벨 (예: '서울', 'seoul') */
   region: string;
+  /** region_sigungu 컬럼에 저장할 시군구 라벨 (예: '경주시') */
+  regionSigungu?: string | null;
   coordinates: Coordinates;
+  imageUrl?: string | null;
+  /** 임베딩 대상 텍스트 해시 (증분 upsert 판정용) */
+  textHash?: string | null;
+  /** 임베딩에 사용한 모델 식별자 */
+  embeddingModel?: string | null;
+}
+
+/** 멱등/증분 판정을 위한 기존 행 조회 결과. */
+export interface PlaceProvenance {
+  id: string;
+  textHash: string | null;
+  embeddingModel: string | null;
+}
+
+/** upsertPlace 시 중복/기존 행을 찾기 위한 키. */
+export interface PlaceDedupeKey {
+  kakaoPlaceId?: string | null;
+  tourismApiId?: string | null;
+  region: string;
+  name: string;
 }
 
 interface PlaceEmbeddingRow {
@@ -30,6 +53,7 @@ interface PlaceEmbeddingRow {
   category?: string | null;
   destination_region?: string | null;
   coordinates?: Coordinates | string | null;
+  image_url?: string | null;
   similarity?: number | string | null;
   preference_similarity?: number | string | null;
 }
@@ -46,7 +70,10 @@ export class PlaceEmbeddingRepository {
     limit: number,
     preferenceVector?: number[],
   ): Promise<RawPlaceCandidate[]> {
-    const region = normalizeDestinationRegion(destination);
+    // 목적지 어간(접미사 제거)으로 시도/시군구를 매칭한다.
+    // 예: '경주' → region_sigungu '경주시' 프리픽스 매칭, '부산' → destination_region '부산' 매칭.
+    const stem = regionStem(destination);
+    const stemLike = stem ? `${stem}%` : '';
     const destinationLike = `%${destination}%`;
     const vector = `[${embedding.join(',')}]`;
     const hasPreference = Array.isArray(preferenceVector) && preferenceVector.length > 0;
@@ -56,8 +83,8 @@ export class PlaceEmbeddingRepository {
       ? '1 - (embedding <=> $5::vector) AS preference_similarity'
       : 'NULL AS preference_similarity';
     const params = hasPreference
-      ? [vector, region, destinationLike, limit, preference]
-      : [vector, region, destinationLike, limit];
+      ? [vector, stemLike, destinationLike, limit, preference]
+      : [vector, stemLike, destinationLike, limit];
 
     try {
       const rows: PlaceEmbeddingRow[] = await this.dataSource.query(
@@ -70,15 +97,16 @@ export class PlaceEmbeddingRepository {
                category,
                destination_region,
                coordinates,
+               image_url,
                1 - (embedding <=> $1::vector) AS similarity,
                ${preferenceSelect}
         FROM place_embeddings
         WHERE embedding IS NOT NULL
           AND (
             destination_region IS NULL
-            OR lower(destination_region) = $2
             OR name ILIKE $3
             OR address ILIKE $3
+            OR ($2 <> '' AND (region_sigungu ILIKE $2 OR destination_region ILIKE $2))
           )
         ORDER BY embedding <=> $1::vector
         LIMIT $4
@@ -117,10 +145,20 @@ export class PlaceEmbeddingRepository {
     let inserted = 0;
 
     for (const place of seeds) {
+      const kakaoPlaceId = place.kakaoPlaceId ?? place.id;
+      // seed 는 insert-only: 이미 있으면 건너뛴다.
+      const existing = await this.findProvenance({
+        kakaoPlaceId,
+        tourismApiId: place.tourismApiId ?? null,
+        region,
+        name: place.name,
+      });
+      if (existing) continue;
+
       const embedding = await embed(buildPlaceEmbeddingText(place));
-      const added = await this.upsertPlace(
+      await this.upsertPlace(
         {
-          kakaoPlaceId: place.kakaoPlaceId ?? place.id,
+          kakaoPlaceId,
           tourismApiId: place.tourismApiId ?? null,
           name: place.name,
           address: place.address,
@@ -130,7 +168,7 @@ export class PlaceEmbeddingRepository {
         },
         embedding,
       );
-      inserted += added ? 1 : 0;
+      inserted += 1;
     }
 
     if (inserted > 0) {
@@ -140,21 +178,78 @@ export class PlaceEmbeddingRepository {
   }
 
   /**
-   * 장소 1건을 place_embeddings 에 멱등 삽입한다.
-   * 중복 판정 우선순위: kakao_place_id > tourism_api_id > (destination_region, name).
-   * 이미 있으면 삽입하지 않고 false 를 반환한다.
+   * 중복 판정 우선순위(kakao_place_id > tourism_api_id > (destination_region, name))로
+   * 기존 행의 provenance(id·text_hash·embedding_model)를 조회한다. 없으면 null.
+   * 적재 시 재임베딩 여부를 텍스트 해시·모델로 판단하는 데 쓴다.
    */
-  async upsertPlace(place: UpsertPlaceInput, embedding: number[]): Promise<boolean> {
+  async findProvenance(dedupe: PlaceDedupeKey): Promise<PlaceProvenance | null> {
+    const clause = dedupe.kakaoPlaceId
+      ? { sql: 'kakao_place_id = $1', params: [dedupe.kakaoPlaceId] }
+      : dedupe.tourismApiId
+        ? { sql: 'tourism_api_id = $1', params: [dedupe.tourismApiId] }
+        : {
+            sql: 'lower(destination_region) = $1 AND name = $2',
+            params: [dedupe.region.toLowerCase(), dedupe.name],
+          };
+
+    const rows: Array<{ id: string; text_hash: string | null; embedding_model: string | null }> =
+      await this.dataSource.query(
+        `SELECT id, text_hash, embedding_model FROM place_embeddings WHERE ${clause.sql} LIMIT 1`,
+        clause.params,
+      );
+    const row = rows[0];
+    return row
+      ? { id: row.id, textHash: row.text_hash, embeddingModel: row.embedding_model }
+      : null;
+  }
+
+  /**
+   * 장소 1건을 삽입하거나(existingId 없음) 갱신한다(existingId 있음).
+   * 갱신 시 메타데이터·임베딩·provenance(text_hash·embedding_model·updated_at)를 모두 새로 쓴다.
+   * → insert-only 였던 이전과 달리 텍스트/모델이 바뀐 행을 --reseed 없이 증분 갱신할 수 있다.
+   */
+  async upsertPlace(
+    place: UpsertPlaceInput,
+    embedding: number[],
+    existingId?: string,
+  ): Promise<void> {
     const vector = `[${embedding.join(',')}]`;
-    const region = place.region.toLowerCase();
 
-    const dedupeClause = place.kakaoPlaceId
-      ? { sql: 'kakao_place_id = $9', param: place.kakaoPlaceId }
-      : place.tourismApiId
-        ? { sql: 'tourism_api_id = $9', param: place.tourismApiId }
-        : { sql: 'lower(destination_region) = $9 AND name = $3', param: region };
+    if (existingId) {
+      await this.dataSource.query(
+        `
+        UPDATE place_embeddings SET
+          name = $2,
+          address = $3,
+          category = $4,
+          destination_region = $5,
+          region_sigungu = $6,
+          coordinates = $7::jsonb,
+          image_url = $8,
+          embedding = $9::vector,
+          text_hash = $10,
+          embedding_model = $11,
+          updated_at = NOW()
+        WHERE id = $1
+        `,
+        [
+          existingId,
+          place.name,
+          place.address ?? null,
+          place.category ?? null,
+          place.region,
+          place.regionSigungu ?? null,
+          JSON.stringify(place.coordinates),
+          place.imageUrl ?? null,
+          vector,
+          place.textHash ?? null,
+          place.embeddingModel ?? null,
+        ],
+      );
+      return;
+    }
 
-    const result: Array<{ inserted: number }> = await this.dataSource.query(
+    await this.dataSource.query(
       `
       INSERT INTO place_embeddings (
         kakao_place_id,
@@ -163,14 +258,15 @@ export class PlaceEmbeddingRepository {
         address,
         category,
         destination_region,
+        region_sigungu,
         coordinates,
-        embedding
+        image_url,
+        embedding,
+        text_hash,
+        embedding_model,
+        updated_at
       )
-      SELECT $1, $2, $3, $4, $5, $6, $7::jsonb, $8::vector
-      WHERE NOT EXISTS (
-        SELECT 1 FROM place_embeddings WHERE ${dedupeClause.sql}
-      )
-      RETURNING 1 AS inserted
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::vector, $11, $12, NOW())
       `,
       [
         place.kakaoPlaceId ?? null,
@@ -179,13 +275,14 @@ export class PlaceEmbeddingRepository {
         place.address ?? null,
         place.category ?? null,
         place.region,
+        place.regionSigungu ?? null,
         JSON.stringify(place.coordinates),
+        place.imageUrl ?? null,
         vector,
-        dedupeClause.param,
+        place.textHash ?? null,
+        place.embeddingModel ?? null,
       ],
     );
-
-    return (result[0]?.inserted ?? 0) > 0;
   }
 
   async countByRegion(region: string): Promise<number> {
@@ -198,19 +295,29 @@ export class PlaceEmbeddingRepository {
 
   /**
    * 지역 place_embeddings 를 삭제한다 (재적재/임베딩 서버 전환 시 사용).
-   * 적재가 저장한 원본 라벨(예: '서울특별시')과 seed catalog 의 정규화 라벨(예: 'seoul')을
-   * 모두 지워 임베딩 공간을 깨끗하게 재생성할 수 있게 한다.
+   * 라벨 표기가 섞여 있어도(옛 단축명 '대구' vs 새 법정동 풀네임 '대구광역시' vs seed 슬러그 'daegu')
+   * 어간 프리픽스로 함께 지워 임베딩 공간을 깨끗하게 재생성한다.
+   * 예: region='대구광역시' → 어간 '대구' → '대구%' 로 '대구'·'대구광역시' 모두 삭제.
    */
   async deleteRegion(region: string): Promise<number> {
     const raw = region.toLowerCase();
     const normalized = normalizeDestinationRegion(region);
-    const rows: Array<{ deleted: number }> = await this.dataSource.query(
-      `DELETE FROM place_embeddings
-       WHERE lower(destination_region) IN ($1, $2)
-       RETURNING 1 AS deleted`,
-      [raw, normalized],
+    const stem = regionStem(region).toLowerCase();
+    const stemLike = stem ? `${stem}%` : null; // 어간이 비면(비정상 입력) 전체 삭제 방지 위해 미적용
+    // CTE 로 삭제 후 개수를 SELECT 한다. DELETE ... RETURNING 을 dataSource.query 로 직접 받으면
+    // 드라이버가 [rows, affected] 형태를 돌려줘 rows.length 가 실제 삭제 수와 어긋난다.
+    const rows: Array<{ count: string }> = await this.dataSource.query(
+      `WITH deleted AS (
+         DELETE FROM place_embeddings
+         WHERE lower(destination_region) = $1
+            OR lower(destination_region) = $2
+            OR ($3::text IS NOT NULL AND lower(destination_region) LIKE $3)
+         RETURNING 1
+       )
+       SELECT COUNT(*)::text AS count FROM deleted`,
+      [raw, normalized, stemLike],
     );
-    return rows.length;
+    return Number(rows[0]?.count ?? 0);
   }
 
   private toCandidate(row: PlaceEmbeddingRow): RawPlaceCandidate[] {
@@ -225,6 +332,7 @@ export class PlaceEmbeddingRepository {
       category: row.category ?? 'attraction',
       address: row.address ?? '',
       coordinates,
+      ...(row.image_url ? { imageUrl: row.image_url } : {}),
     };
 
     const similarity = this.numberOrUndefined(row.similarity);

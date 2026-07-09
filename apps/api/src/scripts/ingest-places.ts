@@ -4,12 +4,14 @@
  * 실행:
  *   cd apps/api && pnpm ingest:places
  *   pnpm ingest:places -- --regions=서울,부산 --sources=tour,kakao --max=100
+ *   pnpm ingest:places -- --append --max=100   # 크론 반복 시 페이지 이어 누적
  *
  * 옵션:
  *   --regions=서울,부산   특정 시도만 적재 (미지정 시 전국 시도)
  *   --sources=tour,kakao  적재 소스 (기본: 둘 다)
  *   --max=100             소스별 시도당 최대 수집 건수 (기본 100)
  *   --reseed              적재 전 대상 지역의 기존 벡터 삭제 (임베딩 서버 전환 시)
+ *   --append              지역별 페이지 커서를 이어받아 새 페이지부터 적재 (크론 반복 시 누적)
  *   --allow-hash          임베딩 서버가 없어도 해시 폴백으로 적재 강행 (기본: 중단)
  *
  * 안전장치: 기본적으로 임베딩 서버가 실제 벡터를 주지 못하면(해시 폴백) 적재를 중단한다.
@@ -32,6 +34,10 @@ function parseArgs(argv: string[]): IngestOptions {
     const value = rawValue?.trim();
     if (rawKey === 'reseed') {
       options.reseed = true;
+      continue;
+    }
+    if (rawKey === 'append') {
+      options.append = true;
       continue;
     }
     if (rawKey === 'allow-hash') {
@@ -67,11 +73,11 @@ async function main() {
     console.log('\n=== 적재 요약 ===');
     for (const r of summary.regions) {
       console.log(
-        `${r.region.padEnd(8)} 수집 ${String(r.fetched).padStart(4)} | 신규 ${String(r.inserted).padStart(4)} | skip ${String(r.skipped).padStart(4)} | 삭제 ${String(r.deleted).padStart(4)}`,
+        `${r.region.padEnd(8)} 수집 ${String(r.fetched).padStart(4)} | 신규 ${String(r.inserted).padStart(4)} | 갱신 ${String(r.updated).padStart(4)} | 유지 ${String(r.unchanged).padStart(4)} | 삭제 ${String(r.deleted).padStart(4)}`,
       );
     }
     console.log(
-      `----\n총 수집 ${summary.totalFetched} | 총 신규 ${summary.totalInserted} | 총 삭제 ${summary.totalDeleted}`,
+      `----\n총 수집 ${summary.totalFetched} | 총 신규 ${summary.totalInserted} | 총 갱신 ${summary.totalUpdated} | 총 유지 ${summary.totalUnchanged} | 총 삭제 ${summary.totalDeleted}`,
     );
   } finally {
     await app.close();

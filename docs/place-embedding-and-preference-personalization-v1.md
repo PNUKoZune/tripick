@@ -56,7 +56,8 @@ flowchart TD
   A["pnpm ingest:places (--regions/--sources/--max/--reseed)"] --> B["TourApiService.fetchSidoList"]
   B --> C{"지역별 반복"}
   C --> D["TourApiService.fetchByArea (KorService2)"]
-  C --> E["KakaoLocalService.search"]
+  D --> D2["관광공사 좌표로 앵커 클러스터 도출"]
+  D2 --> E["KakaoLocalService.searchAround<br/>(앵커별 카테고리 검색 CT1·AT4·FD6·CE7)"]
   D --> F["정규화 IngestPlace"]
   E --> F
   F --> G["dedupe: ID + 이름·좌표(≈100m)"]
@@ -66,8 +67,11 @@ flowchart TD
 
 ### 3.1 소스 수집
 
-- **한국관광공사 KorService2** (`TourApiService`): `areaCode2`로 시도 코드 목록, `areaBasedList2`로 시도별 장소(contentid, 좌표, 주소, contentTypeId→category). `KTO_API_KEY` 필요, 페이지네이션(numOfRows=100), 좌표 0/비유효·제목 없음은 제외.
-- **카카오 로컬** (`KakaoLocalService`): 지역명 키워드 검색. `KAKAO_LOCAL_API_KEY`(또는 `KAKAO_REST_API_KEY`) 필요. 런타임 fallback과 적재 소스로 공용.
+- **한국관광공사 KorService2** (`TourApiService`): `ldongCode2`로 법정동 시도 코드(`lDongRegnCd`) 목록, `areaBasedList2`로 시도별 장소(contentid, 좌표, 주소, contentTypeId→category). 지역 필터는 폐기 예정인 `areaCode`/`sigunguCode` 대신 **법정동 코드 `lDongRegnCd`**를 쓴다(KTO 가 `areaCode`·`sigunguCode`·`cat1~3`을 `lDongRegnCd`·`lDongSignguCd`·`lclsSystm1~3`으로 대체). `KTO_API_KEY` 필요, 페이지네이션(numOfRows=100), 좌표 0/비유효·제목 없음·숙박(contentTypeId=32)은 제외.
+- **카카오 로컬** (`KakaoLocalService.searchAround`): **위치+카테고리 기반 카테고리 검색**(`search/category.json`). 관광공사가 먼저 수집한 좌표를 격자(≈0.1°)로 버킷팅해 밀집 순 **앵커**(관광 중심지)를 뽑고, 앵커별로 4개 `category_group_code`(CT1 문화시설·AT4 관광명소·FD6 음식점·CE7 카페)를 반경(`KAKAO_INGEST_RADIUS_M`) 안에서 순회한다. 키워드 검색과 달리 x/y/radius 로 지역이 묶여 **타지역 동명 장소(예: 경주 밖 "경주식당")가 섞이지 않는다**. `KAKAO_LOCAL_API_KEY`(또는 `KAKAO_REST_API_KEY`) 필요.
+  - **소스 비중(반반)**: 카카오 budget 을 관광공사와 동일한 `--max` 상한으로 두고 앵커·카테고리에 고르게 분배해, 그동안 키워드 검색 단일 페이지로 소수만 수집돼 관광공사에 치우치던 문제를 해소한다.
+  - **관광공사 좌표가 없을 때**(`--sources=kakao` 등): `resolveCenter`로 지역명을 지오코딩해 중심 1곳(반경 내)만으로 폴백하며, 커버리지 제한을 경고 로그로 남긴다.
+  - **런타임 fallback** `KakaoLocalService.search`는 키워드 검색을 유지하되, `currentLocation`이 있으면 x/y/radius(`KAKAO_SEARCH_RADIUS_M`)로 묶어 이탈·웨이팅 재계획 시 타지역 누수를 막는다.
 
 ### 3.2 정규화·중복 제거
 
@@ -78,9 +82,17 @@ flowchart TD
 
 ### 3.3 임베딩·멱등 적재 (`upsertPlace`)
 
-`name | category | address | tags` 텍스트를 임베딩해 `INSERT ... WHERE NOT EXISTS`로 삽입한다. 중복 판정 우선순위: `kakao_place_id` > `tourism_api_id` > `(destination_region, name)`. 이미 있으면 삽입하지 않는다(멱등).
+임베딩 텍스트는 `name | categoryDetail | 지역: 시도 시군구 | address | 태그: …` 형태로 구성한다. 코스 카테고리(attraction 등) 대신 **원본 카테고리 상세**(카카오 `category_name` 경로 예: "음식점 > 한식 > 국밥", KTO 콘텐츠 유형명 예: "문화시설")를 넣고, **지역(시도·시군구)을 명시**해 질의 텍스트(`destination:… taste:…`)와 토큰이 겹치도록 한다. `inferPlaceTags`도 `categoryDetail`을 함께 훑어 태그 신호를 늘린다. `INSERT ... WHERE NOT EXISTS`로 삽입하며 중복 판정 우선순위: `kakao_place_id` > `tourism_api_id` > `(destination_region, name)`. 이미 있으면 삽입하지 않는다(멱등).
 
-### 3.4 CLI 옵션
+> **임베딩 텍스트 포맷을 바꾸면** 기존 행은 예전 포맷으로 임베딩돼 있어 신규 행과 신호가 어긋난다. 전체 반영은 `--reseed`로 재적재해야 한다(7장).
+
+### 3.4 지역 라벨 granularity (시도 + 시군구)
+
+`place_embeddings`는 시도 라벨(`destination_region`, 예: '경상북도')에 더해 **시군구 라벨(`region_sigungu`, 예: '경주시')**을 저장한다. 시군구는 주소에서 파싱(`parseSigungu`)한다(첫 토큰=시도 건너뛰고 시/군/구로 끝나는 토큰).
+
+런타임 검색은 목적지 어간(`regionStem` — 행정 접미사 제거, 예: '경주'→'경주', '경상북도'→'경상북')으로 `region_sigungu`(프리픽스) 또는 `destination_region`을 매칭한다. 이전에는 `lower(destination_region) = normalizeDestinationRegion()`(영문 슬러그)로 비교해 **한글 시도명과 영문 슬러그가 어긋나 사실상 무력**했고 `name/address ILIKE`에만 의존했다. 이제 "경주"가 우연한 substring이 아니라 시군구 필터로 정확히 걸린다.
+
+### 3.5 CLI 옵션
 
 ```bash
 cd apps/api
@@ -90,7 +102,7 @@ pnpm ingest:places -- --reseed --regions=서울         # 재시드(아래 7장)
 pnpm ingest:places -- --allow-hash                   # 임베딩 서버 없이 강행(아래 8장)
 ```
 
-### 3.5 임베딩 서버 안전장치
+### 3.6 임베딩 서버 안전장치
 
 임베딩 서버가 죽어 있거나 URL 이 틀리면 `TextEmbeddingService`가 **조용히 해시 폴백**으로 벡터를 만든다. 그대로 두면 해시 벡터가 실제 벡터와 섞여 검색 품질이 손상된다. 이를 막기 위해:
 
@@ -193,6 +205,9 @@ cd apps/api && pnpm reembed:preferences
 | --- | --- | --- |
 | `KTO_API_KEY` | — | 한국관광공사 KorService2 키 (적재) |
 | `KAKAO_LOCAL_API_KEY` / `KAKAO_REST_API_KEY` | — | 카카오 로컬 키 (적재·런타임 fallback) |
+| `KAKAO_SEARCH_RADIUS_M` | `20000` | 런타임 키워드 검색 반경(m). `currentLocation` 있을 때만 적용. 최대 20000 |
+| `KAKAO_INGEST_RADIUS_M` | `10000` | 적재 카테고리 검색 반경(m). 앵커 1곳 커버 범위. 최대 20000 |
+| `KAKAO_INGEST_MAX_ANCHORS` | `8` | 적재 시 시도별 카카오 앵커(관광공사 좌표 클러스터 중심) 최대 개수 |
 | `DATABASE_URL` | `postgresql://tripick:tripick@localhost:5432/tripick` | 적재 CLI DB 연결 |
 | `LLM_BASE_URL` / `LLM_API_KEY` | `http://localhost:8080/v1` / `local` | chat/planner LLM 엔드포인트 |
 | `LLM_EMBEDDING_BASE_URL` / `LLM_EMBEDDING_API_KEY` | (미설정 시 `LLM_BASE_URL`/`LLM_API_KEY` 폴백) | 임베딩 전용 서버. 별도 포트로 분리할 때 사용 (예: `http://localhost:8081/v1`) |

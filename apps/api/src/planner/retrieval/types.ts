@@ -5,6 +5,8 @@ export type RetrievalSource = 'pgvector' | 'kakao' | 'seed';
 export interface RawPlaceCandidate extends PlaceDto {
   source: RetrievalSource;
   tags?: string[];
+  /** 원본 카테고리 상세 (카카오 category_name 경로 등). 임베딩 텍스트 강화용 */
+  categoryDetail?: string;
   destinationRegion?: string;
   similarity?: number;
   /** 저장된 사용자 취향 벡터와의 코사인 유사도 (pgvector 후보만) */
