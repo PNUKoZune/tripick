@@ -8,6 +8,11 @@ export type EmbeddingSource = 'remote' | 'hash';
 export interface EmbeddingResult {
   vector: number[];
   source: EmbeddingSource;
+  /**
+   * 원격 서버가 반환한 원본 차원(normalizeDimensions 로 패딩/절단하기 전).
+   * hash 폴백이면 undefined. 헬스체크에서 엉뚱한 모델(차원 불일치) 감지에 사용.
+   */
+  remoteDimensions?: number;
 }
 
 @Injectable()
@@ -27,14 +32,24 @@ export class TextEmbeddingService {
   async embedWithSource(text: string): Promise<EmbeddingResult> {
     const vector = await this.tryRemoteEmbedding(text);
     if (vector.length > 0) {
-      return { vector: this.normalizeDimensions(vector), source: 'remote' };
+      return {
+        vector: this.normalizeDimensions(vector),
+        source: 'remote',
+        remoteDimensions: vector.length,
+      };
     }
     return { vector: this.buildHashEmbedding(text), source: 'hash' };
   }
 
   private async tryRemoteEmbedding(text: string): Promise<number[]> {
-    const baseUrl = this.config.get<string>('LLM_BASE_URL', 'http://localhost:8080/v1');
-    const apiKey = this.config.get<string>('LLM_API_KEY', 'local');
+    // 임베딩 전용 서버를 별도 포트로 띄우는 경우 LLM_EMBEDDING_BASE_URL 로 분리.
+    // 미설정 시 chat 과 동일한 LLM_BASE_URL 로 폴백(하위호환).
+    const baseUrl =
+      this.config.get<string>('LLM_EMBEDDING_BASE_URL') ??
+      this.config.get<string>('LLM_BASE_URL', 'http://localhost:8080/v1');
+    const apiKey =
+      this.config.get<string>('LLM_EMBEDDING_API_KEY') ??
+      this.config.get<string>('LLM_API_KEY', 'local');
     const model = this.config.get<string>('LLM_EMBEDDING_MODEL', 'text-embedding-model');
 
     try {
@@ -99,9 +114,11 @@ export class TextEmbeddingService {
     return vector.map((value) => Number((value / norm).toFixed(8)));
   }
 
-  private dimensions(): number {
-    const raw = this.config.get<string | number>('LLM_EMBEDDING_DIMENSIONS', 1536);
+  /** 기대 임베딩 차원(pgvector 컬럼과 일치해야 함). 헬스체크의 차원 검증에도 사용. */
+  dimensions(): number {
+    // 기본값은 place_embeddings/preference_embeddings 컬럼 차원(BGE-m3-ko=1024)과 일치시킨다.
+    const raw = this.config.get<string | number>('LLM_EMBEDDING_DIMENSIONS', 1024);
     const parsed = Number(raw);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1536;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1024;
   }
 }

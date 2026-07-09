@@ -196,7 +196,17 @@ export class PlaceIngestionService {
   private async assertEmbeddingServerReady(allowHash: boolean): Promise<void> {
     const probe = await this.embeddings.embedWithSource('임베딩 서버 헬스체크');
     if (probe.source === 'remote') {
-      this.logger.log('임베딩 서버 확인 완료 (remote embedding).');
+      const expected = this.embeddings.dimensions();
+      if (probe.remoteDimensions !== expected) {
+        // 차원이 어긋나면 normalizeDimensions 가 조용히 패딩/절단해 검색 공간이 오염된다.
+        // --allow-hash 와 무관하게(하시 폴백이 아니라 잘못된 모델 문제) 항상 중단.
+        throw new Error(
+          `임베딩 서버가 ${probe.remoteDimensions}차원을 반환했지만 기대 차원은 ${expected}입니다. ` +
+            '엉뚱한 모델이 올라갔을 가능성이 큽니다(패딩/절단으로 검색 품질이 조용히 손상됨). ' +
+            'LLM_EMBEDDING_MODEL 이 차원과 맞는지, LLM_EMBEDDING_DIMENSIONS·init.sql 의 vector(N) 이 일치하는지 확인하세요.',
+        );
+      }
+      this.logger.log(`임베딩 서버 확인 완료 (remote embedding, ${expected}차원).`);
       return;
     }
     if (allowHash) {
@@ -208,7 +218,7 @@ export class PlaceIngestionService {
     throw new Error(
       '임베딩 서버에 연결할 수 없어(해시 폴백 감지) 적재를 중단합니다. ' +
         '해시 벡터가 실제 벡터와 섞이면 검색 품질이 손상됩니다. ' +
-        'LLM_BASE_URL / LLM_EMBEDDING_MODEL 을 확인하거나, 의도한 것이면 --allow-hash 로 재실행하세요.',
+        'LLM_EMBEDDING_BASE_URL / LLM_EMBEDDING_MODEL 을 확인하거나, 의도한 것이면 --allow-hash 로 재실행하세요.',
     );
   }
 

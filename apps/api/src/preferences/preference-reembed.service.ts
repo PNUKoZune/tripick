@@ -78,14 +78,25 @@ export class PreferenceReembedService {
   /** 재임베딩 시작 전 임베딩 서버가 실제 벡터를 주는지 확인한다. 해시 폴백이면 중단. */
   private async assertEmbeddingServerReady(allowHash: boolean): Promise<void> {
     const probe = await this.embeddings.embedWithSource('임베딩 서버 헬스체크');
-    if (probe.source === 'remote') return;
+    if (probe.source === 'remote') {
+      const expected = this.embeddings.dimensions();
+      if (probe.remoteDimensions !== expected) {
+        // 차원 불일치는 normalizeDimensions 가 조용히 패딩/절단해 공간을 오염시킨다. 항상 중단.
+        throw new Error(
+          `임베딩 서버가 ${probe.remoteDimensions}차원을 반환했지만 기대 차원은 ${expected}입니다. ` +
+            '엉뚱한 모델이 올라갔을 가능성이 큽니다. ' +
+            'LLM_EMBEDDING_MODEL 이 차원과 맞는지, LLM_EMBEDDING_DIMENSIONS·init.sql 의 vector(N) 이 일치하는지 확인하세요.',
+        );
+      }
+      return;
+    }
     if (allowHash) {
       this.logger.warn('임베딩 서버 미가용 — 해시 폴백으로 재임베딩을 강행합니다(--allow-hash).');
       return;
     }
     throw new Error(
       '임베딩 서버에 연결할 수 없어(해시 폴백 감지) 취향 재임베딩을 중단합니다. ' +
-        'LLM_BASE_URL / LLM_EMBEDDING_MODEL 을 확인하거나, 의도한 것이면 --allow-hash 로 재실행하세요.',
+        'LLM_EMBEDDING_BASE_URL / LLM_EMBEDDING_MODEL 을 확인하거나, 의도한 것이면 --allow-hash 로 재실행하세요.',
     );
   }
 
