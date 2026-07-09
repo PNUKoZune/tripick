@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { parseSigungu } from './place-seeds';
 import type { IngestPlace } from './ingestion.types';
 
 /** areaCode2 응답 아이템 (시도 / 시군구 공통) */
@@ -56,6 +57,17 @@ const CONTENT_TYPE_CATEGORY: Record<string, string> = {
 
 /** 적재에서 제외할 contentTypeId (숙박). 이 서비스는 숙박을 일정 후보로 다루지 않는다. */
 const EXCLUDED_CONTENT_TYPES = new Set(['32']);
+
+/** contentTypeId → 한글 유형명 (임베딩 텍스트 강화용). */
+const CONTENT_TYPE_NAME: Record<string, string> = {
+  '12': '관광지',
+  '14': '문화시설',
+  '15': '축제공연행사',
+  '25': '여행코스',
+  '28': '레포츠',
+  '38': '쇼핑',
+  '39': '음식점',
+};
 
 function toArray<T>(item: T | T[] | undefined): T[] {
   if (!item) return [];
@@ -168,14 +180,18 @@ export class TourApiService {
     if (EXCLUDED_CONTENT_TYPES.has(contentTypeId)) return null; // 숙박 제외
     const category = CONTENT_TYPE_CATEGORY[contentTypeId] ?? 'attraction';
     const address = [row.addr1, row.addr2].filter(Boolean).join(' ').trim();
+    const sigungu = parseSigungu(address);
+    const categoryDetail = CONTENT_TYPE_NAME[contentTypeId];
 
     return {
       tourismApiId: String(row.contentid),
       name,
       category,
+      ...(categoryDetail ? { categoryDetail } : {}),
       address,
       coordinates: { lat, lng },
       region,
+      ...(sigungu ? { sigungu } : {}),
       ...(row.firstimage ? { imageUrl: row.firstimage } : {}),
       source: 'tour',
     };

@@ -7,6 +7,7 @@ import {
   getSeedPlaces,
   inferPlaceTags,
   normalizeDestinationRegion,
+  regionStem,
 } from './place-seeds';
 import type { RawPlaceCandidate } from './types';
 
@@ -18,6 +19,8 @@ export interface UpsertPlaceInput {
   category?: string | null;
   /** destination_region 컬럼에 저장할 지역 라벨 (예: '서울', 'seoul') */
   region: string;
+  /** region_sigungu 컬럼에 저장할 시군구 라벨 (예: '경주시') */
+  regionSigungu?: string | null;
   coordinates: Coordinates;
 }
 
@@ -46,7 +49,10 @@ export class PlaceEmbeddingRepository {
     limit: number,
     preferenceVector?: number[],
   ): Promise<RawPlaceCandidate[]> {
-    const region = normalizeDestinationRegion(destination);
+    // 목적지 어간(접미사 제거)으로 시도/시군구를 매칭한다.
+    // 예: '경주' → region_sigungu '경주시' 프리픽스 매칭, '부산' → destination_region '부산' 매칭.
+    const stem = regionStem(destination);
+    const stemLike = stem ? `${stem}%` : '';
     const destinationLike = `%${destination}%`;
     const vector = `[${embedding.join(',')}]`;
     const hasPreference = Array.isArray(preferenceVector) && preferenceVector.length > 0;
@@ -56,8 +62,8 @@ export class PlaceEmbeddingRepository {
       ? '1 - (embedding <=> $5::vector) AS preference_similarity'
       : 'NULL AS preference_similarity';
     const params = hasPreference
-      ? [vector, region, destinationLike, limit, preference]
-      : [vector, region, destinationLike, limit];
+      ? [vector, stemLike, destinationLike, limit, preference]
+      : [vector, stemLike, destinationLike, limit];
 
     try {
       const rows: PlaceEmbeddingRow[] = await this.dataSource.query(
@@ -76,9 +82,9 @@ export class PlaceEmbeddingRepository {
         WHERE embedding IS NOT NULL
           AND (
             destination_region IS NULL
-            OR lower(destination_region) = $2
             OR name ILIKE $3
             OR address ILIKE $3
+            OR ($2 <> '' AND (region_sigungu ILIKE $2 OR destination_region ILIKE $2))
           )
         ORDER BY embedding <=> $1::vector
         LIMIT $4
@@ -149,10 +155,10 @@ export class PlaceEmbeddingRepository {
     const region = place.region.toLowerCase();
 
     const dedupeClause = place.kakaoPlaceId
-      ? { sql: 'kakao_place_id = $9', param: place.kakaoPlaceId }
+      ? { sql: 'kakao_place_id = $10', param: place.kakaoPlaceId }
       : place.tourismApiId
-        ? { sql: 'tourism_api_id = $9', param: place.tourismApiId }
-        : { sql: 'lower(destination_region) = $9 AND name = $3', param: region };
+        ? { sql: 'tourism_api_id = $10', param: place.tourismApiId }
+        : { sql: 'lower(destination_region) = $10 AND name = $3', param: region };
 
     const result: Array<{ inserted: number }> = await this.dataSource.query(
       `
@@ -163,10 +169,11 @@ export class PlaceEmbeddingRepository {
         address,
         category,
         destination_region,
+        region_sigungu,
         coordinates,
         embedding
       )
-      SELECT $1, $2, $3, $4, $5, $6, $7::jsonb, $8::vector
+      SELECT $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::vector
       WHERE NOT EXISTS (
         SELECT 1 FROM place_embeddings WHERE ${dedupeClause.sql}
       )
@@ -179,6 +186,7 @@ export class PlaceEmbeddingRepository {
         place.address ?? null,
         place.category ?? null,
         place.region,
+        place.regionSigungu ?? null,
         JSON.stringify(place.coordinates),
         vector,
         dedupeClause.param,

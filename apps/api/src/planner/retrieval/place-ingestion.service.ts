@@ -5,7 +5,7 @@ import { KAKAO_CATEGORY_CODES, KakaoLocalService } from './kakao-local.service';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { TourApiService } from './tour-api.service';
-import { inferPlaceTags } from './place-seeds';
+import { inferPlaceTags, parseSigungu } from './place-seeds';
 import type { IngestPlace, IngestRegionResult, IngestSource, IngestSummary } from './ingestion.types';
 
 export interface IngestOptions {
@@ -127,6 +127,7 @@ export class PlaceIngestionService {
           address: place.address,
           category: place.category,
           region: place.region,
+          regionSigungu: place.sigungu ?? null,
           coordinates: place.coordinates,
         },
         embedding,
@@ -184,13 +185,16 @@ export class PlaceIngestionService {
       for (const c of candidates) {
         if (!c.kakaoPlaceId || seen.has(c.kakaoPlaceId)) continue;
         seen.add(c.kakaoPlaceId);
+        const sigungu = parseSigungu(c.address);
         collected.push({
           kakaoPlaceId: c.kakaoPlaceId,
           name: c.name,
           category: c.category,
+          ...(c.categoryDetail ? { categoryDetail: c.categoryDetail } : {}),
           address: c.address,
           coordinates: c.coordinates,
           region,
+          ...(sigungu ? { sigungu } : {}),
           source: 'kakao' as const,
         });
         if (collected.length >= budget) break;
@@ -306,8 +310,21 @@ export class PlaceIngestionService {
     );
   }
 
+  /**
+   * 임베딩 대상 텍스트를 구성한다. 카테고리 상세(카카오 경로/KTO 유형명)와 지역(시도·시군구)을
+   * 명시적으로 포함해 질의(destination:… taste:…)와 토큰이 겹치도록 하고 의미 신호를 강화한다.
+   */
   private buildText(place: IngestPlace): string {
     const tags = inferPlaceTags(place).join(', ');
-    return [place.name, place.category, place.address, tags].filter(Boolean).join(' | ');
+    const regionLabel = [place.region, place.sigungu].filter(Boolean).join(' ');
+    return [
+      place.name,
+      place.categoryDetail || place.category,
+      regionLabel ? `지역: ${regionLabel}` : '',
+      place.address,
+      tags ? `태그: ${tags}` : '',
+    ]
+      .filter(Boolean)
+      .join(' | ');
   }
 }

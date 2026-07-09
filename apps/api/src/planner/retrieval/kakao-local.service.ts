@@ -234,7 +234,8 @@ export class KakaoLocalService {
     return {
       ...place,
       source: 'kakao' as const,
-      tags: inferPlaceTags(place),
+      tags: inferPlaceTags({ ...place, categoryDetail: doc.category_name }),
+      ...(doc.category_name ? { categoryDetail: doc.category_name } : {}),
       ...(doc.distance ? { distanceM: Number(doc.distance) } : {}),
     };
   }

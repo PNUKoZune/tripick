@@ -28,11 +28,15 @@ CREATE TABLE IF NOT EXISTS place_embeddings (
   name                TEXT NOT NULL,
   address             TEXT,
   category            TEXT,
-  destination_region  TEXT,
+  destination_region  TEXT,           -- 시도 라벨 (예: 서울, 경상북도)
+  region_sigungu      TEXT,           -- 시군구 라벨 (예: 경주시, 해운대구). 시/군 단위 정밀 필터용
   coordinates         JSONB,
   embedding           vector(1024),  -- BGE-m3(-ko) 차원. preference_embeddings 와 반드시 동일
   created_at          TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 기존 볼륨에 이미 테이블이 있는 경우를 위한 증분 컬럼 추가 (재실행 안전)
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS region_sigungu TEXT;
 
 -- pgvector HNSW 인덱스 (코사인 유사도 검색)
 CREATE INDEX IF NOT EXISTS idx_preference_embeddings_hnsw
@@ -46,6 +50,10 @@ CREATE INDEX IF NOT EXISTS idx_place_embeddings_hnsw
 -- 장소 임베딩 destination_region 인덱스
 CREATE INDEX IF NOT EXISTS idx_place_embeddings_region
   ON place_embeddings (destination_region);
+
+-- 시군구 정밀 필터 인덱스
+CREATE INDEX IF NOT EXISTS idx_place_embeddings_sigungu
+  ON place_embeddings (region_sigungu);
 
 -- 로컬 seed 및 외부 API 후보 중복 방지/조회 최적화용 보조 인덱스
 CREATE INDEX IF NOT EXISTS idx_place_embeddings_region_name

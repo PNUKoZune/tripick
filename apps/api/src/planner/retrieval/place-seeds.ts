@@ -75,6 +75,29 @@ const TAG_HINTS: Array<[string, string[]]> = [
   ['산책', ['walk', 'healing']],
 ];
 
+/**
+ * 목적지 문자열에서 행정구역 접미사를 떼어 매칭용 어간을 만든다.
+ * 예: '서울특별시'→'서울', '경상북도'→'경상북', '경주시'→'경주', '해운대구'→'해운대'.
+ * 첫 토큰만 사용해 '부산 해운대' 같은 다중 토큰도 시도 어간으로 정규화.
+ */
+export function regionStem(destination: string): string {
+  const first = destination.trim().split(/\s+/)[0] ?? '';
+  return first.replace(/(특별자치도|특별자치시|특별시|광역시|자치도|자치시|도|시|군|구)$/, '');
+}
+
+/**
+ * 주소에서 시군구 라벨을 추출한다. 첫 토큰(시도)을 건너뛰고
+ * 시/군/구로 끝나는 첫 토큰을 반환. 예: '경상북도 경주시 불국로 385'→'경주시'.
+ * 세종특별자치시처럼 시군구가 없으면 null.
+ */
+export function parseSigungu(address: string): string | null {
+  const parts = address.trim().split(/\s+/);
+  for (const part of parts.slice(1)) {
+    if (/(시|군|구)$/.test(part)) return part;
+  }
+  return null;
+}
+
 export function normalizeDestinationRegion(destination: string): string {
   const normalized = destination.toLowerCase();
   if (normalized.includes('서울') || normalized.includes('seoul')) return 'seoul';
@@ -98,9 +121,11 @@ export function getSeedCandidates(destination: string): RawPlaceCandidate[] {
   }));
 }
 
-export function inferPlaceTags(place: Pick<PlaceDto, 'name' | 'category' | 'address'>): string[] {
+export function inferPlaceTags(
+  place: Pick<PlaceDto, 'name' | 'category' | 'address'> & { categoryDetail?: string },
+): string[] {
   const tags = new Set<string>();
-  const haystack = `${place.name} ${place.category} ${place.address}`;
+  const haystack = `${place.name} ${place.category} ${place.address} ${place.categoryDetail ?? ''}`;
   for (const [keyword, hints] of TAG_HINTS) {
     if (haystack.includes(keyword)) {
       hints.forEach((hint) => tags.add(hint));

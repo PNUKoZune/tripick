@@ -82,9 +82,17 @@ flowchart TD
 
 ### 3.3 임베딩·멱등 적재 (`upsertPlace`)
 
-`name | category | address | tags` 텍스트를 임베딩해 `INSERT ... WHERE NOT EXISTS`로 삽입한다. 중복 판정 우선순위: `kakao_place_id` > `tourism_api_id` > `(destination_region, name)`. 이미 있으면 삽입하지 않는다(멱등).
+임베딩 텍스트는 `name | categoryDetail | 지역: 시도 시군구 | address | 태그: …` 형태로 구성한다. 코스 카테고리(attraction 등) 대신 **원본 카테고리 상세**(카카오 `category_name` 경로 예: "음식점 > 한식 > 국밥", KTO 콘텐츠 유형명 예: "문화시설")를 넣고, **지역(시도·시군구)을 명시**해 질의 텍스트(`destination:… taste:…`)와 토큰이 겹치도록 한다. `inferPlaceTags`도 `categoryDetail`을 함께 훑어 태그 신호를 늘린다. `INSERT ... WHERE NOT EXISTS`로 삽입하며 중복 판정 우선순위: `kakao_place_id` > `tourism_api_id` > `(destination_region, name)`. 이미 있으면 삽입하지 않는다(멱등).
 
-### 3.4 CLI 옵션
+> **임베딩 텍스트 포맷을 바꾸면** 기존 행은 예전 포맷으로 임베딩돼 있어 신규 행과 신호가 어긋난다. 전체 반영은 `--reseed`로 재적재해야 한다(7장).
+
+### 3.4 지역 라벨 granularity (시도 + 시군구)
+
+`place_embeddings`는 시도 라벨(`destination_region`, 예: '경상북도')에 더해 **시군구 라벨(`region_sigungu`, 예: '경주시')**을 저장한다. 시군구는 주소에서 파싱(`parseSigungu`)한다(첫 토큰=시도 건너뛰고 시/군/구로 끝나는 토큰).
+
+런타임 검색은 목적지 어간(`regionStem` — 행정 접미사 제거, 예: '경주'→'경주', '경상북도'→'경상북')으로 `region_sigungu`(프리픽스) 또는 `destination_region`을 매칭한다. 이전에는 `lower(destination_region) = normalizeDestinationRegion()`(영문 슬러그)로 비교해 **한글 시도명과 영문 슬러그가 어긋나 사실상 무력**했고 `name/address ILIKE`에만 의존했다. 이제 "경주"가 우연한 substring이 아니라 시군구 필터로 정확히 걸린다.
+
+### 3.5 CLI 옵션
 
 ```bash
 cd apps/api
@@ -94,7 +102,7 @@ pnpm ingest:places -- --reseed --regions=서울         # 재시드(아래 7장)
 pnpm ingest:places -- --allow-hash                   # 임베딩 서버 없이 강행(아래 8장)
 ```
 
-### 3.5 임베딩 서버 안전장치
+### 3.6 임베딩 서버 안전장치
 
 임베딩 서버가 죽어 있거나 URL 이 틀리면 `TextEmbeddingService`가 **조용히 해시 폴백**으로 벡터를 만든다. 그대로 두면 해시 벡터가 실제 벡터와 섞여 검색 품질이 손상된다. 이를 막기 위해:
 
