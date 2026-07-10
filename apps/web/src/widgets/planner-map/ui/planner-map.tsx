@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { FiNavigation, FiSearch, FiX } from 'react-icons/fi';
+import { FiMapPin, FiNavigation, FiSearch, FiX } from 'react-icons/fi';
 import type { PlannerMapCenterDto, PlannerMapMarkerDto } from '@tripick/types';
 
 import {
@@ -26,6 +26,10 @@ type Props = {
   showSearch?: boolean;
   /** 값이 바뀔 때마다 현재 center 로 부드럽게 재이동한다 (현재 위치 버튼 등) */
   recenterKey?: number;
+  /** 지정 시, 검색으로 고른 장소를 일정에 반영하는 액션 버튼을 노출한다 */
+  onPickSearchPlace?: (place: { name: string; address: string; lat: number; lng: number }) => void;
+  /** 반영 버튼 라벨 (기본: "이 장소로 일정 변경") */
+  pickPlaceLabel?: string;
 };
 
 const variantStyle: Record<PlannerMapMarkerDto['variant'], { dot: string; label: string }> = {
@@ -59,6 +63,8 @@ export function PlannerMap({
   onMarkerClick,
   showSearch = true,
   recenterKey,
+  onPickSearchPlace,
+  pickPlaceLabel = '이 장소로 일정 변경',
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<KakaoMapInstance | null>(null);
@@ -77,6 +83,7 @@ export function PlannerMap({
   const [searchOpen, setSearchOpen] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<{
     name: string;
+    address: string;
     lat: number;
     lng: number;
   } | null>(null);
@@ -237,7 +244,12 @@ export function PlannerMap({
       yAnchor: 1,
       map,
     });
-    setSelectedPlace({ name: place.place_name, lat, lng });
+    setSelectedPlace({
+      name: place.place_name,
+      address: place.road_address_name || place.address_name || '',
+      lat,
+      lng,
+    });
     setSearchQuery(place.place_name);
     setSearchOpen(false);
   };
@@ -290,7 +302,8 @@ export function PlannerMap({
         ) : null}
       </div>
       {showSearch ? (
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start gap-2 px-3 pt-3">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 px-3 pt-3">
+          <div className="flex items-start gap-2">
           <div className="pointer-events-auto relative flex-1">
             <div className="flex h-9 items-center rounded-[16px] border border-[#E5E8EB] bg-white px-3 shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
               <FiSearch aria-hidden className="mr-2 size-4 shrink-0 text-[#8B95A1]" />
@@ -352,6 +365,22 @@ export function PlannerMap({
             <FiNavigation className="size-4" />
             길찾기
           </button>
+          </div>
+          {onPickSearchPlace && selectedPlace && !searchOpen ? (
+            <div className="pointer-events-auto mt-2 flex items-center justify-between gap-2 rounded-[14px] border border-[#C7DCFF] bg-[#EAF2FF] px-3 py-2 shadow-[0_4px_12px_rgba(49,130,246,0.14)]">
+              <span className="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-[#1B64DA]">
+                <FiMapPin aria-hidden className="size-3.5 shrink-0" />
+                <span className="truncate">{selectedPlace.name}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => onPickSearchPlace(selectedPlace)}
+                className="shrink-0 rounded-[10px] bg-[#3182F6] px-2.5 py-1.5 text-[12px] font-bold text-white hover:bg-[#1B64DA]"
+              >
+                {pickPlaceLabel}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
       <div className="pointer-events-none absolute bottom-2 right-3 rounded-md bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-[#6B7684]">

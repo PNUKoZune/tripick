@@ -10,12 +10,14 @@ import {
   FiChevronsRight,
   FiUserPlus,
 } from 'react-icons/fi';
+import { LuSparkles } from 'react-icons/lu';
 import { useQuery } from '@tanstack/react-query';
 import type { PlannerItineraryItemDto, PlannerMapMarkerDto, PlannerTripDto } from '@tripick/types';
 
 import { SessionGuard } from '@/entities/session';
 import { fetchPlannerTrip, fetchPlannerTrips, isTripPeriodActive } from '@/entities/trip-plan';
 import { MemberAvatars } from '@/entities/member';
+import { useApplySearchedPlace, type SearchedPlace } from '@/features/apply-searched-place';
 import { DaySelector } from '@/features/day-selector';
 import { DeleteTripButton } from '@/features/delete-trip';
 import { TripMembersSheet } from '@/features/manage-trip-members';
@@ -23,7 +25,7 @@ import { PlannerTabs, type PlannerTab } from '@/features/planner-tab-switch';
 import { ReplanToast } from '@/features/subscribe-replan-result';
 import { queryKeys } from '@/shared/api/query-keys';
 import { useMediaQuery } from '@/shared/lib';
-import { Button, Chip } from '@/shared/ui';
+import { Button, Chip, Toast } from '@/shared/ui';
 import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
 import { AlternativeSheet } from '@/widgets/alternative-sheet';
 import { PlannerHeader } from '@/widgets/planner-header';
@@ -56,6 +58,11 @@ function PlannerContent({ tripId }: { tripId?: string }) {
   const isWideDesktop = useMediaQuery('(min-width: 1536px)');
   const activeSidePanel = isWideDesktop ? 'schedule' : sidePanel;
   const sidebarVisible = isWideDesktop || !sidebarCollapsed;
+  const [placeToast, setPlaceToast] = useState<{
+    tone: 'success' | 'warning' | 'error';
+    title: string;
+    message?: string;
+  } | null>(null);
 
   const {
     data: trips = [],
@@ -126,6 +133,53 @@ function PlannerContent({ tripId }: { tripId?: string }) {
     ? { lat: focusedMarker.lat, lng: focusedMarker.lng, level: 4 }
     : (trip?.mapCenter ?? { lat: 35.8347, lng: 129.2247, level: 7 });
 
+  const focusedItem = itemsForDay.find((i) => i.id === focusedItemId) ?? null;
+  const applyPlace = useApplySearchedPlace(trip?.id ?? selectedTripId);
+
+  // 지도 검색으로 고른 장소를 "선택한 일정 항목"에 반영(swap)한다
+  function handlePickSearchPlace(place: SearchedPlace) {
+    if (!focusedItem) {
+      setPlaceToast({
+        tone: 'warning',
+        title: '먼저 일정을 선택하세요',
+        message: '지도에 반영할 일정 항목을 목록에서 눌러 선택해 주세요.',
+      });
+      return;
+    }
+    const targetName = focusedItem.name;
+    applyPlace.mutate(
+      { itemId: focusedItem.id, place },
+      {
+        onSuccess: (result) => {
+          setSwapResult({ id: result.swappedItemId, name: result.newItemName });
+          setPlaceToast({
+            tone: 'success',
+            title: `‘${targetName}’을(를) 바꿨어요`,
+            message: result.warnings?.length
+              ? `${result.newItemName} · ${result.warnings[0]}`
+              : `${result.newItemName}(으)로 변경했어요.`,
+          });
+        },
+        onError: (err) => {
+          setPlaceToast({
+            tone: 'error',
+            title: '장소를 반영하지 못했어요',
+            ...(err instanceof Error ? { message: err.message } : {}),
+          });
+        },
+      },
+    );
+  }
+
+  // 토스트 자동 닫힘
+  useEffect(() => {
+    if (!placeToast) return;
+    const timer = setTimeout(() => setPlaceToast(null), 3600);
+    return () => clearTimeout(timer);
+  }, [placeToast]);
+
+  const pickPlaceLabel = focusedItem ? '이 일정으로 변경' : '이 장소로 일정 변경';
+
   return (
     <div className="min-h-dvh bg-[#F7F8FA]">
       {/* < lg : phone shell (모바일 우선) */}
@@ -143,6 +197,8 @@ function PlannerContent({ tripId }: { tripId?: string }) {
             placeholder={trip.searchPlaceholder}
             center={mapCenter}
             markers={dayMarkers}
+            onPickSearchPlace={handlePickSearchPlace}
+            pickPlaceLabel={pickPlaceLabel}
           />
         ) : (
           <div className="flex aspect-[390/290] items-center justify-center bg-[#F2F4F6] px-5 text-center text-[13px] font-semibold text-[#8B95A1]">
@@ -190,14 +246,14 @@ function PlannerContent({ tripId }: { tripId?: string }) {
           {trip ? (
             <button
               type="button"
-              aria-label="AI 도움"
+              aria-label="AI 대안 제안"
               onClick={() =>
                 setOpenItem(itemsForDay.find((i) => i.hasWaiting) ?? itemsForDay[0] ?? null)
               }
-              className="fixed bottom-[96px] z-20 flex size-14 items-center justify-center rounded-full bg-[#3182F6] text-[14px] font-bold text-white shadow-[0_12px_24px_rgba(49,130,246,0.32)] active:translate-y-px lg:hidden"
+              className="fixed bottom-[96px] z-20 flex size-14 items-center justify-center rounded-full bg-[#3182F6] text-white shadow-[0_12px_24px_rgba(49,130,246,0.32)] active:translate-y-px lg:hidden"
               style={{ right: 'max(20px, calc((100vw - 430px) / 2 + 20px))' }}
             >
-              AI
+              <LuSparkles className="size-6" aria-hidden />
             </button>
           ) : null}
         </div>
@@ -257,7 +313,10 @@ function PlannerContent({ tripId }: { tripId?: string }) {
                       setOpenItem(itemsForDay.find((i) => i.hasWaiting) ?? itemsForDay[0] ?? null)
                     }
                   >
-                    AI 대안 제안
+                    <span className="flex items-center gap-1.5">
+                      <LuSparkles className="size-4" aria-hidden />
+                      AI 대안 제안
+                    </span>
                   </Button>
                 ) : null}
               </div>
@@ -393,6 +452,8 @@ function PlannerContent({ tripId }: { tripId?: string }) {
                     if (!marker.itemId) return;
                     setFocusedItemId(marker.itemId);
                   }}
+                  onPickSearchPlace={handlePickSearchPlace}
+                  pickPlaceLabel={pickPlaceLabel}
                 />
               ) : (
                 <div className="flex flex-1 items-center justify-center bg-[#F2F4F6] px-6 text-center text-[14px] font-semibold text-[#8B95A1]">
@@ -427,6 +488,15 @@ function PlannerContent({ tripId }: { tripId?: string }) {
       />
 
       {selectedTripId ? <ReplanToast tripId={selectedTripId} /> : null}
+
+      {placeToast ? (
+        <Toast
+          tone={placeToast.tone}
+          title={placeToast.title}
+          {...(placeToast.message ? { message: placeToast.message } : {})}
+          onClose={() => setPlaceToast(null)}
+        />
+      ) : null}
     </div>
   );
 }
