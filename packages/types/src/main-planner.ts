@@ -162,8 +162,9 @@ export interface PlannerResolvePlaceRequestDto {
 }
 
 export interface PlannerResolvePlaceResponseDto {
-  alternative: PlannerAlternativeDto;
-  mapMarker: PlannerMapMarkerDto;
+  /** 검색된 실제 장소 후보들 (상위 몇 곳). 사용자가 이 중 맞는 곳을 고른다 */
+  alternatives: PlannerAlternativeDto[];
+  mapMarkers: PlannerMapMarkerDto[];
 }
 
 /** swap 대상 장소. 추천/커스텀/링크 어디서 왔든 동일한 형태로 반영 */
@@ -187,6 +188,8 @@ export interface PlannerSwapResponseDto {
   newItemName: string;
   /** 반영 후 실현가능성 경고 (이동시간이 빠듯한 경우 등). 없으면 생략 */
   warnings?: string[];
+  /** 되돌리기용: 바뀌기 직전 장소 (이 값으로 다시 swap 하면 원복) */
+  previousPlace: PlannerSwapPlaceDto;
 }
 
 export type TripSummaryStatus = 'draft' | 'upcoming' | 'ongoing' | 'done';

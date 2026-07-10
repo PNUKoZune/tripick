@@ -23,10 +23,10 @@ type State =
   | { status: 'error'; message: string }
   | { status: 'ready'; data: PlannerAlternativeResponseDto };
 
-/** 장소 이름 검색으로 찾은, 사용자 확인 대기 중인 후보 */
-type PendingPlace = {
-  alternative: PlannerAlternativeDto;
-  mapMarker: PlannerMapMarkerDto;
+/** 장소 이름 검색으로 찾은, 사용자 확인 대기 중인 후보들 */
+type PendingCandidates = {
+  alternatives: PlannerAlternativeDto[];
+  markers: PlannerMapMarkerDto[];
 };
 
 function toSwapPlace(alt: PlannerAlternativeDto): PlannerSwapPlaceDto {
@@ -44,8 +44,9 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [appliedName, setAppliedName] = useState<string | null>(null);
-  // 장소 이름 검색으로 찾아 확인 대기 중인 후보
-  const [pendingPlace, setPendingPlace] = useState<PendingPlace | null>(null);
+  // 장소 이름 검색으로 찾은 후보들 + 그 중 사용자가 고른 후보
+  const [pending, setPending] = useState<PendingCandidates | null>(null);
+  const [pendingSelectedId, setPendingSelectedId] = useState<string | null>(null);
 
   const alternativesQuery = useQuery({
     queryKey: queryKeys.planner.alternatives(tripId, itemId ?? 'pending'),
@@ -61,7 +62,8 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
 
   // itemId 가 바뀌면 로컬 상태 초기화
   useEffect(() => {
-    setPendingPlace(null);
+    setPending(null);
+    setPendingSelectedId(null);
     setSelectedId(null);
     setAppliedName(null);
   }, [itemId]);
@@ -98,7 +100,8 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
       return resolvePlannerPlace(tripId, itemId, name);
     },
     onSuccess: (result) => {
-      setPendingPlace(result);
+      setPending({ alternatives: result.alternatives, markers: result.mapMarkers });
+      setPendingSelectedId(result.alternatives[0]?.id ?? null);
     },
   });
 
@@ -135,7 +138,8 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
   );
 
   const cancelPending = useCallback(() => {
-    setPendingPlace(null);
+    setPending(null);
+    setPendingSelectedId(null);
     searchPlaceMutation.reset();
   }, [searchPlaceMutation]);
 
@@ -149,6 +153,15 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
     [replanMutation],
   );
 
+  /** 임의의 장소로 교체 (되돌리기 등에서 재사용). */
+  const swapToPlace = useCallback(
+    (place: PlannerSwapPlaceDto) => {
+      if (swapMutation.isPending) return null;
+      return swapMutation.mutateAsync(place);
+    },
+    [swapMutation],
+  );
+
   const apply = useCallback(async () => {
     if (!itemId || !selectedId || swapMutation.isPending) return null;
     const selected = alternatives.find((alt) => alt.id === selectedId);
@@ -158,23 +171,28 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
   }, [swapMutation, itemId, selectedId, alternativesQuery.data]);
 
   const confirmPending = useCallback(async () => {
-    if (!pendingPlace || swapMutation.isPending) return null;
-    const result = await swapMutation.mutateAsync(toSwapPlace(pendingPlace.alternative));
-    setPendingPlace(null);
+    if (!pending || !pendingSelectedId || swapMutation.isPending) return null;
+    const chosen = pending.alternatives.find((alt) => alt.id === pendingSelectedId);
+    if (!chosen) return null;
+    const result = await swapMutation.mutateAsync(toSwapPlace(chosen));
+    setPending(null);
+    setPendingSelectedId(null);
     return result;
-  }, [swapMutation, pendingPlace]);
+  }, [swapMutation, pending, pendingSelectedId]);
 
   return {
     state,
     alternatives,
     selectedId,
     setSelectedId,
-    // 장소 이름 검색 → 확인 플로우
+    // 장소 이름 검색 → 확인 플로우 (복수 후보 중 선택)
     searchPlace,
     searchingPlace: searchPlaceMutation.isPending,
     searchPlaceError:
       searchPlaceMutation.error instanceof Error ? searchPlaceMutation.error.message : null,
-    pendingPlace,
+    pending,
+    pendingSelectedId,
+    setPendingSelectedId,
     cancelPending,
     confirmPending,
     // 자유 텍스트 요청 → AI 재계획
@@ -182,6 +200,7 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
     requestingReplan: replanMutation.isPending,
     replanError: replanMutation.error instanceof Error ? replanMutation.error.message : null,
     apply,
+    swapToPlace,
     submitting: swapMutation.isPending,
     appliedName,
   };

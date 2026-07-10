@@ -1,7 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { PlannerItineraryItemDto, PlannerMapCenterDto } from '@tripick/types';
+import type {
+  PlannerItineraryItemDto,
+  PlannerMapCenterDto,
+  PlannerSwapPlaceDto,
+} from '@tripick/types';
 
 import { AlternativeCard } from '@/entities/alternative';
 import { useAlternativeController } from '@/features/select-alternative';
@@ -25,8 +29,12 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
   const [placeName, setPlaceName] = useState('');
   // 자유 텍스트 → AI 재계획 요청 전송 완료 상태
   const [replanRequested, setReplanRequested] = useState(false);
-  // swap 반영 후 실현가능성 경고 (이동시간 빠듯 등)
-  const [swapWarnings, setSwapWarnings] = useState<string[]>([]);
+  // swap 반영 결과 (변경명·되돌리기용 이전 장소·경고)
+  const [swapResult, setSwapResult] = useState<{
+    newName: string;
+    previousPlace: PlannerSwapPlaceDto;
+    warnings: string[];
+  } | null>(null);
 
   // 시트를 새로 열 때마다 입력 초기화
   useEffect(() => {
@@ -35,7 +43,7 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
       setRequestText('');
       setPlaceName('');
       setReplanRequested(false);
-      setSwapWarnings([]);
+      setSwapResult(null);
     }
   }, [open, item?.id]);
 
@@ -46,14 +54,32 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
     return () => clearTimeout(timer);
   }, [replanRequested, onClose]);
 
-  const readyData = controller.state.status === 'ready' ? controller.state.data : null;
-  const { pendingPlace, selectedId } = controller;
+  // 경고 없는 변경은 되돌리기 여유를 두고 5초 뒤 자동으로 닫는다
+  useEffect(() => {
+    if (!swapResult || swapResult.warnings.length > 0) return;
+    const timer = setTimeout(onClose, 5000);
+    return () => clearTimeout(timer);
+  }, [swapResult, onClose]);
 
-  // 지도: 확인 대기 장소 > 선택한 대안 순으로 초점을 맞춘다
+  async function handleUndo() {
+    if (!swapResult || !item) return;
+    const result = await controller.swapToPlace(swapResult.previousPlace);
+    if (result) {
+      onApplied(result.newItemName, item.id);
+      onClose();
+    }
+  }
+
+  const readyData = controller.state.status === 'ready' ? controller.state.data : null;
+  const { pending, pendingSelectedId, selectedId } = controller;
+
+  // 지도: 확인 대기 후보 > 선택한 대안 순으로 초점을 맞춘다
   const baseMarkers = readyData?.mapMarkers ?? [];
-  const mapMarkers = pendingPlace ? [...baseMarkers, pendingPlace.mapMarker] : baseMarkers;
-  const activeMarkerId = pendingPlace
-    ? pendingPlace.mapMarker.id
+  const mapMarkers = pending ? [...baseMarkers, ...pending.markers] : baseMarkers;
+  const activeMarkerId = pending
+    ? pendingSelectedId
+      ? `marker-${pendingSelectedId}`
+      : (pending.markers[0]?.id ?? null)
     : selectedId
       ? `marker-${selectedId}`
       : null;
@@ -121,24 +147,43 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
               {readyData.realtime ? <Chip tone="success">실데이터</Chip> : null}
             </div>
 
-            {swapWarnings.length > 0 ? (
-              <div className="mt-4 rounded-[16px] border border-[#FDE68A] bg-[#FFFBEB] p-4">
-                <div className="text-[13px] font-bold text-[#B45309]">
-                  반영했지만 확인이 필요해요
+            {swapResult ? (
+              <div
+                className={`mt-4 rounded-[16px] border p-4 ${
+                  swapResult.warnings.length > 0
+                    ? 'border-[#FDE68A] bg-[#FFFBEB]'
+                    : 'border-[#C7DCFF] bg-[#F4F9FF]'
+                }`}
+              >
+                {swapResult.warnings.length > 0 ? (
+                  <>
+                    <div className="text-[13px] font-bold text-[#B45309]">
+                      변경했지만 확인이 필요해요
+                    </div>
+                    <ul className="mt-1.5 space-y-1 text-[13px] leading-[18px] text-[#92400E]">
+                      {swapResult.warnings.map((w) => (
+                        <li key={w}>· {w}</li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <div className="text-[14px] font-bold text-[#1B64DA]">
+                    ‘{swapResult.newName}’(으)로 변경했어요.
+                  </div>
+                )}
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    variant="secondary"
+                    fullWidth
+                    disabled={controller.submitting}
+                    onClick={handleUndo}
+                  >
+                    되돌리기
+                  </Button>
+                  <Button variant="primary" fullWidth onClick={onClose}>
+                    확인
+                  </Button>
                 </div>
-                <ul className="mt-1.5 space-y-1 text-[13px] leading-[18px] text-[#92400E]">
-                  {swapWarnings.map((w) => (
-                    <li key={w}>· {w}</li>
-                  ))}
-                </ul>
-                <Button
-                  variant="secondary"
-                  fullWidth
-                  className="mt-3"
-                  onClick={onClose}
-                >
-                  확인
-                </Button>
               </div>
             ) : null}
 
@@ -217,19 +262,23 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
               ) : null}
             </div>
 
-            {/* 장소 이름 검색 결과 — "이 장소가 맞나요?" 확인 */}
-            {pendingPlace ? (
+            {/* 장소 이름 검색 결과 — 후보 중 맞는 곳 선택 */}
+            {pending ? (
               <div className="mt-4 rounded-[16px] border border-[#3182F6] bg-[#EAF2FF] p-4">
-                <div className="text-[13px] font-bold text-[#1B64DA]">이 장소가 맞나요?</div>
-                <div className="mt-1 text-[16px] font-bold text-[#191F28]">
-                  {pendingPlace.alternative.name}
+                <div className="text-[13px] font-bold text-[#1B64DA]">
+                  {pending.alternatives.length > 1 ? '이 중 맞는 곳을 골라주세요' : '이 장소가 맞나요?'}
                 </div>
-                {pendingPlace.alternative.address ? (
-                  <div className="mt-0.5 text-[13px] text-[#6B7684]">
-                    {pendingPlace.alternative.address}
-                  </div>
-                ) : null}
-                <div className="mt-1 text-[12px] text-[#8B95A1]">
+                <div className="mt-2 space-y-2">
+                  {pending.alternatives.map((alt) => (
+                    <AlternativeCard
+                      key={alt.id}
+                      alternative={alt}
+                      selected={pendingSelectedId === alt.id}
+                      onSelect={() => controller.setPendingSelectedId(alt.id)}
+                    />
+                  ))}
+                </div>
+                <div className="mt-1.5 text-[12px] text-[#8B95A1]">
                   위쪽 지도에서 위치를 확인해보세요.
                 </div>
                 <div className="mt-3 flex gap-2">
@@ -238,19 +287,22 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
                     className="h-10 flex-1 text-[14px]"
                     onClick={controller.cancelPending}
                   >
-                    아니요
+                    취소
                   </Button>
                   <Button
                     variant="primary"
                     className="h-10 flex-1 text-[14px]"
-                    disabled={controller.submitting}
+                    disabled={controller.submitting || !pendingSelectedId}
                     onClick={async () => {
                       if (!item) return;
                       const result = await controller.confirmPending();
                       if (result) {
                         onApplied(result.newItemName, item.id);
-                        if (result.warnings?.length) setSwapWarnings(result.warnings);
-                        else onClose();
+                        setSwapResult({
+                          newName: result.newItemName,
+                          previousPlace: result.previousPlace,
+                          warnings: result.warnings ?? [],
+                        });
                       }
                     }}
                   >
@@ -311,20 +363,17 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
                   const result = await controller.apply();
                   if (result) {
                     onApplied(result.newItemName, item.id);
-                    if (result.warnings?.length) setSwapWarnings(result.warnings);
-                    else onClose();
+                    setSwapResult({
+                      newName: result.newItemName,
+                      previousPlace: result.previousPlace,
+                      warnings: result.warnings ?? [],
+                    });
                   }
                 }}
               >
                 {controller.submitting ? '변경 중…' : '이 장소로 변경'}
               </Button>
             </div>
-
-            {controller.appliedName ? (
-              <div className="mt-3 text-center text-[13px] text-[#00A86B]">
-                {controller.appliedName}(으)로 변경됐어요.
-              </div>
-            ) : null}
           </>
         ) : null}
       </div>

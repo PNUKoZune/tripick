@@ -19,8 +19,11 @@ export class ReplanningService {
       throw new ForbiddenException();
     }
 
+    // P3-12: 같은 여행·트리거의 재계획을 짧은 시간 창(10초) 안에서 dedup.
+    // BullMQ 는 동일 jobId 를 무시하므로 연속 클릭/중복 제출이 하나의 잡으로 합쳐진다.
+    const bucket = Math.floor(Date.now() / 10_000);
     const job = await this.queue.add(REPLAN_JOB, dto, {
-      jobId: `${dto.tripId}-${Date.now()}`,
+      jobId: `${dto.tripId}-${dto.trigger}-${bucket}`,
     });
     return {
       jobId: String(job.id),

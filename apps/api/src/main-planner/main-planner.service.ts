@@ -29,6 +29,7 @@ import type {
   PlannerMapMarkerDto,
   PlannerMemberDto,
   PlannerResolvePlaceResponseDto,
+  PlannerSwapPlaceDto,
   PlannerSwapRequestDto,
   PlannerSwapResponseDto,
   PlannerTripDto,
@@ -248,21 +249,23 @@ export class MainPlannerService {
       throw new BadRequestException('장소 이름을 입력해 주세요.');
     }
 
+    // P3-8: 상위 후보 몇 곳을 돌려줘 사용자가 맞는 곳을 고르게 한다
     const results = await this.kakaoLocal.searchByText(
       keyword,
-      1,
+      3,
       item.coordinates,
       MainPlannerService.ALTERNATIVE_RADIUS_M * 8,
     );
-    const place = results[0];
-    if (!place) {
-      throw new NotFoundException(`"${keyword}" 장소를 찾지 못했어요. 다른 링크로 시도해 주세요.`);
+    if (results.length === 0) {
+      throw new NotFoundException(`"${keyword}" 장소를 찾지 못했어요. 다른 이름으로 시도해 주세요.`);
     }
 
-    const alternative = this.toRealAlternative(item, place);
+    const alternatives = results.map((place) => this.toRealAlternative(item, place));
     return {
-      alternative,
-      mapMarker: this.toAlternativeMarker(alternative, 1),
+      alternatives,
+      mapMarkers: alternatives.map((alternative, index) =>
+        this.toAlternativeMarker(alternative, index + 1),
+      ),
     };
   }
 
@@ -276,6 +279,14 @@ export class MainPlannerService {
 
     const place = dto.place;
     const previousName = item.name;
+    // P3-10: 되돌리기용으로 바뀌기 직전 장소를 보관
+    const previousPlace: PlannerSwapPlaceDto = {
+      name: item.name,
+      category: this.toPlannerItemType(item.type),
+      address: item.address,
+      lat: item.coordinates.lat,
+      lng: item.coordinates.lng,
+    };
     item.name = place.name;
     item.address = place.address?.trim() || `${place.name} 인근`;
     item.coordinates = { lat: place.lat, lng: place.lng };
@@ -319,6 +330,7 @@ export class MainPlannerService {
       tripId,
       swappedItemId: dto.itemId,
       newItemName: place.name,
+      previousPlace,
       ...(warnings.length > 0 ? { warnings } : {}),
     };
   }
@@ -688,9 +700,12 @@ export class MainPlannerService {
     }
 
     const itemType = this.toPlannerItemType(item.type);
+    // P2-7: 이미 이 여행 일정에 담긴 장소는 대안에서 제외 (현재 항목 포함)
+    const tripItems = await this.itemsRepo.find({ where: { tripId: trip.id } });
+    const usedNames = new Set(tripItems.map((entry) => entry.name.trim()));
     const seen = new Set<string>();
     const deduped = retrieval.places.filter((place) => {
-      if (place.name === item.name) return false; // 현재 장소 자기 자신 제외
+      if (usedNames.has(place.name.trim())) return false;
       const key = place.kakaoPlaceId ?? `${place.name}:${place.address}`;
       if (seen.has(key)) return false;
       seen.add(key);
