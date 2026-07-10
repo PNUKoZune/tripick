@@ -9,7 +9,12 @@ import type {
   PlannerSwapPlaceDto,
 } from '@tripick/types';
 
-import { fetchPlannerAlternatives, resolvePlannerPlace, swapPlannerItem } from '@/entities/trip-plan';
+import {
+  fetchPlannerAlternatives,
+  requestTripReplan,
+  resolvePlannerPlace,
+  swapPlannerItem,
+} from '@/entities/trip-plan';
 import { queryKeys } from '@/shared/api/query-keys';
 
 type State =
@@ -39,18 +44,16 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [appliedName, setAppliedName] = useState<string | null>(null);
-  // 사용자가 확정한 자유 텍스트 요청 (예: "조용한 감성 카페"). '' 이면 기본 추천.
-  const [query, setQuery] = useState('');
   // 장소 이름 검색으로 찾아 확인 대기 중인 후보
   const [pendingPlace, setPendingPlace] = useState<PendingPlace | null>(null);
 
   const alternativesQuery = useQuery({
-    queryKey: queryKeys.planner.alternatives(tripId, itemId ?? 'pending', query),
+    queryKey: queryKeys.planner.alternatives(tripId, itemId ?? 'pending'),
     queryFn: () => {
       if (!itemId) {
         throw new Error('일정 항목을 먼저 선택해주세요.');
       }
-      return fetchPlannerAlternatives(tripId, itemId, query);
+      return fetchPlannerAlternatives(tripId, itemId);
     },
     enabled: Boolean(itemId),
     staleTime: 2 * 60 * 1000,
@@ -58,7 +61,6 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
 
   // itemId 가 바뀌면 로컬 상태 초기화
   useEffect(() => {
-    setQuery('');
     setPendingPlace(null);
     setSelectedId(null);
     setAppliedName(null);
@@ -100,6 +102,19 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
     },
   });
 
+  // 자유 텍스트 요청 → AI 재계획(BullMQ) 트리거. 결과는 replan_result 로 도착해 ReplanToast 가 노출한다.
+  const replanMutation = useMutation({
+    mutationFn: (note: string) => {
+      if (!itemId) throw new Error('일정 항목을 먼저 선택해주세요.');
+      return requestTripReplan({
+        tripId,
+        trigger: 'manual',
+        deviatedItemId: itemId,
+        note,
+      });
+    },
+  });
+
   const state: State = !itemId
     ? { status: 'idle' }
     : alternativesQuery.isPending
@@ -109,10 +124,6 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
         : alternativesQuery.data
           ? { status: 'ready', data: alternativesQuery.data }
           : { status: 'loading' };
-
-  const submitSearch = useCallback((text: string) => {
-    setQuery(text.trim());
-  }, []);
 
   const searchPlace = useCallback(
     async (name: string) => {
@@ -127,6 +138,16 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
     setPendingPlace(null);
     searchPlaceMutation.reset();
   }, [searchPlaceMutation]);
+
+  const requestReplan = useCallback(
+    async (note: string): Promise<boolean> => {
+      if (!note.trim() || replanMutation.isPending) return false;
+      replanMutation.reset();
+      const result = await replanMutation.mutateAsync(note.trim()).catch(() => null);
+      return Boolean(result);
+    },
+    [replanMutation],
+  );
 
   const apply = useCallback(async () => {
     if (!itemId || !selectedId || swapMutation.isPending) return null;
@@ -148,9 +169,6 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
     alternatives,
     selectedId,
     setSelectedId,
-    query,
-    submitSearch,
-    searching: alternativesQuery.isFetching && Boolean(query),
     // 장소 이름 검색 → 확인 플로우
     searchPlace,
     searchingPlace: searchPlaceMutation.isPending,
@@ -159,6 +177,10 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
     pendingPlace,
     cancelPending,
     confirmPending,
+    // 자유 텍스트 요청 → AI 재계획
+    requestReplan,
+    requestingReplan: replanMutation.isPending,
+    replanError: replanMutation.error instanceof Error ? replanMutation.error.message : null,
     apply,
     submitting: swapMutation.isPending,
     appliedName,

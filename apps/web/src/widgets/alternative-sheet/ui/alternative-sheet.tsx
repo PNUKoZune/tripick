@@ -23,6 +23,8 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
   const [keepOriginal, setKeepOriginal] = useState(false);
   const [requestText, setRequestText] = useState('');
   const [placeName, setPlaceName] = useState('');
+  // 자유 텍스트 → AI 재계획 요청 전송 완료 상태
+  const [replanRequested, setReplanRequested] = useState(false);
 
   // 시트를 새로 열 때마다 입력 초기화
   useEffect(() => {
@@ -30,8 +32,16 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
       setKeepOriginal(false);
       setRequestText('');
       setPlaceName('');
+      setReplanRequested(false);
     }
   }, [open, item?.id]);
+
+  // 재계획 요청을 보냈으면 잠시 안내 후 시트를 닫는다 (결과는 ReplanToast 가 노출)
+  useEffect(() => {
+    if (!replanRequested) return;
+    const timer = setTimeout(onClose, 1600);
+    return () => clearTimeout(timer);
+  }, [replanRequested, onClose]);
 
   const readyData = controller.state.status === 'ready' ? controller.state.data : null;
   const { pendingPlace, selectedId } = controller;
@@ -108,34 +118,49 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
               {readyData.realtime ? <Chip tone="success">실시간 반영</Chip> : null}
             </div>
 
-            {/* 사용자 직접 요청: 자유 텍스트 추천 + 장소 이름 지정 */}
+            {/* 사용자 직접 요청: 자유 텍스트 AI 재계획 + 장소 이름 지정 */}
             <div className="mt-5 space-y-3 rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] p-4">
               <div className="text-[13px] font-bold text-[#4E5968]">
                 원하는 곳이 없나요? 직접 요청해보세요
               </div>
 
-              <form
-                className="flex gap-2"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  controller.submitSearch(requestText);
-                }}
-              >
-                <input
-                  value={requestText}
-                  onChange={(e) => setRequestText(e.target.value)}
-                  placeholder="예: 조용한 감성 카페 추천해줘"
-                  className="h-11 flex-1 rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[14px] text-[#191F28] outline-none placeholder:text-[#B0B8C1] focus:border-[#3182F6]"
-                />
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  className="h-11 shrink-0 px-4 text-[14px]"
-                  disabled={controller.searching || !requestText.trim()}
+              {replanRequested ? (
+                <div className="rounded-[12px] border border-[#C7DCFF] bg-[#EAF2FF] px-3 py-2.5 text-[13px] font-semibold text-[#1B64DA]">
+                  AI에게 요청을 보냈어요. 새 일정이 준비되면 알려드릴게요.
+                </div>
+              ) : (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void controller.requestReplan(requestText).then((ok) => {
+                      if (ok) {
+                        setRequestText('');
+                        setReplanRequested(true);
+                      }
+                    });
+                  }}
                 >
-                  {controller.searching ? '검색 중…' : '검색'}
-                </Button>
-              </form>
+                  <div className="flex gap-2">
+                    <input
+                      value={requestText}
+                      onChange={(e) => setRequestText(e.target.value)}
+                      placeholder="예: 조용한 감성 카페 위주로 바꿔줘"
+                      className="h-11 flex-1 rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[14px] text-[#191F28] outline-none placeholder:text-[#B0B8C1] focus:border-[#3182F6]"
+                    />
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      className="h-11 shrink-0 px-4 text-[14px]"
+                      disabled={controller.requestingReplan || !requestText.trim()}
+                    >
+                      {controller.requestingReplan ? '요청 중…' : 'AI 재계획'}
+                    </Button>
+                  </div>
+                  <div className="mt-1.5 text-[12px] text-[#8B95A1]">
+                    요청을 반영해 AI가 일정을 다시 짜드려요.
+                  </div>
+                </form>
+              )}
 
               <form
                 className="flex gap-2"
@@ -160,13 +185,11 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
                 </Button>
               </form>
 
+              {controller.replanError ? (
+                <div className="text-[12px] text-[#F04452]">{controller.replanError}</div>
+              ) : null}
               {controller.searchPlaceError ? (
                 <div className="text-[12px] text-[#F04452]">{controller.searchPlaceError}</div>
-              ) : null}
-              {controller.query ? (
-                <div className="text-[12px] text-[#6B7684]">
-                  ‘{controller.query}’ 요청 결과를 보여드려요.
-                </div>
               ) : null}
             </div>
 
@@ -215,7 +238,7 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
             <div className="mt-5 border-t border-[#E5E8EB] pt-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-[16px] font-bold leading-[22px] text-[#191F28]">
-                  {controller.query ? '요청 반영 결과' : 'AI 추천 대안'}
+                  AI 추천 대안
                 </h2>
                 <span className="text-[12px] font-semibold text-[#8B95A1]">
                   {controller.alternatives.length}곳
@@ -224,9 +247,7 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
 
               {controller.alternatives.length === 0 ? (
                 <div className="mt-3 rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] p-4 text-center text-[13px] text-[#6B7684]">
-                  {controller.query
-                    ? '요청에 맞는 장소를 찾지 못했어요. 다른 표현으로 시도해보세요.'
-                    : '추천할 대안을 찾지 못했어요.'}
+                  추천할 대안을 찾지 못했어요.
                 </div>
               ) : (
                 <div className="mt-3 space-y-2">

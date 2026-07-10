@@ -13,6 +13,7 @@ export {
   fetchPlannerCoordination,
   reportTripWaiting,
   reportTripDeviation,
+  requestTripReplan,
 } from './api';
 export { splitTripSchedule, isTripPeriodActive } from './lib/select-active-trip';
 export type { TripScheduleSplit } from './lib/select-active-trip';

@@ -87,3 +87,8 @@ export function reportTripWaiting(body: ReplanRequestDto) {
 export function reportTripDeviation(body: ReplanRequestDto) {
   return api.post<ReplanJobDto>('/alternative/deviation', body);
 }
+
+/** 대안 팝업 자유 텍스트 요청 → 재계획 트리거 (manual, BullMQ 잡 등록) */
+export function requestTripReplan(body: ReplanRequestDto) {
+  return api.post<ReplanJobDto>('/alternative/request', body);
+}
