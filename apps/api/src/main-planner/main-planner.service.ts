@@ -806,6 +806,7 @@ export class MainPlannerService {
         : `체류 ${item.durationMin}분`,
       durationMin: item.durationMin,
       ...(item.memo ? { memo: item.memo } : {}),
+      ...(item.kakaoPlaceId ? { kakaoPlaceId: item.kakaoPlaceId } : {}),
       hasWaiting: item.type === 'restaurant',
       ...(item.type === 'restaurant' ? { waitingMinutes: 15 } : {}),
     };

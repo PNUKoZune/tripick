@@ -1,10 +1,17 @@
 'use client';
 
 import { FiAlertTriangle, FiChevronRight } from 'react-icons/fi';
-import { LuGripVertical, LuPencil, LuTrash2 } from 'react-icons/lu';
+import { LuExternalLink, LuGripVertical, LuPencil, LuTrash2 } from 'react-icons/lu';
 import type { PlannerItineraryItemDto } from '@tripick/types';
 
 import { ChangeScheduleButton, Chip } from '@/shared/ui';
+
+/** 카카오맵 장소 페이지 URL. place ID 가 있으면 상세 페이지, 없으면 이름 검색으로 폴백. */
+function kakaoPlaceUrl(item: PlannerItineraryItemDto): string {
+  return item.kakaoPlaceId
+    ? `https://place.map.kakao.com/${item.kakaoPlaceId}`
+    : `https://map.kakao.com/link/search/${encodeURIComponent(item.name)}`;
+}
 
 const typeToneMap = {
   attraction: 'primary',
@@ -47,6 +54,7 @@ export function ItineraryItemCard({
     ? 'border-[#3182F6] bg-[#EAF2FF] shadow-[0_8px_24px_rgba(49,130,246,0.12)]'
     : 'border-[#E5E8EB] bg-white hover:border-[#C7DCFF] hover:bg-[#FAFBFC]';
   const showControls = Boolean(onEdit || onDelete);
+  const placeUrl = kakaoPlaceUrl(item);
   return (
     <div
       className={`flex w-full items-stretch gap-2 text-left transition ${dragging ? 'opacity-60' : ''}`}
@@ -117,30 +125,41 @@ export function ItineraryItemCard({
             <ChangeScheduleButton onClick={onSwitch} urgent={item.hasWaiting} label="변경" />
           </div>
         ) : null}
-        {showControls ? (
-          <div className="mt-2 flex items-center justify-end gap-1 border-t border-[#F2F4F6] pt-2">
-            {onEdit ? (
-              <button
-                type="button"
-                onClick={onEdit}
-                className="flex h-7 items-center gap-1 rounded-[8px] px-2 text-[12px] font-semibold text-[#4E5968] hover:bg-[#F2F4F6]"
-              >
-                <LuPencil className="size-3.5" />
-                수정
-              </button>
-            ) : null}
-            {onDelete ? (
-              <button
-                type="button"
-                onClick={onDelete}
-                className="flex h-7 items-center gap-1 rounded-[8px] px-2 text-[12px] font-semibold text-[#F04452] hover:bg-[#FFECEE]"
-              >
-                <LuTrash2 className="size-3.5" />
-                삭제
-              </button>
-            ) : null}
-          </div>
-        ) : null}
+        <div className="mt-2 flex items-center justify-between gap-1 border-t border-[#F2F4F6] pt-2">
+          <a
+            href={placeUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex h-7 items-center gap-1 rounded-[8px] px-2 text-[12px] font-semibold text-[#4E5968] hover:bg-[#F2F4F6]"
+          >
+            <LuExternalLink className="size-3.5" />
+            카카오맵
+          </a>
+          {showControls ? (
+            <div className="flex items-center gap-1">
+              {onEdit ? (
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  className="flex h-7 items-center gap-1 rounded-[8px] px-2 text-[12px] font-semibold text-[#4E5968] hover:bg-[#F2F4F6]"
+                >
+                  <LuPencil className="size-3.5" />
+                  수정
+                </button>
+              ) : null}
+              {onDelete ? (
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  className="flex h-7 items-center gap-1 rounded-[8px] px-2 text-[12px] font-semibold text-[#F04452] hover:bg-[#FFECEE]"
+                >
+                  <LuTrash2 className="size-3.5" />
+                  삭제
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
         </div>
       </div>
     </div>
