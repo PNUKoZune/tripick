@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { FiChevronRight, FiTrash2 } from 'react-icons/fi';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { deleteTrip } from '@/entities/trip-plan';
@@ -41,7 +42,7 @@ export function DeleteTripButton({ tripId, tripTitle, variant = 'menu', onError 
           aria-label="이 여행 삭제"
           className="flex h-9 items-center gap-1 rounded-[12px] border border-[#FECDD3] bg-white px-3 text-[13px] font-semibold text-[#F04452] hover:bg-[#FFECEE]"
         >
-          <span aria-hidden>🗑</span>
+          <FiTrash2 className="size-4" aria-hidden />
           <span className="hidden sm:inline">삭제</span>
         </button>
       ) : (
@@ -50,8 +51,11 @@ export function DeleteTripButton({ tripId, tripTitle, variant = 'menu', onError 
           onClick={() => setOpen(true)}
           className="flex h-12 w-full items-center justify-between rounded-[12px] border border-[#FECDD3] bg-white px-4 text-left text-[14px] font-bold text-[#F04452] hover:bg-[#FFECEE]"
         >
-          <span>이 여행 삭제</span>
-          <span className="text-[12px]">→</span>
+          <span className="flex items-center gap-2">
+            <FiTrash2 className="size-4" aria-hidden />
+            이 여행 삭제
+          </span>
+          <FiChevronRight className="size-4" aria-hidden />
         </button>
       )}
       {open ? (

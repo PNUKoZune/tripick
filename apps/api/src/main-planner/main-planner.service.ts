@@ -462,7 +462,7 @@ export class MainPlannerService {
       title: trip.title,
       isOwner,
       members: members.map((member) => this.toPlannerMember(member)),
-      searchPlaceholder: `${trip.destination} 여행 검색...`,
+      searchPlaceholder: `${trip.destination} 장소 검색...`,
       mapCenter: center,
       mapMarkers: markers,
       days,

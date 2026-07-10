@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { FiNavigation, FiSearch, FiX } from 'react-icons/fi';
 import type { PlannerMapCenterDto, PlannerMapMarkerDto } from '@tripick/types';
 
 import {
@@ -226,7 +227,7 @@ export function PlannerMap({
     const content = document.createElement('div');
     content.className = 'flex flex-col items-center';
     content.innerHTML = `
-      <span class="flex size-7 items-center justify-center rounded-full border border-[#C2415D] bg-[#F04452] text-[13px] text-white shadow-[0_4px_10px_rgba(240,68,82,0.4)]">📍</span>
+      <span class="flex size-7 items-center justify-center rounded-full border border-[#C2415D] bg-[#F04452] text-white shadow-[0_4px_10px_rgba(240,68,82,0.4)]"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></span>
       <span class="mt-1 inline-block max-w-[140px] truncate rounded-md border border-[#FECDD3] bg-white px-1.5 py-0.5 text-[11px] font-semibold text-[#F04452]">${escapeHtml(place.place_name)}</span>
     `;
     searchOverlayRef.current = new maps.CustomOverlay({
@@ -292,9 +293,7 @@ export function PlannerMap({
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start gap-2 px-3 pt-3">
           <div className="pointer-events-auto relative flex-1">
             <div className="flex h-9 items-center rounded-[16px] border border-[#E5E8EB] bg-white px-3 shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
-              <span aria-hidden className="mr-2 text-[#8B95A1]">
-                🔍
-              </span>
+              <FiSearch aria-hidden className="mr-2 size-4 shrink-0 text-[#8B95A1]" />
               <input
                 type="text"
                 value={searchQuery}
@@ -313,9 +312,9 @@ export function PlannerMap({
                   type="button"
                   onClick={clearSearch}
                   aria-label="검색 지우기"
-                  className="ml-1 shrink-0 text-[13px] text-[#B0B8C1] hover:text-[#6B7684]"
+                  className="ml-1 flex shrink-0 items-center text-[#B0B8C1] hover:text-[#6B7684]"
                 >
-                  ✕
+                  <FiX className="size-4" />
                 </button>
               ) : null}
             </div>
@@ -346,9 +345,11 @@ export function PlannerMap({
             type="button"
             onClick={openDirections}
             disabled={!directionsTarget}
+            aria-label="길찾기"
             title={directionsTarget ? `${directionsTarget.name} 길찾기` : '길찾기 대상이 없어요'}
-            className="pointer-events-auto h-9 shrink-0 rounded-[16px] bg-[#3182F6] px-3 text-[13px] font-semibold text-white shadow-[0_4px_12px_rgba(49,130,246,0.24)] disabled:cursor-not-allowed disabled:opacity-40"
+            className="pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-[16px] bg-[#3182F6] px-3 text-[13px] font-semibold text-white shadow-[0_4px_12px_rgba(49,130,246,0.24)] disabled:cursor-not-allowed disabled:opacity-40"
           >
+            <FiNavigation className="size-4" />
             길찾기
           </button>
         </div>
