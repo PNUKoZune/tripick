@@ -57,6 +57,10 @@ export interface KakaoPlace {
   place_name: string;
   address_name: string;
   road_address_name: string;
+  /** 카테고리 경로 (예: "음식점 > 카페 > 개인카페") */
+  category_name?: string;
+  /** 카테고리 그룹명 (예: "카페") */
+  category_group_name?: string;
   x: string;
   y: string;
 }

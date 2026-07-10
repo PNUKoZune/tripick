@@ -23,6 +23,7 @@ import { DeleteTripButton } from '@/features/delete-trip';
 import { EditableTimeline } from '@/features/edit-itinerary';
 import { TripMembersSheet } from '@/features/manage-trip-members';
 import { PlannerTabs, type PlannerTab } from '@/features/planner-tab-switch';
+import { ReplanModal } from '@/features/request-replan';
 import { ReplanToast } from '@/features/subscribe-replan-result';
 import { queryKeys } from '@/shared/api/query-keys';
 import { useMediaQuery } from '@/shared/lib';
@@ -51,6 +52,7 @@ function PlannerContent({ tripId }: { tripId?: string }) {
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [swapResult, setSwapResult] = useState<{ id: string; name: string } | null>(null);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [replanOpen, setReplanOpen] = useState(false);
   // 데스크탑 좌측 패널 탭 (2xl 미만: 우측 정보/조율 컬럼이 없어 좌측에서 전환)
   const [sidePanel, setSidePanel] = useState<'schedule' | 'info' | 'coordination'>('schedule');
   // 태블릿(2xl 미만)에서 좌측 패널을 접어 지도 영역을 넓힐 수 있게 한다
@@ -248,10 +250,8 @@ function PlannerContent({ tripId }: { tripId?: string }) {
           {trip ? (
             <button
               type="button"
-              aria-label="AI 대안 제안"
-              onClick={() =>
-                setOpenItem(itemsForDay.find((i) => i.hasWaiting) ?? itemsForDay[0] ?? null)
-              }
+              aria-label="AI 재계획"
+              onClick={() => setReplanOpen(true)}
               className="fixed bottom-[96px] z-20 flex size-14 items-center justify-center rounded-full bg-[#3182F6] text-white shadow-[0_12px_24px_rgba(49,130,246,0.32)] active:translate-y-px lg:hidden"
               style={{ right: 'max(20px, calc((100vw - 430px) / 2 + 20px))' }}
             >
@@ -311,13 +311,11 @@ function PlannerContent({ tripId }: { tripId?: string }) {
                     variant="primary"
                     size="md"
                     className="h-10 px-4 text-[14px]"
-                    onClick={() =>
-                      setOpenItem(itemsForDay.find((i) => i.hasWaiting) ?? itemsForDay[0] ?? null)
-                    }
+                    onClick={() => setReplanOpen(true)}
                   >
                     <span className="flex items-center gap-1.5">
                       <LuSparkles className="size-4" aria-hidden />
-                      AI 대안 제안
+                      AI 재계획
                     </span>
                   </Button>
                 ) : null}
@@ -489,6 +487,19 @@ function PlannerContent({ tripId }: { tripId?: string }) {
         tripId={trip?.id ?? selectedTripId}
         tripTitle={trip?.title ?? '여행'}
         members={trip?.members ?? []}
+      />
+
+      <ReplanModal
+        tripId={trip?.id ?? selectedTripId}
+        open={replanOpen}
+        onClose={() => setReplanOpen(false)}
+        onRequested={() =>
+          setPlaceToast({
+            tone: 'success',
+            title: 'AI가 일정을 다시 짜고 있어요',
+            message: '완료되면 일정에 자동으로 반영돼요.',
+          })
+        }
       />
 
       {selectedTripId ? <ReplanToast tripId={selectedTripId} /> : null}
