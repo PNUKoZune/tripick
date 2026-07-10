@@ -133,48 +133,7 @@ export class KakaoLocalService {
   }
 
   /**
-   * 대안 추천용: 특정 좌표 주변에서 카테고리 그룹 코드들로 실제 장소를 모은다.
-   * 일정 항목 근처의 같은 종류(음식점/카페/관광) 장소를 뽑을 때 사용.
-   */
-  async searchNearbyByCategories(
-    center: Coordinates,
-    radius: number,
-    categoryGroupCodes: readonly KakaoCategoryCode[],
-    limitPerCategory: number,
-  ): Promise<RawPlaceCandidate[]> {
-    const apiKey = this.apiKey();
-    if (!apiKey) return [];
-
-    const collected: RawPlaceCandidate[] = [];
-    const seen = new Set<string>();
-    for (const code of categoryGroupCodes) {
-      const places = await this.searchByCategory(apiKey, code, center, radius, limitPerCategory);
-      for (const place of places) {
-        const key = place.kakaoPlaceId ?? `${place.name}:${place.address}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        collected.push(place);
-      }
-    }
-    return collected;
-  }
-
-  /**
-   * 대안 추천용: 사용자가 입력한 자유 텍스트("조용한 감성 카페")를 좌표 주변에서 키워드 검색.
-   */
-  async searchNearbyKeyword(
-    keyword: string,
-    center: Coordinates,
-    radius: number,
-    limit: number,
-  ): Promise<RawPlaceCandidate[]> {
-    const apiKey = this.apiKey();
-    if (!apiKey) return [];
-    return this.searchKeyword(apiKey, keyword, limit, { center, radius });
-  }
-
-  /**
-   * 지도 링크 해석용: 링크에서 뽑아낸 장소명/키워드로 전국 키워드 검색.
+   * 장소 이름 검색용: 사용자가 입력한 장소명/키워드로 키워드 검색.
    * center 가 있으면 그 주변을 우선한다.
    */
   async searchByText(

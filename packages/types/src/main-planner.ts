@@ -116,8 +116,8 @@ export interface PlannerTripDto {
   progress: PlannerTripProgressDto;
 }
 
-/** 대안이 어디서 왔는지: AI 추천 · 사용자 자유 텍스트 검색 · 지도 링크 붙여넣기 */
-export type PlannerAlternativeOrigin = 'recommend' | 'custom' | 'link';
+/** 대안이 어디서 왔는지: AI 추천(CRAG) · 장소 이름 검색으로 직접 지정 */
+export type PlannerAlternativeOrigin = 'recommend' | 'link';
 
 export interface PlannerAlternativeDto {
   id: string;
@@ -127,7 +127,8 @@ export interface PlannerAlternativeDto {
   name: string;
   walkLabel: string;
   waitLabel: string;
-  rating: number;
+  /** 실제 평점이 있을 때만 (카카오는 미제공이라 대부분 없음) */
+  rating?: number;
   mapHref: string;
   badge: string;
   badgeTone: PlannerBadgeTone;
@@ -147,10 +148,8 @@ export interface PlannerAlternativeResponseDto {
   itemId: string;
   itemName: string;
   waitingMinutes: number;
-  radiusMeters: number;
+  /** 실데이터(카카오/pgvector) 기반 후보가 하나라도 포함됐는지 */
   realtime: boolean;
-  /** 사용자가 입력한 자유 텍스트 요청 (있을 때 그대로 에코) */
-  query?: string;
   alternatives: PlannerAlternativeDto[];
   mapCenter: PlannerMapCenterDto;
   mapMarkers: PlannerMapMarkerDto[];
@@ -186,6 +185,8 @@ export interface PlannerSwapResponseDto {
   tripId: string;
   swappedItemId: string;
   newItemName: string;
+  /** 반영 후 실현가능성 경고 (이동시간이 빠듯한 경우 등). 없으면 생략 */
+  warnings?: string[];
 }
 
 export type TripSummaryStatus = 'draft' | 'upcoming' | 'ongoing' | 'done';

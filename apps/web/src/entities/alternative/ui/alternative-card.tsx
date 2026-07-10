@@ -73,8 +73,12 @@ export function AlternativeCard({ alternative, selected, onSelect }: Props) {
           </div>
           <div className="mt-2 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-[13px] leading-[18px] text-[#6B7684]">
-              <span className="text-[#FF8A00]">★</span>
-              <span>{alternative.rating.toFixed(1)}</span>
+              {alternative.rating !== undefined ? (
+                <>
+                  <span className="text-[#FF8A00]">★</span>
+                  <span>{alternative.rating.toFixed(1)}</span>
+                </>
+              ) : null}
               <a
                 href={alternative.mapHref}
                 target="_blank"

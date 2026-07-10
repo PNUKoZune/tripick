@@ -25,6 +25,8 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
   const [placeName, setPlaceName] = useState('');
   // 자유 텍스트 → AI 재계획 요청 전송 완료 상태
   const [replanRequested, setReplanRequested] = useState(false);
+  // swap 반영 후 실현가능성 경고 (이동시간 빠듯 등)
+  const [swapWarnings, setSwapWarnings] = useState<string[]>([]);
 
   // 시트를 새로 열 때마다 입력 초기화
   useEffect(() => {
@@ -33,6 +35,7 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
       setRequestText('');
       setPlaceName('');
       setReplanRequested(false);
+      setSwapWarnings([]);
     }
   }, [open, item?.id]);
 
@@ -113,10 +116,31 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
 
             <div className="mt-3 flex flex-wrap gap-2">
               <Chip tone="primary" size="md">
-                카카오맵 기준 반경 {readyData.radiusMeters}m 내
+                취향 기반 추천
               </Chip>
-              {readyData.realtime ? <Chip tone="success">실시간 반영</Chip> : null}
+              {readyData.realtime ? <Chip tone="success">실데이터</Chip> : null}
             </div>
+
+            {swapWarnings.length > 0 ? (
+              <div className="mt-4 rounded-[16px] border border-[#FDE68A] bg-[#FFFBEB] p-4">
+                <div className="text-[13px] font-bold text-[#B45309]">
+                  반영했지만 확인이 필요해요
+                </div>
+                <ul className="mt-1.5 space-y-1 text-[13px] leading-[18px] text-[#92400E]">
+                  {swapWarnings.map((w) => (
+                    <li key={w}>· {w}</li>
+                  ))}
+                </ul>
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  className="mt-3"
+                  onClick={onClose}
+                >
+                  확인
+                </Button>
+              </div>
+            ) : null}
 
             {/* 사용자 직접 요청: 자유 텍스트 AI 재계획 + 장소 이름 지정 */}
             <div className="mt-5 space-y-3 rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] p-4">
@@ -225,7 +249,8 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
                       const result = await controller.confirmPending();
                       if (result) {
                         onApplied(result.newItemName, item.id);
-                        onClose();
+                        if (result.warnings?.length) setSwapWarnings(result.warnings);
+                        else onClose();
                       }
                     }}
                   >
@@ -286,7 +311,8 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
                   const result = await controller.apply();
                   if (result) {
                     onApplied(result.newItemName, item.id);
-                    onClose();
+                    if (result.warnings?.length) setSwapWarnings(result.warnings);
+                    else onClose();
                   }
                 }}
               >
