@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { LuMapPin, LuSearch } from 'react-icons/lu';
 import type { PlannerItemType, PlannerItineraryItemDto } from '@tripick/types';
 
 import { BottomSheet, Button, SegmentToggle } from '@/shared/ui';
+import { toResolvedPlace, useKakaoPlaceSearch, type KakaoPlace } from '@/shared/lib';
 
 export type ItemEditorValues = {
   name: string;
@@ -11,6 +13,9 @@ export type ItemEditorValues = {
   scheduledAt: string;
   durationMin: number;
   memo: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
 };
 
 type Props = {
@@ -39,15 +44,7 @@ const DEFAULTS: ItemEditorValues = {
   memo: '',
 };
 
-export function ItemEditorSheet({
-  open,
-  mode,
-  item,
-  pending,
-  error,
-  onClose,
-  onSubmit,
-}: Props) {
+export function ItemEditorSheet({ open, mode, item, pending, error, onClose, onSubmit }: Props) {
   const [values, setValues] = useState<ItemEditorValues>(DEFAULTS);
 
   useEffect(() => {
@@ -65,7 +62,9 @@ export function ItemEditorSheet({
     }
   }, [open, mode, item]);
 
-  const canSubmit = values.name.trim().length > 0 && /^\d{2}:\d{2}$/.test(values.scheduledAt);
+  // 추가 모드에서는 실제 존재하는 장소(좌표 포함)를 골라야 제출할 수 있다
+  const placePicked = mode === 'edit' || (values.name.trim().length > 0 && values.lat !== undefined);
+  const canSubmit = placePicked && /^\d{2}:\d{2}$/.test(values.scheduledAt);
 
   return (
     <BottomSheet open={open} onClose={onClose}>
@@ -75,21 +74,49 @@ export function ItemEditorSheet({
         </h2>
         <p className="mt-1 text-[13px] text-[#8B95A1]">
           {mode === 'add'
-            ? '이 날짜에 새 일정을 추가해요. 추가 후 지도에서 위치도 바꿀 수 있어요.'
-            : '시간·메모·장소명을 수정할 수 있어요.'}
+            ? '실제 장소를 검색해 추가해요. 장소를 고르면 지도 위치도 함께 저장됩니다.'
+            : '시간·체류시간·메모를 수정할 수 있어요. 장소를 바꾸려면 카드의 변경(대안) 버튼을 이용하세요.'}
         </p>
 
         <div className="mt-4 space-y-4">
-          <Field label="장소명">
-            <input
-              type="text"
-              value={values.name}
-              onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))}
-              placeholder="예) 첨성대"
-              maxLength={120}
-              className="h-11 w-full rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[15px] text-[#191F28] outline-none focus:border-[#3182F6] focus:ring-2 focus:ring-[#E1ECFF]"
-            />
-          </Field>
+          {mode === 'add' ? (
+            <Field label="장소 검색">
+              <PlaceSearchField
+                picked={
+                  values.lat !== undefined && values.name
+                    ? { name: values.name, address: values.address ?? '' }
+                    : null
+                }
+                onPick={(place) =>
+                  setValues((v) => ({
+                    ...v,
+                    name: place.name,
+                    address: place.address,
+                    lat: place.lat,
+                    lng: place.lng,
+                  }))
+                }
+                onClear={() =>
+                  setValues((v) => {
+                    const { address, lat, lng, ...rest } = v;
+                    void address;
+                    void lat;
+                    void lng;
+                    return { ...rest, name: '' };
+                  })
+                }
+              />
+            </Field>
+          ) : (
+            <Field label="장소">
+              <div className="flex items-center gap-2 rounded-[12px] border border-[#E5E8EB] bg-[#F7F8FA] px-3 py-2.5">
+                <LuMapPin className="size-4 shrink-0 text-[#8B95A1]" />
+                <span className="truncate text-[15px] font-semibold text-[#191F28]">
+                  {values.name}
+                </span>
+              </div>
+            </Field>
+          )}
 
           {mode === 'add' ? (
             <Field label="종류">
@@ -129,7 +156,7 @@ export function ItemEditorSheet({
             <textarea
               value={values.memo}
               onChange={(e) => setValues((v) => ({ ...v, memo: e.target.value }))}
-              placeholder="예약 시간, 준비물 등을 적어두세요."
+              placeholder="예약 시간, 준비물 등 나만의 메모를 남겨보세요."
               maxLength={500}
               rows={3}
               className="w-full resize-none rounded-[12px] border border-[#E5E8EB] bg-white px-3 py-2 text-[14px] text-[#191F28] outline-none focus:border-[#3182F6] focus:ring-2 focus:ring-[#E1ECFF]"
@@ -159,11 +186,7 @@ export function ItemEditorSheet({
             className="flex-1"
             disabled={!canSubmit || pending}
             onClick={() =>
-              onSubmit({
-                ...values,
-                name: values.name.trim(),
-                memo: values.memo.trim(),
-              })
+              onSubmit({ ...values, name: values.name.trim(), memo: values.memo.trim() })
             }
           >
             {pending ? '저장 중…' : mode === 'add' ? '추가' : '저장'}
@@ -171,6 +194,101 @@ export function ItemEditorSheet({
         </div>
       </div>
     </BottomSheet>
+  );
+}
+
+function PlaceSearchField({
+  picked,
+  onPick,
+  onClear,
+}: {
+  picked: { name: string; address: string } | null;
+  onPick: (place: { name: string; address: string; lat: number; lng: number }) => void;
+  onClear: () => void;
+}) {
+  const { ready, search } = useKakaoPlaceSearch();
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<KakaoPlace[]>([]);
+  const [openList, setOpenList] = useState(false);
+  const blurTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!ready || picked) return;
+    const timer = setTimeout(() => {
+      search(query, (places) => {
+        setResults(places);
+        setOpenList(places.length > 0);
+      });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [query, ready, picked, search]);
+
+  if (picked) {
+    return (
+      <div className="flex items-center gap-2 rounded-[12px] border border-[#C7DCFF] bg-[#EAF2FF] px-3 py-2.5">
+        <LuMapPin className="size-4 shrink-0 text-[#3182F6]" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] font-semibold text-[#191F28]">
+            {picked.name}
+          </span>
+          {picked.address ? (
+            <span className="block truncate text-[12px] text-[#6B7684]">{picked.address}</span>
+          ) : null}
+        </span>
+        <button
+          type="button"
+          onClick={onClear}
+          className="shrink-0 rounded-[8px] px-2 py-1 text-[12px] font-semibold text-[#3182F6] hover:bg-white"
+        >
+          다시 검색
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <div className="flex h-11 items-center rounded-[12px] border border-[#E5E8EB] bg-white px-3 focus-within:border-[#3182F6] focus-within:ring-2 focus-within:ring-[#E1ECFF]">
+        <LuSearch className="mr-2 size-4 shrink-0 text-[#8B95A1]" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => {
+            if (results.length > 0) setOpenList(true);
+          }}
+          onBlur={() => {
+            blurTimer.current = window.setTimeout(() => setOpenList(false), 120);
+          }}
+          placeholder={ready ? '장소 이름을 검색하세요 (예: 첨성대)' : '지도를 불러오는 중…'}
+          disabled={!ready}
+          autoComplete="off"
+          className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-[#191F28] outline-none placeholder:text-[#B0B8C1] disabled:cursor-not-allowed"
+        />
+      </div>
+      {openList && results.length > 0 ? (
+        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-10 max-h-64 overflow-y-auto rounded-[12px] border border-[#E5E8EB] bg-white py-1 shadow-[0_12px_28px_rgba(0,0,0,0.12)]">
+          {results.map((place, index) => (
+            <button
+              key={`${place.place_name}-${index}`}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                if (blurTimer.current) window.clearTimeout(blurTimer.current);
+                onPick(toResolvedPlace(place));
+                setOpenList(false);
+              }}
+              className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-[#F7F8FA]"
+            >
+              <span className="text-[14px] font-semibold text-[#191F28]">{place.place_name}</span>
+              <span className="text-[12px] text-[#8B95A1]">
+                {place.road_address_name || place.address_name}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

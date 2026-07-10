@@ -146,6 +146,8 @@ export class PlannerService {
       ? aiValidation.items
       : await this.rebuildValidDraft(candidates, draftContext, aiValidation);
 
+    // memo 는 사용자가 직접 남기는 메모 공간이므로 생성 단계의 AI 추론(취향·confidence·
+    // 날씨 힌트)을 저장하지 않는다. 새 일정의 memo 는 비어 있는 채로 시작한다.
     const toStore: CreateItineraryItemDto[] = finalItems.map((item) => ({
       tripId: item.tripId,
       day: item.day,
@@ -161,7 +163,6 @@ export class PlannerService {
       ...(item.phoneNumber ? { phoneNumber: item.phoneNumber } : {}),
       ...(item.kakaoPlaceId ? { kakaoPlaceId: item.kakaoPlaceId } : {}),
       ...(item.imageUrl ? { imageUrl: item.imageUrl } : {}),
-      ...(item.memo ? { memo: item.memo } : {}),
     } as CreateItineraryItemDto));
 
     const saved = await this.itineraryService.replaceTripItems(trip.id, toStore);

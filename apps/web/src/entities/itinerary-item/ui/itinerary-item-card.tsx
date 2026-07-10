@@ -56,8 +56,9 @@ export function ItineraryItemCard({
           type="button"
           ref={dragHandleRef}
           aria-label="드래그해서 순서 변경"
+          title="드래그해서 순서 변경"
           style={{ touchAction: 'none' }}
-          className="flex w-5 shrink-0 cursor-grab items-center justify-center self-stretch rounded-[8px] text-[#C4CAD2] hover:bg-[#F2F4F6] hover:text-[#8B95A1] active:cursor-grabbing"
+          className="mt-2 flex w-7 shrink-0 cursor-grab items-center justify-center self-stretch rounded-[10px] border border-[#E5E8EB] bg-[#F7F8FA] text-[#8B95A1] transition hover:border-[#C7DCFF] hover:bg-[#EAF2FF] hover:text-[#3182F6] active:cursor-grabbing"
         >
           <LuGripVertical className="size-4" />
         </button>

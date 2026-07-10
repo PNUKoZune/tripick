@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { LuPlus } from 'react-icons/lu';
+import { LuGripVertical, LuPlus } from 'react-icons/lu';
 import { DragDropProvider } from '@dnd-kit/react';
 import { useSortable } from '@dnd-kit/react/sortable';
 import { move } from '@dnd-kit/helpers';
@@ -65,6 +65,9 @@ export function EditableTimeline({
           type: values.type,
           scheduledAt: values.scheduledAt,
           durationMin: values.durationMin,
+          ...(values.address ? { address: values.address } : {}),
+          ...(values.lat !== undefined ? { lat: values.lat } : {}),
+          ...(values.lng !== undefined ? { lng: values.lng } : {}),
           ...(values.memo ? { memo: values.memo } : {}),
         },
         { onSuccess: () => setEditor(null) },
@@ -92,6 +95,13 @@ export function EditableTimeline({
           이 날짜에 등록된 일정이 없어요. 아래에서 추가해 보세요.
         </div>
       ) : (
+        <>
+        {orderedItems.length >= 2 ? (
+          <p className="mb-2 flex items-center gap-1.5 rounded-[10px] bg-[#F2F4F6] px-2.5 py-1.5 text-[12px] font-medium text-[#6B7684]">
+            <LuGripVertical className="size-3.5 shrink-0 text-[#8B95A1]" />
+            왼쪽 손잡이를 잡고 끌어 순서를 바꿀 수 있어요
+          </p>
+        ) : null}
         <DragDropProvider
           onDragEnd={(event) => {
             const next = move(order, event);
@@ -119,6 +129,7 @@ export function EditableTimeline({
             ))}
           </div>
         </DragDropProvider>
+        </>
       )}
 
       <button
