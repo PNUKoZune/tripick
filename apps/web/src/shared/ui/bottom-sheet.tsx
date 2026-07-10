@@ -14,7 +14,10 @@ type Props = {
 };
 
 const DURATION_MS = 320;
-const EASE_OUT = 'cubic-bezier(0.22, 1, 0.36, 1)';
+// 모바일 시트가 올라오는 시간은 조금 더 길게 둬서 급하게 튀어오르는 느낌을 줄인다.
+const SHEET_OPEN_MS = 440;
+// 시작이 급격하지 않고 부드럽게 감속하는 커브 (Vaul 계열)
+const EASE_OUT = 'cubic-bezier(0.32, 0.72, 0, 1)';
 const EASE_IN = 'cubic-bezier(0.4, 0, 1, 1)';
 
 export function BottomSheet({ open, onClose, children, topSlot }: Props) {
@@ -117,7 +120,8 @@ export function BottomSheet({ open, onClose, children, topSlot }: Props) {
               }
             : {
                 transform: isVisible ? 'translate3d(0, 0, 0)' : 'translate3d(0, 100%, 0)',
-                transition: `transform ${DURATION_MS}ms ${easing}`,
+                // 올라올 때(opening/open)만 길게, 닫힐 때는 기존 속도 유지
+                transition: `transform ${phase === 'closing' ? DURATION_MS : SHEET_OPEN_MS}ms ${easing}`,
                 willChange: 'transform',
                 alignItems: 'flex-end',
               }
