@@ -17,12 +17,12 @@ import {
   useDeviationDetection,
   type NextPlace,
 } from '@/features/detect-route-deviation';
-import { WaitingReportSheet } from '@/features/report-waiting';
 import { ReplanToast, useReplanSubscription } from '@/features/subscribe-replan-result';
 import { NextStopBar, useTripProgress } from '@/features/track-trip-progress';
 import { queryKeys } from '@/shared/api/query-keys';
 import { LocationPermissionBanner, useCurrentLocation } from '@/shared/location';
 import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
+import { AlternativeSheet } from '@/widgets/alternative-sheet';
 import { LiveMap } from '@/widgets/live-map';
 import { TripProgressTimeline } from '@/widgets/trip-progress-timeline';
 
@@ -85,7 +85,7 @@ function TripProgressContent() {
     return trip.mapMarkers.filter((m) => !m.itemId || ids.has(m.itemId));
   }, [trip, itemsForDay]);
 
-  const [waitingItem, setWaitingItem] = useState<PlannerItineraryItemDto | null>(null);
+  const [alternativeItem, setAlternativeItem] = useState<PlannerItineraryItemDto | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
   const selectedMarker = useMemo(
@@ -141,7 +141,7 @@ function TripProgressContent() {
               items={progressItems}
               selectedItemId={selectedItemId}
               onSelectItem={(item) => setSelectedItemId(item.id)}
-              onReportWaiting={setWaitingItem}
+              onSwitchItem={setAlternativeItem}
             />
           </div>
         </div>
@@ -188,7 +188,7 @@ function TripProgressContent() {
                 items={progressItems}
                 selectedItemId={selectedItemId}
                 onSelectItem={(item) => setSelectedItemId(item.id)}
-                onReportWaiting={setWaitingItem}
+                onSwitchItem={setAlternativeItem}
               />
             </div>
           </aside>
@@ -203,12 +203,12 @@ function TripProgressContent() {
         reporting={deviation.isReporting}
       />
 
-      <WaitingReportSheet
-        open={waitingItem !== null}
-        onClose={() => setWaitingItem(null)}
+      <AlternativeSheet
         tripId={active.id}
-        item={waitingItem}
-        position={position}
+        open={alternativeItem !== null}
+        item={alternativeItem}
+        onClose={() => setAlternativeItem(null)}
+        onApplied={() => setAlternativeItem(null)}
       />
 
       <ReplanToast tripId={active.id} subscription={replan} />
