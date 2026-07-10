@@ -9,6 +9,7 @@ export type KakaoResolvedPlace = {
   address: string;
   lat: number;
   lng: number;
+  kakaoPlaceId?: string;
 };
 
 /**
@@ -54,5 +55,6 @@ export function toResolvedPlace(place: KakaoPlace): KakaoResolvedPlace {
     address: place.road_address_name || place.address_name || '',
     lat: Number(place.y),
     lng: Number(place.x),
+    ...(place.id ? { kakaoPlaceId: place.id } : {}),
   };
 }

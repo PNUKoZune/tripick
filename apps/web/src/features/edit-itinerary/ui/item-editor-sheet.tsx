@@ -5,7 +5,12 @@ import { LuMapPin, LuSearch } from 'react-icons/lu';
 import type { PlannerItemType, PlannerItineraryItemDto } from '@tripick/types';
 
 import { BottomSheet, Button, SegmentToggle } from '@/shared/ui';
-import { toResolvedPlace, useKakaoPlaceSearch, type KakaoPlace } from '@/shared/lib';
+import {
+  toResolvedPlace,
+  useKakaoPlaceSearch,
+  type KakaoPlace,
+  type KakaoResolvedPlace,
+} from '@/shared/lib';
 
 export type ItemEditorValues = {
   name: string;
@@ -16,6 +21,7 @@ export type ItemEditorValues = {
   address?: string;
   lat?: number;
   lng?: number;
+  kakaoPlaceId?: string;
 };
 
 type Props = {
@@ -88,20 +94,26 @@ export function ItemEditorSheet({ open, mode, item, pending, error, onClose, onS
                     : null
                 }
                 onPick={(place) =>
-                  setValues((v) => ({
-                    ...v,
-                    name: place.name,
-                    address: place.address,
-                    lat: place.lat,
-                    lng: place.lng,
-                  }))
+                  setValues((v) => {
+                    const { kakaoPlaceId: _prev, ...rest } = v;
+                    void _prev;
+                    return {
+                      ...rest,
+                      name: place.name,
+                      address: place.address,
+                      lat: place.lat,
+                      lng: place.lng,
+                      ...(place.kakaoPlaceId ? { kakaoPlaceId: place.kakaoPlaceId } : {}),
+                    };
+                  })
                 }
                 onClear={() =>
                   setValues((v) => {
-                    const { address, lat, lng, ...rest } = v;
+                    const { address, lat, lng, kakaoPlaceId, ...rest } = v;
                     void address;
                     void lat;
                     void lng;
+                    void kakaoPlaceId;
                     return { ...rest, name: '' };
                   })
                 }
@@ -203,7 +215,7 @@ function PlaceSearchField({
   onClear,
 }: {
   picked: { name: string; address: string } | null;
-  onPick: (place: { name: string; address: string; lat: number; lng: number }) => void;
+  onPick: (place: KakaoResolvedPlace) => void;
   onClear: () => void;
 }) {
   const { ready, search } = useKakaoPlaceSearch();

@@ -71,6 +71,8 @@ export interface PlannerAddItemRequestDto {
   lat?: number;
   lng?: number;
   memo?: string;
+  /** 카카오 장소 ID (있으면 항목에 저장) */
+  kakaoPlaceId?: string;
 }
 
 /** 일정 항목 부분 수정 요청 (시간·메모·이름·체류시간) */
@@ -176,6 +178,8 @@ export interface PlannerAlternativeDto {
   address?: string;
   /** 실제 장소의 일정 카테고리 */
   category: PlannerItemType;
+  /** 카카오 장소 ID (실데이터일 때). swap 시 항목에 저장돼 상세 링크에 사용 */
+  kakaoPlaceId?: string;
   origin: PlannerAlternativeOrigin;
   /** 카카오 실데이터 여부. false 면 폴백(mock) 후보 */
   realPlace: boolean;
@@ -212,6 +216,8 @@ export interface PlannerSwapPlaceDto {
   lat: number;
   lng: number;
   mapHref?: string;
+  /** 카카오 장소 ID (있으면 항목에 저장) */
+  kakaoPlaceId?: string;
 }
 
 export interface PlannerSwapRequestDto {

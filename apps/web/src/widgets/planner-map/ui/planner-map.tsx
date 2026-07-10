@@ -27,7 +27,13 @@ type Props = {
   /** 값이 바뀔 때마다 현재 center 로 부드럽게 재이동한다 (현재 위치 버튼 등) */
   recenterKey?: number;
   /** 지정 시, 검색으로 고른 장소를 일정에 반영하는 액션 버튼을 노출한다 */
-  onPickSearchPlace?: (place: { name: string; address: string; lat: number; lng: number }) => void;
+  onPickSearchPlace?: (place: {
+    name: string;
+    address: string;
+    lat: number;
+    lng: number;
+    kakaoPlaceId?: string;
+  }) => void;
   /** 반영 버튼 라벨 (기본: "이 장소로 일정 변경") */
   pickPlaceLabel?: string;
 };
@@ -86,6 +92,7 @@ export function PlannerMap({
     address: string;
     lat: number;
     lng: number;
+    kakaoPlaceId?: string;
   } | null>(null);
 
   // SDK 1회 로드 + 지도 초기화. 컨테이너가 0×0 이면 잠시 기다렸다 초기화한다.
@@ -249,6 +256,7 @@ export function PlannerMap({
       address: place.road_address_name || place.address_name || '',
       lat,
       lng,
+      ...(place.id ? { kakaoPlaceId: place.id } : {}),
     });
     setSearchQuery(place.place_name);
     setSearchOpen(false);

@@ -120,6 +120,11 @@ class PlannerSwapPlaceBodyDto implements PlannerSwapPlaceDto {
   @IsString()
   @MaxLength(500)
   mapHref?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  kakaoPlaceId?: string;
 }
 
 export class PlannerSwapRequestBodyDto implements PlannerSwapRequestDto {
@@ -185,6 +190,11 @@ export class PlannerAddItemBodyDto implements PlannerAddItemRequestDto {
   @IsString()
   @MaxLength(500)
   memo?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  kakaoPlaceId?: string;
 }
 
 export class PlannerUpdateItemBodyDto implements PlannerUpdateItemRequestDto {

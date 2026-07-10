@@ -54,6 +54,8 @@ export interface KakaoRegionCode {
 
 /** keywordSearch 결과 (장소 1건) */
 export interface KakaoPlace {
+  /** 카카오 장소 ID (place.map.kakao.com/{id}) */
+  id?: string;
   place_name: string;
   address_name: string;
   road_address_name: string;

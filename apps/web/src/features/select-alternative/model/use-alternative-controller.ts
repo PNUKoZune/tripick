@@ -36,6 +36,7 @@ function toSwapPlace(alt: PlannerAlternativeDto): PlannerSwapPlaceDto {
     lng: alt.lng,
     mapHref: alt.mapHref,
     ...(alt.address ? { address: alt.address } : {}),
+    ...(alt.kakaoPlaceId ? { kakaoPlaceId: alt.kakaoPlaceId } : {}),
   };
 }
 

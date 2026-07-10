@@ -12,6 +12,7 @@ export type SearchedPlace = {
   address: string;
   lat: number;
   lng: number;
+  kakaoPlaceId?: string;
 };
 
 /**
@@ -29,6 +30,7 @@ export function useApplySearchedPlace(tripId: string) {
           address: place.address,
           lat: place.lat,
           lng: place.lng,
+          ...(place.kakaoPlaceId ? { kakaoPlaceId: place.kakaoPlaceId } : {}),
         },
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.planner.trip(tripId) }),

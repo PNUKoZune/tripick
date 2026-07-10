@@ -292,10 +292,13 @@ export class MainPlannerService {
       address: item.address,
       lat: item.coordinates.lat,
       lng: item.coordinates.lng,
+      ...(item.kakaoPlaceId ? { kakaoPlaceId: item.kakaoPlaceId } : {}),
     };
     item.name = place.name;
     item.address = place.address?.trim() || `${place.name} 인근`;
     item.coordinates = { lat: place.lat, lng: place.lng };
+    // 새 장소의 카카오 ID 로 교체(없으면 이전 ID 를 남기지 않도록 비운다)
+    (item as { kakaoPlaceId?: string | null }).kakaoPlaceId = place.kakaoPlaceId ?? null;
     if (place.category) {
       // P1-2: 카테고리도 함께 반영해 라벨·이모지·웨이팅 표시가 어긋나지 않게 한다
       item.type = place.category;
@@ -376,6 +379,7 @@ export class MainPlannerService {
       scheduledAt: this.combineScheduledAt(this.dayBaseDate(trip, dto.day), dto.scheduledAt),
       durationMin: dto.durationMin ?? 60,
       ...(dto.memo?.trim() ? { memo: dto.memo.trim() } : {}),
+      ...(dto.kakaoPlaceId?.trim() ? { kakaoPlaceId: dto.kakaoPlaceId.trim() } : {}),
     });
     const saved = await this.itemsRepo.save(item);
     await this.recomputeDayTravelTimes(trip, dto.day);
@@ -938,6 +942,7 @@ export class MainPlannerService {
       lat: place.coordinates.lat,
       lng: place.coordinates.lng,
       ...(place.address ? { address: place.address } : {}),
+      ...(place.kakaoPlaceId ? { kakaoPlaceId: place.kakaoPlaceId } : {}),
       category,
       origin: 'recommend',
       realPlace: true,
@@ -969,6 +974,7 @@ export class MainPlannerService {
       lat: place.coordinates.lat,
       lng: place.coordinates.lng,
       ...(place.address ? { address: place.address } : {}),
+      ...(place.kakaoPlaceId ? { kakaoPlaceId: place.kakaoPlaceId } : {}),
       category,
       origin: 'link',
       realPlace: true,

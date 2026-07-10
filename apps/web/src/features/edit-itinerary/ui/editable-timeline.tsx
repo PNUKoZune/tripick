@@ -68,6 +68,7 @@ export function EditableTimeline({
           ...(values.address ? { address: values.address } : {}),
           ...(values.lat !== undefined ? { lat: values.lat } : {}),
           ...(values.lng !== undefined ? { lng: values.lng } : {}),
+          ...(values.kakaoPlaceId ? { kakaoPlaceId: values.kakaoPlaceId } : {}),
           ...(values.memo ? { memo: values.memo } : {}),
         },
         { onSuccess: () => setEditor(null) },
