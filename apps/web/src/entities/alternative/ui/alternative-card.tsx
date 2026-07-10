@@ -28,8 +28,17 @@ type Props = {
 export function AlternativeCard({ alternative, selected, onSelect }: Props) {
   return (
     <div
-      className={`rounded-[16px] border p-3 transition ${
-        selected ? 'border-[#3182F6] bg-[#EAF2FF]' : 'border-[#E5E8EB] bg-white'
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      className={`cursor-pointer rounded-[16px] border p-3 transition ${
+        selected ? 'border-[#3182F6] bg-[#EAF2FF]' : 'border-[#E5E8EB] bg-white hover:border-[#C7DCFF]'
       }`}
     >
       <div className="flex items-stretch gap-3">
@@ -41,23 +50,40 @@ export function AlternativeCard({ alternative, selected, onSelect }: Props) {
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <div className="truncate text-[15px] font-semibold leading-[22px] text-[#191F28]">
-                {alternative.name}
+              <div className="flex items-center gap-1.5">
+                <span className="truncate text-[15px] font-semibold leading-[22px] text-[#191F28]">
+                  {alternative.name}
+                </span>
+                {alternative.realPlace ? (
+                  <span className="shrink-0 rounded-full bg-[#E5F7EE] px-1.5 py-0.5 text-[10px] font-bold text-[#00A86B]">
+                    실제 장소
+                  </span>
+                ) : null}
               </div>
               <div className="mt-1 text-[13px] leading-[18px] text-[#6B7684]">
                 {alternative.walkLabel} · {alternative.waitLabel}
               </div>
+              {alternative.address ? (
+                <div className="mt-0.5 truncate text-[12px] leading-[16px] text-[#8B95A1]">
+                  {alternative.address}
+                </div>
+              ) : null}
             </div>
             <Chip tone={badgeToneMap[alternative.badgeTone]}>{alternative.badge}</Chip>
           </div>
           <div className="mt-2 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-[13px] leading-[18px] text-[#6B7684]">
-              <span className="text-[#FF8A00]">★</span>
-              <span>{alternative.rating.toFixed(1)}</span>
+              {alternative.rating !== undefined ? (
+                <>
+                  <span className="text-[#FF8A00]">★</span>
+                  <span>{alternative.rating.toFixed(1)}</span>
+                </>
+              ) : null}
               <a
                 href={alternative.mapHref}
                 target="_blank"
                 rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
                 className="rounded-full border border-[#E5E8EB] bg-[#FAFBFC] px-2 py-1 text-[12px] font-semibold text-[#6B7684]"
               >
                 카카오맵 보기

@@ -2,6 +2,7 @@ export {
   fetchPlannerTrips,
   fetchPlannerTrip,
   fetchPlannerAlternatives,
+  resolvePlannerPlace,
   swapPlannerItem,
   fetchDestinationSuggestions,
   createTrip,
@@ -10,8 +11,8 @@ export {
   acceptTripInvite,
   rejectTripInvite,
   fetchPlannerCoordination,
-  reportTripWaiting,
   reportTripDeviation,
+  requestTripReplan,
 } from './api';
 export { splitTripSchedule, isTripPeriodActive } from './lib/select-active-trip';
 export type { TripScheduleSplit } from './lib/select-active-trip';

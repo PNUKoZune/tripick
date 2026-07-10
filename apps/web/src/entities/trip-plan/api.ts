@@ -5,6 +5,8 @@ import type {
   PlannerAlternativeResponseDto,
   PlannerCoordinationDto,
   PlannerMemberDto,
+  PlannerResolvePlaceResponseDto,
+  PlannerSwapPlaceDto,
   PlannerSwapResponseDto,
   PlannerTripDto,
   ReplanJobDto,
@@ -22,15 +24,24 @@ export function fetchPlannerTrip(tripId: string) {
   return api.get<PlannerTripDto>(`/main-planner/trips/${tripId}`);
 }
 
-export function fetchPlannerAlternatives(tripId: string, itemId: string) {
+export function fetchPlannerAlternatives(tripId: string, itemId: string, note?: string) {
+  const search = note?.trim() ? `?note=${encodeURIComponent(note.trim())}` : '';
   return api.get<PlannerAlternativeResponseDto>(
-    `/main-planner/trips/${tripId}/items/${itemId}/alternatives`,
+    `/main-planner/trips/${tripId}/items/${itemId}/alternatives${search}`,
+  );
+}
+
+/** 장소 이름(지도 링크도 허용) → 카카오 Local 실제 장소 1곳 해석 (확인용) */
+export function resolvePlannerPlace(tripId: string, itemId: string, query: string) {
+  return api.post<PlannerResolvePlaceResponseDto>(
+    `/main-planner/trips/${tripId}/items/${itemId}/resolve-place`,
+    { query },
   );
 }
 
 export function swapPlannerItem(
   tripId: string,
-  body: { itemId: string; alternativeId: string },
+  body: { itemId: string; place: PlannerSwapPlaceDto },
 ) {
   return api.post<PlannerSwapResponseDto>(`/main-planner/trips/${tripId}/swap`, body);
 }
@@ -67,12 +78,12 @@ export function fetchPlannerCoordination(tripId: string) {
   return api.get<PlannerCoordinationDto>(`/main-planner/trips/${tripId}/coordination`);
 }
 
-/** 웨이팅 신고 → 재계획 트리거 (BullMQ 잡 등록) */
-export function reportTripWaiting(body: ReplanRequestDto) {
-  return api.post<ReplanJobDto>('/alternative/waiting', body);
-}
-
 /** 경로 이탈 신고 → 재계획 트리거 (BullMQ 잡 등록) */
 export function reportTripDeviation(body: ReplanRequestDto) {
   return api.post<ReplanJobDto>('/alternative/deviation', body);
+}
+
+/** 대안 팝업 자유 텍스트 요청 → 재계획 트리거 (manual, BullMQ 잡 등록) */
+export function requestTripReplan(body: ReplanRequestDto) {
+  return api.post<ReplanJobDto>('/alternative/request', body);
 }

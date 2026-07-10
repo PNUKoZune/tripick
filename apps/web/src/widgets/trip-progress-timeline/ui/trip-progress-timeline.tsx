@@ -9,7 +9,8 @@ type Props = {
   items: ProgressItem[];
   selectedItemId?: string | null;
   onSelectItem?: (item: PlannerItineraryItemDto) => void;
-  onReportWaiting?: (item: PlannerItineraryItemDto) => void;
+  /** 현재 일정에서 대안 팝업(일정 변경)을 연다 */
+  onSwitchItem?: (item: PlannerItineraryItemDto) => void;
 };
 
 const DOT_STYLE: Record<ProgressItem['progress'], string> = {
@@ -22,7 +23,7 @@ export function TripProgressTimeline({
   items,
   selectedItemId,
   onSelectItem,
-  onReportWaiting,
+  onSwitchItem,
 }: Props) {
   const currentRef = useRef<HTMLLIElement>(null);
   const currentId = items.find((entry) => entry.progress === 'current')?.item.id ?? null;
@@ -106,16 +107,17 @@ export function TripProgressTimeline({
                 {item.durationLabel}
               </div>
 
-              {isCurrent && onReportWaiting ? (
+              {isCurrent && onSwitchItem ? (
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onReportWaiting(item);
+                    onSwitchItem(item);
                   }}
-                  className="mt-3 h-9 w-full rounded-[10px] border border-[#3182F6] bg-white text-[13px] font-bold text-[#1B64DA] hover:bg-[#EAF2FF]"
+                  className="mt-3 flex h-9 w-full items-center justify-center gap-1.5 rounded-[10px] border border-[#3182F6] bg-white text-[13px] font-bold text-[#1B64DA] hover:bg-[#EAF2FF]"
                 >
-                  웨이팅 신고
+                  <SwapIcon />
+                  일정 변경
                 </button>
               ) : null}
             </div>
@@ -123,5 +125,19 @@ export function TripProgressTimeline({
         );
       })}
     </ol>
+  );
+}
+
+function SwapIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 8h13l-3-3M20 16H7l3 3"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

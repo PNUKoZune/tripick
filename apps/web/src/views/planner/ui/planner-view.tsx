@@ -152,7 +152,12 @@ function PlannerContent({ tripId }: { tripId?: string }) {
           {!selectedTripId && !loadError ? <PlannerEmptyState loading={isResolvingTrip} /> : null}
 
           {tab === 'schedule' && selectedTripId ? (
-            <PlannerTimeline items={itemsForDay} onSelectItem={setOpenItem} />
+            <PlannerTimeline
+              items={itemsForDay}
+              selectedItemId={focusedItemId}
+              onSelectItem={(item) => setFocusedItemId(item.id)}
+              onSwitchItem={setOpenItem}
+            />
           ) : null}
           {tab === 'map' && trip ? (
             <TripMapPanel trip={trip} items={itemsForDay} onSelectItem={setOpenItem} />
@@ -249,7 +254,7 @@ function PlannerContent({ tripId }: { tripId?: string }) {
                   </span>
                 </div>
                 <p className="mt-1 text-[13px] leading-[20px] text-[#6B7684]">
-                  일자를 선택하고 일정을 클릭하면 우측 지도가 이동해요.
+                  일정을 클릭하면 지도가 이동하고, 변경 아이콘으로 대안을 볼 수 있어요.
                 </p>
                 {trip ? (
                   <div className="mt-3">
@@ -268,18 +273,13 @@ function PlannerContent({ tripId }: { tripId?: string }) {
                   <PlannerTimeline
                     items={itemsForDay}
                     selectedItemId={focusedItemId}
-                    onSelectItem={(item) => {
-                      if (focusedItemId === item.id) {
-                        setOpenItem(item);
-                      } else {
-                        setFocusedItemId(item.id);
-                      }
-                    }}
+                    onSelectItem={(item) => setFocusedItemId(item.id)}
+                    onSwitchItem={setOpenItem}
                   />
                 )}
               </div>
               <div className="border-t border-[#E5E8EB] bg-[#FAFBFC] px-5 py-3 text-[12px] text-[#6B7684]">
-                일정을 한 번 클릭하면 지도에서 초점이 맞춰지고, 다시 누르면 대안 시트가 열립니다.
+                일정을 클릭하면 지도에서 초점이 맞춰지고, 변경 아이콘을 누르면 대안 시트가 열립니다.
               </div>
             </aside>
 
@@ -295,12 +295,7 @@ function PlannerContent({ tripId }: { tripId?: string }) {
                   fill
                   onMarkerClick={(marker) => {
                     if (!marker.itemId) return;
-                    if (focusedItemId === marker.itemId) {
-                      const target = itemsForDay.find((i) => i.id === marker.itemId);
-                      if (target) setOpenItem(target);
-                    } else {
-                      setFocusedItemId(marker.itemId);
-                    }
+                    setFocusedItemId(marker.itemId);
                   }}
                 />
               ) : (

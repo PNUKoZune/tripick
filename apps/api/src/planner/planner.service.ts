@@ -19,6 +19,8 @@ interface GenerateOptions {
   waitingMinutes?: number;
   deviatedItemId?: string;
   currentLocation?: ReplanRequestDto['currentLocation'];
+  /** 사용자 자유 텍스트 요청. 검색·프롬프트 notes 에 합쳐진다 */
+  note?: string;
 }
 
 interface DraftBuildContext {
@@ -72,6 +74,7 @@ export class PlannerService {
       ...(request.waitingMinutes !== undefined ? { waitingMinutes: request.waitingMinutes } : {}),
       ...(request.deviatedItemId !== undefined ? { deviatedItemId: request.deviatedItemId } : {}),
       ...(request.currentLocation !== undefined ? { currentLocation: request.currentLocation } : {}),
+      ...(request.note !== undefined ? { note: request.note } : {}),
     });
   }
 
@@ -85,10 +88,13 @@ export class PlannerService {
     const wakeTime = trip.wakeTime ?? '08:30';
     const sleepTime = trip.sleepTime ?? '22:00';
     const itemsPerDay = 4;
+    // 여행 고정 노트 + 이번 재계획 요청 노트를 합쳐 검색·프롬프트에 반영
+    const combinedNotes =
+      [trip.notes, options.note].map((v) => v?.trim()).filter(Boolean).join(' · ') || null;
     const retrieval = await this.placeRetrieval.retrieve({
       userId: trip.userId,
       destination: trip.destination,
-      notes: trip.notes,
+      notes: combinedNotes,
       limit: Math.max(dayCount * itemsPerDay + 4, 12),
       startAt: this.makeDateTime(trip.startDate, wakeTime),
       ...(tasteTags !== undefined ? { tasteTags } : {}),
@@ -117,7 +123,7 @@ export class PlannerService {
       dayCount,
       itemsPerDay,
       candidates,
-      notes: trip.notes,
+      notes: combinedNotes,
       weatherHint,
       ...(tasteTags !== undefined ? { tasteTags } : {}),
       ...(options.trigger !== undefined ? { trigger: options.trigger } : {}),

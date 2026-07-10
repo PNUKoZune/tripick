@@ -9,6 +9,7 @@ import { TripEntity } from '../trips/trip.entity';
 import { TripsModule } from '../trips/trips.module';
 import { DestinationsService } from './destinations.service';
 import { WeatherHelper } from '../planner/helpers/weather.helper';
+import { PlannerModule } from '../planner/planner.module';
 import { MainPlannerController } from './main-planner.controller';
 import { MainPlannerService } from './main-planner.service';
 
@@ -20,6 +21,8 @@ import { MainPlannerService } from './main-planner.service';
     FriendsModule,
     PreferencesModule,
     InboxModule,
+    // 기본 추천 대안에 CRAG/임베딩 검색(PlaceRetrievalService)과 Kakao 직검색을 쓴다
+    PlannerModule,
   ],
   controllers: [MainPlannerController],
   providers: [MainPlannerService, DestinationsService, WeatherHelper],

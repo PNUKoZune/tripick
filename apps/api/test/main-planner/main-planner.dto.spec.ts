@@ -56,11 +56,40 @@ describe('Main planner DTO validation', () => {
   it('requires a UUID itinerary item id for swaps', async () => {
     const dto = plainToInstance(PlannerSwapRequestBodyDto, {
       itemId: 'not-a-uuid',
-      alternativeId: 'alt-1',
+      place: { name: '대안 카페', lat: 35.1587, lng: 129.1604 },
     });
 
     const errors = await validate(dto);
 
     expect(errors.map((error) => error.property)).toContain('itemId');
+  });
+
+  it('accepts a valid swap payload with a resolved place', async () => {
+    const dto = plainToInstance(PlannerSwapRequestBodyDto, {
+      itemId: '7ad4657d-cb04-4450-a6af-195e1ceb8791',
+      place: {
+        name: '해운대 감성 카페',
+        category: 'cafe',
+        address: '부산 해운대구',
+        lat: 35.1587,
+        lng: 129.1604,
+        mapHref: 'https://place.map.kakao.com/123',
+      },
+    });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+  });
+
+  it('rejects a swap payload with out-of-range coordinates', async () => {
+    const dto = plainToInstance(PlannerSwapRequestBodyDto, {
+      itemId: '7ad4657d-cb04-4450-a6af-195e1ceb8791',
+      place: { name: '잘못된 좌표', lat: 999, lng: 999 },
+    });
+
+    const errors = await validate(dto);
+    const placeErrors = errors.find((error) => error.property === 'place')?.children ?? [];
+    expect(placeErrors.map((error) => error.property)).toEqual(
+      expect.arrayContaining(['lat', 'lng']),
+    );
   });
 });

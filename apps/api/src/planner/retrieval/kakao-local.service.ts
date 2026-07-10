@@ -132,6 +132,22 @@ export class KakaoLocalService {
     return docs[0]?.coordinates ?? null;
   }
 
+  /**
+   * 장소 이름 검색용: 사용자가 입력한 장소명/키워드로 키워드 검색.
+   * center 가 있으면 그 주변을 우선한다.
+   */
+  async searchByText(
+    keyword: string,
+    limit: number,
+    center?: Coordinates,
+    radius?: number,
+  ): Promise<RawPlaceCandidate[]> {
+    const apiKey = this.apiKey();
+    if (!apiKey) return [];
+    const opts = center ? { center, radius: radius ?? KAKAO_MAX_RADIUS_M } : undefined;
+    return this.searchKeyword(apiKey, keyword, limit, opts);
+  }
+
   private async searchByCategory(
     apiKey: string,
     categoryGroupCode: KakaoCategoryCode,

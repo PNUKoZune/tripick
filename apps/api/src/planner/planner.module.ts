@@ -40,6 +40,6 @@ import { TripEntity } from '../trips/trip.entity';
     TourApiService,
     PlaceIngestionService,
   ],
-  exports: [PlannerService],
+  exports: [PlannerService, PlaceRetrievalService, KakaoLocalService, RouteHelper],
 })
 export class PlannerModule {}

@@ -19,6 +19,7 @@ import { MainPlannerService } from './main-planner.service';
 import {
   AddTripMemberRequestBodyDto,
   CreateTripRequestBodyDto,
+  PlannerResolvePlaceBodyDto,
   PlannerSwapRequestBodyDto,
 } from './dto/main-planner.dto';
 
@@ -57,13 +58,26 @@ export class MainPlannerController {
   }
 
   @Get('trips/:tripId/items/:itemId/alternatives')
-  @ApiOperation({ summary: '일정 항목 대안 추천' })
+  @ApiOperation({ summary: '일정 항목 대안 추천 (취향 기반 CRAG, note: 사용자 조건)' })
   getAlternatives(
     @CurrentUser() user: UserEntity,
     @Param('tripId') tripId: string,
     @Param('itemId') itemId: string,
+    @Query('note') note?: string,
   ) {
-    return this.mainPlannerService.getAlternatives(user, tripId, itemId);
+    return this.mainPlannerService.getAlternatives(user, tripId, itemId, note);
+  }
+
+  @Post('trips/:tripId/items/:itemId/resolve-place')
+  @HttpCode(200)
+  @ApiOperation({ summary: '장소 이름 → 카카오 Local 실제 장소 해석 (확인용)' })
+  resolvePlace(
+    @CurrentUser() user: UserEntity,
+    @Param('tripId') tripId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: PlannerResolvePlaceBodyDto,
+  ) {
+    return this.mainPlannerService.resolvePlace(user, tripId, itemId, dto.query);
   }
 
   @Get('trips/:tripId/coordination')

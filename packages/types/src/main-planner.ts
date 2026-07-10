@@ -116,6 +116,9 @@ export interface PlannerTripDto {
   progress: PlannerTripProgressDto;
 }
 
+/** 대안이 어디서 왔는지: AI 추천(CRAG) · 장소 이름 검색으로 직접 지정 */
+export type PlannerAlternativeOrigin = 'recommend' | 'link';
+
 export interface PlannerAlternativeDto {
   id: string;
   categoryEmoji: string;
@@ -124,32 +127,69 @@ export interface PlannerAlternativeDto {
   name: string;
   walkLabel: string;
   waitLabel: string;
-  rating: number;
+  /** 실제 평점이 있을 때만 (카카오는 미제공이라 대부분 없음) */
+  rating?: number;
   mapHref: string;
   badge: string;
   badgeTone: PlannerBadgeTone;
+  /** swap 시 재조회 없이 바로 반영하기 위한 실제 장소 좌표 */
+  lat: number;
+  lng: number;
+  /** 실제 장소 주소 (있을 때) */
+  address?: string;
+  /** 실제 장소의 일정 카테고리 */
+  category: PlannerItemType;
+  origin: PlannerAlternativeOrigin;
+  /** 카카오 실데이터 여부. false 면 폴백(mock) 후보 */
+  realPlace: boolean;
 }
 
 export interface PlannerAlternativeResponseDto {
   itemId: string;
   itemName: string;
   waitingMinutes: number;
-  radiusMeters: number;
+  /** 실데이터(카카오/pgvector) 기반 후보가 하나라도 포함됐는지 */
   realtime: boolean;
   alternatives: PlannerAlternativeDto[];
   mapCenter: PlannerMapCenterDto;
   mapMarkers: PlannerMapMarkerDto[];
 }
 
+/** 장소 이름 → 카카오 Local 로 실제 장소 1곳 해석 (사용자 확인 후 반영) */
+export interface PlannerResolvePlaceRequestDto {
+  /** 사용자가 입력한 장소 이름 (지도 링크도 허용) */
+  query: string;
+}
+
+export interface PlannerResolvePlaceResponseDto {
+  /** 검색된 실제 장소 후보들 (상위 몇 곳). 사용자가 이 중 맞는 곳을 고른다 */
+  alternatives: PlannerAlternativeDto[];
+  mapMarkers: PlannerMapMarkerDto[];
+}
+
+/** swap 대상 장소. 추천/커스텀/링크 어디서 왔든 동일한 형태로 반영 */
+export interface PlannerSwapPlaceDto {
+  name: string;
+  category?: PlannerItemType;
+  address?: string;
+  lat: number;
+  lng: number;
+  mapHref?: string;
+}
+
 export interface PlannerSwapRequestDto {
   itemId: string;
-  alternativeId: string;
+  place: PlannerSwapPlaceDto;
 }
 
 export interface PlannerSwapResponseDto {
   tripId: string;
   swappedItemId: string;
   newItemName: string;
+  /** 반영 후 실현가능성 경고 (이동시간이 빠듯한 경우 등). 없으면 생략 */
+  warnings?: string[];
+  /** 되돌리기용: 바뀌기 직전 장소 (이 값으로 다시 swap 하면 원복) */
+  previousPlace: PlannerSwapPlaceDto;
 }
 
 export type TripSummaryStatus = 'draft' | 'upcoming' | 'ongoing' | 'done';

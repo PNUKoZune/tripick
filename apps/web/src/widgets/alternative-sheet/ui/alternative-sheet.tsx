@@ -1,12 +1,18 @@
 'use client';
 
-import { useState } from 'react';
-import type { PlannerItineraryItemDto } from '@tripick/types';
+import { useEffect, useState } from 'react';
+import type {
+  PlannerItineraryItemDto,
+  PlannerMapCenterDto,
+  PlannerSwapPlaceDto,
+} from '@tripick/types';
 
 import { AlternativeCard } from '@/entities/alternative';
 import { useAlternativeController } from '@/features/select-alternative';
 import { BottomSheet, Button, Chip } from '@/shared/ui';
 import { PlannerMap } from '@/widgets/planner-map';
+
+const FALLBACK_CENTER: PlannerMapCenterDto = { lat: 37.5665, lng: 126.978, level: 5 };
 
 type Props = {
   tripId: string;
@@ -19,15 +25,68 @@ type Props = {
 export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Props) {
   const controller = useAlternativeController(tripId, open ? item?.id ?? null : null);
   const [keepOriginal, setKeepOriginal] = useState(false);
+  const [requestText, setRequestText] = useState('');
+  const [placeName, setPlaceName] = useState('');
+  // swap 반영 결과 (변경명·되돌리기용 이전 장소·경고)
+  const [swapResult, setSwapResult] = useState<{
+    newName: string;
+    previousPlace: PlannerSwapPlaceDto;
+    warnings: string[];
+  } | null>(null);
+
+  // 시트를 새로 열 때마다 입력 초기화
+  useEffect(() => {
+    if (open) {
+      setKeepOriginal(false);
+      setRequestText('');
+      setPlaceName('');
+      setSwapResult(null);
+    }
+  }, [open, item?.id]);
+
+  // 경고 없는 변경은 되돌리기 여유를 두고 5초 뒤 자동으로 닫는다
+  useEffect(() => {
+    if (!swapResult || swapResult.warnings.length > 0) return;
+    const timer = setTimeout(onClose, 5000);
+    return () => clearTimeout(timer);
+  }, [swapResult, onClose]);
+
+  async function handleUndo() {
+    if (!swapResult || !item) return;
+    const result = await controller.swapToPlace(swapResult.previousPlace);
+    if (result) {
+      onApplied(result.newItemName, item.id);
+      onClose();
+    }
+  }
+
+  const readyData = controller.state.status === 'ready' ? controller.state.data : null;
+  const { pending, pendingSelectedId, selectedId } = controller;
+
+  // 지도: 확인 대기 후보 > 선택한 대안 순으로 초점을 맞춘다
+  const baseMarkers = readyData?.mapMarkers ?? [];
+  const mapMarkers = pending ? [...baseMarkers, ...pending.markers] : baseMarkers;
+  const activeMarkerId = pending
+    ? pendingSelectedId
+      ? `marker-${pendingSelectedId}`
+      : (pending.markers[0]?.id ?? null)
+    : selectedId
+      ? `marker-${selectedId}`
+      : null;
+  const activeMarker = mapMarkers.find((m) => m.id === activeMarkerId) ?? null;
+  const mapCenter: PlannerMapCenterDto = activeMarker
+    ? { lat: activeMarker.lat, lng: activeMarker.lng, level: 4 }
+    : readyData?.mapCenter ?? FALLBACK_CENTER;
 
   const topSlot = (
     <div className="relative aspect-[16/9] w-full overflow-hidden bg-[#F2F4F6]">
-      {controller.state.status === 'ready' ? (
+      {readyData ? (
         <div className="absolute inset-0">
           <PlannerMap
             placeholder="대안 위치 확인"
-            center={controller.state.data.mapCenter}
-            markers={controller.state.data.mapMarkers}
+            center={mapCenter}
+            markers={mapMarkers}
+            selectedMarkerId={activeMarkerId}
             showCurrentDot={false}
             aspect="aspect-[16/9]"
             showSearch={false}
@@ -52,7 +111,7 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
           </div>
         ) : null}
 
-        {controller.state.status === 'ready' ? (
+        {readyData ? (
           <>
             <div className="flex items-start gap-3">
               <div className="flex size-9 items-center justify-center rounded-[10px] bg-[#FFECEE] text-[18px] font-bold text-[#F04452]">
@@ -60,45 +119,219 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
               </div>
               <div className="flex-1">
                 <div className="text-[18px] font-bold leading-[26px] text-[#191F28]">
-                  {controller.state.data.waitingMinutes > 0 ? '웨이팅이 길어요' : '비슷한 다른 장소'}
+                  {readyData.waitingMinutes > 0 ? '웨이팅이 길어요' : '비슷한 다른 장소'}
                 </div>
                 <div className="mt-1 text-[14px] leading-[20px] text-[#6B7684]">
-                  {controller.state.data.itemName}
-                  {controller.state.data.waitingMinutes > 0
-                    ? ` 현재 예상 대기: 약 ${controller.state.data.waitingMinutes}분`
+                  {readyData.itemName}
+                  {readyData.waitingMinutes > 0
+                    ? ` 현재 예상 대기: 약 ${readyData.waitingMinutes}분`
                     : ' 주변에서 골라볼 수 있어요'}
                 </div>
               </div>
             </div>
 
-            <div className="mt-3">
+            <div className="mt-3 flex flex-wrap gap-2">
               <Chip tone="primary" size="md">
-                카카오맵 기준 반경 {controller.state.data.radiusMeters}m 내
+                취향 기반 추천
               </Chip>
+              {readyData.realtime ? <Chip tone="success">실데이터</Chip> : null}
             </div>
+
+            {swapResult ? (
+              <div
+                className={`mt-4 rounded-[16px] border p-4 ${
+                  swapResult.warnings.length > 0
+                    ? 'border-[#FDE68A] bg-[#FFFBEB]'
+                    : 'border-[#C7DCFF] bg-[#F4F9FF]'
+                }`}
+              >
+                {swapResult.warnings.length > 0 ? (
+                  <>
+                    <div className="text-[13px] font-bold text-[#B45309]">
+                      변경했지만 확인이 필요해요
+                    </div>
+                    <ul className="mt-1.5 space-y-1 text-[13px] leading-[18px] text-[#92400E]">
+                      {swapResult.warnings.map((w) => (
+                        <li key={w}>· {w}</li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <div className="text-[14px] font-bold text-[#1B64DA]">
+                    ‘{swapResult.newName}’(으)로 변경했어요.
+                  </div>
+                )}
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    variant="secondary"
+                    fullWidth
+                    disabled={controller.submitting}
+                    onClick={handleUndo}
+                  >
+                    되돌리기
+                  </Button>
+                  <Button variant="primary" fullWidth onClick={onClose}>
+                    확인
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {/* 사용자 직접 요청: 자유 텍스트 AI 재계획 + 장소 이름 지정 */}
+            <div className="mt-5 space-y-3 rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] p-4">
+              <div className="text-[13px] font-bold text-[#4E5968]">
+                원하는 곳이 없나요? 직접 요청해보세요
+              </div>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  controller.refine(requestText);
+                }}
+              >
+                <div className="flex gap-2">
+                  <input
+                    value={requestText}
+                    onChange={(e) => setRequestText(e.target.value)}
+                    placeholder="예: 조용한 감성 카페 위주로"
+                    className="h-11 flex-1 rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[14px] text-[#191F28] outline-none placeholder:text-[#B0B8C1] focus:border-[#3182F6]"
+                  />
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    className="h-11 shrink-0 px-4 text-[14px]"
+                    disabled={controller.refining || !requestText.trim()}
+                  >
+                    {controller.refining ? '찾는 중…' : 'AI 추천'}
+                  </Button>
+                </div>
+                <div className="mt-1.5 text-[12px] text-[#8B95A1]">
+                  조건을 반영해 이 일정의 대안을 다시 찾아드려요.
+                </div>
+              </form>
+
+              <form
+                className="flex gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void controller.searchPlace(placeName);
+                }}
+              >
+                <input
+                  value={placeName}
+                  onChange={(e) => setPlaceName(e.target.value)}
+                  placeholder="가고 싶은 장소 이름 입력 (예: 성수 대림창고)"
+                  className="h-11 flex-1 rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[14px] text-[#191F28] outline-none placeholder:text-[#B0B8C1] focus:border-[#3182F6]"
+                />
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  className="h-11 shrink-0 px-4 text-[14px]"
+                  disabled={controller.searchingPlace || !placeName.trim()}
+                >
+                  {controller.searchingPlace ? '찾는 중…' : '찾기'}
+                </Button>
+              </form>
+
+              {controller.searchPlaceError ? (
+                <div className="text-[12px] text-[#F04452]">{controller.searchPlaceError}</div>
+              ) : null}
+            </div>
+
+            {/* 장소 이름 검색 결과 — 후보 중 맞는 곳 선택 */}
+            {pending ? (
+              <div className="mt-4 rounded-[16px] border border-[#3182F6] bg-[#EAF2FF] p-4">
+                <div className="text-[13px] font-bold text-[#1B64DA]">
+                  {pending.alternatives.length > 1 ? '이 중 맞는 곳을 골라주세요' : '이 장소가 맞나요?'}
+                </div>
+                <div className="mt-2 space-y-2">
+                  {pending.alternatives.map((alt) => (
+                    <AlternativeCard
+                      key={alt.id}
+                      alternative={alt}
+                      selected={pendingSelectedId === alt.id}
+                      onSelect={() => controller.setPendingSelectedId(alt.id)}
+                    />
+                  ))}
+                </div>
+                <div className="mt-1.5 text-[12px] text-[#8B95A1]">
+                  위쪽 지도에서 위치를 확인해보세요.
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    variant="secondary"
+                    className="h-10 flex-1 text-[14px]"
+                    onClick={controller.cancelPending}
+                  >
+                    취소
+                  </Button>
+                  <Button
+                    variant="primary"
+                    className="h-10 flex-1 text-[14px]"
+                    disabled={controller.submitting || !pendingSelectedId}
+                    onClick={async () => {
+                      if (!item) return;
+                      const result = await controller.confirmPending();
+                      if (result) {
+                        onApplied(result.newItemName, item.id);
+                        setSwapResult({
+                          newName: result.newItemName,
+                          previousPlace: result.previousPlace,
+                          warnings: result.warnings ?? [],
+                        });
+                      }
+                    }}
+                  >
+                    {controller.submitting ? '변경 중…' : '이 장소로 변경'}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-5 border-t border-[#E5E8EB] pt-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-[16px] font-bold leading-[22px] text-[#191F28]">
-                  AI 추천 대안
+                  {controller.note ? '조건 반영 결과' : 'AI 추천 대안'}
                 </h2>
-                {controller.state.data.realtime ? (
-                  <Chip tone="success">실시간 반영</Chip>
-                ) : null}
+                <span className="text-[12px] font-semibold text-[#8B95A1]">
+                  {controller.alternatives.length}곳
+                </span>
               </div>
-              <div className="mt-3 space-y-2">
-                {controller.state.data.alternatives.map((alt) => (
-                  <AlternativeCard
-                    key={alt.id}
-                    alternative={alt}
-                    selected={controller.selectedId === alt.id && !keepOriginal}
-                    onSelect={() => {
-                      controller.setSelectedId(alt.id);
-                      setKeepOriginal(false);
-                    }}
-                  />
-                ))}
-              </div>
+
+              {controller.note ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRequestText('');
+                    controller.clearRefine();
+                  }}
+                  className="mt-1 text-[12px] font-semibold text-[#3182F6]"
+                >
+                  ‘{controller.note}’ 반영 중 · 기본 추천으로 되돌리기
+                </button>
+              ) : null}
+
+              {controller.alternatives.length === 0 ? (
+                <div className="mt-3 rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] p-4 text-center text-[13px] text-[#6B7684]">
+                  {controller.note
+                    ? '조건에 맞는 장소를 찾지 못했어요. 다른 표현으로 시도해보세요.'
+                    : '추천할 대안을 찾지 못했어요.'}
+                </div>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {controller.alternatives.map((alt) => (
+                    <AlternativeCard
+                      key={alt.id}
+                      alternative={alt}
+                      selected={selectedId === alt.id && !keepOriginal}
+                      onSelect={() => {
+                        controller.setSelectedId(alt.id);
+                        setKeepOriginal(false);
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="mt-5 flex gap-3">
@@ -115,25 +348,23 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
               <Button
                 variant="primary"
                 fullWidth
-                disabled={controller.submitting || !controller.selectedId}
+                disabled={controller.submitting || !selectedId}
                 onClick={async () => {
                   if (!item) return;
                   const result = await controller.apply();
                   if (result) {
                     onApplied(result.newItemName, item.id);
-                    onClose();
+                    setSwapResult({
+                      newName: result.newItemName,
+                      previousPlace: result.previousPlace,
+                      warnings: result.warnings ?? [],
+                    });
                   }
                 }}
               >
-                {controller.submitting ? '변경 중…' : '대안으로 변경'}
+                {controller.submitting ? '변경 중…' : '이 장소로 변경'}
               </Button>
             </div>
-
-            {controller.appliedName ? (
-              <div className="mt-3 text-center text-[13px] text-[#00A86B]">
-                {controller.appliedName}(으)로 변경됐어요.
-              </div>
-            ) : null}
           </>
         ) : null}
       </div>
