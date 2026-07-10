@@ -11,7 +11,6 @@ export {
   acceptTripInvite,
   rejectTripInvite,
   fetchPlannerCoordination,
-  reportTripWaiting,
   reportTripDeviation,
   requestTripReplan,
 } from './api';
