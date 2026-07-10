@@ -2,13 +2,17 @@ import type {
   AddTripMemberRequestDto,
   CreateTripRequestDto,
   DestinationSuggestionDto,
+  PlannerAddItemRequestDto,
   PlannerAlternativeResponseDto,
   PlannerCoordinationDto,
+  PlannerItineraryItemDto,
   PlannerMemberDto,
+  PlannerReorderItemsRequestDto,
   PlannerResolvePlaceResponseDto,
   PlannerSwapPlaceDto,
   PlannerSwapResponseDto,
   PlannerTripDto,
+  PlannerUpdateItemRequestDto,
   ReplanJobDto,
   ReplanRequestDto,
   TripSummaryDto,
@@ -58,6 +62,33 @@ export function createTrip(body: CreateTripRequestDto) {
 /** 여행 삭제 (owner 만) */
 export function deleteTrip(tripId: string) {
   return api.delete<void>(`/trips/${tripId}`);
+}
+
+/** 일정 항목 수동 추가 */
+export function addItineraryItem(tripId: string, body: PlannerAddItemRequestDto) {
+  return api.post<PlannerItineraryItemDto>(`/main-planner/trips/${tripId}/items`, body);
+}
+
+/** 일정 항목 수정 (시간·메모·이름·체류시간) */
+export function updateItineraryItem(
+  tripId: string,
+  itemId: string,
+  body: PlannerUpdateItemRequestDto,
+) {
+  return api.patch<PlannerItineraryItemDto>(
+    `/main-planner/trips/${tripId}/items/${itemId}`,
+    body,
+  );
+}
+
+/** 일정 항목 삭제 */
+export function deleteItineraryItem(tripId: string, itemId: string) {
+  return api.delete<void>(`/main-planner/trips/${tripId}/items/${itemId}`);
+}
+
+/** 일정 항목 순서 변경 (드래그&드롭) */
+export function reorderItineraryItems(tripId: string, body: PlannerReorderItemsRequestDto) {
+  return api.patch<void>(`/main-planner/trips/${tripId}/items/reorder`, body);
 }
 
 export function addTripMember(tripId: string, body: AddTripMemberRequestDto) {

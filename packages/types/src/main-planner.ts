@@ -49,8 +49,41 @@ export interface PlannerItineraryItemDto {
   name: string;
   /** "도보 20분" 같은 표시용 문구 */
   durationLabel: string;
+  /** 체류 시간(분) — 편집 폼 prefill 용 */
+  durationMin: number;
+  /** 사용자 메모 — 편집 폼 prefill 용 */
+  memo?: string;
   waitingMinutes?: number;
   hasWaiting: boolean;
+}
+
+/** 일정 항목 신규 추가 요청 */
+export interface PlannerAddItemRequestDto {
+  day: number;
+  name: string;
+  /** HH:mm */
+  scheduledAt: string;
+  type?: PlannerItemType;
+  durationMin?: number;
+  address?: string;
+  lat?: number;
+  lng?: number;
+  memo?: string;
+}
+
+/** 일정 항목 부분 수정 요청 (시간·메모·이름·체류시간) */
+export interface PlannerUpdateItemRequestDto {
+  name?: string;
+  /** HH:mm */
+  scheduledAt?: string;
+  durationMin?: number;
+  memo?: string;
+}
+
+/** 일정 항목 순서 변경 요청 (해당 일차의 새 순서) */
+export interface PlannerReorderItemsRequestDto {
+  day: number;
+  orderedItemIds: string[];
 }
 
 export interface PlannerDayDto {

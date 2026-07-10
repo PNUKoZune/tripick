@@ -20,6 +20,7 @@ import { MemberAvatars } from '@/entities/member';
 import { useApplySearchedPlace, type SearchedPlace } from '@/features/apply-searched-place';
 import { DaySelector } from '@/features/day-selector';
 import { DeleteTripButton } from '@/features/delete-trip';
+import { EditableTimeline } from '@/features/edit-itinerary';
 import { TripMembersSheet } from '@/features/manage-trip-members';
 import { PlannerTabs, type PlannerTab } from '@/features/planner-tab-switch';
 import { ReplanToast } from '@/features/subscribe-replan-result';
@@ -30,7 +31,6 @@ import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame
 import { AlternativeSheet } from '@/widgets/alternative-sheet';
 import { PlannerHeader } from '@/widgets/planner-header';
 import { PlannerMap } from '@/widgets/planner-map';
-import { PlannerTimeline } from '@/widgets/planner-timeline';
 import { TripCoordinationPanel } from '@/widgets/trip-coordination-panel';
 import { TripInfoPanel } from '@/widgets/trip-info-panel';
 import { TripMapPanel } from '@/widgets/trip-map-panel';
@@ -223,8 +223,10 @@ function PlannerContent({ tripId }: { tripId?: string }) {
 
           {!selectedTripId && !loadError ? <PlannerEmptyState loading={isResolvingTrip} /> : null}
 
-          {tab === 'schedule' && selectedTripId ? (
-            <PlannerTimeline
+          {tab === 'schedule' && trip ? (
+            <EditableTimeline
+              tripId={trip.id}
+              day={day}
               items={itemsForDay}
               selectedItemId={focusedItemId}
               onSelectItem={(item) => setFocusedItemId(item.id)}
@@ -412,7 +414,9 @@ function PlannerContent({ tripId }: { tripId?: string }) {
                 ) : activeSidePanel === 'coordination' ? (
                   <TripCoordinationPanel tripId={trip.id} />
                 ) : (
-                  <PlannerTimeline
+                  <EditableTimeline
+                    tripId={trip.id}
+                    day={day}
                     items={itemsForDay}
                     selectedItemId={focusedItemId}
                     onSelectItem={(item) => setFocusedItemId(item.id)}

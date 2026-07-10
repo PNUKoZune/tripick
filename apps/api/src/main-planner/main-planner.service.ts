@@ -20,6 +20,9 @@ import type {
   AddTripMemberRequestDto,
   CreateTripDto,
   CreateTripRequestDto,
+  PlannerAddItemRequestDto,
+  PlannerReorderItemsRequestDto,
+  PlannerUpdateItemRequestDto,
   PlannerAlternativeDto,
   PlannerAlternativeResponseDto,
   PlannerCoordinationDto,
@@ -338,6 +341,177 @@ export class MainPlannerService {
     };
   }
 
+  /** 일정 항목 신규 추가 (해당 일차 끝에 붙이고 이동시간 재계산) */
+  async addItem(
+    user: UserEntity,
+    tripId: string,
+    dto: PlannerAddItemRequestDto,
+  ): Promise<PlannerItineraryItemDto> {
+    const trip = await this.tripsService.findOne(tripId, user.id);
+    const name = dto.name?.trim();
+    if (!name) throw new BadRequestException('장소 이름을 입력해 주세요.');
+    if (!Number.isInteger(dto.day) || dto.day < 1) {
+      throw new BadRequestException('유효한 일차가 아닙니다.');
+    }
+
+    const dayItems = await this.itemsRepo.find({ where: { tripId, day: dto.day } });
+    const maxOrder = dayItems.reduce((max, entry) => Math.max(max, entry.order), 0);
+    const fallback =
+      dayItems[dayItems.length - 1]?.coordinates ??
+      (await this.itemsRepo.findOne({ where: { tripId }, order: { day: 'ASC', order: 'ASC' } }))
+        ?.coordinates ??
+      MainPlannerService.DEFAULT_COORDINATES;
+
+    const item = this.itemsRepo.create({
+      tripId,
+      day: dto.day,
+      order: maxOrder + 1,
+      type: dto.type ?? 'attraction',
+      name,
+      address: dto.address?.trim() || `${name} 인근`,
+      coordinates:
+        dto.lat !== undefined && dto.lng !== undefined
+          ? { lat: dto.lat, lng: dto.lng }
+          : fallback,
+      scheduledAt: this.combineScheduledAt(this.dayBaseDate(trip, dto.day), dto.scheduledAt),
+      durationMin: dto.durationMin ?? 60,
+      ...(dto.memo?.trim() ? { memo: dto.memo.trim() } : {}),
+    });
+    const saved = await this.itemsRepo.save(item);
+    await this.recomputeDayTravelTimes(trip, dto.day);
+    return this.toPlannerItem(await this.findItem(tripId, saved.id));
+  }
+
+  /** 일정 항목 부분 수정 (시간·메모·이름·체류시간) */
+  async updateItem(
+    user: UserEntity,
+    tripId: string,
+    itemId: string,
+    dto: PlannerUpdateItemRequestDto,
+  ): Promise<PlannerItineraryItemDto> {
+    await this.tripsService.findOne(tripId, user.id);
+    const item = await this.findItem(tripId, itemId);
+
+    if (dto.name !== undefined) {
+      const name = dto.name.trim();
+      if (!name) throw new BadRequestException('장소 이름은 비울 수 없어요.');
+      item.name = name;
+    }
+    if (dto.scheduledAt !== undefined) {
+      item.scheduledAt = this.combineScheduledAt(this.kstDateString(item.scheduledAt), dto.scheduledAt);
+    }
+    if (dto.durationMin !== undefined) {
+      if (!Number.isInteger(dto.durationMin) || dto.durationMin < 0) {
+        throw new BadRequestException('체류 시간이 올바르지 않습니다.');
+      }
+      item.durationMin = dto.durationMin;
+    }
+    if (dto.memo !== undefined) {
+      (item as { memo?: string | null }).memo = dto.memo.trim() || null;
+    }
+    await this.itemsRepo.save(item);
+    return this.toPlannerItem(await this.findItem(tripId, itemId));
+  }
+
+  /** 일정 항목 삭제 (남은 항목 순서 재정렬 + 이동시간 재계산) */
+  async deleteItem(user: UserEntity, tripId: string, itemId: string): Promise<void> {
+    const trip = await this.tripsService.findOne(tripId, user.id);
+    const item = await this.findItem(tripId, itemId);
+    const day = item.day;
+    await this.itemsRepo.remove(item);
+    await this.resequenceDay(tripId, day);
+    await this.recomputeDayTravelTimes(trip, day);
+  }
+
+  /** 일정 항목 순서 변경 (드래그&드롭). 시간 슬롯은 유지하고 장소만 재배치한다. */
+  async reorderItems(
+    user: UserEntity,
+    tripId: string,
+    dto: PlannerReorderItemsRequestDto,
+  ): Promise<void> {
+    const trip = await this.tripsService.findOne(tripId, user.id);
+    const dayItems = await this.itemsRepo.find({ where: { tripId, day: dto.day } });
+    const byId = new Map(dayItems.map((entry) => [entry.id, entry]));
+    if (
+      dto.orderedItemIds.length !== dayItems.length ||
+      !dto.orderedItemIds.every((id) => byId.has(id))
+    ) {
+      throw new BadRequestException('순서 정보가 현재 일정과 일치하지 않습니다.');
+    }
+
+    // 기존 시작 시간을 시간순으로 모아 새 위치에 그대로 배정 (타임라인이 오름차순 유지)
+    const slotTimes = dayItems
+      .map((entry) => entry.scheduledAt)
+      .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+
+    const reordered = dto.orderedItemIds.map((id, index) => {
+      const entry = byId.get(id)!;
+      entry.order = index + 1;
+      entry.scheduledAt = slotTimes[index]!;
+      return entry;
+    });
+    await this.itemsRepo.save(reordered);
+    await this.recomputeDayTravelTimes(trip, dto.day);
+  }
+
+  private static readonly DEFAULT_COORDINATES = { lat: 37.5665, lng: 126.978 };
+
+  /** 해당 일차 항목의 order 를 1..n 으로 다시 매긴다. */
+  private async resequenceDay(tripId: string, day: number): Promise<void> {
+    const items = (await this.itemsRepo.find({ where: { tripId, day } })).sort(
+      (a, b) => a.order - b.order,
+    );
+    items.forEach((entry, index) => {
+      entry.order = index + 1;
+    });
+    if (items.length > 0) await this.itemsRepo.save(items);
+  }
+
+  /** 해당 일차 항목의 이동시간(travelTimeMin)을 순서대로 다시 계산한다. */
+  private async recomputeDayTravelTimes(trip: TripEntity, day: number): Promise<void> {
+    const items = (await this.itemsRepo.find({ where: { tripId: trip.id, day } })).sort(
+      (a, b) => a.order - b.order,
+    );
+    for (let i = 0; i < items.length; i += 1) {
+      const entry = items[i]!;
+      if (i === 0) {
+        (entry as { travelTimeMin?: number | null }).travelTimeMin = null;
+      } else {
+        entry.travelTimeMin = await this.travelMinutes(
+          trip,
+          items[i - 1]!.coordinates,
+          entry.coordinates,
+        );
+      }
+    }
+    if (items.length > 0) await this.itemsRepo.save(items);
+  }
+
+  /** trip.startDate 기준 day 번째 날의 달력 날짜(YYYY-MM-DD). */
+  private dayBaseDate(trip: TripEntity, day: number): string {
+    const base = new Date(`${trip.startDate}T12:00:00Z`);
+    base.setUTCDate(base.getUTCDate() + (day - 1));
+    return base.toISOString().slice(0, 10);
+  }
+
+  /** Date → Asia/Seoul 기준 YYYY-MM-DD 문자열. */
+  private kstDateString(date: Date): string {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Seoul',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+  }
+
+  /** YYYY-MM-DD + HH:mm(KST) → UTC Date. */
+  private combineScheduledAt(dateStr: string, hhmm: string): Date {
+    if (!/^\d{2}:\d{2}$/.test(hhmm)) {
+      throw new BadRequestException('시간 형식은 HH:mm 이어야 합니다.');
+    }
+    return new Date(`${dateStr}T${hhmm}:00+09:00`);
+  }
+
   /** 교통수단에 맞춰 두 좌표 사이 이동 시간(분)을 계산 (API 키 없으면 로컬 추정). */
   private async travelMinutes(
     trip: TripEntity,
@@ -630,6 +804,8 @@ export class MainPlannerService {
       durationLabel: item.travelTimeMin
         ? `이동 ${item.travelTimeMin}분 · 체류 ${item.durationMin}분`
         : `체류 ${item.durationMin}분`,
+      durationMin: item.durationMin,
+      ...(item.memo ? { memo: item.memo } : {}),
       hasWaiting: item.type === 'restaurant',
       ...(item.type === 'restaurant' ? { waitingMinutes: 15 } : {}),
     };
