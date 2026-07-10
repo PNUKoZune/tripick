@@ -8,6 +8,7 @@ import {
   loadKakaoMaps,
   type KakaoMapInstance,
   type KakaoOverlayInstance,
+  type KakaoPlace,
 } from '@/shared/lib';
 
 type Props = {
@@ -67,6 +68,17 @@ export function PlannerMap({
   }, [onMarkerClick]);
   const [sdkReady, setSdkReady] = useState<boolean>(false);
   const [sdkAttempted, setSdkAttempted] = useState<boolean>(false);
+
+  // 지도 검색 (Kakao Places keywordSearch)
+  const searchOverlayRef = useRef<KakaoOverlayInstance | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<KakaoPlace[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [selectedPlace, setSelectedPlace] = useState<{
+    name: string;
+    lat: number;
+    lng: number;
+  } | null>(null);
 
   // SDK 1회 로드 + 지도 초기화. 컨테이너가 0×0 이면 잠시 기다렸다 초기화한다.
   useEffect(() => {
@@ -166,6 +178,97 @@ export function PlannerMap({
     });
   }, [sdkReady, markers, selectedMarkerId]);
 
+  // 검색어 입력 → Kakao Places 키워드 검색 (services 라이브러리 필요)
+  useEffect(() => {
+    if (!sdkReady) return;
+    const services = window.kakao?.maps?.services;
+    if (!services) return;
+    const keyword = searchQuery.trim();
+    if (keyword.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      const places = new services.Places();
+      places.keywordSearch(
+        keyword,
+        (result, status) => {
+          if (status === services.Status.OK) {
+            setSearchResults(result);
+            setSearchOpen(true);
+          } else {
+            setSearchResults([]);
+          }
+        },
+        { size: 10 },
+      );
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery, sdkReady]);
+
+  // 언마운트 시 검색 마커 정리
+  useEffect(() => {
+    return () => {
+      searchOverlayRef.current?.setMap(null);
+    };
+  }, []);
+
+  const selectSearchPlace = (place: KakaoPlace) => {
+    const maps = window.kakao?.maps;
+    const map = mapRef.current;
+    if (!maps || !map) return;
+    const lat = Number(place.y);
+    const lng = Number(place.x);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) return;
+    map.setLevel(3);
+    map.panTo(new maps.LatLng(lat, lng));
+    searchOverlayRef.current?.setMap(null);
+    const content = document.createElement('div');
+    content.className = 'flex flex-col items-center';
+    content.innerHTML = `
+      <span class="flex size-7 items-center justify-center rounded-full border border-[#C2415D] bg-[#F04452] text-[13px] text-white shadow-[0_4px_10px_rgba(240,68,82,0.4)]">📍</span>
+      <span class="mt-1 inline-block max-w-[140px] truncate rounded-md border border-[#FECDD3] bg-white px-1.5 py-0.5 text-[11px] font-semibold text-[#F04452]">${escapeHtml(place.place_name)}</span>
+    `;
+    searchOverlayRef.current = new maps.CustomOverlay({
+      position: new maps.LatLng(lat, lng),
+      content,
+      xAnchor: 0.5,
+      yAnchor: 1,
+      map,
+    });
+    setSelectedPlace({ name: place.place_name, lat, lng });
+    setSearchQuery(place.place_name);
+    setSearchOpen(false);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setSearchResults([]);
+    setSearchOpen(false);
+    setSelectedPlace(null);
+    searchOverlayRef.current?.setMap(null);
+    searchOverlayRef.current = null;
+  };
+
+  // 길찾기 대상: 검색 선택 장소 > 선택된 마커 > 순번 있는 첫 마커
+  const directionsTarget =
+    selectedPlace ??
+    (() => {
+      const marker =
+        markers.find((m) => m.id === selectedMarkerId) ??
+        markers.find((m) => m.order > 0) ??
+        markers[0];
+      return marker ? { name: marker.label, lat: marker.lat, lng: marker.lng } : null;
+    })();
+
+  // Kakao Map 길찾기 화면 열기 (JS SDK 에는 경로 렌더링이 없어 링크로 위임)
+  const openDirections = () => {
+    if (!directionsTarget) return;
+    const { name, lat, lng } = directionsTarget;
+    const url = `https://map.kakao.com/link/to/${encodeURIComponent(name)},${lat},${lng}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   const showFallback = sdkAttempted && !sdkReady;
   const outerClass = fill
     ? 'relative h-full w-full overflow-hidden bg-[#F7F8FA]'
@@ -186,16 +289,65 @@ export function PlannerMap({
         ) : null}
       </div>
       {showSearch ? (
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center gap-2 px-3 pt-3">
-          <div className="pointer-events-auto flex h-9 flex-1 items-center rounded-[16px] border border-[#E5E8EB] bg-white px-3 text-[13px] text-[#8B95A1] shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
-            <span aria-hidden className="mr-2">
-              🔍
-            </span>
-            {placeholder}
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start gap-2 px-3 pt-3">
+          <div className="pointer-events-auto relative flex-1">
+            <div className="flex h-9 items-center rounded-[16px] border border-[#E5E8EB] bg-white px-3 shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
+              <span aria-hidden className="mr-2 text-[#8B95A1]">
+                🔍
+              </span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onFocus={() => {
+                  if (searchResults.length > 0) setSearchOpen(true);
+                }}
+                onBlur={() => setTimeout(() => setSearchOpen(false), 120)}
+                placeholder={sdkReady ? placeholder : '지도를 불러오는 중…'}
+                disabled={!sdkReady}
+                autoComplete="off"
+                className="h-full min-w-0 flex-1 bg-transparent text-[13px] text-[#191F28] outline-none placeholder:text-[#8B95A1] disabled:cursor-not-allowed"
+              />
+              {searchQuery ? (
+                <button
+                  type="button"
+                  onClick={clearSearch}
+                  aria-label="검색 지우기"
+                  className="ml-1 shrink-0 text-[13px] text-[#B0B8C1] hover:text-[#6B7684]"
+                >
+                  ✕
+                </button>
+              ) : null}
+            </div>
+            {searchOpen && searchResults.length > 0 ? (
+              <div className="absolute left-0 right-0 top-[calc(100%+4px)] max-h-64 overflow-y-auto rounded-[14px] border border-[#E5E8EB] bg-white py-1 shadow-[0_12px_28px_rgba(0,0,0,0.12)]">
+                {searchResults.map((place, index) => (
+                  <button
+                    key={`${place.place_name}-${index}`}
+                    type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      selectSearchPlace(place);
+                    }}
+                    className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-[#F7F8FA]"
+                  >
+                    <span className="text-[13px] font-semibold text-[#191F28]">
+                      {place.place_name}
+                    </span>
+                    <span className="text-[11px] text-[#8B95A1]">
+                      {place.road_address_name || place.address_name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
           <button
             type="button"
-            className="pointer-events-auto h-9 rounded-[16px] bg-[#3182F6] px-3 text-[13px] font-semibold text-white shadow-[0_4px_12px_rgba(49,130,246,0.24)]"
+            onClick={openDirections}
+            disabled={!directionsTarget}
+            title={directionsTarget ? `${directionsTarget.name} 길찾기` : '길찾기 대상이 없어요'}
+            className="pointer-events-auto h-9 shrink-0 rounded-[16px] bg-[#3182F6] px-3 text-[13px] font-semibold text-white shadow-[0_4px_12px_rgba(49,130,246,0.24)] disabled:cursor-not-allowed disabled:opacity-40"
           >
             길찾기
           </button>

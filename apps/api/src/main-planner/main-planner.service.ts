@@ -116,7 +116,7 @@ export class MainPlannerService {
       this.findItems(tripId),
       this.preferencesService.findByUser(user.id),
     ]);
-    return this.toPlannerTrip(trip, members, items, preference?.tasteTags);
+    return this.toPlannerTrip(trip, members, items, preference?.tasteTags, trip.userId === user.id);
   }
 
   async getCoordination(user: UserEntity, tripId: string): Promise<PlannerCoordinationDto> {
@@ -448,6 +448,7 @@ export class MainPlannerService {
     members: TripMemberDto[],
     items: ItineraryItemEntity[],
     tasteTags?: PlannerTripDto['meta']['tasteTags'],
+    isOwner = false,
   ): Promise<PlannerTripDto> {
     const days = this.buildDays(trip.startDate, trip.endDate);
     const markers = this.withNormalizedMarkerPositions(
@@ -459,6 +460,7 @@ export class MainPlannerService {
     return {
       id: trip.id,
       title: trip.title,
+      isOwner,
       members: members.map((member) => this.toPlannerMember(member)),
       searchPlaceholder: `${trip.destination} 여행 검색...`,
       mapCenter: center,

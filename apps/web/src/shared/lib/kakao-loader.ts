@@ -61,6 +61,18 @@ export interface KakaoPlace {
   y: string;
 }
 
+/** Places.keywordSearch 옵션 (검색 결과 편향·개수 조정) */
+export interface KakaoPlacesSearchOptions {
+  /** 결과 개수 (1~15) */
+  size?: number;
+  /** 정렬 기준 */
+  sort?: 'accuracy' | 'distance';
+  /** 중심 좌표 편향 (LatLng 인스턴스) */
+  location?: unknown;
+  /** location 기준 반경(m, 최대 20000) */
+  radius?: number;
+}
+
 export interface KakaoServicesNamespace {
   Status: { OK: string; ZERO_RESULT: string; ERROR: string };
   Geocoder: new () => {
@@ -74,6 +86,7 @@ export interface KakaoServicesNamespace {
     keywordSearch(
       query: string,
       callback: (result: KakaoPlace[], status: string) => void,
+      options?: KakaoPlacesSearchOptions,
     ): void;
   };
 }

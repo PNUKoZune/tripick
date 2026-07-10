@@ -1,6 +1,7 @@
 export { api } from '@/shared/api/client';
 export { firstErrorMessage } from './first-error-message';
 export { loadKakaoMaps, getKakaoKey } from './kakao-loader';
+export { useMediaQuery } from './use-media-query';
 export type {
   KakaoMapInstance,
   KakaoMarkerInstance,
@@ -9,4 +10,5 @@ export type {
   KakaoMouseEvent,
   KakaoRegionCode,
   KakaoPlace,
+  KakaoPlacesSearchOptions,
 } from './kakao-loader';

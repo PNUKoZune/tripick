@@ -106,6 +106,8 @@ export interface PlannerTripProgressDto {
 export interface PlannerTripDto {
   id: string;
   title: string;
+  /** 조회한 사용자가 이 여행의 소유자인지 (삭제 등 owner 전용 기능 노출용) */
+  isOwner: boolean;
   members: PlannerMemberDto[];
   searchPlaceholder: string;
   mapCenter: PlannerMapCenterDto;

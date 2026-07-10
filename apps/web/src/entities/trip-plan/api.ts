@@ -55,6 +55,11 @@ export function createTrip(body: CreateTripRequestDto) {
   return api.post<TripSummaryDto>('/main-planner/trips', body);
 }
 
+/** 여행 삭제 (owner 만) */
+export function deleteTrip(tripId: string) {
+  return api.delete<void>(`/trips/${tripId}`);
+}
+
 export function addTripMember(tripId: string, body: AddTripMemberRequestDto) {
   return api.post<PlannerMemberDto[]>(`/main-planner/trips/${tripId}/members`, body);
 }

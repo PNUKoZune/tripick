@@ -6,6 +6,7 @@ export {
   swapPlannerItem,
   fetchDestinationSuggestions,
   createTrip,
+  deleteTrip,
   addTripMember,
   removeTripMember,
   acceptTripInvite,

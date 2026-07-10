@@ -10,10 +10,12 @@ import { SessionGuard } from '@/entities/session';
 import { fetchPlannerTrip, fetchPlannerTrips, isTripPeriodActive } from '@/entities/trip-plan';
 import { MemberAvatars } from '@/entities/member';
 import { DaySelector } from '@/features/day-selector';
+import { DeleteTripButton } from '@/features/delete-trip';
 import { TripMembersSheet } from '@/features/manage-trip-members';
 import { PlannerTabs, type PlannerTab } from '@/features/planner-tab-switch';
 import { ReplanToast } from '@/features/subscribe-replan-result';
 import { queryKeys } from '@/shared/api/query-keys';
+import { useMediaQuery } from '@/shared/lib';
 import { Button, Chip } from '@/shared/ui';
 import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
 import { AlternativeSheet } from '@/widgets/alternative-sheet';
@@ -40,6 +42,10 @@ function PlannerContent({ tripId }: { tripId?: string }) {
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [swapResult, setSwapResult] = useState<{ id: string; name: string } | null>(null);
   const [membersOpen, setMembersOpen] = useState(false);
+  // 데스크탑 좌측 패널 탭 (2xl 미만: 우측 정보/조율 컬럼이 없어 좌측에서 전환)
+  const [sidePanel, setSidePanel] = useState<'schedule' | 'info' | 'coordination'>('schedule');
+  const isWideDesktop = useMediaQuery('(min-width: 1536px)');
+  const activeSidePanel = isWideDesktop ? 'schedule' : sidePanel;
 
   const {
     data: trips = [],
@@ -165,6 +171,12 @@ function PlannerContent({ tripId }: { tripId?: string }) {
           {tab === 'info' && trip ? <TripInfoPanel trip={trip} /> : null}
           {tab === 'coordination' && trip ? <TripCoordinationPanel tripId={trip.id} /> : null}
 
+          {trip?.isOwner ? (
+            <div className="mt-6 border-t border-[#F2F4F6] pt-5">
+              <DeleteTripButton tripId={trip.id} tripTitle={trip.title} variant="menu" />
+            </div>
+          ) : null}
+
           {trip ? (
             <button
               type="button"
@@ -225,6 +237,9 @@ function PlannerContent({ tripId }: { tripId?: string }) {
                     </span>
                   </button>
                 ) : null}
+                {trip?.isOwner ? (
+                  <DeleteTripButton tripId={trip.id} tripTitle={trip.title} variant="compact" />
+                ) : null}
                 {trip ? (
                   <Button
                     variant="primary"
@@ -244,22 +259,59 @@ function PlannerContent({ tripId }: { tripId?: string }) {
           {isLiveActive ? <LivePromoBanner /> : null}
 
           <div className="mx-auto grid h-full w-full min-h-0 max-w-[1360px] grid-cols-[360px_minmax(0,1fr)] gap-5 px-8 py-6 xl:grid-cols-[400px_minmax(0,1fr)] xl:gap-6 xl:px-10 2xl:grid-cols-[420px_minmax(0,1fr)_360px]">
-            {/* 좌측: 일정 패널 */}
+            {/* 좌측: 일정 패널 (2xl 미만에서는 정보·조율 탭도 이곳에서 전환) */}
             <aside className="flex h-[calc(100dvh-120px)] min-h-0 flex-col overflow-hidden rounded-[20px] border border-[#E5E8EB] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
               <div className="border-b border-[#E5E8EB] px-5 py-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-[18px] font-bold leading-[26px] text-[#191F28]">일정</h2>
-                  <span className="text-[12px] font-semibold text-[#8B95A1]">
-                    {itemsForDay.length}개
-                  </span>
+                  <h2 className="text-[18px] font-bold leading-[26px] text-[#191F28]">
+                    {activeSidePanel === 'schedule'
+                      ? '일정'
+                      : activeSidePanel === 'info'
+                        ? '여행 정보'
+                        : '취향 조율'}
+                  </h2>
+                  {activeSidePanel === 'schedule' ? (
+                    <span className="text-[12px] font-semibold text-[#8B95A1]">
+                      {itemsForDay.length}개
+                    </span>
+                  ) : null}
                 </div>
-                <p className="mt-1 text-[13px] leading-[20px] text-[#6B7684]">
-                  일정을 클릭하면 지도가 이동하고, 변경 아이콘으로 대안을 볼 수 있어요.
-                </p>
+                {/* 2xl 미만: 우측 정보/조율 컬럼이 없으므로 좌측에서 탭으로 전환 */}
                 {trip ? (
-                  <div className="mt-3">
-                    <DaySelector days={trip.days} value={day} onChange={setDay} />
+                  <div className="mt-3 flex gap-1 rounded-[12px] bg-[#F2F4F6] p-1 2xl:hidden">
+                    {(
+                      [
+                        { key: 'schedule', label: '일정' },
+                        { key: 'info', label: '정보' },
+                        { key: 'coordination', label: '조율' },
+                      ] as const
+                    ).map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => setSidePanel(item.key)}
+                        className={`h-8 flex-1 rounded-[8px] text-[13px] font-semibold transition ${
+                          activeSidePanel === item.key
+                            ? 'bg-white text-[#191F28] shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
+                            : 'text-[#8B95A1] hover:text-[#4E5968]'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
                   </div>
+                ) : null}
+                {activeSidePanel === 'schedule' ? (
+                  <>
+                    <p className="mt-3 text-[13px] leading-[20px] text-[#6B7684]">
+                      일정을 클릭하면 지도가 이동하고, 변경 아이콘으로 대안을 볼 수 있어요.
+                    </p>
+                    {trip ? (
+                      <div className="mt-3">
+                        <DaySelector days={trip.days} value={day} onChange={setDay} />
+                      </div>
+                    ) : null}
+                  </>
                 ) : null}
               </div>
               <div className="flex-1 overflow-y-auto px-5 py-4">
@@ -267,8 +319,12 @@ function PlannerContent({ tripId }: { tripId?: string }) {
                   <div className="rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-4 text-[14px] text-[#F04452]">
                     {loadError}
                   </div>
-                ) : !selectedTripId ? (
+                ) : !selectedTripId || !trip ? (
                   <PlannerEmptyState loading={isResolvingTrip} />
+                ) : activeSidePanel === 'info' ? (
+                  <TripInfoPanel trip={trip} />
+                ) : activeSidePanel === 'coordination' ? (
+                  <TripCoordinationPanel tripId={trip.id} />
                 ) : (
                   <PlannerTimeline
                     items={itemsForDay}
