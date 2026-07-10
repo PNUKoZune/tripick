@@ -245,7 +245,7 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
               )}
             </div>
 
-            <div className="mt-5 flex gap-3">
+            <div className="sticky bottom-0 z-[5] -mx-5 mt-5 flex gap-3 border-t border-[#E5E8EB] bg-white px-5 pb-2 pt-3">
               <Button
                 variant="secondary"
                 fullWidth
