@@ -195,16 +195,19 @@ export class MainPlannerService {
     user: UserEntity,
     tripId: string,
     itemId: string,
+    note?: string,
   ): Promise<PlannerAlternativeResponseDto> {
     const trip = await this.tripsService.findOne(tripId, user.id);
     const item = await this.findItem(tripId, itemId);
+    const trimmedNote = note?.trim() || undefined;
 
-    // 기본 추천 → CRAG/임베딩(취향 개인화)
-    let alternatives = await this.buildRecommendedAlternatives(trip, item);
+    // 기본 추천 → CRAG/임베딩(취향 개인화). note 가 있으면 그 조건을 검색에 반영(항목 스코프).
+    let alternatives = await this.buildRecommendedAlternatives(trip, item, trimmedNote);
     const realCount = alternatives.length;
 
-    // 최소 3개가 되도록 mock 후보로 보충 (오프라인/키 미설정 대비)
-    if (realCount < 3) {
+    // 기본 추천은 최소 3개가 되도록 mock 후보로 보충 (오프라인/키 미설정 대비).
+    // note(사용자 조건 검색)일 때는 보충하지 않아 "결과 없음"을 그대로 노출한다.
+    if (!trimmedNote && realCount < 3) {
       const filler = this.buildAlternatives(item)
         .slice(0, 3 - realCount)
         .map((alt, index) => ({ ...alt, id: `${item.id}:fill-${index + 1}` }));
@@ -677,18 +680,22 @@ export class MainPlannerService {
   private async buildRecommendedAlternatives(
     trip: TripEntity,
     item: ItineraryItemEntity,
+    note?: string,
   ): Promise<PlannerAlternativeDto[]> {
     const preference = await this.preferencesService.findByUser(trip.userId);
     const tasteTags = preference?.tasteTags;
     const preferenceVector = await this.preferencesService.getPreferenceVector(trip.userId);
     const waiting = item.type === 'restaurant';
+    // 여행 고정 노트 + 이번 요청 조건(note)을 합쳐 검색을 개인화
+    const combinedNotes =
+      [trip.notes, note].map((v) => v?.trim()).filter(Boolean).join(' · ') || null;
 
     let retrieval;
     try {
       retrieval = await this.placeRetrieval.retrieve({
         userId: trip.userId,
         destination: trip.destination,
-        notes: trip.notes,
+        notes: combinedNotes,
         limit: 14,
         currentLocation: item.coordinates,
         ...(tasteTags !== undefined ? { tasteTags } : {}),

@@ -11,7 +11,6 @@ import type {
 
 import {
   fetchPlannerAlternatives,
-  requestTripReplan,
   resolvePlannerPlace,
   swapPlannerItem,
 } from '@/entities/trip-plan';
@@ -47,17 +46,21 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
   // 장소 이름 검색으로 찾은 후보들 + 그 중 사용자가 고른 후보
   const [pending, setPending] = useState<PendingCandidates | null>(null);
   const [pendingSelectedId, setPendingSelectedId] = useState<string | null>(null);
+  // 사용자가 확정한 조건 텍스트 (예: "조용한 감성 카페"). '' 이면 기본 추천.
+  const [note, setNote] = useState('');
 
   const alternativesQuery = useQuery({
-    queryKey: queryKeys.planner.alternatives(tripId, itemId ?? 'pending'),
+    queryKey: queryKeys.planner.alternatives(tripId, itemId ?? 'pending', note),
     queryFn: () => {
       if (!itemId) {
         throw new Error('일정 항목을 먼저 선택해주세요.');
       }
-      return fetchPlannerAlternatives(tripId, itemId);
+      return fetchPlannerAlternatives(tripId, itemId, note);
     },
     enabled: Boolean(itemId),
     staleTime: 2 * 60 * 1000,
+    // note 변경(조건 재검색) 시 이전 결과를 유지해 시트가 스켈레톤으로 깜빡이지 않게 한다
+    placeholderData: (prev) => prev,
   });
 
   // itemId 가 바뀌면 로컬 상태 초기화
@@ -66,6 +69,7 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
     setPendingSelectedId(null);
     setSelectedId(null);
     setAppliedName(null);
+    setNote('');
   }, [itemId]);
 
   const alternatives = alternativesQuery.data?.alternatives ?? [];
@@ -105,19 +109,6 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
     },
   });
 
-  // 자유 텍스트 요청 → AI 재계획(BullMQ) 트리거. 결과는 replan_result 로 도착해 ReplanToast 가 노출한다.
-  const replanMutation = useMutation({
-    mutationFn: (note: string) => {
-      if (!itemId) throw new Error('일정 항목을 먼저 선택해주세요.');
-      return requestTripReplan({
-        tripId,
-        trigger: 'manual',
-        deviatedItemId: itemId,
-        note,
-      });
-    },
-  });
-
   const state: State = !itemId
     ? { status: 'idle' }
     : alternativesQuery.isPending
@@ -143,15 +134,14 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
     searchPlaceMutation.reset();
   }, [searchPlaceMutation]);
 
-  const requestReplan = useCallback(
-    async (note: string): Promise<boolean> => {
-      if (!note.trim() || replanMutation.isPending) return false;
-      replanMutation.reset();
-      const result = await replanMutation.mutateAsync(note.trim()).catch(() => null);
-      return Boolean(result);
-    },
-    [replanMutation],
-  );
+  // 조건 텍스트로 이 항목의 대안 목록을 다시 찾는다 (항목 스코프, 동기)
+  const refine = useCallback((text: string) => {
+    setNote(text.trim());
+  }, []);
+
+  const clearRefine = useCallback(() => {
+    setNote('');
+  }, []);
 
   /** 임의의 장소로 교체 (되돌리기 등에서 재사용). */
   const swapToPlace = useCallback(
@@ -195,10 +185,11 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
     setPendingSelectedId,
     cancelPending,
     confirmPending,
-    // 자유 텍스트 요청 → AI 재계획
-    requestReplan,
-    requestingReplan: replanMutation.isPending,
-    replanError: replanMutation.error instanceof Error ? replanMutation.error.message : null,
+    // 조건 텍스트로 이 항목 대안 다시 찾기 (항목 스코프)
+    note,
+    refine,
+    clearRefine,
+    refining: alternativesQuery.isFetching && Boolean(note),
     apply,
     swapToPlace,
     submitting: swapMutation.isPending,

@@ -58,13 +58,14 @@ export class MainPlannerController {
   }
 
   @Get('trips/:tripId/items/:itemId/alternatives')
-  @ApiOperation({ summary: '일정 항목 대안 추천 (취향 기반 CRAG)' })
+  @ApiOperation({ summary: '일정 항목 대안 추천 (취향 기반 CRAG, note: 사용자 조건)' })
   getAlternatives(
     @CurrentUser() user: UserEntity,
     @Param('tripId') tripId: string,
     @Param('itemId') itemId: string,
+    @Query('note') note?: string,
   ) {
-    return this.mainPlannerService.getAlternatives(user, tripId, itemId);
+    return this.mainPlannerService.getAlternatives(user, tripId, itemId, note);
   }
 
   @Post('trips/:tripId/items/:itemId/resolve-place')

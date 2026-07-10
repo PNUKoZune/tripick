@@ -24,9 +24,10 @@ export function fetchPlannerTrip(tripId: string) {
   return api.get<PlannerTripDto>(`/main-planner/trips/${tripId}`);
 }
 
-export function fetchPlannerAlternatives(tripId: string, itemId: string) {
+export function fetchPlannerAlternatives(tripId: string, itemId: string, note?: string) {
+  const search = note?.trim() ? `?note=${encodeURIComponent(note.trim())}` : '';
   return api.get<PlannerAlternativeResponseDto>(
-    `/main-planner/trips/${tripId}/items/${itemId}/alternatives`,
+    `/main-planner/trips/${tripId}/items/${itemId}/alternatives${search}`,
   );
 }
 
