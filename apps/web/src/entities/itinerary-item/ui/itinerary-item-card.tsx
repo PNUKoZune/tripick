@@ -58,7 +58,7 @@ export function ItineraryItemCard({
         <span className={`size-2.5 rounded-full ${selected ? 'bg-[#1B64DA]' : 'bg-[#3182F6]'}`} />
         {!isLast ? <span className="mt-1 h-full w-px bg-[#E5E8EB]" /> : null}
       </div>
-      <div className={`relative flex flex-1 overflow-hidden rounded-[16px] border transition ${cardClass}`}>
+      <div className={`relative flex flex-1 rounded-[16px] border transition ${cardClass}`}>
         {dragHandleRef ? (
           <button
             type="button"
@@ -66,7 +66,7 @@ export function ItineraryItemCard({
             aria-label="드래그해서 순서 변경"
             title="드래그해서 순서 변경"
             style={{ touchAction: 'none' }}
-            className="flex w-8 shrink-0 cursor-grab items-center justify-center border-r border-[#EFF1F4] bg-[#FAFBFC] text-[#B0B8C1] transition hover:bg-[#EAF2FF] hover:text-[#3182F6] active:cursor-grabbing"
+            className="flex w-8 shrink-0 cursor-grab items-center justify-center rounded-l-[15px] border-r border-[#EFF1F4] bg-[#FAFBFC] text-[#B0B8C1] transition hover:bg-[#EAF2FF] hover:text-[#3182F6] active:cursor-grabbing"
           >
             <LuGripVertical className="size-4" />
           </button>
@@ -92,7 +92,9 @@ export function ItineraryItemCard({
               <FiChevronRight aria-hidden className="size-4 text-[#8B95A1]" />
             )}
           </div>
-          <div className="mt-2 pr-10 text-[16px] font-semibold leading-[24px] text-[#191F28]">
+          <div
+            className={`mt-2 text-[16px] font-semibold leading-[24px] text-[#191F28] ${onSwitch ? 'pr-[70px]' : 'pr-10'}`}
+          >
             {item.name}
           </div>
           <div className="mt-1 flex items-center gap-2 text-[13px] leading-[18px] text-[#6B7684]">
@@ -112,7 +114,7 @@ export function ItineraryItemCard({
         </div>
         {onSwitch ? (
           <div className="absolute right-3 top-3">
-            <ChangeScheduleButton onClick={onSwitch} urgent={item.hasWaiting} />
+            <ChangeScheduleButton onClick={onSwitch} urgent={item.hasWaiting} label="변경" />
           </div>
         ) : null}
         {showControls ? (
