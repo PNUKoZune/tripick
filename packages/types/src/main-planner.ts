@@ -155,6 +155,27 @@ export interface PlannerTripDto {
   progress: PlannerTripProgressDto;
 }
 
+/** 공유 링크 활성화 응답 */
+export interface TripShareResponseDto {
+  /** 공유 토큰. 공유 URL 은 프론트가 `${origin}/share/${token}` 로 구성한다 */
+  token: string;
+}
+
+/** 공개 공유 페이지에서 렌더할 읽기 전용 일정 (인증 불필요) */
+export interface SharedItineraryDto {
+  title: string;
+  destination: string;
+  durationLabel: string;
+  transportLabel: string;
+  memberCount: number;
+  startDate: string;
+  endDate: string;
+  days: PlannerDayDto[];
+  items: PlannerItineraryItemDto[];
+  mapCenter: PlannerMapCenterDto;
+  mapMarkers: PlannerMapMarkerDto[];
+}
+
 /** 대안이 어디서 왔는지: AI 추천(CRAG) · 장소 이름 검색으로 직접 지정 */
 export type PlannerAlternativeOrigin = 'recommend' | 'link';
 

@@ -89,6 +89,26 @@ export class MainPlannerController {
     return this.mainPlannerService.getCoordination(user, tripId);
   }
 
+  @Get('trips/:tripId/share')
+  @ApiOperation({ summary: '공유 링크 상태 조회 (owner)' })
+  getShareStatus(@CurrentUser() user: UserEntity, @Param('tripId') tripId: string) {
+    return this.mainPlannerService.getShareStatus(user, tripId);
+  }
+
+  @Post('trips/:tripId/share')
+  @HttpCode(200)
+  @ApiOperation({ summary: '공유 링크 활성화 (owner)' })
+  enableShare(@CurrentUser() user: UserEntity, @Param('tripId') tripId: string) {
+    return this.mainPlannerService.enableShare(user, tripId);
+  }
+
+  @Delete('trips/:tripId/share')
+  @HttpCode(204)
+  @ApiOperation({ summary: '공유 링크 비활성화 (owner)' })
+  disableShare(@CurrentUser() user: UserEntity, @Param('tripId') tripId: string) {
+    return this.mainPlannerService.disableShare(user, tripId);
+  }
+
   @Post('trips/:tripId/members')
   @ApiOperation({ summary: '여행 멤버로 친구 추가' })
   addMember(

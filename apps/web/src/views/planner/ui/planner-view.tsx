@@ -10,7 +10,7 @@ import {
   FiChevronsRight,
   FiUserPlus,
 } from 'react-icons/fi';
-import { LuSparkles } from 'react-icons/lu';
+import { LuShare2, LuSparkles } from 'react-icons/lu';
 import { useQuery } from '@tanstack/react-query';
 import type { PlannerItineraryItemDto, PlannerMapMarkerDto, PlannerTripDto } from '@tripick/types';
 
@@ -24,6 +24,7 @@ import { EditableTimeline } from '@/features/edit-itinerary';
 import { TripMembersSheet } from '@/features/manage-trip-members';
 import { PlannerTabs, type PlannerTab } from '@/features/planner-tab-switch';
 import { ReplanModal } from '@/features/request-replan';
+import { ShareTripSheet } from '@/features/share-trip';
 import { ReplanToast } from '@/features/subscribe-replan-result';
 import { queryKeys } from '@/shared/api/query-keys';
 import { useMediaQuery } from '@/shared/lib';
@@ -53,6 +54,7 @@ function PlannerContent({ tripId }: { tripId?: string }) {
   const [swapResult, setSwapResult] = useState<{ id: string; name: string } | null>(null);
   const [membersOpen, setMembersOpen] = useState(false);
   const [replanOpen, setReplanOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   // 데스크탑 좌측 패널 탭 (2xl 미만: 우측 정보/조율 컬럼이 없어 좌측에서 전환)
   const [sidePanel, setSidePanel] = useState<'schedule' | 'info' | 'coordination'>('schedule');
   // 태블릿(2xl 미만)에서 좌측 패널을 접어 지도 영역을 넓힐 수 있게 한다
@@ -190,6 +192,7 @@ function PlannerContent({ tripId }: { tripId?: string }) {
           title={trip?.title ?? (isResolvingTrip ? '여행 찾는 중' : '여행을 먼저 만들어주세요')}
           members={trip?.members ?? []}
           {...(trip ? { onMembersClick: () => setMembersOpen(true) } : {})}
+          {...(trip ? { onShareClick: () => setShareOpen(true) } : {})}
         />
 
         {isLiveActive ? <LivePromoBanner /> : null}
@@ -301,6 +304,16 @@ function PlannerContent({ tripId }: { tripId?: string }) {
                   >
                     <MemberAvatars members={trip.members} />
                     <FiUserPlus className="size-4 text-[#8B95A1]" aria-hidden />
+                  </button>
+                ) : null}
+                {trip ? (
+                  <button
+                    type="button"
+                    onClick={() => setShareOpen(true)}
+                    className="flex h-9 items-center gap-1.5 rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[13px] font-semibold text-[#4E5968] hover:bg-[#FAFBFC] hover:text-[#191F28]"
+                  >
+                    <LuShare2 className="size-4" />
+                    공유
                   </button>
                 ) : null}
                 {trip?.isOwner ? (
@@ -488,6 +501,19 @@ function PlannerContent({ tripId }: { tripId?: string }) {
         tripTitle={trip?.title ?? '여행'}
         members={trip?.members ?? []}
       />
+
+      {trip ? (
+        <ShareTripSheet
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          tripId={trip.id}
+          tripTitle={trip.title}
+          subtitle={`${trip.meta.durationLabel} · ${trip.meta.transportLabel}`}
+          days={trip.days}
+          items={trip.items}
+          canShareLink={trip.isOwner}
+        />
+      ) : null}
 
       <ReplanModal
         tripId={trip?.id ?? selectedTripId}

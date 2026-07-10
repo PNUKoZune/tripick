@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { randomBytes } from 'crypto';
 import axios from 'axios';
 import { FriendsService } from '../friends/friends.service';
 import { InboxService } from '../inbox/inbox.service';
@@ -37,6 +38,8 @@ import type {
   PlannerSwapResponseDto,
   PlannerTripDto,
   PlannerTripProgressDto,
+  SharedItineraryDto,
+  TripShareResponseDto,
   PreferenceCoordinationDto,
   PreferenceVoteDto,
   TripMemberDto,
@@ -120,6 +123,61 @@ export class MainPlannerService {
       this.preferencesService.findByUser(user.id),
     ]);
     return this.toPlannerTrip(trip, members, items, preference?.tasteTags, trip.userId === user.id);
+  }
+
+  /** 현재 공유 상태 조회 (owner) */
+  async getShareStatus(user: UserEntity, tripId: string): Promise<{ token: string | null }> {
+    const trip = await this.tripsService.findOne(tripId, user.id);
+    return { token: trip.shareToken };
+  }
+
+  /** 공유 링크 활성화 (owner). 이미 있으면 기존 토큰을 그대로 반환한다. */
+  async enableShare(user: UserEntity, tripId: string): Promise<TripShareResponseDto> {
+    const trip = await this.tripsService.findOne(tripId, user.id);
+    if (!trip.shareToken) {
+      trip.shareToken = randomBytes(12).toString('base64url');
+      await this.tripsRepo.save(trip);
+    }
+    return { token: trip.shareToken };
+  }
+
+  /** 공유 링크 비활성화 (owner) */
+  async disableShare(user: UserEntity, tripId: string): Promise<void> {
+    const trip = await this.tripsService.findOne(tripId, user.id);
+    if (trip.shareToken) {
+      trip.shareToken = null;
+      await this.tripsRepo.save(trip);
+    }
+  }
+
+  /** 공개 공유 토큰으로 읽기 전용 일정 조회 (인증 불필요) */
+  async getSharedItinerary(token: string): Promise<SharedItineraryDto> {
+    if (!token?.trim()) throw new NotFoundException('공유된 일정을 찾을 수 없어요.');
+    const trip = await this.tripsRepo.findOneBy({ shareToken: token });
+    if (!trip) throw new NotFoundException('공유된 일정을 찾을 수 없어요.');
+
+    const [items, memberCount] = await Promise.all([
+      this.findItems(trip.id),
+      this.tripMembersService.countMembers(trip.id),
+    ]);
+    const days = this.buildDays(trip.startDate, trip.endDate);
+    const markers = this.withNormalizedMarkerPositions(
+      items.map((item, index) => this.toMarker(item, index, index === 0 ? 'current' : 'primary')),
+    );
+
+    return {
+      title: trip.title,
+      destination: trip.destination,
+      durationLabel: this.durationLabel(trip.startDate, trip.endDate),
+      transportLabel: this.transportLabel(trip.transportMode),
+      memberCount,
+      startDate: trip.startDate,
+      endDate: trip.endDate,
+      days,
+      items: items.map((item) => this.toPlannerItem(item)),
+      mapCenter: this.mapCenter(items, trip.destination),
+      mapMarkers: markers,
+    };
   }
 
   async getCoordination(user: UserEntity, tripId: string): Promise<PlannerCoordinationDto> {

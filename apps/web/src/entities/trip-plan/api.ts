@@ -15,6 +15,8 @@ import type {
   PlannerUpdateItemRequestDto,
   ReplanJobDto,
   ReplanRequestDto,
+  SharedItineraryDto,
+  TripShareResponseDto,
   TripSummaryDto,
 } from '@tripick/types';
 
@@ -62,6 +64,26 @@ export function createTrip(body: CreateTripRequestDto) {
 /** 여행 삭제 (owner 만) */
 export function deleteTrip(tripId: string) {
   return api.delete<void>(`/trips/${tripId}`);
+}
+
+/** 공유 링크 상태 조회 (owner) */
+export function fetchTripShareStatus(tripId: string) {
+  return api.get<{ token: string | null }>(`/main-planner/trips/${tripId}/share`);
+}
+
+/** 공유 링크 활성화 (owner) */
+export function enableTripShare(tripId: string) {
+  return api.post<TripShareResponseDto>(`/main-planner/trips/${tripId}/share`, {});
+}
+
+/** 공유 링크 비활성화 (owner) */
+export function disableTripShare(tripId: string) {
+  return api.delete<void>(`/main-planner/trips/${tripId}/share`);
+}
+
+/** 공개 공유 토큰으로 읽기 전용 일정 조회 (인증 불필요) */
+export function fetchSharedItinerary(token: string) {
+  return api.get<SharedItineraryDto>(`/shared-itineraries/${token}`);
 }
 
 /** 일정 항목 수동 추가 */

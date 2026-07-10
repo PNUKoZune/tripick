@@ -11,6 +11,7 @@ import { DestinationsService } from './destinations.service';
 import { WeatherHelper } from '../planner/helpers/weather.helper';
 import { PlannerModule } from '../planner/planner.module';
 import { MainPlannerController } from './main-planner.controller';
+import { SharedItineraryController } from './shared-itinerary.controller';
 import { MainPlannerService } from './main-planner.service';
 
 @Module({
@@ -24,7 +25,7 @@ import { MainPlannerService } from './main-planner.service';
     // 기본 추천 대안에 CRAG/임베딩 검색(PlaceRetrievalService)과 Kakao 직검색을 쓴다
     PlannerModule,
   ],
-  controllers: [MainPlannerController],
+  controllers: [MainPlannerController, SharedItineraryController],
   providers: [MainPlannerService, DestinationsService, WeatherHelper],
 })
 export class MainPlannerModule {}

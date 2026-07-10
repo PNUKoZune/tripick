@@ -49,6 +49,10 @@ export class TripEntity {
   @Column({ type: 'text', nullable: true })
   notes: string | null;
 
+  /** 공유 링크 토큰. 설정 시 공개 공유 페이지에서 조회 가능 */
+  @Column({ type: 'varchar', nullable: true, unique: true })
+  shareToken: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
