@@ -51,38 +51,39 @@ export function ItineraryItemCard({
     <div
       className={`flex w-full items-stretch gap-2 text-left transition ${dragging ? 'opacity-60' : ''}`}
     >
-      {dragHandleRef ? (
-        <button
-          type="button"
-          ref={dragHandleRef}
-          aria-label="드래그해서 순서 변경"
-          title="드래그해서 순서 변경"
-          style={{ touchAction: 'none' }}
-          className="mt-2 flex w-7 shrink-0 cursor-grab items-center justify-center self-stretch rounded-[10px] border border-[#E5E8EB] bg-[#F7F8FA] text-[#8B95A1] transition hover:border-[#C7DCFF] hover:bg-[#EAF2FF] hover:text-[#3182F6] active:cursor-grabbing"
-        >
-          <LuGripVertical className="size-4" />
-        </button>
-      ) : null}
-      <div className="flex w-[46px] shrink-0 flex-col items-end pt-3 text-[13px] font-semibold leading-[18px] text-[#191F28]">
+      <div className="flex w-[42px] shrink-0 flex-col items-end pt-3 text-[13px] font-semibold leading-[18px] text-[#191F28]">
         {item.scheduledAt}
       </div>
       <div className="relative flex flex-col items-center pt-4">
         <span className={`size-2.5 rounded-full ${selected ? 'bg-[#1B64DA]' : 'bg-[#3182F6]'}`} />
         {!isLast ? <span className="mt-1 h-full w-px bg-[#E5E8EB]" /> : null}
       </div>
-      <div className={`relative flex-1 rounded-[16px] border px-4 py-3 transition ${cardClass}`}>
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={onClick}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              onClick?.();
-            }
-          }}
-          className="block w-full cursor-pointer text-left outline-none"
-        >
+      <div className={`relative flex flex-1 overflow-hidden rounded-[16px] border transition ${cardClass}`}>
+        {dragHandleRef ? (
+          <button
+            type="button"
+            ref={dragHandleRef}
+            aria-label="드래그해서 순서 변경"
+            title="드래그해서 순서 변경"
+            style={{ touchAction: 'none' }}
+            className="flex w-8 shrink-0 cursor-grab items-center justify-center border-r border-[#EFF1F4] bg-[#FAFBFC] text-[#B0B8C1] transition hover:bg-[#EAF2FF] hover:text-[#3182F6] active:cursor-grabbing"
+          >
+            <LuGripVertical className="size-4" />
+          </button>
+        ) : null}
+        <div className="relative min-w-0 flex-1 px-4 py-3">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={onClick}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onClick?.();
+              }
+            }}
+            className="block w-full cursor-pointer text-left outline-none"
+          >
           <div className="flex items-center justify-between gap-2">
             <Chip tone={tone}>{item.typeLabel}</Chip>
             {onSwitch ? (
@@ -138,6 +139,7 @@ export function ItineraryItemCard({
             ) : null}
           </div>
         ) : null}
+        </div>
       </div>
     </div>
   );
