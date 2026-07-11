@@ -40,6 +40,8 @@ export interface PlaceProvenance {
 export interface RegionRecommendation {
   /** place_embeddings.destination_region 원본 값 (시도명 또는 정규화 슬러그) */
   region: string;
+  /** place_embeddings.region_sigungu 원본 값 (시/군/구, 없으면 null) */
+  sigungu: string | null;
   /** 상위 topK 장소의 취향 코사인 평균 (0~1) */
   score: number;
   /** 점수 계산에 쓴 장소 수 */
@@ -134,9 +136,10 @@ export class PlaceEmbeddingRepository {
   }
 
   /**
-   * 취향 벡터로 목적지(destination_region)를 랭킹한다.
-   * 지역별 상위 topK개 장소의 취향 코사인 평균을 점수로 써서,
-   * "내 취향에 맞는 스팟이 많은 지역"을 상위로 올린다.
+   * 취향 벡터로 목적지를 랭킹한다. 시군구(region_sigungu)가 있으면 시/군/구 단위로,
+   * 없으면 시도(destination_region) 단위로 묶어(가능한 가장 세밀한 단위) 상위 topK개
+   * 장소의 취향 코사인 평균을 점수로 쓴다. (region, sigungu) 조합으로 그룹핑하므로
+   * 서로 다른 시도의 동명 시군구('중구' 등)는 별개로 유지된다.
    * 벡터 차원 불일치 등 실패 시 [] 를 반환해 호출부가 인기순으로 폴백하게 한다.
    */
   async recommendRegions(
@@ -148,14 +151,15 @@ export class PlaceEmbeddingRepository {
     if (preferenceVector.length === 0) return [];
     const vector = `[${preferenceVector.join(',')}]`;
     try {
-      const rows: Array<{ region: string; score: string; places: string }> =
+      const rows: Array<{ region: string; sigungu: string | null; score: string; places: string }> =
         await this.dataSource.query(
           `
           WITH scored AS (
             SELECT destination_region AS region,
+                   region_sigungu AS sigungu,
                    1 - (embedding <=> $1::vector) AS sim,
                    ROW_NUMBER() OVER (
-                     PARTITION BY destination_region
+                     PARTITION BY destination_region, region_sigungu
                      ORDER BY embedding <=> $1::vector
                    ) AS rnk
             FROM place_embeddings
@@ -163,10 +167,10 @@ export class PlaceEmbeddingRepository {
               AND destination_region IS NOT NULL
               AND destination_region <> 'default'
           )
-          SELECT region, AVG(sim) AS score, COUNT(*) AS places
+          SELECT region, sigungu, AVG(sim) AS score, COUNT(*) AS places
           FROM scored
           WHERE rnk <= $2
-          GROUP BY region
+          GROUP BY region, sigungu
           HAVING COUNT(*) >= $3
           ORDER BY score DESC
           LIMIT $4
@@ -175,6 +179,7 @@ export class PlaceEmbeddingRepository {
         );
       return rows.map((row) => ({
         region: row.region,
+        sigungu: row.sigungu,
         score: Number(row.score),
         places: Number(row.places),
       }));

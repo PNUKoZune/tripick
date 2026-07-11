@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import type { DestinationSuggestionDto } from '@tripick/types';
-import { PlaceEmbeddingRepository } from '../planner/retrieval/place-embedding.repository';
+import {
+  PlaceEmbeddingRepository,
+  type RegionRecommendation,
+} from '../planner/retrieval/place-embedding.repository';
 import { regionStem } from '../planner/retrieval/place-seeds';
 import { PreferencesService } from '../preferences/preferences.service';
 
@@ -21,6 +24,14 @@ function displayRegionName(raw: string): string | null {
   if (SLUG_TO_KO[key]) return SLUG_TO_KO[key];
   // '부산광역시'→'부산', '제주특별자치도'→'제주', '경기도'→'경기'
   return regionStem(raw) || raw;
+}
+
+/** 같은 시도 내 두 후보 중 next 를 대표로 바꿔야 하는지. 시군구 있는 후보 우선, 같은 급이면 고점수. */
+function preferSigungu(cur: RegionRecommendation, next: RegionRecommendation): boolean {
+  const curHas = !!cur.sigungu?.trim();
+  const nextHas = !!next.sigungu?.trim();
+  if (curHas !== nextHas) return nextHas;
+  return next.score > cur.score;
 }
 
 /** areaCode2 응답 아이템 (시도 / 시군구 공통) */
@@ -103,6 +114,8 @@ export class DestinationsService {
   private static readonly REC_TOP_K = 12;
   private static readonly REC_MIN_PLACES = 5;
   private static readonly REC_LIMIT = 8;
+  /** 시도별 대표로 접기 전에 받아둘 후보(시도·시군구) 수 */
+  private static readonly REC_CANDIDATES = 100;
 
   constructor(
     private readonly config: ConfigService,
@@ -130,21 +143,42 @@ export class DestinationsService {
     const vector = await this.preferences.getPreferenceVector(userId);
     if (!vector || vector.length === 0) return this.popular(all);
 
+    // 시도·시군구 후보를 넉넉히 받아서(전체 그룹 수가 많지 않음) 시도별로 대표 1개로 접는다.
     const ranked = await this.placeEmbeddings.recommendRegions(
       vector,
       DestinationsService.REC_TOP_K,
       DestinationsService.REC_MIN_PLACES,
-      DestinationsService.REC_LIMIT,
+      DestinationsService.REC_CANDIDATES,
     );
     if (ranked.length === 0) return this.popular(all);
 
+    // 시도별 대표: 시군구 데이터가 있으면 그 시도의 최고 시/군/구, 없으면 시도 전체.
+    // (밀도가 큰 '시도 전체' 버킷이 개별 시군구를 가리지 않도록 시군구를 우선한다.)
+    const repBySido = new Map<string, RegionRecommendation>();
+    for (const r of ranked) {
+      const cur = repBySido.get(r.region);
+      if (!cur || preferSigungu(cur, r)) repBySido.set(r.region, r);
+    }
+    const reps = [...repBySido.values()].sort((a, b) => b.score - a.score);
+
     const picked: DestinationSuggestionDto[] = [];
     const seen = new Set<string>();
-    for (const r of ranked) {
-      const name = displayRegionName(r.region);
-      if (!name || seen.has(name)) continue;
+    for (const r of reps) {
+      if (picked.length >= DestinationsService.REC_LIMIT) break;
+      const sido = displayRegionName(r.region);
+      if (!sido) continue;
+      // 시군구가 있으면 그 이름을 카드 제목으로(예: '경주시'), 상위 시도는 부제로 맥락 제공.
+      const sigungu = r.sigungu?.trim() || null;
+      const name = sigungu ?? sido;
+      if (seen.has(name)) continue;
       seen.add(name);
-      picked.push({ id: `rec-${r.region}`, name, region: name, emoji: pickEmoji(name) });
+      picked.push({
+        id: `rec-${r.region}-${sigungu ?? ''}`,
+        name,
+        region: sido,
+        // 이모지는 원본 시도명으로 매칭해야 정확하다('경상북도'→🏛️).
+        emoji: pickEmoji(r.region),
+      });
     }
     // 추천이 목표 개수보다 적으면 인기 여행지로 채운다 (중복 제외).
     if (picked.length < DestinationsService.REC_LIMIT) {
