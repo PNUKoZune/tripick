@@ -1,7 +1,11 @@
 import { Type } from 'class-transformer';
 import {
+  IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
+  IsLatitude,
+  IsLongitude,
   IsNumber,
   IsObject,
   IsOptional,
@@ -12,9 +16,18 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import type { ReplanRequestDto, ReplanTrigger } from '@tripick/types';
+import type {
+  ReplanBudget,
+  ReplanPace,
+  ReplanPlaceDto,
+  ReplanPreferencesDto,
+  ReplanRequestDto,
+  ReplanTrigger,
+} from '@tripick/types';
 
 const REPLAN_TRIGGERS = ['waiting', 'deviation', 'weather', 'manual'] as const satisfies readonly ReplanTrigger[];
+const REPLAN_PACE = ['relaxed', 'balanced', 'packed'] as const satisfies readonly ReplanPace[];
+const REPLAN_BUDGET = ['thrifty', 'normal', 'premium'] as const satisfies readonly ReplanBudget[];
 
 export class ReplanLocationBodyDto {
   @Type(() => Number)
@@ -28,6 +41,51 @@ export class ReplanLocationBodyDto {
   @Min(-180)
   @Max(180)
   lng!: number;
+}
+
+export class ReplanPlaceBodyDto implements ReplanPlaceDto {
+  @IsString()
+  @MaxLength(120)
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  address?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  category?: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsLatitude()
+  lat!: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsLongitude()
+  lng!: number;
+}
+
+export class ReplanPreferencesBodyDto implements ReplanPreferencesDto {
+  @IsOptional()
+  @IsIn(REPLAN_PACE)
+  pace?: ReplanPace;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  avoid?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  minimizeTravel?: boolean;
+
+  @IsOptional()
+  @IsIn(REPLAN_BUDGET)
+  budget?: ReplanBudget;
 }
 
 export class BaseReplanRequestBodyDto implements Omit<ReplanRequestDto, 'trigger'> {
@@ -54,6 +112,17 @@ export class BaseReplanRequestBodyDto implements Omit<ReplanRequestDto, 'trigger
   @IsString()
   @MaxLength(300)
   note?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ReplanPlaceBodyDto)
+  mustIncludePlaces?: ReplanPlaceBodyDto[];
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ReplanPreferencesBodyDto)
+  preferences?: ReplanPreferencesBodyDto;
 
   @IsOptional()
   @IsObject()

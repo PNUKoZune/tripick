@@ -3,23 +3,36 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
+import {
+  FiChevronLeft,
+  FiChevronRight,
+  FiChevronsLeft,
+  FiChevronsRight,
+  FiUserPlus,
+} from 'react-icons/fi';
+import { LuShare2, LuSparkles } from 'react-icons/lu';
 import { useQuery } from '@tanstack/react-query';
 import type { PlannerItineraryItemDto, PlannerMapMarkerDto, PlannerTripDto } from '@tripick/types';
 
 import { SessionGuard } from '@/entities/session';
 import { fetchPlannerTrip, fetchPlannerTrips, isTripPeriodActive } from '@/entities/trip-plan';
 import { MemberAvatars } from '@/entities/member';
+import { useApplySearchedPlace, type SearchedPlace } from '@/features/apply-searched-place';
 import { DaySelector } from '@/features/day-selector';
+import { DeleteTripButton } from '@/features/delete-trip';
+import { EditableTimeline } from '@/features/edit-itinerary';
 import { TripMembersSheet } from '@/features/manage-trip-members';
 import { PlannerTabs, type PlannerTab } from '@/features/planner-tab-switch';
+import { ReplanModal } from '@/features/request-replan';
+import { ShareTripSheet } from '@/features/share-trip';
 import { ReplanToast } from '@/features/subscribe-replan-result';
 import { queryKeys } from '@/shared/api/query-keys';
-import { Button, Chip } from '@/shared/ui';
+import { useMediaQuery } from '@/shared/lib';
+import { Button, Chip, Toast } from '@/shared/ui';
 import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
 import { AlternativeSheet } from '@/widgets/alternative-sheet';
 import { PlannerHeader } from '@/widgets/planner-header';
 import { PlannerMap } from '@/widgets/planner-map';
-import { PlannerTimeline } from '@/widgets/planner-timeline';
 import { TripCoordinationPanel } from '@/widgets/trip-coordination-panel';
 import { TripInfoPanel } from '@/widgets/trip-info-panel';
 import { TripMapPanel } from '@/widgets/trip-map-panel';
@@ -40,6 +53,20 @@ function PlannerContent({ tripId }: { tripId?: string }) {
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [swapResult, setSwapResult] = useState<{ id: string; name: string } | null>(null);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [replanOpen, setReplanOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  // 데스크탑 좌측 패널 탭 (2xl 미만: 우측 정보/조율 컬럼이 없어 좌측에서 전환)
+  const [sidePanel, setSidePanel] = useState<'schedule' | 'info' | 'coordination'>('schedule');
+  // 태블릿(2xl 미만)에서 좌측 패널을 접어 지도 영역을 넓힐 수 있게 한다
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const isWideDesktop = useMediaQuery('(min-width: 1536px)');
+  const activeSidePanel = isWideDesktop ? 'schedule' : sidePanel;
+  const sidebarVisible = isWideDesktop || !sidebarCollapsed;
+  const [placeToast, setPlaceToast] = useState<{
+    tone: 'success' | 'warning' | 'error';
+    title: string;
+    message?: string;
+  } | null>(null);
 
   const {
     data: trips = [],
@@ -110,6 +137,53 @@ function PlannerContent({ tripId }: { tripId?: string }) {
     ? { lat: focusedMarker.lat, lng: focusedMarker.lng, level: 4 }
     : (trip?.mapCenter ?? { lat: 35.8347, lng: 129.2247, level: 7 });
 
+  const focusedItem = itemsForDay.find((i) => i.id === focusedItemId) ?? null;
+  const applyPlace = useApplySearchedPlace(trip?.id ?? selectedTripId);
+
+  // 지도 검색으로 고른 장소를 "선택한 일정 항목"에 반영(swap)한다
+  function handlePickSearchPlace(place: SearchedPlace) {
+    if (!focusedItem) {
+      setPlaceToast({
+        tone: 'warning',
+        title: '먼저 일정을 선택하세요',
+        message: '지도에 반영할 일정 항목을 목록에서 눌러 선택해 주세요.',
+      });
+      return;
+    }
+    const targetName = focusedItem.name;
+    applyPlace.mutate(
+      { itemId: focusedItem.id, place },
+      {
+        onSuccess: (result) => {
+          setSwapResult({ id: result.swappedItemId, name: result.newItemName });
+          setPlaceToast({
+            tone: 'success',
+            title: `‘${targetName}’을(를) 바꿨어요`,
+            message: result.warnings?.length
+              ? `${result.newItemName} · ${result.warnings[0]}`
+              : `${result.newItemName}(으)로 변경했어요.`,
+          });
+        },
+        onError: (err) => {
+          setPlaceToast({
+            tone: 'error',
+            title: '장소를 반영하지 못했어요',
+            ...(err instanceof Error ? { message: err.message } : {}),
+          });
+        },
+      },
+    );
+  }
+
+  // 토스트 자동 닫힘
+  useEffect(() => {
+    if (!placeToast) return;
+    const timer = setTimeout(() => setPlaceToast(null), 3600);
+    return () => clearTimeout(timer);
+  }, [placeToast]);
+
+  const pickPlaceLabel = focusedItem ? '이 일정으로 변경' : '이 장소로 일정 변경';
+
   return (
     <div className="min-h-dvh bg-[#F7F8FA]">
       {/* < lg : phone shell (모바일 우선) */}
@@ -118,6 +192,7 @@ function PlannerContent({ tripId }: { tripId?: string }) {
           title={trip?.title ?? (isResolvingTrip ? '여행 찾는 중' : '여행을 먼저 만들어주세요')}
           members={trip?.members ?? []}
           {...(trip ? { onMembersClick: () => setMembersOpen(true) } : {})}
+          {...(trip ? { onShareClick: () => setShareOpen(true) } : {})}
         />
 
         {isLiveActive ? <LivePromoBanner /> : null}
@@ -127,6 +202,8 @@ function PlannerContent({ tripId }: { tripId?: string }) {
             placeholder={trip.searchPlaceholder}
             center={mapCenter}
             markers={dayMarkers}
+            onPickSearchPlace={handlePickSearchPlace}
+            pickPlaceLabel={pickPlaceLabel}
           />
         ) : (
           <div className="flex aspect-[390/290] items-center justify-center bg-[#F2F4F6] px-5 text-center text-[13px] font-semibold text-[#8B95A1]">
@@ -151,8 +228,10 @@ function PlannerContent({ tripId }: { tripId?: string }) {
 
           {!selectedTripId && !loadError ? <PlannerEmptyState loading={isResolvingTrip} /> : null}
 
-          {tab === 'schedule' && selectedTripId ? (
-            <PlannerTimeline
+          {tab === 'schedule' && trip ? (
+            <EditableTimeline
+              tripId={trip.id}
+              day={day}
               items={itemsForDay}
               selectedItemId={focusedItemId}
               onSelectItem={(item) => setFocusedItemId(item.id)}
@@ -165,17 +244,21 @@ function PlannerContent({ tripId }: { tripId?: string }) {
           {tab === 'info' && trip ? <TripInfoPanel trip={trip} /> : null}
           {tab === 'coordination' && trip ? <TripCoordinationPanel tripId={trip.id} /> : null}
 
+          {trip?.isOwner ? (
+            <div className="mt-6 border-t border-[#F2F4F6] pt-5">
+              <DeleteTripButton tripId={trip.id} tripTitle={trip.title} variant="menu" />
+            </div>
+          ) : null}
+
           {trip ? (
             <button
               type="button"
-              aria-label="AI 도움"
-              onClick={() =>
-                setOpenItem(itemsForDay.find((i) => i.hasWaiting) ?? itemsForDay[0] ?? null)
-              }
-              className="fixed bottom-[96px] z-20 flex size-14 items-center justify-center rounded-full bg-[#3182F6] text-[14px] font-bold text-white shadow-[0_12px_24px_rgba(49,130,246,0.32)] active:translate-y-px lg:hidden"
+              aria-label="AI 재계획"
+              onClick={() => setReplanOpen(true)}
+              className="fixed bottom-[96px] z-20 flex size-14 items-center justify-center rounded-full bg-[#3182F6] text-white shadow-[0_12px_24px_rgba(49,130,246,0.32)] active:translate-y-px lg:hidden"
               style={{ right: 'max(20px, calc((100vw - 430px) / 2 + 20px))' }}
             >
-              AI
+              <LuSparkles className="size-6" aria-hidden />
             </button>
           ) : null}
         </div>
@@ -191,9 +274,9 @@ function PlannerContent({ tripId }: { tripId?: string }) {
               <div className="flex items-center gap-4">
                 <Link
                   href="/trips"
-                  className="flex h-9 items-center gap-1 rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[13px] font-semibold text-[#6B7684] hover:bg-[#FAFBFC] hover:text-[#191F28]"
+                  className="flex h-9 items-center gap-1 rounded-[12px] border border-[#E5E8EB] bg-white pl-2 pr-3 text-[13px] font-semibold text-[#6B7684] hover:bg-[#FAFBFC] hover:text-[#191F28]"
                 >
-                  <span aria-hidden>‹</span>
+                  <FiChevronLeft className="size-4" aria-hidden />
                   <span>내 여행</span>
                 </Link>
                 <div>
@@ -220,21 +303,33 @@ function PlannerContent({ tripId }: { tripId?: string }) {
                     className="flex items-center gap-2 rounded-full px-2 py-1 transition hover:bg-[#F2F4F6]"
                   >
                     <MemberAvatars members={trip.members} />
-                    <span className="text-[16px] text-[#8B95A1]" aria-hidden>
-                      ＋
-                    </span>
+                    <FiUserPlus className="size-4 text-[#8B95A1]" aria-hidden />
                   </button>
+                ) : null}
+                {trip ? (
+                  <button
+                    type="button"
+                    onClick={() => setShareOpen(true)}
+                    className="flex h-9 items-center gap-1.5 rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[13px] font-semibold text-[#4E5968] hover:bg-[#FAFBFC] hover:text-[#191F28]"
+                  >
+                    <LuShare2 className="size-4" />
+                    공유
+                  </button>
+                ) : null}
+                {trip?.isOwner ? (
+                  <DeleteTripButton tripId={trip.id} tripTitle={trip.title} variant="compact" />
                 ) : null}
                 {trip ? (
                   <Button
                     variant="primary"
                     size="md"
                     className="h-10 px-4 text-[14px]"
-                    onClick={() =>
-                      setOpenItem(itemsForDay.find((i) => i.hasWaiting) ?? itemsForDay[0] ?? null)
-                    }
+                    onClick={() => setReplanOpen(true)}
                   >
-                    AI 대안 제안
+                    <span className="flex items-center gap-1.5">
+                      <LuSparkles className="size-4" aria-hidden />
+                      AI 재계획
+                    </span>
                   </Button>
                 ) : null}
               </div>
@@ -243,23 +338,79 @@ function PlannerContent({ tripId }: { tripId?: string }) {
 
           {isLiveActive ? <LivePromoBanner /> : null}
 
-          <div className="mx-auto grid h-full w-full min-h-0 max-w-[1360px] grid-cols-[360px_minmax(0,1fr)] gap-5 px-8 py-6 xl:grid-cols-[400px_minmax(0,1fr)] xl:gap-6 xl:px-10 2xl:grid-cols-[420px_minmax(0,1fr)_360px]">
-            {/* 좌측: 일정 패널 */}
-            <aside className="flex h-[calc(100dvh-120px)] min-h-0 flex-col overflow-hidden rounded-[20px] border border-[#E5E8EB] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
+          <div
+            className={`mx-auto grid h-full w-full min-h-0 max-w-[1360px] gap-5 px-8 py-6 xl:gap-6 xl:px-10 ${
+              sidebarVisible
+                ? 'grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[380px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)_360px]'
+                : 'grid-cols-[minmax(0,1fr)]'
+            }`}
+          >
+            {/* 좌측: 일정 패널 (2xl 미만에서는 정보·조율 탭도 이곳에서 전환) */}
+            {sidebarVisible ? (
+              <aside className="flex h-[calc(100dvh-120px)] min-h-0 flex-col overflow-hidden rounded-[20px] border border-[#E5E8EB] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
               <div className="border-b border-[#E5E8EB] px-5 py-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-[18px] font-bold leading-[26px] text-[#191F28]">일정</h2>
-                  <span className="text-[12px] font-semibold text-[#8B95A1]">
-                    {itemsForDay.length}개
-                  </span>
-                </div>
-                <p className="mt-1 text-[13px] leading-[20px] text-[#6B7684]">
-                  일정을 클릭하면 지도가 이동하고, 변경 아이콘으로 대안을 볼 수 있어요.
-                </p>
-                {trip ? (
-                  <div className="mt-3">
-                    <DaySelector days={trip.days} value={day} onChange={setDay} />
+                  <h2 className="text-[18px] font-bold leading-[26px] text-[#191F28]">
+                    {activeSidePanel === 'schedule'
+                      ? '일정'
+                      : activeSidePanel === 'info'
+                        ? '여행 정보'
+                        : '취향 조율'}
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    {activeSidePanel === 'schedule' ? (
+                      <span className="text-[12px] font-semibold text-[#8B95A1]">
+                        {itemsForDay.length}개
+                      </span>
+                    ) : null}
+                    {/* 2xl 미만: 접어서 지도 넓히기 */}
+                    <button
+                      type="button"
+                      onClick={() => setSidebarCollapsed(true)}
+                      aria-label="패널 접기"
+                      title="패널 접기"
+                      className="flex size-7 items-center justify-center rounded-[8px] text-[#8B95A1] hover:bg-[#F2F4F6] hover:text-[#4E5968] 2xl:hidden"
+                    >
+                      <FiChevronsLeft className="size-4" />
+                    </button>
                   </div>
+                </div>
+                {/* 2xl 미만: 우측 정보/조율 컬럼이 없으므로 좌측에서 탭으로 전환 */}
+                {trip ? (
+                  <div className="mt-3 flex gap-1 rounded-[12px] bg-[#F2F4F6] p-1 2xl:hidden">
+                    {(
+                      [
+                        { key: 'schedule', label: '일정' },
+                        { key: 'info', label: '정보' },
+                        { key: 'coordination', label: '조율' },
+                      ] as const
+                    ).map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => setSidePanel(item.key)}
+                        className={`h-8 flex-1 rounded-[8px] text-[13px] font-semibold transition ${
+                          activeSidePanel === item.key
+                            ? 'bg-white text-[#191F28] shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
+                            : 'text-[#8B95A1] hover:text-[#4E5968]'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {activeSidePanel === 'schedule' ? (
+                  <>
+                    <p className="mt-3 text-[13px] leading-[20px] text-[#6B7684]">
+                      일정을 클릭하면 지도가 이동하고, 변경 아이콘으로 대안을 볼 수 있어요.
+                    </p>
+                    {trip ? (
+                      <div className="mt-3">
+                        <DaySelector days={trip.days} value={day} onChange={setDay} />
+                      </div>
+                    ) : null}
+                  </>
                 ) : null}
               </div>
               <div className="flex-1 overflow-y-auto px-5 py-4">
@@ -267,10 +418,16 @@ function PlannerContent({ tripId }: { tripId?: string }) {
                   <div className="rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-4 text-[14px] text-[#F04452]">
                     {loadError}
                   </div>
-                ) : !selectedTripId ? (
+                ) : !selectedTripId || !trip ? (
                   <PlannerEmptyState loading={isResolvingTrip} />
+                ) : activeSidePanel === 'info' ? (
+                  <TripInfoPanel trip={trip} />
+                ) : activeSidePanel === 'coordination' ? (
+                  <TripCoordinationPanel tripId={trip.id} />
                 ) : (
-                  <PlannerTimeline
+                  <EditableTimeline
+                    tripId={trip.id}
+                    day={day}
                     items={itemsForDay}
                     selectedItemId={focusedItemId}
                     onSelectItem={(item) => setFocusedItemId(item.id)}
@@ -282,9 +439,22 @@ function PlannerContent({ tripId }: { tripId?: string }) {
                 일정을 클릭하면 지도에서 초점이 맞춰지고, 변경 아이콘을 누르면 대안 시트가 열립니다.
               </div>
             </aside>
+            ) : null}
 
             {/* 중앙: 큰 지도 */}
-            <main className="flex h-[calc(100dvh-120px)] min-h-0 flex-col overflow-hidden rounded-[20px] border border-[#E5E8EB] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
+            <main className="relative flex h-[calc(100dvh-120px)] min-h-0 flex-col overflow-hidden rounded-[20px] border border-[#E5E8EB] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
+              {/* 패널 접힘 상태: 지도 좌측 가장자리에 펼치기 핸들 (검색바와 겹치지 않게) */}
+              {!sidebarVisible ? (
+                <button
+                  type="button"
+                  onClick={() => setSidebarCollapsed(false)}
+                  aria-label="일정 패널 펼치기"
+                  title="일정 패널 펼치기"
+                  className="absolute left-0 top-1/2 z-20 flex -translate-y-1/2 items-center rounded-r-[14px] border border-l-0 border-[#E5E8EB] bg-white py-4 pl-1 pr-1.5 text-[#4E5968] shadow-[0_4px_12px_rgba(15,23,42,0.1)] hover:bg-[#FAFBFC] hover:text-[#191F28]"
+                >
+                  <FiChevronsRight className="size-5" />
+                </button>
+              ) : null}
               {trip ? (
                 <PlannerMap
                   placeholder={trip.searchPlaceholder}
@@ -297,6 +467,8 @@ function PlannerContent({ tripId }: { tripId?: string }) {
                     if (!marker.itemId) return;
                     setFocusedItemId(marker.itemId);
                   }}
+                  onPickSearchPlace={handlePickSearchPlace}
+                  pickPlaceLabel={pickPlaceLabel}
                 />
               ) : (
                 <div className="flex flex-1 items-center justify-center bg-[#F2F4F6] px-6 text-center text-[14px] font-semibold text-[#8B95A1]">
@@ -330,7 +502,42 @@ function PlannerContent({ tripId }: { tripId?: string }) {
         members={trip?.members ?? []}
       />
 
+      {trip ? (
+        <ShareTripSheet
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          tripId={trip.id}
+          tripTitle={trip.title}
+          subtitle={`${trip.meta.durationLabel} · ${trip.meta.transportLabel}`}
+          days={trip.days}
+          items={trip.items}
+          canShareLink={trip.isOwner}
+        />
+      ) : null}
+
+      <ReplanModal
+        tripId={trip?.id ?? selectedTripId}
+        open={replanOpen}
+        onClose={() => setReplanOpen(false)}
+        onRequested={() =>
+          setPlaceToast({
+            tone: 'success',
+            title: 'AI가 일정을 다시 짜고 있어요',
+            message: '완료되면 일정에 자동으로 반영돼요.',
+          })
+        }
+      />
+
       {selectedTripId ? <ReplanToast tripId={selectedTripId} /> : null}
+
+      {placeToast ? (
+        <Toast
+          tone={placeToast.tone}
+          title={placeToast.title}
+          {...(placeToast.message ? { message: placeToast.message } : {})}
+          onClose={() => setPlaceToast(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -348,7 +555,10 @@ function LivePromoBanner() {
         </span>
         지금 여행 중이에요
       </span>
-      <span className="text-[12px] font-semibold">실시간 화면 보기 ›</span>
+      <span className="flex items-center gap-0.5 text-[12px] font-semibold">
+        실시간 화면 보기
+        <FiChevronRight className="size-3.5" aria-hidden />
+      </span>
     </Link>
   );
 }

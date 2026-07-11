@@ -49,8 +49,45 @@ export interface PlannerItineraryItemDto {
   name: string;
   /** "도보 20분" 같은 표시용 문구 */
   durationLabel: string;
+  /** 체류 시간(분) — 편집 폼 prefill 용 */
+  durationMin: number;
+  /** 사용자 메모 — 편집 폼 prefill 용 */
+  memo?: string;
+  /** 카카오 장소 ID — 있으면 카카오맵 장소 페이지 링크에 사용 */
+  kakaoPlaceId?: string;
   waitingMinutes?: number;
   hasWaiting: boolean;
+}
+
+/** 일정 항목 신규 추가 요청 */
+export interface PlannerAddItemRequestDto {
+  day: number;
+  name: string;
+  /** HH:mm */
+  scheduledAt: string;
+  type?: PlannerItemType;
+  durationMin?: number;
+  address?: string;
+  lat?: number;
+  lng?: number;
+  memo?: string;
+  /** 카카오 장소 ID (있으면 항목에 저장) */
+  kakaoPlaceId?: string;
+}
+
+/** 일정 항목 부분 수정 요청 (시간·메모·이름·체류시간) */
+export interface PlannerUpdateItemRequestDto {
+  name?: string;
+  /** HH:mm */
+  scheduledAt?: string;
+  durationMin?: number;
+  memo?: string;
+}
+
+/** 일정 항목 순서 변경 요청 (해당 일차의 새 순서) */
+export interface PlannerReorderItemsRequestDto {
+  day: number;
+  orderedItemIds: string[];
 }
 
 export interface PlannerDayDto {
@@ -106,6 +143,8 @@ export interface PlannerTripProgressDto {
 export interface PlannerTripDto {
   id: string;
   title: string;
+  /** 조회한 사용자가 이 여행의 소유자인지 (삭제 등 owner 전용 기능 노출용) */
+  isOwner: boolean;
   members: PlannerMemberDto[];
   searchPlaceholder: string;
   mapCenter: PlannerMapCenterDto;
@@ -114,6 +153,27 @@ export interface PlannerTripDto {
   items: PlannerItineraryItemDto[];
   meta: PlannerTripMetaDto;
   progress: PlannerTripProgressDto;
+}
+
+/** 공유 링크 활성화 응답 */
+export interface TripShareResponseDto {
+  /** 공유 토큰. 공유 URL 은 프론트가 `${origin}/share/${token}` 로 구성한다 */
+  token: string;
+}
+
+/** 공개 공유 페이지에서 렌더할 읽기 전용 일정 (인증 불필요) */
+export interface SharedItineraryDto {
+  title: string;
+  destination: string;
+  durationLabel: string;
+  transportLabel: string;
+  memberCount: number;
+  startDate: string;
+  endDate: string;
+  days: PlannerDayDto[];
+  items: PlannerItineraryItemDto[];
+  mapCenter: PlannerMapCenterDto;
+  mapMarkers: PlannerMapMarkerDto[];
 }
 
 /** 대안이 어디서 왔는지: AI 추천(CRAG) · 장소 이름 검색으로 직접 지정 */
@@ -139,6 +199,8 @@ export interface PlannerAlternativeDto {
   address?: string;
   /** 실제 장소의 일정 카테고리 */
   category: PlannerItemType;
+  /** 카카오 장소 ID (실데이터일 때). swap 시 항목에 저장돼 상세 링크에 사용 */
+  kakaoPlaceId?: string;
   origin: PlannerAlternativeOrigin;
   /** 카카오 실데이터 여부. false 면 폴백(mock) 후보 */
   realPlace: boolean;
@@ -175,6 +237,8 @@ export interface PlannerSwapPlaceDto {
   lat: number;
   lng: number;
   mapHref?: string;
+  /** 카카오 장소 ID (있으면 항목에 저장) */
+  kakaoPlaceId?: string;
 }
 
 export interface PlannerSwapRequestDto {

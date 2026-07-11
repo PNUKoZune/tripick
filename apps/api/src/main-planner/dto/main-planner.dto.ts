@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsIn,
+  IsInt,
   IsLatitude,
   IsLongitude,
   IsNumber,
@@ -9,17 +10,22 @@ import {
   IsString,
   IsUUID,
   Matches,
+  Max,
   MaxLength,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
 import type {
   CreateTripRequestDto,
+  PlannerAddItemRequestDto,
   PlannerItemType,
   PlannerMemberDto,
+  PlannerReorderItemsRequestDto,
   PlannerResolvePlaceRequestDto,
   PlannerSwapPlaceDto,
   PlannerSwapRequestDto,
+  PlannerUpdateItemRequestDto,
 } from '@tripick/types';
 
 class PlannerMemberBodyDto implements PlannerMemberDto {
@@ -114,6 +120,11 @@ class PlannerSwapPlaceBodyDto implements PlannerSwapPlaceDto {
   @IsString()
   @MaxLength(500)
   mapHref?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  kakaoPlaceId?: string;
 }
 
 export class PlannerSwapRequestBodyDto implements PlannerSwapRequestDto {
@@ -135,4 +146,86 @@ export class PlannerResolvePlaceBodyDto implements PlannerResolvePlaceRequestDto
 export class AddTripMemberRequestBodyDto {
   @IsUUID()
   friendId!: string;
+}
+
+export class PlannerAddItemBodyDto implements PlannerAddItemRequestDto {
+  @IsInt()
+  @Min(1)
+  day!: number;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  name!: string;
+
+  @Matches(/^\d{2}:\d{2}$/)
+  scheduledAt!: string;
+
+  @IsOptional()
+  @IsIn(['attraction', 'restaurant', 'cafe', 'transport'])
+  type?: PlannerItemType;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1440)
+  durationMin?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  address?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @IsLatitude()
+  lat?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @IsLongitude()
+  lng?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  memo?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  kakaoPlaceId?: string;
+}
+
+export class PlannerUpdateItemBodyDto implements PlannerUpdateItemRequestDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  name?: string;
+
+  @IsOptional()
+  @Matches(/^\d{2}:\d{2}$/)
+  scheduledAt?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1440)
+  durationMin?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  memo?: string;
+}
+
+export class PlannerReorderItemsBodyDto implements PlannerReorderItemsRequestDto {
+  @IsInt()
+  @Min(1)
+  day!: number;
+
+  @IsArray()
+  @IsUUID('4', { each: true })
+  orderedItemIds!: string[];
 }

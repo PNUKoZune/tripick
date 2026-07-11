@@ -71,6 +71,11 @@ export class TripMembersService {
    * 사용자가 해당 trip 에 접근(조회·실시간 세션 참여)할 수 있는지 여부.
    * owner 이거나 accepted 상태의 멤버면 true.
    */
+  /** 여행 멤버 수 (공개 공유 등 뷰어 없이 집계할 때) */
+  async countMembers(tripId: string): Promise<number> {
+    return this.membersRepo.count({ where: { tripId } });
+  }
+
   async canAccessTrip(tripId: string, userId: string): Promise<boolean> {
     const trip = await this.tripsRepo.findOneBy({ id: tripId });
     if (!trip) {

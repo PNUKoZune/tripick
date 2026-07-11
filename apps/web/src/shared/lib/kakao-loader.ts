@@ -54,11 +54,29 @@ export interface KakaoRegionCode {
 
 /** keywordSearch 결과 (장소 1건) */
 export interface KakaoPlace {
+  /** 카카오 장소 ID (place.map.kakao.com/{id}) */
+  id?: string;
   place_name: string;
   address_name: string;
   road_address_name: string;
+  /** 카테고리 경로 (예: "음식점 > 카페 > 개인카페") */
+  category_name?: string;
+  /** 카테고리 그룹명 (예: "카페") */
+  category_group_name?: string;
   x: string;
   y: string;
+}
+
+/** Places.keywordSearch 옵션 (검색 결과 편향·개수 조정) */
+export interface KakaoPlacesSearchOptions {
+  /** 결과 개수 (1~15) */
+  size?: number;
+  /** 정렬 기준 */
+  sort?: 'accuracy' | 'distance';
+  /** 중심 좌표 편향 (LatLng 인스턴스) */
+  location?: unknown;
+  /** location 기준 반경(m, 최대 20000) */
+  radius?: number;
 }
 
 export interface KakaoServicesNamespace {
@@ -74,6 +92,7 @@ export interface KakaoServicesNamespace {
     keywordSearch(
       query: string,
       callback: (result: KakaoPlace[], status: string) => void,
+      options?: KakaoPlacesSearchOptions,
     ): void;
   };
 }

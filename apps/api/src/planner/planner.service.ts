@@ -11,8 +11,28 @@ import { PlannerAgentService } from './agent/planner-agent.service';
 import type { PlannedCandidate } from './agent/planner-agent.service';
 import { PlaceRetrievalService } from './retrieval/place-retrieval.service';
 import { TripEntity } from '../trips/trip.entity';
-import type { CreateItineraryItemDto, ItineraryItemDto, PlaceDto, ReplanRequestDto, TasteTagDto } from '@tripick/types';
+import type {
+  CreateItineraryItemDto,
+  ItineraryItemDto,
+  PlaceDto,
+  ReplanBudget,
+  ReplanPace,
+  ReplanRequestDto,
+  TasteTagDto,
+} from '@tripick/types';
 import type { CandidatePlace } from './retrieval/types';
+
+const PACE_HINT: Record<ReplanPace, string> = {
+  relaxed: '여유로운 일정(하루 일정 수를 줄이고 이동·대기 부담 최소화)',
+  balanced: '균형 잡힌 일정',
+  packed: '알찬 일정(하루에 더 많은 곳을 방문)',
+};
+
+const BUDGET_HINT: Record<ReplanBudget, string> = {
+  thrifty: '가성비 위주(무료·저렴한 장소 선호)',
+  normal: '보통 예산',
+  premium: '프리미엄(고급 맛집·명소 선호)',
+};
 
 interface GenerateOptions {
   trigger?: ReplanRequestDto['trigger'];
@@ -21,6 +41,10 @@ interface GenerateOptions {
   currentLocation?: ReplanRequestDto['currentLocation'];
   /** 사용자 자유 텍스트 요청. 검색·프롬프트 notes 에 합쳐진다 */
   note?: string;
+  /** 반드시 포함할 장소들 (후보 상위에 시드 + 프롬프트 반영) */
+  mustIncludePlaces?: ReplanRequestDto['mustIncludePlaces'];
+  /** 구조화 재계획 옵션 (강도·회피·동선·예산) */
+  preferences?: ReplanRequestDto['preferences'];
 }
 
 interface DraftBuildContext {
@@ -75,6 +99,10 @@ export class PlannerService {
       ...(request.deviatedItemId !== undefined ? { deviatedItemId: request.deviatedItemId } : {}),
       ...(request.currentLocation !== undefined ? { currentLocation: request.currentLocation } : {}),
       ...(request.note !== undefined ? { note: request.note } : {}),
+      ...(request.mustIncludePlaces !== undefined
+        ? { mustIncludePlaces: request.mustIncludePlaces }
+        : {}),
+      ...(request.preferences !== undefined ? { preferences: request.preferences } : {}),
     });
   }
 
@@ -87,10 +115,10 @@ export class PlannerService {
     const dayCount = this.getDayCount(trip.startDate, trip.endDate);
     const wakeTime = trip.wakeTime ?? '08:30';
     const sleepTime = trip.sleepTime ?? '22:00';
-    const itemsPerDay = 4;
-    // 여행 고정 노트 + 이번 재계획 요청 노트를 합쳐 검색·프롬프트에 반영
-    const combinedNotes =
-      [trip.notes, options.note].map((v) => v?.trim()).filter(Boolean).join(' · ') || null;
+    // 일정 강도(pace)에 따라 하루 일정 개수를 조절한다
+    const itemsPerDay = this.itemsPerDayForPace(options.preferences?.pace);
+    // 여행 고정 노트 + 재계획 요청 노트 + 구조화 옵션을 하나의 지시문으로 합쳐 검색·프롬프트에 반영
+    const combinedNotes = this.buildCombinedNotes(trip.notes, options);
     const retrieval = await this.placeRetrieval.retrieve({
       userId: trip.userId,
       destination: trip.destination,
@@ -102,7 +130,11 @@ export class PlannerService {
       ...(options.trigger !== undefined ? { trigger: options.trigger } : {}),
       ...(options.currentLocation !== undefined ? { currentLocation: options.currentLocation } : {}),
     });
-    const candidates = retrieval.places;
+    // 반드시 포함할 장소는 최상위 후보로 시드해 배치 우선순위를 높인다
+    const candidates = [
+      ...this.buildMustIncludeCandidates(options.mustIncludePlaces),
+      ...retrieval.places,
+    ];
 
     if (candidates.length === 0) {
       throw new BadRequestException('No place candidates found for itinerary generation');
@@ -146,6 +178,8 @@ export class PlannerService {
       ? aiValidation.items
       : await this.rebuildValidDraft(candidates, draftContext, aiValidation);
 
+    // memo 는 사용자가 직접 남기는 메모 공간이므로 생성 단계의 AI 추론(취향·confidence·
+    // 날씨 힌트)을 저장하지 않는다. 새 일정의 memo 는 비어 있는 채로 시작한다.
     const toStore: CreateItineraryItemDto[] = finalItems.map((item) => ({
       tripId: item.tripId,
       day: item.day,
@@ -161,7 +195,6 @@ export class PlannerService {
       ...(item.phoneNumber ? { phoneNumber: item.phoneNumber } : {}),
       ...(item.kakaoPlaceId ? { kakaoPlaceId: item.kakaoPlaceId } : {}),
       ...(item.imageUrl ? { imageUrl: item.imageUrl } : {}),
-      ...(item.memo ? { memo: item.memo } : {}),
     } as CreateItineraryItemDto));
 
     const saved = await this.itineraryService.replaceTripItems(trip.id, toStore);
@@ -331,6 +364,66 @@ export class PlannerService {
         aiGenerated: false,
       };
     });
+  }
+
+  /** 일정 강도(pace) → 하루 일정 개수 */
+  private itemsPerDayForPace(pace?: ReplanPace): number {
+    if (pace === 'relaxed') return 3;
+    if (pace === 'packed') return 5;
+    return 4;
+  }
+
+  /** 여행 노트 + 재계획 요청 노트 + 구조화 옵션을 하나의 지시문으로 합친다. */
+  private buildCombinedNotes(
+    tripNotes: string | null | undefined,
+    options: GenerateOptions,
+  ): string | null {
+    const parts: string[] = [];
+    const push = (value?: string | null) => {
+      const trimmed = value?.trim();
+      if (trimmed) parts.push(trimmed);
+    };
+    push(tripNotes);
+    push(options.note);
+    const mustNames = (options.mustIncludePlaces ?? []).map((p) => p.name?.trim()).filter(Boolean);
+    if (mustNames.length > 0) push(`반드시 포함할 장소: ${mustNames.join(', ')}`);
+    const prefs = options.preferences;
+    if (prefs) {
+      push(prefs.avoid ? `피하고 싶은 것: ${prefs.avoid}` : null);
+      if (prefs.minimizeTravel) push('이동 동선을 최대한 짧게 구성');
+      if (prefs.pace) push(PACE_HINT[prefs.pace]);
+      if (prefs.budget) push(BUDGET_HINT[prefs.budget]);
+    }
+    return parts.length > 0 ? parts.join(' · ') : null;
+  }
+
+  /** 반드시 포함할 장소를 최상위 시드 후보(CandidatePlace)로 변환한다. */
+  private buildMustIncludeCandidates(places?: ReplanRequestDto['mustIncludePlaces']): CandidatePlace[] {
+    if (!places?.length) return [];
+    return places
+      .filter((place) => place?.name && Number.isFinite(place.lat) && Number.isFinite(place.lng))
+      .map((place, index) => ({
+        id: `must-${index}-${place.lat},${place.lng}`,
+        name: place.name,
+        category: place.category?.trim() || '관광',
+        address: place.address?.trim() || `${place.name} 인근`,
+        coordinates: { lat: place.lat, lng: place.lng },
+        source: 'seed' as const,
+        tags: ['사용자 필수 포함'],
+        confidence: 1,
+        reason: '사용자가 반드시 포함을 요청한 장소',
+        crag: {
+          total: 1,
+          retrieval: 1,
+          taste: 1,
+          locality: 1,
+          context: 1,
+          availability: 1,
+          dataQuality: 1,
+          matchedTags: [],
+          penalties: [],
+        },
+      }));
   }
 
   private buildPlaceName(name: string, trigger: GenerateOptions['trigger'], day: number, order: number): string {

@@ -28,11 +28,12 @@ export function PlannerTimeline({
   }
   return (
     <div className="space-y-2 pb-4">
-      {items.map((item) => (
+      {items.map((item, index) => (
         <ItineraryItemCard
           key={item.id}
           item={item}
           selected={item.id === selectedItemId}
+          isLast={index === items.length - 1}
           onClick={() => onSelectItem(item)}
           {...(onSwitchItem ? { onSwitch: () => onSwitchItem(item) } : {})}
         />

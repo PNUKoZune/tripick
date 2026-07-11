@@ -19,8 +19,11 @@ import { MainPlannerService } from './main-planner.service';
 import {
   AddTripMemberRequestBodyDto,
   CreateTripRequestBodyDto,
+  PlannerAddItemBodyDto,
+  PlannerReorderItemsBodyDto,
   PlannerResolvePlaceBodyDto,
   PlannerSwapRequestBodyDto,
+  PlannerUpdateItemBodyDto,
 } from './dto/main-planner.dto';
 
 @ApiTags('Main Planner')
@@ -86,6 +89,26 @@ export class MainPlannerController {
     return this.mainPlannerService.getCoordination(user, tripId);
   }
 
+  @Get('trips/:tripId/share')
+  @ApiOperation({ summary: '공유 링크 상태 조회 (owner)' })
+  getShareStatus(@CurrentUser() user: UserEntity, @Param('tripId') tripId: string) {
+    return this.mainPlannerService.getShareStatus(user, tripId);
+  }
+
+  @Post('trips/:tripId/share')
+  @HttpCode(200)
+  @ApiOperation({ summary: '공유 링크 활성화 (owner)' })
+  enableShare(@CurrentUser() user: UserEntity, @Param('tripId') tripId: string) {
+    return this.mainPlannerService.enableShare(user, tripId);
+  }
+
+  @Delete('trips/:tripId/share')
+  @HttpCode(204)
+  @ApiOperation({ summary: '공유 링크 비활성화 (owner)' })
+  disableShare(@CurrentUser() user: UserEntity, @Param('tripId') tripId: string) {
+    return this.mainPlannerService.disableShare(user, tripId);
+  }
+
   @Post('trips/:tripId/members')
   @ApiOperation({ summary: '여행 멤버로 친구 추가' })
   addMember(
@@ -136,5 +159,49 @@ export class MainPlannerController {
     @Body() dto: PlannerSwapRequestBodyDto,
   ) {
     return this.mainPlannerService.swap(user, tripId, dto);
+  }
+
+  @Post('trips/:tripId/items')
+  @ApiOperation({ summary: '일정 항목 수동 추가' })
+  addItem(
+    @CurrentUser() user: UserEntity,
+    @Param('tripId') tripId: string,
+    @Body() dto: PlannerAddItemBodyDto,
+  ) {
+    return this.mainPlannerService.addItem(user, tripId, dto);
+  }
+
+  // :itemId 라우트보다 먼저 선언해야 "reorder" 가 itemId 로 잡히지 않는다
+  @Patch('trips/:tripId/items/reorder')
+  @HttpCode(200)
+  @ApiOperation({ summary: '일정 항목 순서 변경 (드래그&드롭)' })
+  reorderItems(
+    @CurrentUser() user: UserEntity,
+    @Param('tripId') tripId: string,
+    @Body() dto: PlannerReorderItemsBodyDto,
+  ) {
+    return this.mainPlannerService.reorderItems(user, tripId, dto);
+  }
+
+  @Patch('trips/:tripId/items/:itemId')
+  @ApiOperation({ summary: '일정 항목 수정 (시간·메모·이름·체류시간)' })
+  updateItem(
+    @CurrentUser() user: UserEntity,
+    @Param('tripId') tripId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: PlannerUpdateItemBodyDto,
+  ) {
+    return this.mainPlannerService.updateItem(user, tripId, itemId, dto);
+  }
+
+  @Delete('trips/:tripId/items/:itemId')
+  @HttpCode(204)
+  @ApiOperation({ summary: '일정 항목 삭제' })
+  deleteItem(
+    @CurrentUser() user: UserEntity,
+    @Param('tripId') tripId: string,
+    @Param('itemId') itemId: string,
+  ) {
+    return this.mainPlannerService.deleteItem(user, tripId, itemId);
   }
 }

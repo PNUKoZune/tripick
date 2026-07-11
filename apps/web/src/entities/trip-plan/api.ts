@@ -2,15 +2,21 @@ import type {
   AddTripMemberRequestDto,
   CreateTripRequestDto,
   DestinationSuggestionDto,
+  PlannerAddItemRequestDto,
   PlannerAlternativeResponseDto,
   PlannerCoordinationDto,
+  PlannerItineraryItemDto,
   PlannerMemberDto,
+  PlannerReorderItemsRequestDto,
   PlannerResolvePlaceResponseDto,
   PlannerSwapPlaceDto,
   PlannerSwapResponseDto,
   PlannerTripDto,
+  PlannerUpdateItemRequestDto,
   ReplanJobDto,
   ReplanRequestDto,
+  SharedItineraryDto,
+  TripShareResponseDto,
   TripSummaryDto,
 } from '@tripick/types';
 
@@ -53,6 +59,58 @@ export function fetchDestinationSuggestions(query: string) {
 
 export function createTrip(body: CreateTripRequestDto) {
   return api.post<TripSummaryDto>('/main-planner/trips', body);
+}
+
+/** 여행 삭제 (owner 만) */
+export function deleteTrip(tripId: string) {
+  return api.delete<void>(`/trips/${tripId}`);
+}
+
+/** 공유 링크 상태 조회 (owner) */
+export function fetchTripShareStatus(tripId: string) {
+  return api.get<{ token: string | null }>(`/main-planner/trips/${tripId}/share`);
+}
+
+/** 공유 링크 활성화 (owner) */
+export function enableTripShare(tripId: string) {
+  return api.post<TripShareResponseDto>(`/main-planner/trips/${tripId}/share`, {});
+}
+
+/** 공유 링크 비활성화 (owner) */
+export function disableTripShare(tripId: string) {
+  return api.delete<void>(`/main-planner/trips/${tripId}/share`);
+}
+
+/** 공개 공유 토큰으로 읽기 전용 일정 조회 (인증 불필요) */
+export function fetchSharedItinerary(token: string) {
+  return api.get<SharedItineraryDto>(`/shared-itineraries/${token}`);
+}
+
+/** 일정 항목 수동 추가 */
+export function addItineraryItem(tripId: string, body: PlannerAddItemRequestDto) {
+  return api.post<PlannerItineraryItemDto>(`/main-planner/trips/${tripId}/items`, body);
+}
+
+/** 일정 항목 수정 (시간·메모·이름·체류시간) */
+export function updateItineraryItem(
+  tripId: string,
+  itemId: string,
+  body: PlannerUpdateItemRequestDto,
+) {
+  return api.patch<PlannerItineraryItemDto>(
+    `/main-planner/trips/${tripId}/items/${itemId}`,
+    body,
+  );
+}
+
+/** 일정 항목 삭제 */
+export function deleteItineraryItem(tripId: string, itemId: string) {
+  return api.delete<void>(`/main-planner/trips/${tripId}/items/${itemId}`);
+}
+
+/** 일정 항목 순서 변경 (드래그&드롭) */
+export function reorderItineraryItems(tripId: string, body: PlannerReorderItemsRequestDto) {
+  return api.patch<void>(`/main-planner/trips/${tripId}/items/reorder`, body);
 }
 
 export function addTripMember(tripId: string, body: AddTripMemberRequestDto) {
