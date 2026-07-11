@@ -15,7 +15,12 @@ import { useQuery } from '@tanstack/react-query';
 import type { PlannerItineraryItemDto, PlannerMapMarkerDto, PlannerTripDto } from '@tripick/types';
 
 import { SessionGuard } from '@/entities/session';
-import { fetchPlannerTrip, fetchPlannerTrips, isTripPeriodActive } from '@/entities/trip-plan';
+import {
+  fetchPlannerTrip,
+  fetchPlannerTrips,
+  isTripPeriodActive,
+  useActiveTrip,
+} from '@/entities/trip-plan';
 import { MemberAvatars } from '@/entities/member';
 import { useApplySearchedPlace, type SearchedPlace } from '@/features/apply-searched-place';
 import { DaySelector } from '@/features/day-selector';
@@ -54,6 +59,8 @@ function PlannerContent({ tripId }: { tripId?: string }) {
   const [swapResult, setSwapResult] = useState<{ id: string; name: string } | null>(null);
   const [membersOpen, setMembersOpen] = useState(false);
   const [replanOpen, setReplanOpen] = useState(false);
+  // 진행 중 여행이 있으면 우하단 "여행 중" FAB(ActiveTripFab)가 떠서 겹치므로 재계획 버튼을 그 위로 쌓는다
+  const { active: activeTrip } = useActiveTrip();
   const [shareOpen, setShareOpen] = useState(false);
   // 데스크탑 좌측 패널 탭 (2xl 미만: 우측 정보/조율 컬럼이 없어 좌측에서 전환)
   const [sidePanel, setSidePanel] = useState<'schedule' | 'info' | 'coordination'>('schedule');
@@ -255,7 +262,9 @@ function PlannerContent({ tripId }: { tripId?: string }) {
               type="button"
               aria-label="AI 재계획"
               onClick={() => setReplanOpen(true)}
-              className="fixed bottom-[96px] z-20 flex size-14 items-center justify-center rounded-full bg-[#3182F6] text-white shadow-[0_12px_24px_rgba(49,130,246,0.32)] active:translate-y-px lg:hidden"
+              className={`fixed z-20 flex size-14 items-center justify-center rounded-full bg-[#3182F6] text-white shadow-[0_12px_24px_rgba(49,130,246,0.32)] active:translate-y-px lg:hidden ${
+                activeTrip ? 'bottom-[152px]' : 'bottom-[96px]'
+              }`}
               style={{ right: 'max(20px, calc((100vw - 430px) / 2 + 20px))' }}
             >
               <LuSparkles className="size-6" aria-hidden />

@@ -2,12 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 
-import { getStoredSession } from '@/entities/session/model/session-storage';
-import { fetchPlannerTrips, splitTripSchedule } from '@/entities/trip-plan';
-import { queryKeys } from '@/shared/api/query-keys';
+import { useActiveTrip } from '@/entities/trip-plan';
 
 /**
  * 진행 중인 여행이 있을 때만 떠서 `/trip/live` 로 안내하는 플로팅 버튼.
@@ -15,21 +11,7 @@ import { queryKeys } from '@/shared/api/query-keys';
  */
 export function ActiveTripFab() {
   const pathname = usePathname();
-  const [hasSession, setHasSession] = useState(false);
-
-  // localStorage 접근은 마운트 후에 (SSR/hydration mismatch 방지)
-  useEffect(() => {
-    setHasSession(Boolean(getStoredSession()));
-  }, [pathname]);
-
-  const { data: trips = [] } = useQuery({
-    queryKey: queryKeys.planner.trips,
-    queryFn: fetchPlannerTrips,
-    enabled: hasSession,
-    staleTime: 60 * 1000,
-  });
-
-  const { active } = useMemo(() => splitTripSchedule(trips), [trips]);
+  const { active } = useActiveTrip();
 
   if (!active || pathname === '/trip/live') return null;
 
