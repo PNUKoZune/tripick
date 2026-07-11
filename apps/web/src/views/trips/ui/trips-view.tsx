@@ -7,6 +7,7 @@ import type { TripSummaryStatus, TripSummaryDto } from '@tripick/types';
 
 import { SessionGuard } from '@/entities/session';
 import { fetchPlannerTrips, TripSummaryCard } from '@/entities/trip-plan';
+import { DeleteTripButton } from '@/features/delete-trip';
 import { queryKeys } from '@/shared/api/query-keys';
 import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
 
@@ -30,7 +31,11 @@ export function TripsView() {
 function TripsContent() {
   const [filter, setFilter] = useState<Filter>('all');
 
-  const { data: trips = [], error } = useQuery({
+  const {
+    data: trips = [],
+    error,
+    isLoading,
+  } = useQuery({
     queryKey: queryKeys.planner.trips,
     queryFn: fetchPlannerTrips,
     staleTime: 5 * 60 * 1000,
@@ -100,17 +105,25 @@ function TripsContent() {
           </div>
         ) : null}
 
-        {filtered.length === 0 && !loadError ? (
+        {isLoading ? (
+          <SkeletonGrid />
+        ) : filtered.length === 0 && !loadError ? (
           <div className="mt-6">
-            <EmptyState />
+            <EmptyState hasTrips={trips.length > 0} />
           </div>
-        ) : null}
-
-        <div className="mt-4 space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 xl:grid-cols-3">
-          {filtered.map((trip) => (
-            <TripSummaryCard key={trip.id} trip={trip} />
-          ))}
-        </div>
+        ) : (
+          <div className="mt-4 space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 xl:grid-cols-3">
+            {filtered.map((trip) => (
+              <TripSummaryCard
+                key={trip.id}
+                trip={trip}
+                draftAction={
+                  <DeleteTripButton tripId={trip.id} tripTitle={trip.title} variant="compact" />
+                }
+              />
+            ))}
+          </div>
+        )}
       </PageContainer>
     </AppFrame>
   );
@@ -163,22 +176,51 @@ function FilterBar({ value, onChange }: { value: Filter; onChange: (next: Filter
   );
 }
 
-function EmptyState() {
+function SkeletonGrid() {
+  return (
+    <div
+      aria-hidden
+      className="mt-4 space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 xl:grid-cols-3"
+    >
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div
+          key={index}
+          className="h-full overflow-hidden rounded-[20px] border border-[#E5E8EB] bg-white"
+        >
+          <div className="h-16 animate-pulse bg-[#EEF1F5]" />
+          <div className="flex flex-col gap-3 p-4">
+            <div className="h-3 w-16 animate-pulse rounded-full bg-[#EEF1F5]" />
+            <div className="h-4 w-2/3 animate-pulse rounded-full bg-[#EEF1F5]" />
+            <div className="h-3 w-full animate-pulse rounded-full bg-[#EEF1F5]" />
+            <div className="mt-1 h-3 w-1/2 animate-pulse rounded-full bg-[#EEF1F5]" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EmptyState({ hasTrips }: { hasTrips: boolean }) {
+  // 여행 자체가 없는 신규 사용자와, 필터 결과만 비어 있는 경우의 안내를 구분한다.
   return (
     <div className="rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] p-6 text-center">
       <div className="text-[24px]">🧳</div>
-      <div className="mt-2 text-[14px] font-bold text-[#191F28]">해당 상태의 여행이 없어요</div>
+      <div className="mt-2 text-[14px] font-bold text-[#191F28]">
+        {hasTrips ? '해당 조건의 여행이 없어요' : '아직 만든 여행이 없어요'}
+      </div>
       <div className="mt-1 text-[13px] text-[#6B7684]">
-        다른 필터를 선택하거나 새 여행을 만들어보세요.
+        {hasTrips ? '다른 필터를 선택해보세요.' : '첫 여행을 만들어 일정을 받아보세요.'}
       </div>
-      <div className="mt-3 flex justify-center">
-        <Link
-          href="/trips/new"
-          className="inline-flex h-9 items-center rounded-full bg-[#3182F6] px-4 text-[13px] font-semibold text-white hover:bg-[#1B64DA]"
-        >
-          새 여행 만들기
-        </Link>
-      </div>
+      {hasTrips ? null : (
+        <div className="mt-3 flex justify-center">
+          <Link
+            href="/trips/new"
+            className="inline-flex h-9 items-center rounded-full bg-[#3182F6] px-4 text-[13px] font-semibold text-white hover:bg-[#1B64DA]"
+          >
+            새 여행 만들기
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

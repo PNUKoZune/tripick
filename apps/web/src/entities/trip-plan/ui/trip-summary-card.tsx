@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import type { TripSummaryStatus, TripSummaryDto } from '@tripick/types';
 
 import { MemberAvatars } from '@/entities/member';
@@ -15,9 +16,14 @@ const statusTone: Record<TripSummaryStatus, 'neutral' | 'primary' | 'success' | 
 
 type Props = {
   trip: TripSummaryDto;
+  /**
+   * 상세 진입이 불가능한(hasDetail=false) 카드에 노출할 액션 슬롯.
+   * 삭제 등 mutation 은 feature 레이어 소관이라 view 에서 주입한다.
+   */
+  draftAction?: ReactNode;
 };
 
-export function TripSummaryCard({ trip }: Props) {
+export function TripSummaryCard({ trip, draftAction }: Props) {
   const tone = statusTone[trip.status];
   const inner = (
     <article
@@ -50,8 +56,9 @@ export function TripSummaryCard({ trip }: Props) {
           <MemberAvatars members={trip.members} />
         </div>
         {!trip.hasDetail ? (
-          <div className="rounded-[12px] border border-dashed border-[#E5E8EB] bg-[#FAFBFC] px-3 py-2 text-[12px] text-[#8B95A1]">
-            상세 준비 중
+          <div className="flex items-center justify-between gap-2 rounded-[12px] border border-dashed border-[#E5E8EB] bg-[#FAFBFC] px-3 py-2">
+            <span className="text-[12px] text-[#8B95A1]">상세 준비 중</span>
+            {draftAction}
           </div>
         ) : null}
       </div>
