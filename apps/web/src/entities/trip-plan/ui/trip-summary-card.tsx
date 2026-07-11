@@ -27,18 +27,20 @@ export function TripSummaryCard({ trip }: Props) {
           : 'opacity-90'
       }`}
     >
-      <div className="flex h-32 items-center justify-center bg-[linear-gradient(180deg,#EAF2FF_0%,#FAFBFC_100%)] text-[44px]">
-        <span aria-hidden>{trip.coverEmoji}</span>
+      <div className="relative flex h-16 items-center bg-[linear-gradient(135deg,#EAF2FF_0%,#F4F7FB_100%)] px-4">
+        <div className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-white text-[24px] shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+          <span aria-hidden>{trip.coverEmoji}</span>
+        </div>
+        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+          <Chip tone={tone}>{trip.statusLabel}</Chip>
+        </div>
       </div>
       <div className="flex flex-1 flex-col gap-3 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="text-[12px] font-semibold text-[#8B95A1]">{trip.destination}</div>
-            <h3 className="mt-0.5 truncate text-[16px] font-bold leading-[24px] text-[#191F28]">
-              {trip.title}
-            </h3>
-          </div>
-          <Chip tone={tone}>{trip.statusLabel}</Chip>
+        <div className="min-w-0">
+          <div className="text-[12px] font-semibold text-[#8B95A1]">{trip.destination}</div>
+          <h3 className="mt-0.5 truncate text-[16px] font-bold leading-[24px] text-[#191F28]">
+            {trip.title}
+          </h3>
         </div>
         <p className="text-[13px] leading-[20px] text-[#6B7684]">{trip.highlight}</p>
         <div className="mt-auto flex items-center justify-between border-t border-[#E5E8EB] pt-3">

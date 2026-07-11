@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -79,10 +80,14 @@ export class TripsService {
     try {
       await this.plannerService.generateItinerary(saved.id);
     } catch (error) {
-      saved.status = 'draft';
-      await this.repo.save(saved);
+      // 일정 생성이 실패하면 재시도 수단이 없어 되살릴 수 없는 여행이 남는다.
+      // 좀비 draft 를 남기지 않고 생성을 통째로 롤백해 사용자가 다시 시도하게 한다.
+      await this.repo.delete(saved.id);
       this.logger.warn(
-        `Trip ${saved.id} created without itinerary: ${error instanceof Error ? error.message : String(error)}`,
+        `Trip ${saved.id} creation rolled back (itinerary generation failed): ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new ServiceUnavailableException(
+        '여행 일정을 생성하지 못했어요. 잠시 후 다시 시도해주세요.',
       );
     }
     return this.findOne(saved.id, userId);

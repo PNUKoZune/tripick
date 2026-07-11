@@ -14,9 +14,8 @@ type Filter = 'all' | TripSummaryStatus;
 
 const FILTERS: Array<{ value: Filter; label: string }> = [
   { value: 'all', label: '전체' },
-  { value: 'upcoming', label: '곧 출발' },
+  { value: 'upcoming', label: '출발 전' },
   { value: 'ongoing', label: '진행 중' },
-  { value: 'draft', label: '초안' },
   { value: 'done', label: '다녀옴' },
 ];
 
@@ -46,9 +45,9 @@ function TripsContent() {
 
   const stats = useMemo(() => {
     const upcoming = trips.filter((t) => t.status === 'upcoming').length;
-    const draft = trips.filter((t) => t.status === 'draft').length;
+    const ongoing = trips.filter((t) => t.status === 'ongoing').length;
     const done = trips.filter((t) => t.status === 'done').length;
-    return { upcoming, draft, done };
+    return { upcoming, ongoing, done };
   }, [trips]);
   const latestTrip = trips[0];
 
@@ -80,14 +79,14 @@ function TripsContent() {
       />
       <PageContainer>
         <div className="grid grid-cols-3 gap-2 lg:hidden">
-          <SummaryTile label="곧 출발" value={stats.upcoming} tone="primary" />
-          <SummaryTile label="초안" value={stats.draft} tone="neutral" />
+          <SummaryTile label="출발 전" value={stats.upcoming} tone="primary" />
+          <SummaryTile label="진행 중" value={stats.ongoing} tone="neutral" />
           <SummaryTile label="다녀옴" value={stats.done} tone="success" />
         </div>
         <div className="mb-4 hidden grid-cols-4 gap-3 lg:grid">
           <SummaryTile label="전체" value={trips.length} tone="neutral" />
-          <SummaryTile label="곧 출발" value={stats.upcoming} tone="primary" />
-          <SummaryTile label="초안" value={stats.draft} tone="neutral" />
+          <SummaryTile label="출발 전" value={stats.upcoming} tone="primary" />
+          <SummaryTile label="진행 중" value={stats.ongoing} tone="neutral" />
           <SummaryTile label="다녀옴" value={stats.done} tone="success" />
         </div>
 
