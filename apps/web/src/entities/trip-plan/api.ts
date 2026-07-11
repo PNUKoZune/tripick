@@ -57,6 +57,11 @@ export function fetchDestinationSuggestions(query: string) {
   return api.get<DestinationSuggestionDto[]>(`/main-planner/destinations${search}`);
 }
 
+/** 취향 기반 추천 여행지 (취향 벡터 없으면 서버가 인기순으로 폴백) */
+export function fetchRecommendedDestinations() {
+  return api.get<DestinationSuggestionDto[]>('/main-planner/destinations/recommended');
+}
+
 export function createTrip(body: CreateTripRequestDto) {
   return api.post<TripSummaryDto>('/main-planner/trips', body);
 }

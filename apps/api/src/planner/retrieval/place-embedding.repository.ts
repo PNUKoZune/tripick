@@ -36,6 +36,16 @@ export interface PlaceProvenance {
   embeddingModel: string | null;
 }
 
+/** 취향 벡터 기반 지역 추천 1건. */
+export interface RegionRecommendation {
+  /** place_embeddings.destination_region 원본 값 (시도명 또는 정규화 슬러그) */
+  region: string;
+  /** 상위 topK 장소의 취향 코사인 평균 (0~1) */
+  score: number;
+  /** 점수 계산에 쓴 장소 수 */
+  places: number;
+}
+
 /** upsertPlace 시 중복/기존 행을 찾기 위한 키. */
 export interface PlaceDedupeKey {
   kakaoPlaceId?: string | null;
@@ -118,6 +128,59 @@ export class PlaceEmbeddingRepository {
     } catch (error) {
       this.logger.warn(
         `pgvector place search failed, retrieval will fallback: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * 취향 벡터로 목적지(destination_region)를 랭킹한다.
+   * 지역별 상위 topK개 장소의 취향 코사인 평균을 점수로 써서,
+   * "내 취향에 맞는 스팟이 많은 지역"을 상위로 올린다.
+   * 벡터 차원 불일치 등 실패 시 [] 를 반환해 호출부가 인기순으로 폴백하게 한다.
+   */
+  async recommendRegions(
+    preferenceVector: number[],
+    topK: number,
+    minPlaces: number,
+    limit: number,
+  ): Promise<RegionRecommendation[]> {
+    if (preferenceVector.length === 0) return [];
+    const vector = `[${preferenceVector.join(',')}]`;
+    try {
+      const rows: Array<{ region: string; score: string; places: string }> =
+        await this.dataSource.query(
+          `
+          WITH scored AS (
+            SELECT destination_region AS region,
+                   1 - (embedding <=> $1::vector) AS sim,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY destination_region
+                     ORDER BY embedding <=> $1::vector
+                   ) AS rnk
+            FROM place_embeddings
+            WHERE embedding IS NOT NULL
+              AND destination_region IS NOT NULL
+              AND destination_region <> 'default'
+          )
+          SELECT region, AVG(sim) AS score, COUNT(*) AS places
+          FROM scored
+          WHERE rnk <= $2
+          GROUP BY region
+          HAVING COUNT(*) >= $3
+          ORDER BY score DESC
+          LIMIT $4
+          `,
+          [vector, topK, minPlaces, limit],
+        );
+      return rows.map((row) => ({
+        region: row.region,
+        score: Number(row.score),
+        places: Number(row.places),
+      }));
+    } catch (error) {
+      this.logger.warn(
+        `region recommendation failed, falling back to popular: ${error instanceof Error ? error.message : String(error)}`,
       );
       return [];
     }

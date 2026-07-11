@@ -48,6 +48,12 @@ export class MainPlannerController {
     return this.destinationsService.search(q ?? '');
   }
 
+  @Get('destinations/recommended')
+  @ApiOperation({ summary: '취향 기반 추천 여행지' })
+  recommendedDestinations(@CurrentUser() user: UserEntity) {
+    return this.destinationsService.recommend(user.id);
+  }
+
   @Post('trips')
   @ApiOperation({ summary: '신규 여행 생성 및 일정 생성' })
   createTrip(@CurrentUser() user: UserEntity, @Body() dto: CreateTripRequestBodyDto) {
