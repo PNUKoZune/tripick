@@ -90,10 +90,17 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
 
   const errorMessage = error instanceof Error ? error.message : null;
 
+  const today = useMemo(() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }, []);
+
   const startDate = range?.from ? toIsoDate(range.from) : '';
   const endDate = range?.to ? toIsoDate(range.to) : range?.from ? toIsoDate(range.from) : '';
 
-  const sameDay = !!range?.from && !!range?.to && startDate === endDate;
+  // 당일치기는 달력을 한 번만 클릭해 range.to 가 없으므로 날짜 문자열로 판정한다.
+  const sameDay = startDate.length > 0 && startDate === endDate;
   const timeError =
     sameDay && startTime >= endTime ? '도착 시각은 출발 시각보다 늦어야 해요.' : null;
 
@@ -181,6 +188,8 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
               numberOfMonths={1}
               showOutsideDays
               weekStartsOn={0}
+              disabled={{ before: today }}
+              startMonth={today}
             />
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 border-t border-[#E5E8EB] pt-4">
@@ -197,11 +206,13 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
         <FriendMemberPicker members={members} onAdd={addMember} onRemove={removeMember} />
       </Field>
 
-      <Field label="이동 수단" hint="선택 · 미선택 시 취향 설정을 따라요">
+      <Field label="이동 수단" hint="선택 · 다시 누르면 해제(취향 설정을 따라요)">
         <SegmentToggle
           items={TRANSPORT_OPTIONS}
           value={transportMode}
-          onChange={(next) => setTransportMode(next as TransportMode)}
+          onChange={(next) =>
+            setTransportMode((prev) => (prev === next ? '' : (next as TransportMode)))
+          }
         />
       </Field>
 
@@ -210,6 +221,7 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
           items={PACE_OPTIONS}
           value={pace}
           onChange={(next) => setPace(next as ReplanPace)}
+          columns={3}
         />
       </Field>
 
@@ -218,6 +230,7 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
           items={BUDGET_OPTIONS}
           value={budget}
           onChange={(next) => setBudget(next as ReplanBudget)}
+          columns={3}
         />
       </Field>
 

@@ -108,6 +108,7 @@ export function ReplanModal({ tripId, open, onClose, onRequested }: Props) {
               items={PACE_OPTIONS}
               value={pace}
               onChange={(next) => setPace(next as ReplanPace)}
+              columns={3}
             />
           </Field>
 
@@ -116,6 +117,7 @@ export function ReplanModal({ tripId, open, onClose, onRequested }: Props) {
               items={BUDGET_OPTIONS}
               value={budget}
               onChange={(next) => setBudget(next as ReplanBudget)}
+              columns={3}
             />
           </Field>
 
