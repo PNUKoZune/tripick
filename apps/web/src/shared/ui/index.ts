@@ -3,6 +3,7 @@ export { Chip } from './chip';
 export { Button } from './button';
 export { BottomSheet } from './bottom-sheet';
 export { SegmentToggle } from './segment-toggle';
+export { PlaceSearchPicker } from './place-search-picker';
 export { Switch } from './switch';
 export { InlineEditableText } from './inline-editable-text';
 export { Toast } from './toast';

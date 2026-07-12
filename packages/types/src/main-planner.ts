@@ -3,6 +3,8 @@
  * API가 저장된 여행/멤버/일정 데이터를 planner 화면 형태로 직렬화한다.
  */
 
+import type { ReplanBudget, ReplanPace, ReplanPlaceDto } from './replanning';
+
 export type PlannerItemType = 'attraction' | 'restaurant' | 'cafe' | 'transport';
 export type PlannerBadgeTone = 'urgent' | 'recommend' | 'local';
 
@@ -342,4 +344,12 @@ export interface CreateTripRequestDto {
   members: PlannerMemberDto[];
   /** 이번 여행에 추가로 반영하고 싶은 요청/제약 (예: "유아 동반", "해산물 알레르기") */
   notes?: string;
+  /** 일정에 반드시 포함할 장소 (카카오 검색 결과) */
+  mustIncludePlaces?: ReplanPlaceDto[];
+  /** 일정 강도(하루 일정 밀도) */
+  pace?: ReplanPace;
+  /** 예산 수준 */
+  budget?: ReplanBudget;
+  /** 선호 이동 수단: transit(대중교통) | car(자가용) */
+  transportMode?: 'transit' | 'car';
 }
