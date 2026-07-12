@@ -12,11 +12,14 @@ type Props = {
   items: Item[];
   value: string;
   onChange: (next: string) => void;
+  /** 열 개수 (기본 2). 옵션이 3개면 3으로 주면 균등 배치된다. */
+  columns?: 2 | 3;
 };
 
-export function SegmentToggle({ items, value, onChange }: Props) {
+export function SegmentToggle({ items, value, onChange, columns = 2 }: Props) {
+  const gridClass = columns === 3 ? 'grid-cols-3' : 'grid-cols-2';
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className={`grid ${gridClass} gap-2`}>
       {items.map((item) => {
         const active = item.value === value;
         return (

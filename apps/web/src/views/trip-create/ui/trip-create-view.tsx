@@ -7,22 +7,46 @@ import { DayPicker, type DateRange } from 'react-day-picker';
 import { ko } from 'react-day-picker/locale';
 import { format } from 'date-fns';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import type { PlannerMemberDto } from '@tripick/types';
+import type {
+  PlannerMemberDto,
+  ReplanBudget,
+  ReplanPace,
+  ReplanPlaceDto,
+} from '@tripick/types';
 
 import { SessionGuard } from '@/entities/session';
 import { createTrip } from '@/entities/trip-plan';
 import { DestinationSearchInput, DestinationMapPicker } from '@/features/destination-search';
 import { queryKeys } from '@/shared/api/query-keys';
-import { Button } from '@/shared/ui';
+import { Button, PlaceSearchPicker, SegmentToggle } from '@/shared/ui';
 import { AppFrame } from '@/shared/ui/app-frame';
 
 import { FriendMemberPicker } from './friend-member-picker';
-import { TimeSelect } from './time-select';
+import { TimeField } from './time-field';
+import { TripCreateLoading } from './trip-create-loading';
 
 import 'react-day-picker/style.css';
 import './trip-create-calendar.css';
 
 type DraftMember = PlannerMemberDto;
+type TransportMode = 'transit' | 'car';
+
+const PACE_OPTIONS: Array<{ value: ReplanPace; label: string }> = [
+  { value: 'relaxed', label: '여유롭게' },
+  { value: 'balanced', label: '균형' },
+  { value: 'packed', label: '알차게' },
+];
+
+const BUDGET_OPTIONS: Array<{ value: ReplanBudget; label: string }> = [
+  { value: 'thrifty', label: '알뜰' },
+  { value: 'normal', label: '보통' },
+  { value: 'premium', label: '프리미엄' },
+];
+
+const TRANSPORT_OPTIONS: Array<{ value: TransportMode; label: string }> = [
+  { value: 'transit', label: '대중교통' },
+  { value: 'car', label: '자가용' },
+];
 
 function toIsoDate(date: Date) {
   return format(date, 'yyyy-MM-dd');
@@ -49,24 +73,40 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
   const [members, setMembers] = useState<DraftMember[]>([
     { id: 'me', initial: '나', color: '#3182F6' },
   ]);
+  const [mustPlaces, setMustPlaces] = useState<ReplanPlaceDto[]>([]);
+  const [pace, setPace] = useState<ReplanPace>('balanced');
+  const [budget, setBudget] = useState<ReplanBudget>('normal');
+  const [transportMode, setTransportMode] = useState<TransportMode | ''>('');
   const [notes, setNotes] = useState('');
+  const [navigating, setNavigating] = useState(false);
 
   const NOTES_MAX = 200;
 
   const { mutate, isPending, error } = useMutation({
     mutationFn: createTrip,
     onSuccess: async (trip) => {
+      // 생성 성공 후 /planner 이동이 끝날 때까지 로딩 화면을 유지 (isPending 이 내려가며 생기는 깜빡임 방지)
+      setNavigating(true);
       await queryClient.invalidateQueries({ queryKey: queryKeys.planner.trips });
       router.push(`/planner?tripId=${trip.id}`);
     },
   });
 
+  const showLoading = isPending || navigating;
+
   const errorMessage = error instanceof Error ? error.message : null;
+
+  const today = useMemo(() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }, []);
 
   const startDate = range?.from ? toIsoDate(range.from) : '';
   const endDate = range?.to ? toIsoDate(range.to) : range?.from ? toIsoDate(range.from) : '';
 
-  const sameDay = !!range?.from && !!range?.to && startDate === endDate;
+  // 당일치기는 달력을 한 번만 클릭해 range.to 가 없으므로 날짜 문자열로 판정한다.
+  const sameDay = startDate.length > 0 && startDate === endDate;
   const timeError =
     sameDay && startTime >= endTime ? '도착 시각은 출발 시각보다 늦어야 해요.' : null;
 
@@ -89,7 +129,7 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
   }
 
   function handleSubmit() {
-    if (!canSubmit || isPending) return;
+    if (!canSubmit || showLoading) return;
     const trimmedNotes = notes.trim();
     mutate({
       title: title.trim(),
@@ -99,6 +139,10 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
       startTime,
       endTime,
       members,
+      pace,
+      budget,
+      ...(transportMode ? { transportMode } : {}),
+      ...(mustPlaces.length > 0 ? { mustIncludePlaces: mustPlaces } : {}),
       ...(trimmedNotes ? { notes: trimmedNotes } : {}),
     });
   }
@@ -150,11 +194,13 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
               numberOfMonths={1}
               showOutsideDays
               weekStartsOn={0}
+              disabled={{ before: today }}
+              startMonth={today}
             />
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 border-t border-[#E5E8EB] pt-4">
-            <TimeSelect label="출발 시각" value={startTime} onChange={setStartTime} />
-            <TimeSelect label="도착 시각" value={endTime} onChange={setEndTime} />
+            <TimeField label="출발 시각" value={startTime} onChange={setStartTime} />
+            <TimeField label="도착 시각" value={endTime} onChange={setEndTime} />
           </div>
           {timeError ? (
             <p className="mt-2 text-[12px] font-semibold text-[#F04452]">{timeError}</p>
@@ -164,6 +210,38 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
 
       <Field label="동행자" hint="내 친구 목록에서 선택해 추가합니다">
         <FriendMemberPicker members={members} onAdd={addMember} onRemove={removeMember} />
+      </Field>
+
+      <Field label="이동 수단" hint="선택 · 다시 누르면 해제(취향 설정을 따라요)">
+        <SegmentToggle
+          items={TRANSPORT_OPTIONS}
+          value={transportMode}
+          onChange={(next) =>
+            setTransportMode((prev) => (prev === next ? '' : (next as TransportMode)))
+          }
+        />
+      </Field>
+
+      <Field label="일정 강도" hint="하루 일정 밀도">
+        <SegmentToggle
+          items={PACE_OPTIONS}
+          value={pace}
+          onChange={(next) => setPace(next as ReplanPace)}
+          columns={3}
+        />
+      </Field>
+
+      <Field label="예산">
+        <SegmentToggle
+          items={BUDGET_OPTIONS}
+          value={budget}
+          onChange={(next) => setBudget(next as ReplanBudget)}
+          columns={3}
+        />
+      </Field>
+
+      <Field label="꼭 포함할 장소" hint="이 장소들은 반드시 일정에 넣어요">
+        <PlaceSearchPicker value={mustPlaces} onChange={setMustPlaces} />
       </Field>
 
       <Field label="이번 여행에 반영할 사항" hint={`선택 · ${notes.length}/${NOTES_MAX}자`}>
@@ -220,34 +298,48 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
             size="md"
             className="hidden h-10 px-5 text-[14px] lg:inline-flex"
             onClick={handleSubmit}
-            disabled={!canSubmit || isPending}
+            disabled={!canSubmit || showLoading}
           >
-            {isPending ? '생성 중…' : '여행 만들기'}
+            {showLoading ? '생성 중…' : '여행 만들기'}
           </Button>
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-[1160px] px-4 pb-[100px] pt-3 lg:px-8 lg:py-8 lg:pb-8 xl:px-10">
+      <div className="mx-auto w-full max-w-[1160px] px-4 pb-[184px] pt-3 lg:px-8 lg:py-8 lg:pb-8 xl:px-10">
         <div className="lg:rounded-[20px] lg:border lg:border-[#E5E8EB] lg:bg-white lg:p-8 lg:shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
           {formBody}
         </div>
-        <p className="mt-4 hidden text-[12px] text-[#8B95A1] lg:block">
-          생성한 여행은 내 계정에 저장되고 친구 목록 기반으로 멤버를 관리합니다.
-        </p>
+        {/* 데스크탑 하단 CTA + 안내 문구 */}
+        <div className="mt-6 hidden items-center justify-between gap-4 lg:flex">
+          <p className="text-[12px] text-[#8B95A1]">
+            생성한 여행은 내 계정에 저장되고 친구 목록 기반으로 멤버를 관리합니다.
+          </p>
+          <Button
+            variant="primary"
+            size="lg"
+            className="shrink-0 px-8"
+            onClick={handleSubmit}
+            disabled={!canSubmit || showLoading}
+          >
+            {showLoading ? '생성 중…' : '여행 만들기'}
+          </Button>
+        </div>
       </div>
 
-      {/* 모바일 sticky CTA: bottom nav (66px) 바로 위 */}
-      <div className="fixed inset-x-0 bottom-[66px] z-10 mx-auto max-w-[430px] border-t border-[#E5E8EB] bg-white px-5 py-3 lg:hidden">
+      {/* 모바일 sticky CTA: bottom nav 바로 위 (nav 높이 = pt-1.5 6px + grid 66px + safe-area pb) */}
+      <div className="fixed inset-x-0 bottom-[calc(72px+max(10px,env(safe-area-inset-bottom)))] z-20 mx-auto max-w-[430px] border-t border-[#E5E8EB] bg-white px-5 py-3 lg:hidden">
         <Button
           variant="primary"
           size="lg"
           fullWidth
           onClick={handleSubmit}
-          disabled={!canSubmit || isPending}
+          disabled={!canSubmit || showLoading}
         >
-          {isPending ? '생성 중…' : '여행 만들기'}
+          {showLoading ? '생성 중…' : '여행 만들기'}
         </Button>
       </div>
+
+      {showLoading ? <TripCreateLoading /> : null}
     </AppFrame>
   );
 }

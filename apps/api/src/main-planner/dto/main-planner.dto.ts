@@ -26,7 +26,15 @@ import type {
   PlannerSwapPlaceDto,
   PlannerSwapRequestDto,
   PlannerUpdateItemRequestDto,
+  ReplanBudget,
+  ReplanPace,
 } from '@tripick/types';
+
+import { ReplanPlaceBodyDto } from '../../replanning/dto/replan-request.dto';
+
+const CREATE_TRIP_PACE = ['relaxed', 'balanced', 'packed'] as const satisfies readonly ReplanPace[];
+const CREATE_TRIP_BUDGET = ['thrifty', 'normal', 'premium'] as const satisfies readonly ReplanBudget[];
+const CREATE_TRIP_TRANSPORT = ['transit', 'car'] as const;
 
 class PlannerMemberBodyDto implements PlannerMemberDto {
   @IsString()
@@ -91,6 +99,24 @@ export class CreateTripRequestBodyDto implements CreateTripRequestDto {
   @IsString()
   @MaxLength(500)
   notes?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ReplanPlaceBodyDto)
+  mustIncludePlaces?: ReplanPlaceBodyDto[];
+
+  @IsOptional()
+  @IsIn(CREATE_TRIP_PACE)
+  pace?: ReplanPace;
+
+  @IsOptional()
+  @IsIn(CREATE_TRIP_BUDGET)
+  budget?: ReplanBudget;
+
+  @IsOptional()
+  @IsIn(CREATE_TRIP_TRANSPORT)
+  transportMode?: 'transit' | 'car';
 }
 
 class PlannerSwapPlaceBodyDto implements PlannerSwapPlaceDto {

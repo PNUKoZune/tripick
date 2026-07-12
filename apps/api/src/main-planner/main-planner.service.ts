@@ -100,6 +100,7 @@ export class MainPlannerService {
   async createTrip(user: UserEntity, dto: CreateTripRequestDto): Promise<TripSummaryDto> {
     this.assertCreateTrip(dto);
     const preference = await this.preferencesService.findByUser(user.id);
+    const notes = this.composeCreateTripNotes(dto);
     const trip = await this.tripsService.create(user.id, {
       title: dto.title.trim(),
       destination: dto.destination.trim(),
@@ -107,8 +108,9 @@ export class MainPlannerService {
       endDate: dto.endDate,
       wakeTime: preference?.profile?.wakeTime ?? '08:00',
       sleepTime: preference?.profile?.sleepTime ?? '23:00',
-      transportMode: this.resolveTransportMode(preference?.profile?.transportModes?.[0]),
-      ...(dto.notes?.trim() ? { notes: dto.notes.trim() } : {}),
+      transportMode:
+        dto.transportMode ?? this.resolveTransportMode(preference?.profile?.transportModes?.[0]),
+      ...(notes ? { notes } : {}),
     } satisfies CreateTripDto);
 
     await this.addDraftMembers(trip.id, user.id, dto.members);
@@ -649,6 +651,28 @@ export class MainPlannerService {
     if (dto.startDate === dto.endDate && dto.startTime >= dto.endTime) {
       throw new BadRequestException('도착 시각은 출발 시각보다 늦어야 합니다.');
     }
+  }
+
+  /**
+   * 생성 폼의 구조화 옵션(일정 강도·예산·이동 수단·꼭 포함할 장소)을 자유 텍스트 notes 로 합쳐
+   * AI 일정 생성 시 프롬프트에 반영되도록 한다. (별도 컬럼 없이 notes 로 전달)
+   */
+  private composeCreateTripNotes(dto: CreateTripRequestDto): string | undefined {
+    const paceLabel = { relaxed: '여유롭게', balanced: '균형', packed: '알차게' };
+    const budgetLabel = { thrifty: '알뜰', normal: '보통', premium: '프리미엄' };
+    const transportLabel = { transit: '대중교통', car: '자가용' };
+
+    const hints: string[] = [];
+    if (dto.pace) hints.push(`일정 강도: ${paceLabel[dto.pace]}`);
+    if (dto.budget) hints.push(`예산: ${budgetLabel[dto.budget]}`);
+    if (dto.transportMode) hints.push(`이동 수단: ${transportLabel[dto.transportMode]}`);
+    if (dto.mustIncludePlaces?.length) {
+      const names = dto.mustIncludePlaces.map((p) => p.name.trim()).filter(Boolean);
+      if (names.length) hints.push(`꼭 포함할 장소: ${names.join(', ')}`);
+    }
+
+    const parts = [dto.notes?.trim(), hints.length ? hints.join(' · ') : ''].filter(Boolean);
+    return parts.length ? parts.join('\n') : undefined;
   }
 
   private async toTripSummary(trip: TripEntity, user: UserEntity): Promise<TripSummaryDto> {
