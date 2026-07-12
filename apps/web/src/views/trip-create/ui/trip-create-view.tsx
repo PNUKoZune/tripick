@@ -23,6 +23,7 @@ import { AppFrame } from '@/shared/ui/app-frame';
 
 import { FriendMemberPicker } from './friend-member-picker';
 import { TimeField } from './time-field';
+import { TripCreateLoading } from './trip-create-loading';
 
 import 'react-day-picker/style.css';
 import './trip-create-calendar.css';
@@ -77,16 +78,21 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
   const [budget, setBudget] = useState<ReplanBudget>('normal');
   const [transportMode, setTransportMode] = useState<TransportMode | ''>('');
   const [notes, setNotes] = useState('');
+  const [navigating, setNavigating] = useState(false);
 
   const NOTES_MAX = 200;
 
   const { mutate, isPending, error } = useMutation({
     mutationFn: createTrip,
     onSuccess: async (trip) => {
+      // 생성 성공 후 /planner 이동이 끝날 때까지 로딩 화면을 유지 (isPending 이 내려가며 생기는 깜빡임 방지)
+      setNavigating(true);
       await queryClient.invalidateQueries({ queryKey: queryKeys.planner.trips });
       router.push(`/planner?tripId=${trip.id}`);
     },
   });
+
+  const showLoading = isPending || navigating;
 
   const errorMessage = error instanceof Error ? error.message : null;
 
@@ -123,7 +129,7 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
   }
 
   function handleSubmit() {
-    if (!canSubmit || isPending) return;
+    if (!canSubmit || showLoading) return;
     const trimmedNotes = notes.trim();
     mutate({
       title: title.trim(),
@@ -292,9 +298,9 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
             size="md"
             className="hidden h-10 px-5 text-[14px] lg:inline-flex"
             onClick={handleSubmit}
-            disabled={!canSubmit || isPending}
+            disabled={!canSubmit || showLoading}
           >
-            {isPending ? '생성 중…' : '여행 만들기'}
+            {showLoading ? '생성 중…' : '여행 만들기'}
           </Button>
         </div>
       </header>
@@ -313,9 +319,9 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
             size="lg"
             className="shrink-0 px-8"
             onClick={handleSubmit}
-            disabled={!canSubmit || isPending}
+            disabled={!canSubmit || showLoading}
           >
-            {isPending ? '생성 중…' : '여행 만들기'}
+            {showLoading ? '생성 중…' : '여행 만들기'}
           </Button>
         </div>
       </div>
@@ -327,11 +333,13 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
           size="lg"
           fullWidth
           onClick={handleSubmit}
-          disabled={!canSubmit || isPending}
+          disabled={!canSubmit || showLoading}
         >
-          {isPending ? '생성 중…' : '여행 만들기'}
+          {showLoading ? '생성 중…' : '여행 만들기'}
         </Button>
       </div>
+
+      {showLoading ? <TripCreateLoading /> : null}
     </AppFrame>
   );
 }
