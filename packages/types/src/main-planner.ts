@@ -130,7 +130,7 @@ export interface PlannerTripMetaDto {
  * 클라가 startDate 로 직접 day 를 계산하지 않고 이 값을 신뢰한다.
  */
 export interface PlannerTripProgressDto {
-  /** 'upcoming' 출발 전 · 'ongoing' 진행 중 · 'done' 종료 · 'draft' 초안 */
+  /** 'upcoming' 출발 전 · 'ongoing' 진행 중 · 'done' 종료 · 'draft' 준비 중(일정 미생성) */
   status: TripSummaryStatus;
   /** 오늘이 몇 일차인지 (1-based). 출발 전이면 1, 종료 후면 마지막 일차로 클램프. */
   currentDay: number;

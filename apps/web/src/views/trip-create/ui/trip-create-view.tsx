@@ -28,20 +28,21 @@ function toIsoDate(date: Date) {
   return format(date, 'yyyy-MM-dd');
 }
 
-export function TripCreateView() {
+export function TripCreateView({ initialDestination }: { initialDestination?: string } = {}) {
   return (
     <SessionGuard>
-      <TripCreateContent />
+      <TripCreateContent {...(initialDestination ? { initialDestination } : {})} />
     </SessionGuard>
   );
 }
 
-function TripCreateContent() {
+function TripCreateContent({ initialDestination }: { initialDestination?: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const [title, setTitle] = useState('');
-  const [destination, setDestination] = useState('');
+  const seedDestination = initialDestination?.trim() ?? '';
+  const [title, setTitle] = useState(seedDestination ? `${seedDestination} 여행` : '');
+  const [destination, setDestination] = useState(seedDestination);
   const [range, setRange] = useState<DateRange | undefined>(undefined);
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('18:00');

@@ -5,6 +5,7 @@ export {
   resolvePlannerPlace,
   swapPlannerItem,
   fetchDestinationSuggestions,
+  fetchRecommendedDestinations,
   createTrip,
   deleteTrip,
   fetchTripShareStatus,

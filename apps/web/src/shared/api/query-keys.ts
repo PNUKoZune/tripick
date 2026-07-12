@@ -26,5 +26,6 @@ export const queryKeys = {
     alternatives: (tripId: string, itemId: string, note = '') =>
       ['planner', 'trips', tripId, 'alternatives', itemId, note] as const,
     destinations: (query: string) => ['planner', 'destinations', query] as const,
+    recommendedDestinations: ['planner', 'destinations', 'recommended'] as const,
   },
 };

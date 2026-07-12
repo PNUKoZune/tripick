@@ -1299,8 +1299,8 @@ export class MainPlannerService {
 
   private summaryStatusLabel(status: TripSummaryStatus): string {
     return {
-      draft: '초안',
-      upcoming: '곧 출발',
+      draft: '준비 중',
+      upcoming: '출발 전',
       ongoing: '진행 중',
       done: '다녀옴',
     }[status];
