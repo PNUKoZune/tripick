@@ -2,24 +2,15 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type {
-  ActivityIntensity,
-  CompanionPreference,
-  CrowdPreference,
-  InterestPreference,
-  TransportPreference,
-  TravelPace,
-  TravelStylePreference,
-} from '@tripick/types';
+import { FiThumbsDown, FiThumbsUp } from 'react-icons/fi';
+import type { ThemePreference, TransportPreference } from '@tripick/types';
 import {
   ACTIVITY_INTENSITY_OPTIONS,
-  COMPANION_OPTIONS,
   CROWD_OPTIONS,
   INSTAGRAM_TAGS,
-  INTEREST_OPTIONS,
   PACE_OPTIONS,
+  THEME_GROUPS,
   TRANSPORT_OPTIONS,
-  TRAVEL_STYLE_OPTIONS,
 } from '@/entities/preferences/model/options';
 import {
   DEFAULT_PREFERENCE_FORM,
@@ -38,6 +29,8 @@ type Notice = {
   description: string;
   tone: 'red' | 'green';
 };
+
+type ThemeStance = 'like' | 'dislike';
 
 export function PreferenceSetupForm() {
   const queryClient = useQueryClient();
@@ -78,10 +71,7 @@ export function PreferenceSetupForm() {
   }, [preferenceQuery.error]);
 
   const ready =
-    form.travelStyles.length > 0 &&
-    form.companions.length > 0 &&
-    form.transportModes.length > 0 &&
-    form.wakeTime < form.sleepTime;
+    form.likedThemes.length > 0 && form.transportModes.length > 0 && form.wakeTime < form.sleepTime;
 
   const savePreferenceMutation = useMutation({
     mutationFn: async (nextForm: PreferenceFormState) => {
@@ -110,7 +100,7 @@ export function PreferenceSetupForm() {
     if (!ready) {
       setNotice({
         title: '확인 필요',
-        description: '취향, 동행 유형, 이동수단을 하나 이상 고르고 시간을 확인해주세요.',
+        description: '선호 테마와 이동수단을 하나 이상 고르고 시간을 확인해주세요.',
         tone: 'red',
       });
       return;
@@ -121,41 +111,28 @@ export function PreferenceSetupForm() {
 
   return (
     <div className="space-y-8">
-      <SetupBlock title="어떤 여행을 좋아하세요?">
-        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3">
-          {TRAVEL_STYLE_OPTIONS.map((option) => (
-            <SegmentedOption
-              key={option.value}
-              active={form.travelStyles.includes(option.value)}
-              label={option.label}
-              onClick={() => toggleArray(option.value, 'travelStyles')}
-            />
-          ))}
-        </div>
-      </SetupBlock>
-
-      <SetupBlock title="관심 있는 테마를 모두 골라주세요">
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
-          {INTEREST_OPTIONS.map((option) => (
-            <SegmentedOption
-              key={option.value}
-              active={form.interests.includes(option.value)}
-              label={option.label}
-              onClick={() => toggleArray(option.value, 'interests')}
-            />
-          ))}
-        </div>
-      </SetupBlock>
-
-      <SetupBlock title="누구와 여행하나요?">
-        <div className="grid grid-cols-4 gap-2 lg:max-w-[520px]">
-          {COMPANION_OPTIONS.map((option) => (
-            <SegmentedOption
-              key={option.value}
-              active={form.companions.includes(option.value)}
-              label={option.label}
-              onClick={() => toggleArray(option.value, 'companions')}
-            />
+      <SetupBlock title="관심 있는 테마">
+        <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--text-tertiary)]">
+          좋아하는 건 선호, 피하고 싶은 건 불호로 골라주세요. 고르지 않으면 중립이에요.
+        </p>
+        <div className="space-y-4">
+          {THEME_GROUPS.map((group) => (
+            <div key={group.key}>
+              <h3 className="mb-1.5 text-[13px] font-bold leading-5 text-[color:var(--text-secondary)]">
+                {group.label}
+              </h3>
+              <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-2">
+                {group.themes.map((theme) => (
+                  <ThemeStanceRow
+                    key={theme.value}
+                    label={theme.label}
+                    examples={theme.examples}
+                    stance={themeStance(theme.value)}
+                    onSelect={(stance) => setThemeStance(theme.value, stance)}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       </SetupBlock>
@@ -184,7 +161,7 @@ export function PreferenceSetupForm() {
               key={option.value}
               active={form.transportModes.includes(option.value)}
               label={option.label}
-              onClick={() => toggleArray(option.value, 'transportModes')}
+              onClick={() => toggleTransport(option.value)}
             />
           ))}
         </div>
@@ -296,16 +273,32 @@ export function PreferenceSetupForm() {
     </div>
   );
 
-  function toggleArray(
-    value: TravelStylePreference | CompanionPreference | TransportPreference | InterestPreference,
-    key: 'travelStyles' | 'companions' | 'transportModes' | 'interests',
-  ) {
+  function toggleTransport(value: TransportPreference) {
+    setForm((current) => ({
+      ...current,
+      transportModes: current.transportModes.includes(value)
+        ? current.transportModes.filter((item) => item !== value)
+        : [...current.transportModes, value],
+    }));
+  }
+
+  function themeStance(value: ThemePreference): ThemeStance | null {
+    if (form.likedThemes.includes(value)) return 'like';
+    if (form.dislikedThemes.includes(value)) return 'dislike';
+    return null;
+  }
+
+  function setThemeStance(value: ThemePreference, stance: ThemeStance) {
     setForm((current) => {
-      const values = current[key] as string[];
-      const next = values.includes(value)
-        ? values.filter((item) => item !== value)
-        : [...values, value];
-      return { ...current, [key]: next };
+      const liked = current.likedThemes.filter((item) => item !== value);
+      const disliked = current.dislikedThemes.filter((item) => item !== value);
+      // 같은 값을 다시 누르면 중립으로 해제, 다른 값이면 해당 진영으로 이동.
+      if (themeStance(value) === stance) {
+        return { ...current, likedThemes: liked, dislikedThemes: disliked };
+      }
+      return stance === 'like'
+        ? { ...current, likedThemes: [...liked, value], dislikedThemes: disliked }
+        : { ...current, likedThemes: liked, dislikedThemes: [...disliked, value] };
     });
   }
 
@@ -350,5 +343,68 @@ function SetupBlock({ title, children }: { title: string; children: React.ReactN
       <h2 className="mb-3 text-[18px] font-black leading-6">{title}</h2>
       {children}
     </section>
+  );
+}
+
+function ThemeStanceRow({
+  label,
+  examples,
+  stance,
+  onSelect,
+}: {
+  label: string;
+  examples: string[];
+  stance: ThemeStance | null;
+  onSelect: (stance: ThemeStance) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-[12px] bg-[color:var(--soft-bg)] px-3 py-1.5">
+      <div className="flex min-w-0 items-baseline gap-1.5">
+        <span className="shrink-0 text-[14px] font-bold leading-6 text-[#191F28]">{label}</span>
+        <span className="truncate text-[11px] font-medium text-[color:var(--text-tertiary)]">
+          {examples.join(' · ')}
+        </span>
+      </div>
+      <div className="flex shrink-0 gap-1">
+        <StanceButton tone="like" active={stance === 'like'} onClick={() => onSelect('like')} />
+        <StanceButton
+          tone="dislike"
+          active={stance === 'dislike'}
+          onClick={() => onSelect('dislike')}
+        />
+      </div>
+    </div>
+  );
+}
+
+function StanceButton({
+  tone,
+  active,
+  onClick,
+}: {
+  tone: ThemeStance;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const like = tone === 'like';
+  const label = like ? '선호' : '불호';
+  const activeClass = like ? 'bg-[color:var(--blue-600)] text-white' : 'bg-[#F04452] text-white';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={label}
+      title={label}
+      className={`flex size-7 items-center justify-center rounded-full transition ${
+        active ? activeClass : 'bg-white text-[color:var(--text-tertiary)]'
+      }`}
+    >
+      {like ? (
+        <FiThumbsUp className="size-3.5" aria-hidden />
+      ) : (
+        <FiThumbsDown className="size-3.5" aria-hidden />
+      )}
+    </button>
   );
 }

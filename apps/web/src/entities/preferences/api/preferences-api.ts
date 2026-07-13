@@ -7,17 +7,16 @@ import type {
   UpdatePreferenceDto,
 } from '@tripick/types';
 import { api } from '@/shared/api/client';
-import { INTEREST_TO_TASTE, STYLE_TO_TASTE } from '../model/options';
+import { THEME_TO_TASTE } from '../model/options';
 
 export type PreferenceFormState = PreferenceProfileDto;
 
 export const DEFAULT_PREFERENCE_FORM: PreferenceFormState = {
-  travelStyles: ['korean_vibe', 'food_trip', 'insta_spot'],
-  companions: ['couple'],
   sleepTime: '23:00',
   wakeTime: '07:30',
   transportModes: ['transit', 'walk'],
-  interests: ['cafe', 'photo', 'nature'],
+  likedThemes: [],
+  dislikedThemes: [],
   pace: 'balanced',
   activityIntensity: 'moderate',
   crowdPreference: 'balanced',
@@ -38,15 +37,9 @@ function buildPreferencePayload(profile: PreferenceFormState): UpdatePreferenceD
   const mood = new Set<MoodPreference>();
   const environment = new Set<EnvironmentPreference>();
 
-  for (const style of profile.travelStyles) {
-    const taste = STYLE_TO_TASTE[style];
-    taste.food.forEach((item) => food.add(item));
-    taste.mood.forEach((item) => mood.add(item));
-    taste.environment.forEach((item) => environment.add(item));
-  }
-
-  for (const interest of profile.interests) {
-    const taste = INTEREST_TO_TASTE[interest];
+  // 선호 테마만 tasteTags(양의 신호)로 파생. 불호는 임베딩 텍스트에서 제외한다.
+  for (const theme of profile.likedThemes) {
+    const taste = THEME_TO_TASTE[theme];
     taste.food.forEach((item) => food.add(item));
     taste.mood.forEach((item) => mood.add(item));
     taste.environment.forEach((item) => environment.add(item));

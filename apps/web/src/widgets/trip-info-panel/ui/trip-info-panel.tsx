@@ -5,6 +5,7 @@ import { FiInfo } from 'react-icons/fi';
 import type { PlannerTripDto, PlannerTripMetaDto } from '@tripick/types';
 
 import { MemberAvatars } from '@/entities/member';
+import { TASTE_TAG_LABELS } from '@/entities/preferences/model/options';
 import { Chip, SurfaceCard } from '@/shared/ui';
 
 type Props = {
@@ -146,7 +147,7 @@ function TagRow({ label, items }: { label: string; items: PlannerTripMetaDto['ta
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         {items.map((item) => (
           <Chip key={item} tone="primary">
-            {item}
+            {TASTE_TAG_LABELS[item] ?? item}
           </Chip>
         ))}
       </div>

@@ -1,28 +1,41 @@
 export type FoodPreference = 'korean' | 'japanese' | 'western' | 'chinese' | 'vegan' | 'cafe';
 export type MoodPreference = 'healing' | 'adventure' | 'romantic' | 'family' | 'cultural';
 export type EnvironmentPreference = 'nature' | 'city' | 'beach' | 'mountain' | 'village';
-export type TravelStylePreference =
-  | 'korean_vibe'
-  | 'healing'
-  | 'food_trip'
-  | 'nature'
-  | 'shopping'
-  | 'insta_spot';
-export type CompanionPreference = 'solo' | 'couple' | 'friends' | 'family';
 export type TransportPreference = 'transit' | 'walk' | 'car' | 'rental_car';
 
-/** 관심 테마 (세분화된 취향 태그) */
-export type InterestPreference =
-  | 'history'
-  | 'art'
-  | 'nature'
+/**
+ * 관심 테마 (대분류 → 세부 테마). 각 테마는 기본 중립이며 선호/불호로 나뉜다.
+ * likedThemes / dislikedThemes 두 배열로 저장.
+ */
+export type ThemePreference =
+  // 자연·풍경
+  | 'mountain_forest'
+  | 'beach'
+  | 'lake_river'
+  | 'park_garden'
+  // 예술·문화
+  | 'exhibition'
+  | 'heritage'
+  | 'performance'
+  | 'museum'
+  // 미식
+  | 'local_food'
+  | 'cafe_dessert'
+  | 'bar'
+  | 'market_street'
+  // 액티비티·체험
+  | 'sports'
+  | 'themepark'
+  | 'class'
+  | 'wellness'
+  // 쇼핑·거리
+  | 'select_shop'
+  | 'mall'
+  | 'local_street'
+  // 뷰·감성
   | 'nightview'
-  | 'photo'
-  | 'shopping'
-  | 'food'
-  | 'activity'
-  | 'cafe'
-  | 'local';
+  | 'photo_spot'
+  | 'unique_space';
 
 /** 여행 페이스: 빡빡한 일정 ~ 여유로운 일정 */
 export type TravelPace = 'packed' | 'balanced' | 'relaxed';
@@ -53,13 +66,13 @@ export interface PreferenceDto {
 }
 
 export interface PreferenceProfileDto {
-  travelStyles: TravelStylePreference[];
-  companions: CompanionPreference[];
   sleepTime: string;
   wakeTime: string;
   transportModes: TransportPreference[];
-  /** 관심 테마 (세분화) */
-  interests: InterestPreference[];
+  /** 선호하는 관심 테마 */
+  likedThemes: ThemePreference[];
+  /** 불호하는 관심 테마 */
+  dislikedThemes: ThemePreference[];
   /** 여행 페이스 */
   pace: TravelPace;
   /** 활동 강도 */
