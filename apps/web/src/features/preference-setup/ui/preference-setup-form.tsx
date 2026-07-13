@@ -352,10 +352,15 @@ export function PreferenceSetupForm() {
           onClose={() => setToast(null)}
         />
       ) : null}
-      <div className="lg:max-w-[360px]">
-        <PrimaryButton disabled={savePreferenceMutation.isPending || !ready} onClick={handleSubmit}>
-          {savePreferenceMutation.isPending ? '저장 중' : '취향 저장'}
-        </PrimaryButton>
+      <div className="border-t border-[color:var(--line)] pt-6">
+        <div className="lg:mx-auto lg:max-w-[420px]">
+          <PrimaryButton
+            disabled={savePreferenceMutation.isPending || !ready}
+            onClick={handleSubmit}
+          >
+            {savePreferenceMutation.isPending ? '저장 중' : '취향 저장'}
+          </PrimaryButton>
+        </div>
       </div>
     </div>
   );
