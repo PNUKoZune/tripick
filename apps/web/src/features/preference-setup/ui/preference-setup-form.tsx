@@ -28,7 +28,7 @@ import {
   SecondaryButton,
   SegmentedOption,
 } from '@/shared/ui/app-frame';
-import { TimeField, Toast } from '@/shared/ui';
+import { ConfirmDialog, TimeField, Toast } from '@/shared/ui';
 
 type Notice = {
   title: string;
@@ -56,6 +56,7 @@ export function PreferenceSetupForm() {
   // 추가/삭제 후 아직 분석에 반영되지 않은 사진이 있는지
   const [photosDirty, setPhotosDirty] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
   // 마지막으로 저장된(or 하이드레이트된) 폼 스냅샷 — 변경 여부 판단용
   const [savedForm, setSavedForm] = useState<PreferenceFormState>(DEFAULT_PREFERENCE_FORM);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -449,20 +450,31 @@ export function PreferenceSetupForm() {
           >
             {savePreferenceMutation.isPending ? '저장 중' : '취향 저장'}
           </PrimaryButton>
-          <SecondaryButton onClick={resetToDefaults}>기본값 되돌리기</SecondaryButton>
+          <SecondaryButton onClick={() => setResetDialogOpen(true)}>
+            기본값 되돌리기
+          </SecondaryButton>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={resetDialogOpen}
+        title="기본값으로 되돌릴까요?"
+        description="선택한 취향이 모두 초기화돼요. 저장하기 전까지는 반영되지 않아요."
+        confirmLabel="되돌리기"
+        cancelLabel="취소"
+        danger
+        onConfirm={resetToDefaults}
+        onCancel={() => setResetDialogOpen(false)}
+      />
     </div>
   );
 
   function resetToDefaults() {
-    if (!window.confirm('취향을 기본값으로 되돌릴까요? 저장하기 전까지는 반영되지 않아요.')) {
-      return;
-    }
     setForm(DEFAULT_PREFERENCE_FORM);
     setPhotos([]);
     setPhotosDirty(false);
     setNotice(null);
+    setResetDialogOpen(false);
   }
 
   function toggleTransport(value: TransportPreference) {

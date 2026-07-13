@@ -9,3 +9,4 @@ export { InlineEditableText } from './inline-editable-text';
 export { Toast } from './toast';
 export { ChangeScheduleButton } from './change-schedule-button';
 export { TimeField } from './time-field';
+export { ConfirmDialog } from './dialog';
