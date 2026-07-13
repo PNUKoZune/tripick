@@ -1,6 +1,9 @@
 import {
   Controller,
   Post,
+  Delete,
+  Query,
+  BadRequestException,
   UseGuards,
   UseInterceptors,
   UploadedFiles,
@@ -100,5 +103,24 @@ export class PreferenceAnalyzerController {
       embeddingId: preference.embeddingId ?? '',
       preferenceId: preference.id,
     };
+  }
+
+  @Delete('photos')
+  @ApiOperation({ summary: '취향 사진 개별 삭제 (스토리지 원본 + URL 제거)' })
+  async deletePhoto(@CurrentUser() user: UserEntity, @Query('url') url?: string) {
+    if (!url) {
+      throw new BadRequestException('삭제할 사진 URL이 필요합니다.');
+    }
+    const preference = await this.preferencesService.findByUser(user.id);
+    const current = preference?.photoUrls ?? [];
+    // 본인 취향 사진 목록에 있는 URL 만 삭제 (임의 오브젝트 삭제 방지)
+    if (!current.includes(url)) {
+      return { photoUrls: current };
+    }
+    const key = this.storage.keyFromPublicUrl(url);
+    if (key) await this.storage.deleteObject(key);
+    const next = current.filter((item) => item !== url);
+    const updated = await this.preferencesService.setPhotoUrls(user.id, next);
+    return { photoUrls: updated?.photoUrls ?? next };
   }
 }

@@ -15,6 +15,7 @@ import {
 import {
   analyzePreferenceImages,
   DEFAULT_PREFERENCE_FORM,
+  deletePreferencePhoto,
   getMyPreferences,
   savePreferences,
   type PreferenceFormState,
@@ -190,6 +191,24 @@ export function PreferenceSetupForm() {
     },
   });
 
+  const deletePhotoMutation = useMutation({
+    mutationFn: async (url: string) => {
+      const session = getStoredSession() ?? (await startDemoSession());
+      return deletePreferencePhoto(session.tokens.accessToken, url);
+    },
+    onSuccess: (result) => {
+      setSavedPhotoUrls(result.photoUrls);
+      queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
+    },
+    onError: (error) => {
+      setNotice({
+        title: '사진 삭제 실패',
+        description: error instanceof Error ? error.message : '사진 삭제에 실패했습니다.',
+        tone: 'red',
+      });
+    },
+  });
+
   function handleSubmit() {
     if (!ready) {
       setNotice({
@@ -348,9 +367,18 @@ export function PreferenceSetupForm() {
               </div>
               <div className="flex flex-wrap gap-2">
                 {savedPhotoUrls.map((url) => (
-                  <div key={url} className="size-20 overflow-hidden rounded-[12px]">
+                  <div key={url} className="relative size-20 overflow-hidden rounded-[12px]">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={url} alt="" className="size-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => deletePhotoMutation.mutate(url)}
+                      disabled={deletePhotoMutation.isPending}
+                      aria-label="사진 삭제"
+                      className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-black/55 text-white disabled:opacity-50"
+                    >
+                      <FiX className="size-3" aria-hidden />
+                    </button>
                   </div>
                 ))}
               </div>

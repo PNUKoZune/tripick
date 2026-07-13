@@ -43,3 +43,11 @@ export function analyzePreferenceImages(token: string, files: File[]) {
   }
   return api.upload<PreferenceImageAnalysis>('/preference-analyzer/upload', formData, token);
 }
+
+/** 저장된 취향 사진 한 장을 삭제한다 (스토리지 원본 + URL 제거). */
+export function deletePreferencePhoto(token: string, url: string) {
+  return api.delete<{ photoUrls: string[] }>(
+    `/preference-analyzer/photos?url=${encodeURIComponent(url)}`,
+    token,
+  );
+}

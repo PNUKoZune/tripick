@@ -38,6 +38,14 @@ export class PreferencesService {
     return this.repo.findOneBy({ userId });
   }
 
+  /** 취향 사진 URL 목록만 교체. photoUrls 는 임베딩에 영향 없어 재임베딩 불필요. */
+  async setPhotoUrls(userId: string, urls: string[]): Promise<PreferenceEntity | null> {
+    const pref = await this.repo.findOneBy({ userId });
+    if (!pref) return null;
+    pref.photoUrls = urls;
+    return this.repo.save(pref);
+  }
+
   /** 검색 개인화용 저장된 취향 벡터 조회 */
   async getPreferenceVector(userId: string): Promise<number[] | null> {
     return this.preferenceEmbeddings.findVectorByUser(userId);
