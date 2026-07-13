@@ -22,7 +22,7 @@ import { getStoredSession } from '@/entities/session/model/session-storage';
 import { startDemoSession } from '@/entities/session/api/auth-api';
 import { queryKeys } from '@/shared/api/query-keys';
 import { InlineNotice, PrimaryButton, SegmentedOption } from '@/shared/ui/app-frame';
-import { TimeField } from '@/shared/ui';
+import { TimeField, Toast } from '@/shared/ui';
 
 type Notice = {
   title: string;
@@ -38,6 +38,7 @@ export function PreferenceSetupForm() {
   const [form, setForm] = useState<PreferenceFormState>(DEFAULT_PREFERENCE_FORM);
   const [hasSession, setHasSession] = useState(() => Boolean(getStoredSession()));
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [toast, setToast] = useState<{ title: string; message: string } | null>(null);
 
   const preferenceQuery = useQuery({
     queryKey: queryKeys.preferences.me,
@@ -61,6 +62,12 @@ export function PreferenceSetupForm() {
   }, [preferenceQuery.data]);
 
   useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 2500);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
     if (preferenceQuery.error instanceof Error) {
       setNotice({
         title: '불러오기 실패',
@@ -81,11 +88,8 @@ export function PreferenceSetupForm() {
     onSuccess: (preference) => {
       queryClient.setQueryData(queryKeys.preferences.me, preference);
       setHasSession(true);
-      setNotice({
-        title: '저장 완료',
-        description: '취향을 저장했습니다.',
-        tone: 'green',
-      });
+      setNotice(null);
+      setToast({ title: '저장 완료', message: '취향을 저장했습니다.' });
     },
     onError: (error) => {
       setNotice({
@@ -111,7 +115,7 @@ export function PreferenceSetupForm() {
 
   return (
     <div className="space-y-8">
-      <SetupBlock title="관심 있는 테마">
+      <SetupBlock title="테마/장소 선호도">
         <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--text-tertiary)]">
           좋아하는 건 선호, 피하고 싶은 건 불호로 골라주세요. 고르지 않으면 중립이에요.
         </p>
@@ -137,8 +141,9 @@ export function PreferenceSetupForm() {
         </div>
       </SetupBlock>
 
-      <SetupBlock title="취침 / 기상 시간">
-        <div className="grid grid-cols-2 gap-3 lg:max-w-[520px]">
+      <div className="grid gap-x-8 gap-y-8 lg:grid-cols-2">
+        <SetupBlock title="취침 / 기상 시간">
+          <div className="grid grid-cols-2 gap-3">
           <TimeField
             variant="soft"
             label="취침"
@@ -155,7 +160,7 @@ export function PreferenceSetupForm() {
       </SetupBlock>
 
       <SetupBlock title="선호 이동 수단">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:max-w-[640px]">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {TRANSPORT_OPTIONS.map((option) => (
             <SegmentedOption
               key={option.value}
@@ -168,7 +173,7 @@ export function PreferenceSetupForm() {
       </SetupBlock>
 
       <SetupBlock title="여행 페이스">
-        <div className="grid grid-cols-3 gap-2 lg:max-w-[520px]">
+        <div className="grid grid-cols-3 gap-2">
           {PACE_OPTIONS.map((option) => (
             <ChoiceCard
               key={option.value}
@@ -182,7 +187,7 @@ export function PreferenceSetupForm() {
       </SetupBlock>
 
       <SetupBlock title="활동 강도">
-        <div className="grid grid-cols-3 gap-2 lg:max-w-[520px]">
+        <div className="grid grid-cols-3 gap-2">
           {ACTIVITY_INTENSITY_OPTIONS.map((option) => (
             <ChoiceCard
               key={option.value}
@@ -196,7 +201,7 @@ export function PreferenceSetupForm() {
       </SetupBlock>
 
       <SetupBlock title="어떤 분위기를 선호하세요?">
-        <div className="grid grid-cols-3 gap-2 lg:max-w-[520px]">
+        <div className="grid grid-cols-3 gap-2">
           {CROWD_OPTIONS.map((option) => (
             <ChoiceCard
               key={option.value}
@@ -237,7 +242,7 @@ export function PreferenceSetupForm() {
             />
           </button>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 lg:max-w-[420px]">
+        <div className="mt-3 grid grid-cols-3 gap-2">
           {INSTAGRAM_TAGS.map((tag) => (
             <button
               key={tag}
@@ -260,10 +265,19 @@ export function PreferenceSetupForm() {
             </button>
           ))}
         </div>
-      </SetupBlock>
+        </SetupBlock>
+      </div>
 
       {notice ? (
         <InlineNotice title={notice.title} description={notice.description} tone={notice.tone} />
+      ) : null}
+      {toast ? (
+        <Toast
+          title={toast.title}
+          message={toast.message}
+          tone="success"
+          onClose={() => setToast(null)}
+        />
       ) : null}
       <div className="lg:max-w-[360px]">
         <PrimaryButton disabled={savePreferenceMutation.isPending || !ready} onClick={handleSubmit}>
