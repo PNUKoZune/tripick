@@ -22,7 +22,12 @@ import {
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { startDemoSession } from '@/entities/session/api/auth-api';
 import { queryKeys } from '@/shared/api/query-keys';
-import { InlineNotice, PrimaryButton, SegmentedOption } from '@/shared/ui/app-frame';
+import {
+  InlineNotice,
+  PrimaryButton,
+  SecondaryButton,
+  SegmentedOption,
+} from '@/shared/ui/app-frame';
 import { TimeField, Toast } from '@/shared/ui';
 
 type Notice = {
@@ -50,6 +55,9 @@ export function PreferenceSetupForm() {
   const [analyzedTags, setAnalyzedTags] = useState<TasteTagDto | null>(null);
   // 추가/삭제 후 아직 분석에 반영되지 않은 사진이 있는지
   const [photosDirty, setPhotosDirty] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  // 마지막으로 저장된(or 하이드레이트된) 폼 스냅샷 — 변경 여부 판단용
+  const [savedForm, setSavedForm] = useState<PreferenceFormState>(DEFAULT_PREFERENCE_FORM);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const preferenceQuery = useQuery({
@@ -70,7 +78,9 @@ export function PreferenceSetupForm() {
       return;
     }
     hydrated.current = true;
-    setForm({ ...DEFAULT_PREFERENCE_FORM, ...preferenceQuery.data.profile });
+    const nextForm = { ...DEFAULT_PREFERENCE_FORM, ...preferenceQuery.data.profile };
+    setForm(nextForm);
+    setSavedForm(nextForm);
     // 이미 사진 분석으로 저장된 취향 태그가 있으면 그대로 노출
     const tags = preferenceQuery.data.tasteTags;
     if (tags && tags.food.length + tags.mood.length + tags.environment.length > 0) {
@@ -106,14 +116,29 @@ export function PreferenceSetupForm() {
     form.transportModes.length > 0 &&
     form.wakeTime !== form.sleepTime;
 
+  // 저장되지 않은 변경(폼 편집 or 미분석 사진)이 있는지. 분석된 사진은 이미 서버에 반영됨.
+  const dirty = JSON.stringify(form) !== JSON.stringify(savedForm) || photosDirty;
+
+  // 저장 전 페이지 이탈(새로고침·탭 닫기·주소 이동) 시 브라우저 경고
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
+
   const savePreferenceMutation = useMutation({
     mutationFn: async (nextForm: PreferenceFormState) => {
       const session = getStoredSession() ?? (await startDemoSession());
       return savePreferences(session.tokens.accessToken, nextForm);
     },
-    onSuccess: (preference) => {
+    onSuccess: (preference, variables) => {
       queryClient.setQueryData(queryKeys.preferences.me, preference);
       setHasSession(true);
+      setSavedForm(variables);
       setNotice(null);
       setToast({ title: '저장 완료', message: '취향을 저장했습니다.' });
     },
@@ -310,31 +335,58 @@ export function PreferenceSetupForm() {
               event.target.value = '';
             }}
           />
-          <div className="flex flex-wrap gap-2">
-            {previews.map((url, index) => (
-              <div key={url} className="relative size-20 overflow-hidden rounded-[12px]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt="" className="size-full object-cover" />
+          <div
+            onDragOver={(event) => event.preventDefault()}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setDragActive(true);
+            }}
+            onDragLeave={(event) => {
+              // 자식 요소로 이동할 때 깜빡임 방지
+              if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                setDragActive(false);
+              }
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragActive(false);
+              addPhotos(event.dataTransfer.files);
+            }}
+            className={`rounded-[14px] border border-dashed p-3 transition ${
+              dragActive
+                ? 'border-[color:var(--blue-600)] bg-[color:var(--blue-50)]'
+                : 'border-[#E5E8EB]'
+            }`}
+          >
+            <div className="flex flex-wrap gap-2">
+              {previews.map((url, index) => (
+                <div key={url} className="relative size-20 overflow-hidden rounded-[12px]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt="" className="size-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removePhoto(index)}
+                    aria-label="사진 제거"
+                    className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-black/55 text-white"
+                  >
+                    <FiX className="size-3" aria-hidden />
+                  </button>
+                </div>
+              ))}
+              {photos.length < 10 ? (
                 <button
                   type="button"
-                  onClick={() => removePhoto(index)}
-                  aria-label="사진 제거"
-                  className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-black/55 text-white"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex size-20 flex-col items-center justify-center gap-1 rounded-[12px] border border-dashed border-[#C9CDD2] text-[color:var(--text-tertiary)]"
                 >
-                  <FiX className="size-3" aria-hidden />
+                  <FiImage className="size-5" aria-hidden />
+                  <span className="text-[11px] font-semibold">사진 추가</span>
                 </button>
-              </div>
-            ))}
-            {photos.length < 10 ? (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex size-20 flex-col items-center justify-center gap-1 rounded-[12px] border border-dashed border-[#C9CDD2] text-[color:var(--text-tertiary)]"
-              >
-                <FiImage className="size-5" aria-hidden />
-                <span className="text-[11px] font-semibold">사진 추가</span>
-              </button>
-            ) : null}
+              ) : null}
+            </div>
+            <p className="mt-2 text-[12px] font-medium text-[color:var(--text-tertiary)]">
+              사진을 여기로 끌어다 놓아도 돼요.
+            </p>
           </div>
 
           {photos.length > 0 ? (
@@ -390,17 +442,28 @@ export function PreferenceSetupForm() {
         />
       ) : null}
       <div className="border-t border-[color:var(--line)] pt-6">
-        <div className="lg:mx-auto lg:max-w-[420px]">
+        <div className="space-y-2.5 lg:mx-auto lg:max-w-[420px]">
           <PrimaryButton
             disabled={savePreferenceMutation.isPending || !ready}
             onClick={handleSubmit}
           >
             {savePreferenceMutation.isPending ? '저장 중' : '취향 저장'}
           </PrimaryButton>
+          <SecondaryButton onClick={resetToDefaults}>기본값 되돌리기</SecondaryButton>
         </div>
       </div>
     </div>
   );
+
+  function resetToDefaults() {
+    if (!window.confirm('취향을 기본값으로 되돌릴까요? 저장하기 전까지는 반영되지 않아요.')) {
+      return;
+    }
+    setForm(DEFAULT_PREFERENCE_FORM);
+    setPhotos([]);
+    setPhotosDirty(false);
+    setNotice(null);
+  }
 
   function toggleTransport(value: TransportPreference) {
     setForm((current) => ({
