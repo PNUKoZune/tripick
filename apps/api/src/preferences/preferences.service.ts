@@ -83,11 +83,20 @@ export class PreferencesService {
       wakeTime: dto?.profile?.wakeTime ?? pref?.profile?.wakeTime ?? DEFAULT_PROFILE.wakeTime,
     };
 
+    // photoUrls 는 지정된 경우에만 통째로 교체, 아니면 기존 유지
+    const nextPhotoUrls = dto?.photoUrls ?? pref?.photoUrls ?? [];
+
     if (!pref) {
-      pref = this.repo.create({ userId, tasteTags: nextTags, profile: nextProfile });
+      pref = this.repo.create({
+        userId,
+        tasteTags: nextTags,
+        profile: nextProfile,
+        photoUrls: nextPhotoUrls,
+      });
     } else {
       pref.tasteTags = nextTags;
       pref.profile = nextProfile;
+      pref.photoUrls = nextPhotoUrls;
     }
 
     // 취향 태그 + 프로필을 임베딩해 preference_embeddings 에 유저당 1행으로 저장 → 검색 개인화 루프

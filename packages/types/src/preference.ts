@@ -59,6 +59,8 @@ export interface PreferenceDto {
   userId: string;
   tasteTags: TasteTagDto;
   profile?: PreferenceProfileDto;
+  /** 사용자가 올린 취향 원본 사진 URL (Object Storage) */
+  photoUrls?: string[];
   /** pgvector 임베딩 ID 참조 */
   embeddingId?: string;
   createdAt: string;
@@ -84,4 +86,6 @@ export interface PreferenceProfileDto {
 export interface UpdatePreferenceDto {
   tasteTags: Partial<TasteTagDto>;
   profile?: Partial<PreferenceProfileDto>;
+  /** 지정 시 취향 사진 URL 을 통째로 교체 */
+  photoUrls?: string[];
 }

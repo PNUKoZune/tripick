@@ -17,6 +17,8 @@ export const DEFAULT_PREFERENCE_FORM: PreferenceFormState = {
 /** 취향 사진 분석 결과 (vision analyzer → 취향 태그 추출) */
 export type PreferenceImageAnalysis = {
   tasteTags: TasteTagDto;
+  /** Object Storage 에 보관된 원본 사진 URL */
+  photoUrls: string[];
   embeddingId: string;
   preferenceId: string;
 };

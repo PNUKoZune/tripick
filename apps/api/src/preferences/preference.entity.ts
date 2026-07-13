@@ -29,6 +29,10 @@ export class PreferenceEntity {
   @Column({ type: 'jsonb', default: '{}' })
   profile: PreferenceProfileDto;
 
+  /** 사용자가 올린 취향 원본 사진 URL (Object Storage) */
+  @Column({ type: 'jsonb', default: '[]' })
+  photoUrls: string[];
+
   @Column({ nullable: true })
   embeddingId?: string;
 

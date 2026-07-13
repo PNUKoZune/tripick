@@ -53,6 +53,8 @@ export function PreferenceSetupForm() {
   const [photos, setPhotos] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [analyzedTags, setAnalyzedTags] = useState<TasteTagDto | null>(null);
+  // 서버(Object Storage)에 저장된 취향 사진 URL
+  const [savedPhotoUrls, setSavedPhotoUrls] = useState<string[]>([]);
   // 추가/삭제 후 아직 분석에 반영되지 않은 사진이 있는지
   const [photosDirty, setPhotosDirty] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -87,6 +89,7 @@ export function PreferenceSetupForm() {
     if (tags && tags.food.length + tags.mood.length + tags.environment.length > 0) {
       setAnalyzedTags(tags);
     }
+    setSavedPhotoUrls(preferenceQuery.data.photoUrls ?? []);
   }, [preferenceQuery.data]);
 
   useEffect(() => {
@@ -160,6 +163,8 @@ export function PreferenceSetupForm() {
     onSuccess: (result) => {
       setHasSession(true);
       setAnalyzedTags(result.tasteTags);
+      setSavedPhotoUrls(result.photoUrls);
+      setPhotos([]);
       setPhotosDirty(false);
       // 서버가 취향 태그·임베딩을 upsert 했으므로 캐시를 갱신
       queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
@@ -336,6 +341,21 @@ export function PreferenceSetupForm() {
               event.target.value = '';
             }}
           />
+          {savedPhotoUrls.length > 0 ? (
+            <div className="mb-3">
+              <div className="mb-1.5 text-[12px] font-semibold text-[#8B95A1]">
+                저장된 사진 {savedPhotoUrls.length}장
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {savedPhotoUrls.map((url) => (
+                  <div key={url} className="size-20 overflow-hidden rounded-[12px]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt="" className="size-full object-cover" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div
             onDragOver={(event) => event.preventDefault()}
             onDragEnter={(event) => {
