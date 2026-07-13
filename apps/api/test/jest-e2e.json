@@ -10,5 +10,6 @@
     "^@tripick/utils$": "<rootDir>/../../packages/utils/src/index.ts"
   },
   "testEnvironment": "node",
+  "globalSetup": "<rootDir>/test/e2e/global-setup.ts",
   "testTimeout": 120000
 }
