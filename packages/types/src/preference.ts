@@ -79,8 +79,6 @@ export interface PreferenceProfileDto {
   activityIntensity: ActivityIntensity;
   /** 혼잡도·분위기 선호 */
   crowdPreference: CrowdPreference;
-  instagramConnected: boolean;
-  instagramTags: string[];
 }
 
 export interface UpdatePreferenceDto {

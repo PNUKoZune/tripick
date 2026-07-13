@@ -23,8 +23,6 @@ const DEFAULT_PROFILE: PreferenceProfileDto = {
   pace: 'balanced',
   activityIntensity: 'moderate',
   crowdPreference: 'balanced',
-  instagramConnected: false,
-  instagramTags: [],
 };
 
 @Injectable()
@@ -81,13 +79,6 @@ export class PreferencesService {
         dto?.profile?.crowdPreference ??
         pref?.profile?.crowdPreference ??
         DEFAULT_PROFILE.crowdPreference,
-      instagramTags: [
-        ...new Set(dto?.profile?.instagramTags ?? pref?.profile?.instagramTags ?? []),
-      ],
-      instagramConnected:
-        dto?.profile?.instagramConnected ??
-        pref?.profile?.instagramConnected ??
-        DEFAULT_PROFILE.instagramConnected,
       sleepTime: dto?.profile?.sleepTime ?? pref?.profile?.sleepTime ?? DEFAULT_PROFILE.sleepTime,
       wakeTime: dto?.profile?.wakeTime ?? pref?.profile?.wakeTime ?? DEFAULT_PROFILE.wakeTime,
     };

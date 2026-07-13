@@ -74,8 +74,6 @@ describe('Travel AI planner E2E', () => {
         wakeTime: '09:00',
         sleepTime: '22:00',
         transportModes: ['transit'],
-        instagramConnected: false,
-        instagramTags: ['beach', 'cafe'],
       },
     });
 

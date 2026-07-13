@@ -236,8 +236,6 @@ export const CROWD_OPTIONS: Array<{ value: CrowdPreference; label: string; hint:
   { value: 'quiet', label: '한적한 곳', hint: '숨은 명소' },
 ];
 
-export const INSTAGRAM_TAGS = ['미식', '자연', '도시'] as const;
-
 /** tasteTags(food·mood·environment) 영문 enum → 한국어 표시 라벨 (키 중복 없음) */
 export const TASTE_TAG_LABELS: Record<string, string> = {
   // food

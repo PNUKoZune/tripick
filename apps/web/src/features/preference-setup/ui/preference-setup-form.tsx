@@ -2,17 +2,18 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FiThumbsDown, FiThumbsUp } from 'react-icons/fi';
-import type { ThemePreference, TransportPreference } from '@tripick/types';
+import { FiImage, FiThumbsDown, FiThumbsUp, FiX } from 'react-icons/fi';
+import type { TasteTagDto, ThemePreference, TransportPreference } from '@tripick/types';
 import {
   ACTIVITY_INTENSITY_OPTIONS,
   CROWD_OPTIONS,
-  INSTAGRAM_TAGS,
   PACE_OPTIONS,
+  TASTE_TAG_LABELS,
   THEME_GROUPS,
   TRANSPORT_OPTIONS,
 } from '@/entities/preferences/model/options';
 import {
+  analyzePreferenceImages,
   DEFAULT_PREFERENCE_FORM,
   getMyPreferences,
   savePreferences,
@@ -39,6 +40,10 @@ export function PreferenceSetupForm() {
   const [hasSession, setHasSession] = useState(() => Boolean(getStoredSession()));
   const [notice, setNotice] = useState<Notice | null>(null);
   const [toast, setToast] = useState<{ title: string; message: string } | null>(null);
+  const [photos, setPhotos] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
+  const [analyzedTags, setAnalyzedTags] = useState<TasteTagDto | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const preferenceQuery = useQuery({
     queryKey: queryKeys.preferences.me,
@@ -66,6 +71,13 @@ export function PreferenceSetupForm() {
     const timer = setTimeout(() => setToast(null), 2500);
     return () => clearTimeout(timer);
   }, [toast]);
+
+  // 선택한 사진의 미리보기 URL 생성/해제
+  useEffect(() => {
+    const urls = photos.map((file) => URL.createObjectURL(file));
+    setPreviews(urls);
+    return () => urls.forEach((url) => URL.revokeObjectURL(url));
+  }, [photos]);
 
   useEffect(() => {
     if (preferenceQuery.error instanceof Error) {
@@ -95,6 +107,38 @@ export function PreferenceSetupForm() {
       setNotice({
         title: '저장 실패',
         description: error instanceof Error ? error.message : '취향 저장에 실패했습니다.',
+        tone: 'red',
+      });
+    },
+  });
+
+  const analyzePhotosMutation = useMutation({
+    mutationFn: async (files: File[]) => {
+      const session = getStoredSession() ?? (await startDemoSession());
+      return analyzePreferenceImages(session.tokens.accessToken, files);
+    },
+    onSuccess: (result) => {
+      setHasSession(true);
+      setAnalyzedTags(result.tasteTags);
+      // 서버가 취향 태그·임베딩을 upsert 했으므로 캐시를 갱신
+      queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
+      const count =
+        result.tasteTags.food.length +
+        result.tasteTags.mood.length +
+        result.tasteTags.environment.length;
+      setNotice(null);
+      setToast({
+        title: '사진 분석 완료',
+        message:
+          count > 0
+            ? '사진에서 취향을 분석했어요.'
+            : '뚜렷한 취향을 찾지 못했어요. 다른 사진을 올려보세요.',
+      });
+    },
+    onError: (error) => {
+      setNotice({
+        title: '사진 분석 실패',
+        description: error instanceof Error ? error.message : '사진 분석에 실패했습니다.',
         tone: 'red',
       });
     },
@@ -214,58 +258,87 @@ export function PreferenceSetupForm() {
         </div>
       </SetupBlock>
 
-      <SetupBlock title="Instagram 사진 취향">
-        <div className="flex items-center justify-between gap-4 border-y border-[color:var(--line)] py-4">
-          <div>
-            <div className="text-[15px] font-bold leading-5">연결 준비 중</div>
-            <div className="mt-1 text-[13px] font-medium leading-5 text-[color:var(--text-tertiary)]">
-              지금은 선택한 태그만 저장돼요.
+      <SetupBlock title="사진으로 취향 분석">
+        <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--text-tertiary)]">
+          좋아하는 장소·음식 사진을 올리면 취향을 자동으로 분석해요. (최대 10장)
+        </p>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            addPhotos(event.target.files);
+            event.target.value = '';
+          }}
+        />
+        <div className="flex flex-wrap gap-2">
+          {previews.map((url, index) => (
+            <div key={url} className="relative size-20 overflow-hidden rounded-[12px]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={url} alt="" className="size-full object-cover" />
+              <button
+                type="button"
+                onClick={() => removePhoto(index)}
+                aria-label="사진 제거"
+                className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-black/55 text-white"
+              >
+                <FiX className="size-3" aria-hidden />
+              </button>
             </div>
-          </div>
+          ))}
+          {photos.length < 10 ? (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex size-20 flex-col items-center justify-center gap-1 rounded-[12px] border border-dashed border-[#C9CDD2] text-[color:var(--text-tertiary)]"
+            >
+              <FiImage className="size-5" aria-hidden />
+              <span className="text-[11px] font-semibold">사진 추가</span>
+            </button>
+          ) : null}
+        </div>
+
+        {photos.length > 0 ? (
           <button
             type="button"
-            onClick={() =>
-              setForm((current) => ({
-                ...current,
-                instagramConnected: !current.instagramConnected,
-              }))
-            }
-            className={`h-8 w-14 rounded-full p-1 transition ${
-              form.instagramConnected ? 'bg-[color:var(--blue-600)]' : 'bg-slate-300'
-            }`}
-            aria-label="Instagram 연결 상태 전환"
+            onClick={() => analyzePhotosMutation.mutate(photos)}
+            disabled={analyzePhotosMutation.isPending}
+            className="mt-3 h-11 w-full rounded-[14px] bg-[color:var(--blue-50)] text-[14px] font-bold text-[color:var(--blue-700)] transition active:scale-[0.99] disabled:text-[color:var(--text-tertiary)] lg:max-w-[280px]"
           >
-            <span
-              className={`block size-6 rounded-full bg-white transition ${
-                form.instagramConnected ? 'translate-x-6' : ''
-              }`}
-            />
+            {analyzePhotosMutation.isPending
+              ? '분석 중…'
+              : `사진 ${photos.length}장으로 취향 분석하기`}
           </button>
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          {INSTAGRAM_TAGS.map((tag) => (
-            <button
-              key={tag}
-              type="button"
-              onClick={() =>
-                setForm((current) => ({
-                  ...current,
-                  instagramTags: current.instagramTags.includes(tag)
-                    ? current.instagramTags.filter((item) => item !== tag)
-                    : [...current.instagramTags, tag],
-                }))
-              }
-              className={`h-10 rounded-full px-4 text-[13px] font-bold ${
-                form.instagramTags.includes(tag)
-                  ? 'bg-[color:var(--blue-50)] text-[color:var(--blue-700)]'
-                  : 'bg-[color:var(--soft-bg)] text-[color:var(--text-tertiary)]'
-              }`}
-            >
-              {tag}
-            </button>
-          ))}
-        </div>
-        </SetupBlock>
+        ) : null}
+
+        {analyzedTags ? (
+          <div className="mt-3">
+            <div className="text-[12px] font-semibold text-[#8B95A1]">분석된 취향 태그</div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {[...analyzedTags.food, ...analyzedTags.mood, ...analyzedTags.environment].map(
+                (tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full bg-[color:var(--blue-50)] px-3 py-1 text-[13px] font-bold text-[color:var(--blue-700)]"
+                  >
+                    {TASTE_TAG_LABELS[tag] ?? tag}
+                  </span>
+                ),
+              )}
+              {analyzedTags.food.length +
+                analyzedTags.mood.length +
+                analyzedTags.environment.length ===
+              0 ? (
+                <span className="text-[13px] font-medium text-[color:var(--text-tertiary)]">
+                  뚜렷한 취향을 찾지 못했어요.
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </SetupBlock>
       </div>
 
       {notice ? (
@@ -294,6 +367,17 @@ export function PreferenceSetupForm() {
         ? current.transportModes.filter((item) => item !== value)
         : [...current.transportModes, value],
     }));
+  }
+
+  function addPhotos(files: FileList | null) {
+    if (!files) return;
+    const picked = Array.from(files).filter((file) => file.type.startsWith('image/'));
+    // 서버 업로드 한도(10장)에 맞춰 자른다.
+    setPhotos((current) => [...current, ...picked].slice(0, 10));
+  }
+
+  function removePhoto(index: number) {
+    setPhotos((current) => current.filter((_, item) => item !== index));
   }
 
   function themeStance(value: ThemePreference): ThemeStance | null {

@@ -14,8 +14,6 @@ const BASE_PROFILE: PreferenceProfileDto = {
   pace: 'balanced',
   activityIntensity: 'moderate',
   crowdPreference: 'balanced',
-  instagramConnected: false,
-  instagramTags: [],
 };
 
 describe('buildPreferenceText', () => {
