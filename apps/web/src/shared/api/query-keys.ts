@@ -3,7 +3,6 @@ export const queryKeys = {
     me: ['preferences', 'me'] as const,
   },
   trips: {
-    active: ['trips', 'active'] as const,
     members: (tripId: string) => ['trips', tripId, 'members'] as const,
     coordination: (tripId: string) => ['trips', tripId, 'coordination'] as const,
   },

@@ -9,6 +9,7 @@ import type { TripSummaryStatus, TripSummaryDto } from '@tripick/types';
 import { SessionGuard } from '@/entities/session';
 import { fetchPlannerTrips, TripSummaryCard } from '@/entities/trip-plan';
 import { DeleteTripButton } from '@/features/delete-trip';
+import { PreferenceSetupPrompt } from '@/features/prompt-preference-setup';
 import { DestinationSuggestions } from '@/widgets/destination-suggestions';
 import { queryKeys } from '@/shared/api/query-keys';
 import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
@@ -176,6 +177,7 @@ function TripsContent() {
 
         {!isLoading && !loadError ? <DestinationSuggestions /> : null}
       </PageContainer>
+      <PreferenceSetupPrompt />
     </AppFrame>
   );
 }

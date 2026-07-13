@@ -18,11 +18,10 @@ import { SessionGuard } from '@/entities/session';
 import { createTrip } from '@/entities/trip-plan';
 import { DestinationSearchInput, DestinationMapPicker } from '@/features/destination-search';
 import { queryKeys } from '@/shared/api/query-keys';
-import { Button, PlaceSearchPicker, SegmentToggle } from '@/shared/ui';
+import { Button, PlaceSearchPicker, SegmentToggle, TimeField } from '@/shared/ui';
 import { AppFrame } from '@/shared/ui/app-frame';
 
 import { FriendMemberPicker } from './friend-member-picker';
-import { TimeField } from './time-field';
 import { TripCreateLoading } from './trip-create-loading';
 
 import 'react-day-picker/style.css';

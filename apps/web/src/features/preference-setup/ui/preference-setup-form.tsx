@@ -1,38 +1,35 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type {
-  ActivityIntensity,
-  CompanionPreference,
-  CrowdPreference,
-  InterestPreference,
-  TransportPreference,
-  TravelPace,
-  TravelStylePreference,
-} from '@tripick/types';
+import { FiImage, FiThumbsDown, FiThumbsUp, FiX } from 'react-icons/fi';
+import type { TasteTagDto, ThemePreference, TransportPreference } from '@tripick/types';
 import {
   ACTIVITY_INTENSITY_OPTIONS,
-  COMPANION_OPTIONS,
   CROWD_OPTIONS,
-  INSTAGRAM_TAGS,
-  INTEREST_OPTIONS,
   PACE_OPTIONS,
+  TASTE_TAG_LABELS,
+  THEME_GROUPS,
   TRANSPORT_OPTIONS,
-  TRAVEL_STYLE_OPTIONS,
 } from '@/entities/preferences/model/options';
 import {
+  analyzePreferenceImages,
   DEFAULT_PREFERENCE_FORM,
+  deletePreferencePhoto,
   getMyPreferences,
   savePreferences,
   type PreferenceFormState,
 } from '@/entities/preferences/api/preferences-api';
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { startDemoSession } from '@/entities/session/api/auth-api';
-import { ensureActiveTrip } from '@/entities/trip/api/trip-api';
 import { queryKeys } from '@/shared/api/query-keys';
-import { InlineNotice, PrimaryButton, SegmentedOption } from '@/shared/ui/app-frame';
+import {
+  InlineNotice,
+  PrimaryButton,
+  SecondaryButton,
+  SegmentedOption,
+} from '@/shared/ui/app-frame';
+import { ConfirmDialog, TimeField, Toast } from '@/shared/ui';
 
 type Notice = {
   title: string;
@@ -40,14 +37,32 @@ type Notice = {
   tone: 'red' | 'green';
 };
 
+type ThemeStance = 'like' | 'dislike';
+
+/** 백엔드 업로드 제약과 동일하게 맞춘다 (FilesInterceptor 10장 · 10MB · jpeg/png/webp). */
+const MAX_PHOTOS = 10;
+const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+const ACCEPTED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
 export function PreferenceSetupForm() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const hydrated = useRef(false);
   const [form, setForm] = useState<PreferenceFormState>(DEFAULT_PREFERENCE_FORM);
-  const [hasSavedPreference, setHasSavedPreference] = useState(false);
   const [hasSession, setHasSession] = useState(() => Boolean(getStoredSession()));
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [toast, setToast] = useState<{ title: string; message: string } | null>(null);
+  const [photos, setPhotos] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
+  const [analyzedTags, setAnalyzedTags] = useState<TasteTagDto | null>(null);
+  // 서버(Object Storage)에 저장된 취향 사진 URL
+  const [savedPhotoUrls, setSavedPhotoUrls] = useState<string[]>([]);
+  // 추가/삭제 후 아직 분석에 반영되지 않은 사진이 있는지
+  const [photosDirty, setPhotosDirty] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  // 마지막으로 저장된(or 하이드레이트된) 폼 스냅샷 — 변경 여부 판단용
+  const [savedForm, setSavedForm] = useState<PreferenceFormState>(DEFAULT_PREFERENCE_FORM);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const preferenceQuery = useQuery({
     queryKey: queryKeys.preferences.me,
@@ -67,9 +82,29 @@ export function PreferenceSetupForm() {
       return;
     }
     hydrated.current = true;
-    setForm({ ...DEFAULT_PREFERENCE_FORM, ...preferenceQuery.data.profile });
-    setHasSavedPreference(true);
+    const nextForm = { ...DEFAULT_PREFERENCE_FORM, ...preferenceQuery.data.profile };
+    setForm(nextForm);
+    setSavedForm(nextForm);
+    // 이미 사진 분석으로 저장된 취향 태그가 있으면 그대로 노출
+    const tags = preferenceQuery.data.tasteTags;
+    if (tags && tags.food.length + tags.mood.length + tags.environment.length > 0) {
+      setAnalyzedTags(tags);
+    }
+    setSavedPhotoUrls(preferenceQuery.data.photoUrls ?? []);
   }, [preferenceQuery.data]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 2500);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  // 선택한 사진의 미리보기 URL 생성/해제
+  useEffect(() => {
+    const urls = photos.map((file) => URL.createObjectURL(file));
+    setPreviews(urls);
+    return () => urls.forEach((url) => URL.revokeObjectURL(url));
+  }, [photos]);
 
   useEffect(() => {
     if (preferenceQuery.error instanceof Error) {
@@ -82,39 +117,35 @@ export function PreferenceSetupForm() {
   }, [preferenceQuery.error]);
 
   const ready =
-    form.travelStyles.length > 0 &&
-    form.companions.length > 0 &&
+    form.likedThemes.length > 0 &&
     form.transportModes.length > 0 &&
-    form.wakeTime < form.sleepTime;
+    form.wakeTime !== form.sleepTime;
+
+  // 저장되지 않은 변경(폼 편집 or 미분석 사진)이 있는지. 분석된 사진은 이미 서버에 반영됨.
+  const dirty = JSON.stringify(form) !== JSON.stringify(savedForm) || photosDirty;
+
+  // 저장 전 페이지 이탈(새로고침·탭 닫기·주소 이동) 시 브라우저 경고
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
 
   const savePreferenceMutation = useMutation({
-    mutationFn: async ({
-      nextForm,
-    }: {
-      nextForm: PreferenceFormState;
-      shouldStayAfterSave: boolean;
-    }) => {
+    mutationFn: async (nextForm: PreferenceFormState) => {
       const session = getStoredSession() ?? (await startDemoSession());
-      const [preference, activeTrip] = await Promise.all([
-        savePreferences(session.tokens.accessToken, nextForm),
-        ensureActiveTrip(session.tokens.accessToken),
-      ]);
-      return { activeTrip, preference };
+      return savePreferences(session.tokens.accessToken, nextForm);
     },
-    onSuccess: ({ activeTrip, preference }, { shouldStayAfterSave }) => {
+    onSuccess: (preference, variables) => {
       queryClient.setQueryData(queryKeys.preferences.me, preference);
-      queryClient.setQueryData(queryKeys.trips.active, activeTrip);
       setHasSession(true);
-      setHasSavedPreference(true);
-      if (shouldStayAfterSave) {
-        setNotice({
-          title: '저장 완료',
-          description: '취향을 저장했습니다.',
-          tone: 'green',
-        });
-        return;
-      }
-      router.push('/friends');
+      setSavedForm(variables);
+      setNotice(null);
+      setToast({ title: '저장 완료', message: '취향을 저장했습니다.' });
     },
     onError: (error) => {
       setNotice({
@@ -125,211 +156,425 @@ export function PreferenceSetupForm() {
     },
   });
 
+  const analyzePhotosMutation = useMutation({
+    mutationFn: async (files: File[]) => {
+      const session = getStoredSession() ?? (await startDemoSession());
+      return analyzePreferenceImages(session.tokens.accessToken, files);
+    },
+    onSuccess: (result) => {
+      setHasSession(true);
+      setAnalyzedTags(result.tasteTags);
+      setSavedPhotoUrls(result.photoUrls);
+      setPhotos([]);
+      setPhotosDirty(false);
+      // 서버가 취향 태그·임베딩을 upsert 했으므로 캐시를 갱신
+      queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
+      const count =
+        result.tasteTags.food.length +
+        result.tasteTags.mood.length +
+        result.tasteTags.environment.length;
+      setNotice(null);
+      setToast({
+        title: '사진 분석 완료',
+        message:
+          count > 0
+            ? '사진에서 취향을 분석했어요.'
+            : '뚜렷한 취향을 찾지 못했어요. 다른 사진을 올려보세요.',
+      });
+    },
+    onError: (error) => {
+      setNotice({
+        title: '사진 분석 실패',
+        description: error instanceof Error ? error.message : '사진 분석에 실패했습니다.',
+        tone: 'red',
+      });
+    },
+  });
+
+  const deletePhotoMutation = useMutation({
+    mutationFn: async (url: string) => {
+      const session = getStoredSession() ?? (await startDemoSession());
+      return deletePreferencePhoto(session.tokens.accessToken, url);
+    },
+    onSuccess: (result) => {
+      setSavedPhotoUrls(result.photoUrls);
+      queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
+    },
+    onError: (error) => {
+      setNotice({
+        title: '사진 삭제 실패',
+        description: error instanceof Error ? error.message : '사진 삭제에 실패했습니다.',
+        tone: 'red',
+      });
+    },
+  });
+
   function handleSubmit() {
     if (!ready) {
       setNotice({
         title: '확인 필요',
-        description: '취향, 동행 유형, 이동수단을 하나 이상 고르고 시간을 확인해주세요.',
+        description:
+          '선호 테마와 이동수단을 하나 이상 고르고, 취침·기상 시각을 다르게 설정해주세요.',
+        tone: 'red',
+      });
+      return;
+    }
+    if (photos.length > 0 && photosDirty) {
+      setNotice({
+        title: '사진 분석 먼저',
+        description: '추가한 사진을 “취향 분석하기”로 먼저 반영한 뒤 저장해주세요.',
         tone: 'red',
       });
       return;
     }
     setNotice(null);
-    savePreferenceMutation.mutate({
-      nextForm: form,
-      shouldStayAfterSave: hasSavedPreference,
-    });
+    savePreferenceMutation.mutate(form);
+  }
+
+  if (hasSession && preferenceQuery.isLoading) {
+    return (
+      <div className="space-y-4" aria-hidden>
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div
+            key={index}
+            className="h-20 animate-pulse rounded-[16px] bg-[color:var(--soft-bg)]"
+          />
+        ))}
+      </div>
+    );
   }
 
   return (
     <div className="space-y-8">
-      <SetupBlock title="어떤 여행을 좋아하세요?">
-        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3">
-          {TRAVEL_STYLE_OPTIONS.map((option) => (
-            <SegmentedOption
-              key={option.value}
-              active={form.travelStyles.includes(option.value)}
-              label={option.label}
-              onClick={() => toggleArray(option.value, 'travelStyles')}
-            />
-          ))}
-        </div>
-      </SetupBlock>
-
-      <SetupBlock title="관심 있는 테마를 모두 골라주세요">
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
-          {INTEREST_OPTIONS.map((option) => (
-            <SegmentedOption
-              key={option.value}
-              active={form.interests.includes(option.value)}
-              label={option.label}
-              onClick={() => toggleArray(option.value, 'interests')}
-            />
-          ))}
-        </div>
-      </SetupBlock>
-
-      <SetupBlock title="누구와 여행하나요?">
-        <div className="grid grid-cols-4 gap-2 lg:max-w-[520px]">
-          {COMPANION_OPTIONS.map((option) => (
-            <SegmentedOption
-              key={option.value}
-              active={form.companions.includes(option.value)}
-              label={option.label}
-              onClick={() => toggleArray(option.value, 'companions')}
-            />
-          ))}
-        </div>
-      </SetupBlock>
-
-      <SetupBlock title="취침 / 기상 시간">
-        <div className="grid grid-cols-2 gap-3 lg:max-w-[520px]">
-          <TimeField
-            label="취침"
-            value={form.sleepTime}
-            onChange={(sleepTime) => setForm((current) => ({ ...current, sleepTime }))}
-          />
-          <TimeField
-            label="기상"
-            value={form.wakeTime}
-            onChange={(wakeTime) => setForm((current) => ({ ...current, wakeTime }))}
-          />
-        </div>
-      </SetupBlock>
-
-      <SetupBlock title="선호 이동 수단">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:max-w-[640px]">
-          {TRANSPORT_OPTIONS.map((option) => (
-            <SegmentedOption
-              key={option.value}
-              active={form.transportModes.includes(option.value)}
-              label={option.label}
-              onClick={() => toggleArray(option.value, 'transportModes')}
-            />
-          ))}
-        </div>
-      </SetupBlock>
-
-      <SetupBlock title="여행 페이스">
-        <div className="grid grid-cols-3 gap-2 lg:max-w-[520px]">
-          {PACE_OPTIONS.map((option) => (
-            <ChoiceCard
-              key={option.value}
-              active={form.pace === option.value}
-              label={option.label}
-              hint={option.hint}
-              onClick={() => setSingle('pace', option.value)}
-            />
-          ))}
-        </div>
-      </SetupBlock>
-
-      <SetupBlock title="활동 강도">
-        <div className="grid grid-cols-3 gap-2 lg:max-w-[520px]">
-          {ACTIVITY_INTENSITY_OPTIONS.map((option) => (
-            <ChoiceCard
-              key={option.value}
-              active={form.activityIntensity === option.value}
-              label={option.label}
-              hint={option.hint}
-              onClick={() => setSingle('activityIntensity', option.value)}
-            />
-          ))}
-        </div>
-      </SetupBlock>
-
-      <SetupBlock title="어떤 분위기를 선호하세요?">
-        <div className="grid grid-cols-3 gap-2 lg:max-w-[520px]">
-          {CROWD_OPTIONS.map((option) => (
-            <ChoiceCard
-              key={option.value}
-              active={form.crowdPreference === option.value}
-              label={option.label}
-              hint={option.hint}
-              onClick={() => setSingle('crowdPreference', option.value)}
-            />
-          ))}
-        </div>
-      </SetupBlock>
-
-      <SetupBlock title="Instagram 사진 취향">
-        <div className="flex items-center justify-between gap-4 border-y border-[color:var(--line)] py-4">
-          <div>
-            <div className="text-[15px] font-bold leading-5">연결 준비 중</div>
-            <div className="mt-1 text-[13px] font-medium leading-5 text-[color:var(--text-tertiary)]">
-              지금은 선택한 태그만 저장돼요.
+      <SetupBlock title="테마/장소 선호도">
+        <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--text-tertiary)]">
+          좋아하는 건 선호, 피하고 싶은 건 불호로 골라주세요. 고르지 않으면 중립이에요.
+        </p>
+        <div className="space-y-4">
+          {THEME_GROUPS.map((group) => (
+            <div key={group.key}>
+              <h3 className="mb-1.5 text-[13px] font-bold leading-5 text-[color:var(--text-secondary)]">
+                {group.label}
+              </h3>
+              <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-2">
+                {group.themes.map((theme) => (
+                  <ThemeStanceRow
+                    key={theme.value}
+                    label={theme.label}
+                    examples={theme.examples}
+                    stance={themeStance(theme.value)}
+                    onSelect={(stance) => setThemeStance(theme.value, stance)}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-          <button
-            type="button"
-            onClick={() =>
-              setForm((current) => ({
-                ...current,
-                instagramConnected: !current.instagramConnected,
-              }))
-            }
-            className={`h-8 w-14 rounded-full p-1 transition ${
-              form.instagramConnected ? 'bg-[color:var(--blue-600)]' : 'bg-slate-300'
-            }`}
-            aria-label="Instagram 연결 상태 전환"
-          >
-            <span
-              className={`block size-6 rounded-full bg-white transition ${
-                form.instagramConnected ? 'translate-x-6' : ''
-              }`}
-            />
-          </button>
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 lg:max-w-[420px]">
-          {INSTAGRAM_TAGS.map((tag) => (
-            <button
-              key={tag}
-              type="button"
-              onClick={() =>
-                setForm((current) => ({
-                  ...current,
-                  instagramTags: current.instagramTags.includes(tag)
-                    ? current.instagramTags.filter((item) => item !== tag)
-                    : [...current.instagramTags, tag],
-                }))
-              }
-              className={`h-10 rounded-full px-4 text-[13px] font-bold ${
-                form.instagramTags.includes(tag)
-                  ? 'bg-[color:var(--blue-50)] text-[color:var(--blue-700)]'
-                  : 'bg-[color:var(--soft-bg)] text-[color:var(--text-tertiary)]'
-              }`}
-            >
-              {tag}
-            </button>
           ))}
         </div>
       </SetupBlock>
+
+      <div className="grid gap-x-8 gap-y-8 lg:grid-cols-2">
+        <SetupBlock title="취침 / 기상 시간">
+          <div className="grid grid-cols-2 gap-3">
+            <TimeField
+              variant="soft"
+              label="취침"
+              value={form.sleepTime}
+              onChange={(sleepTime) => setForm((current) => ({ ...current, sleepTime }))}
+            />
+            <TimeField
+              variant="soft"
+              label="기상"
+              value={form.wakeTime}
+              onChange={(wakeTime) => setForm((current) => ({ ...current, wakeTime }))}
+            />
+          </div>
+        </SetupBlock>
+
+        <SetupBlock title="선호 이동 수단">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {TRANSPORT_OPTIONS.map((option) => (
+              <SegmentedOption
+                key={option.value}
+                active={form.transportModes.includes(option.value)}
+                label={option.label}
+                onClick={() => toggleTransport(option.value)}
+              />
+            ))}
+          </div>
+        </SetupBlock>
+
+        <SetupBlock title="여행 페이스">
+          <div className="grid grid-cols-3 gap-2">
+            {PACE_OPTIONS.map((option) => (
+              <ChoiceCard
+                key={option.value}
+                active={form.pace === option.value}
+                label={option.label}
+                hint={option.hint}
+                onClick={() => setSingle('pace', option.value)}
+              />
+            ))}
+          </div>
+        </SetupBlock>
+
+        <SetupBlock title="활동 강도">
+          <div className="grid grid-cols-3 gap-2">
+            {ACTIVITY_INTENSITY_OPTIONS.map((option) => (
+              <ChoiceCard
+                key={option.value}
+                active={form.activityIntensity === option.value}
+                label={option.label}
+                hint={option.hint}
+                onClick={() => setSingle('activityIntensity', option.value)}
+              />
+            ))}
+          </div>
+        </SetupBlock>
+
+        <SetupBlock title="어떤 분위기를 선호하세요?">
+          <div className="grid grid-cols-3 gap-2">
+            {CROWD_OPTIONS.map((option) => (
+              <ChoiceCard
+                key={option.value}
+                active={form.crowdPreference === option.value}
+                label={option.label}
+                hint={option.hint}
+                onClick={() => setSingle('crowdPreference', option.value)}
+              />
+            ))}
+          </div>
+        </SetupBlock>
+
+        <SetupBlock title="사진으로 취향 분석">
+          <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--text-tertiary)]">
+            좋아하는 장소·음식 사진을 올리면 취향을 자동으로 분석해요. (최대 10장)
+          </p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            className="hidden"
+            onChange={(event) => {
+              addPhotos(event.target.files);
+              event.target.value = '';
+            }}
+          />
+          {savedPhotoUrls.length > 0 ? (
+            <div className="mb-3">
+              <div className="mb-1.5 text-[12px] font-semibold text-[#8B95A1]">
+                저장된 사진 {savedPhotoUrls.length}장
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {savedPhotoUrls.map((url) => (
+                  <div key={url} className="relative size-20 overflow-hidden rounded-[12px]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt="" className="size-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => deletePhotoMutation.mutate(url)}
+                      disabled={deletePhotoMutation.isPending}
+                      aria-label="사진 삭제"
+                      className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-black/55 text-white disabled:opacity-50"
+                    >
+                      <FiX className="size-3" aria-hidden />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <div
+            onDragOver={(event) => event.preventDefault()}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setDragActive(true);
+            }}
+            onDragLeave={(event) => {
+              // 자식 요소로 이동할 때 깜빡임 방지
+              if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                setDragActive(false);
+              }
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragActive(false);
+              addPhotos(event.dataTransfer.files);
+            }}
+            className={`rounded-[14px] border border-dashed p-3 transition ${
+              dragActive
+                ? 'border-[color:var(--blue-600)] bg-[color:var(--blue-50)]'
+                : 'border-[#E5E8EB]'
+            }`}
+          >
+            <div className="flex flex-wrap gap-2">
+              {previews.map((url, index) => (
+                <div key={url} className="relative size-20 overflow-hidden rounded-[12px]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt="" className="size-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removePhoto(index)}
+                    aria-label="사진 제거"
+                    className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-black/55 text-white"
+                  >
+                    <FiX className="size-3" aria-hidden />
+                  </button>
+                </div>
+              ))}
+              {photos.length < 10 ? (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex size-20 flex-col items-center justify-center gap-1 rounded-[12px] border border-dashed border-[#C9CDD2] text-[color:var(--text-tertiary)]"
+                >
+                  <FiImage className="size-5" aria-hidden />
+                  <span className="text-[11px] font-semibold">사진 추가</span>
+                </button>
+              ) : null}
+            </div>
+            <p className="mt-2 text-[12px] font-medium text-[color:var(--text-tertiary)]">
+              사진을 여기로 끌어다 놓아도 돼요.
+            </p>
+          </div>
+
+          {photos.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => analyzePhotosMutation.mutate(photos)}
+              disabled={analyzePhotosMutation.isPending}
+              className="mt-3 h-11 w-full rounded-[14px] bg-[color:var(--blue-50)] text-[14px] font-bold text-[color:var(--blue-700)] transition active:scale-[0.99] disabled:text-[color:var(--text-tertiary)] lg:max-w-[280px]"
+            >
+              {analyzePhotosMutation.isPending
+                ? '분석 중…'
+                : `사진 ${photos.length}장으로 취향 분석하기`}
+            </button>
+          ) : null}
+
+          {analyzedTags ? (
+            <div className="mt-3">
+              <div className="text-[12px] font-semibold text-[#8B95A1]">분석된 취향 태그</div>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {[...analyzedTags.food, ...analyzedTags.mood, ...analyzedTags.environment].map(
+                  (tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full bg-[color:var(--blue-50)] px-3 py-1 text-[13px] font-bold text-[color:var(--blue-700)]"
+                    >
+                      {TASTE_TAG_LABELS[tag] ?? tag}
+                    </span>
+                  ),
+                )}
+                {analyzedTags.food.length +
+                  analyzedTags.mood.length +
+                  analyzedTags.environment.length ===
+                0 ? (
+                  <span className="text-[13px] font-medium text-[color:var(--text-tertiary)]">
+                    뚜렷한 취향을 찾지 못했어요.
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </SetupBlock>
+      </div>
 
       {notice ? (
         <InlineNotice title={notice.title} description={notice.description} tone={notice.tone} />
       ) : null}
-      <div className="lg:max-w-[360px]">
-        <PrimaryButton disabled={savePreferenceMutation.isPending || !ready} onClick={handleSubmit}>
-          {savePreferenceMutation.isPending
-            ? '저장 중'
-            : hasSavedPreference
-              ? '취향 저장'
-              : '취향 저장하고 멤버 추가'}
-        </PrimaryButton>
+      {toast ? (
+        <Toast
+          title={toast.title}
+          message={toast.message}
+          tone="success"
+          onClose={() => setToast(null)}
+        />
+      ) : null}
+      <div className="border-t border-[color:var(--line)] pt-6">
+        <div className="space-y-2.5 lg:mx-auto lg:max-w-[420px]">
+          <PrimaryButton
+            disabled={savePreferenceMutation.isPending || !ready}
+            onClick={handleSubmit}
+          >
+            {savePreferenceMutation.isPending ? '저장 중' : '취향 저장'}
+          </PrimaryButton>
+          <SecondaryButton onClick={() => setResetDialogOpen(true)}>
+            기본값 되돌리기
+          </SecondaryButton>
+        </div>
       </div>
+
+      <ConfirmDialog
+        open={resetDialogOpen}
+        title="기본값으로 되돌릴까요?"
+        description="선택한 취향이 모두 초기화돼요. 저장하기 전까지는 반영되지 않아요."
+        confirmLabel="되돌리기"
+        cancelLabel="취소"
+        danger
+        onConfirm={resetToDefaults}
+        onCancel={() => setResetDialogOpen(false)}
+      />
     </div>
   );
 
-  function toggleArray(
-    value: TravelStylePreference | CompanionPreference | TransportPreference | InterestPreference,
-    key: 'travelStyles' | 'companions' | 'transportModes' | 'interests',
-  ) {
+  function resetToDefaults() {
+    setForm(DEFAULT_PREFERENCE_FORM);
+    setPhotos([]);
+    setPhotosDirty(false);
+    setNotice(null);
+    setResetDialogOpen(false);
+  }
+
+  function toggleTransport(value: TransportPreference) {
+    setForm((current) => ({
+      ...current,
+      transportModes: current.transportModes.includes(value)
+        ? current.transportModes.filter((item) => item !== value)
+        : [...current.transportModes, value],
+    }));
+  }
+
+  function addPhotos(files: FileList | null) {
+    if (!files) return;
+    const incoming = Array.from(files);
+    const valid = incoming.filter(
+      (file) => ACCEPTED_PHOTO_TYPES.includes(file.type) && file.size <= MAX_PHOTO_BYTES,
+    );
+    if (valid.length < incoming.length) {
+      setNotice({
+        title: '일부 사진 제외',
+        description: 'JPG·PNG·WEBP 형식의 10MB 이하 사진만 올릴 수 있어요.',
+        tone: 'red',
+      });
+    }
+    if (valid.length === 0) return;
+    // 서버 업로드 한도(10장)에 맞춰 자른다.
+    setPhotos((current) => [...current, ...valid].slice(0, MAX_PHOTOS));
+    setPhotosDirty(true);
+  }
+
+  function removePhoto(index: number) {
+    setPhotos((current) => current.filter((_, item) => item !== index));
+    setPhotosDirty(true);
+  }
+
+  function themeStance(value: ThemePreference): ThemeStance | null {
+    if (form.likedThemes.includes(value)) return 'like';
+    if (form.dislikedThemes.includes(value)) return 'dislike';
+    return null;
+  }
+
+  function setThemeStance(value: ThemePreference, stance: ThemeStance) {
     setForm((current) => {
-      const values = current[key] as string[];
-      const next = values.includes(value)
-        ? values.filter((item) => item !== value)
-        : [...values, value];
-      return { ...current, [key]: next };
+      const liked = current.likedThemes.filter((item) => item !== value);
+      const disliked = current.dislikedThemes.filter((item) => item !== value);
+      // 같은 값을 다시 누르면 중립으로 해제, 다른 값이면 해당 진영으로 이동.
+      if (themeStance(value) === stance) {
+        return { ...current, likedThemes: liked, dislikedThemes: disliked };
+      }
+      return stance === 'like'
+        ? { ...current, likedThemes: [...liked, value], dislikedThemes: disliked }
+        : { ...current, likedThemes: liked, dislikedThemes: [...disliked, value] };
     });
   }
 
@@ -377,24 +622,65 @@ function SetupBlock({ title, children }: { title: string; children: React.ReactN
   );
 }
 
-function TimeField({
+function ThemeStanceRow({
   label,
-  value,
-  onChange,
+  examples,
+  stance,
+  onSelect,
 }: {
   label: string;
-  value: string;
-  onChange: (value: string) => void;
+  examples: string[];
+  stance: ThemeStance | null;
+  onSelect: (stance: ThemeStance) => void;
 }) {
   return (
-    <label className="block rounded-[16px] bg-[color:var(--soft-bg)] px-4 py-3">
-      <span className="block text-[13px] font-bold text-[color:var(--text-tertiary)]">{label}</span>
-      <input
-        type="time"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-1 h-8 w-full bg-transparent text-[20px] font-black leading-7 outline-none"
-      />
-    </label>
+    <div className="flex items-center justify-between gap-2 rounded-[12px] bg-[color:var(--soft-bg)] px-3 py-1.5">
+      <div className="flex min-w-0 items-baseline gap-1.5">
+        <span className="shrink-0 text-[14px] font-bold leading-6 text-[#191F28]">{label}</span>
+        <span className="truncate text-[11px] font-medium text-[color:var(--text-tertiary)]">
+          {examples.join(' · ')}
+        </span>
+      </div>
+      <div className="flex shrink-0 gap-1">
+        <StanceButton tone="like" active={stance === 'like'} onClick={() => onSelect('like')} />
+        <StanceButton
+          tone="dislike"
+          active={stance === 'dislike'}
+          onClick={() => onSelect('dislike')}
+        />
+      </div>
+    </div>
+  );
+}
+
+function StanceButton({
+  tone,
+  active,
+  onClick,
+}: {
+  tone: ThemeStance;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const like = tone === 'like';
+  const label = like ? '선호' : '불호';
+  const activeClass = like ? 'bg-[color:var(--blue-600)] text-white' : 'bg-[#F04452] text-white';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={label}
+      title={label}
+      className={`flex size-7 items-center justify-center rounded-full transition ${
+        active ? activeClass : 'bg-white text-[color:var(--text-tertiary)]'
+      }`}
+    >
+      {like ? (
+        <FiThumbsUp className="size-3.5" aria-hidden />
+      ) : (
+        <FiThumbsDown className="size-3.5" aria-hidden />
+      )}
+    </button>
   );
 }

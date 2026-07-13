@@ -69,13 +69,11 @@ describe('Travel AI planner E2E', () => {
         confidence: 0.92,
       },
       profile: {
-        travelStyles: ['healing', 'food_trip'],
-        companions: ['friends'],
+        likedThemes: ['cafe_dessert', 'local_food'],
+        dislikedThemes: ['themepark'],
         wakeTime: '09:00',
         sleepTime: '22:00',
         transportModes: ['transit'],
-        instagramConnected: false,
-        instagramTags: ['beach', 'cafe'],
       },
     });
 

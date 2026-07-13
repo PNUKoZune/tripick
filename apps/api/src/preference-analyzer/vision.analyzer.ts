@@ -6,7 +6,7 @@ import type { TasteTagDto } from '@tripick/types';
 /**
  * Vision Preference Analyzer
  *
- * 이미지(직접 업로드 or Instagram) → Taste Tag 추출
+ * 이미지(사용자 직접 업로드) → Taste Tag 추출
  * MVP: Local LLM (vision 모델) 또는 Triton Inference Server 사용
  *
  * 분류:

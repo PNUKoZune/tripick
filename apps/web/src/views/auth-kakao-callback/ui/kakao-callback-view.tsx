@@ -33,7 +33,7 @@ export function KakaoCallbackView() {
       const session = decodeSession(payload);
       storeSession(session);
       window.history.replaceState(null, '', '/auth/kakao/callback');
-      router.replace('/preferences');
+      router.replace('/');
     } catch {
       setState({ status: 'error', message: '카카오 로그인 정보를 저장하지 못했습니다.' });
     }
@@ -43,7 +43,7 @@ export function KakaoCallbackView() {
     setDemoLoading(true);
     try {
       await startDemoSession();
-      router.replace('/preferences');
+      router.replace('/');
     } catch (error) {
       setState({
         status: 'error',

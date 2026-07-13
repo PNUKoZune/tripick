@@ -15,17 +15,14 @@ const EMPTY_TASTE_TAGS: TasteTagDto = {
 };
 
 const DEFAULT_PROFILE: PreferenceProfileDto = {
-  travelStyles: [],
-  companions: [],
   sleepTime: '23:00',
   wakeTime: '07:30',
   transportModes: [],
-  interests: [],
+  likedThemes: [],
+  dislikedThemes: [],
   pace: 'balanced',
   activityIntensity: 'moderate',
   crowdPreference: 'balanced',
-  instagramConnected: false,
-  instagramTags: [],
 };
 
 @Injectable()
@@ -39,6 +36,14 @@ export class PreferencesService {
 
   async findByUser(userId: string): Promise<PreferenceEntity | null> {
     return this.repo.findOneBy({ userId });
+  }
+
+  /** 취향 사진 URL 목록만 교체. photoUrls 는 임베딩에 영향 없어 재임베딩 불필요. */
+  async setPhotoUrls(userId: string, urls: string[]): Promise<PreferenceEntity | null> {
+    const pref = await this.repo.findOneBy({ userId });
+    if (!pref) return null;
+    pref.photoUrls = urls;
+    return this.repo.save(pref);
   }
 
   /** 검색 개인화용 저장된 취향 벡터 조회 */
@@ -66,12 +71,13 @@ export class PreferencesService {
       ...DEFAULT_PROFILE,
       ...(pref?.profile ?? {}),
       ...(dto?.profile ?? {}),
-      travelStyles: [...new Set(dto?.profile?.travelStyles ?? pref?.profile?.travelStyles ?? [])],
-      companions: [...new Set(dto?.profile?.companions ?? pref?.profile?.companions ?? [])],
       transportModes: [
         ...new Set(dto?.profile?.transportModes ?? pref?.profile?.transportModes ?? []),
       ],
-      interests: [...new Set(dto?.profile?.interests ?? pref?.profile?.interests ?? [])],
+      likedThemes: [...new Set(dto?.profile?.likedThemes ?? pref?.profile?.likedThemes ?? [])],
+      dislikedThemes: [
+        ...new Set(dto?.profile?.dislikedThemes ?? pref?.profile?.dislikedThemes ?? []),
+      ],
       pace: dto?.profile?.pace ?? pref?.profile?.pace ?? DEFAULT_PROFILE.pace,
       activityIntensity:
         dto?.profile?.activityIntensity ??
@@ -81,22 +87,24 @@ export class PreferencesService {
         dto?.profile?.crowdPreference ??
         pref?.profile?.crowdPreference ??
         DEFAULT_PROFILE.crowdPreference,
-      instagramTags: [
-        ...new Set(dto?.profile?.instagramTags ?? pref?.profile?.instagramTags ?? []),
-      ],
-      instagramConnected:
-        dto?.profile?.instagramConnected ??
-        pref?.profile?.instagramConnected ??
-        DEFAULT_PROFILE.instagramConnected,
       sleepTime: dto?.profile?.sleepTime ?? pref?.profile?.sleepTime ?? DEFAULT_PROFILE.sleepTime,
       wakeTime: dto?.profile?.wakeTime ?? pref?.profile?.wakeTime ?? DEFAULT_PROFILE.wakeTime,
     };
 
+    // photoUrls 는 지정된 경우에만 통째로 교체, 아니면 기존 유지
+    const nextPhotoUrls = dto?.photoUrls ?? pref?.photoUrls ?? [];
+
     if (!pref) {
-      pref = this.repo.create({ userId, tasteTags: nextTags, profile: nextProfile });
+      pref = this.repo.create({
+        userId,
+        tasteTags: nextTags,
+        profile: nextProfile,
+        photoUrls: nextPhotoUrls,
+      });
     } else {
       pref.tasteTags = nextTags;
       pref.profile = nextProfile;
+      pref.photoUrls = nextPhotoUrls;
     }
 
     // 취향 태그 + 프로필을 임베딩해 preference_embeddings 에 유저당 1행으로 저장 → 검색 개인화 루프
