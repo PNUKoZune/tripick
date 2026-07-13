@@ -33,6 +33,7 @@ import { startDemoSession } from '@/entities/session/api/auth-api';
 import { ensureActiveTrip } from '@/entities/trip/api/trip-api';
 import { queryKeys } from '@/shared/api/query-keys';
 import { InlineNotice, PrimaryButton, SegmentedOption } from '@/shared/ui/app-frame';
+import { TimeField } from '@/shared/ui';
 
 type Notice = {
   title: string;
@@ -185,11 +186,13 @@ export function PreferenceSetupForm() {
       <SetupBlock title="취침 / 기상 시간">
         <div className="grid grid-cols-2 gap-3 lg:max-w-[520px]">
           <TimeField
+            variant="soft"
             label="취침"
             value={form.sleepTime}
             onChange={(sleepTime) => setForm((current) => ({ ...current, sleepTime }))}
           />
           <TimeField
+            variant="soft"
             label="기상"
             value={form.wakeTime}
             onChange={(wakeTime) => setForm((current) => ({ ...current, wakeTime }))}
@@ -374,27 +377,5 @@ function SetupBlock({ title, children }: { title: string; children: React.ReactN
       <h2 className="mb-3 text-[18px] font-black leading-6">{title}</h2>
       {children}
     </section>
-  );
-}
-
-function TimeField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="block rounded-[16px] bg-[color:var(--soft-bg)] px-4 py-3">
-      <span className="block text-[13px] font-bold text-[color:var(--text-tertiary)]">{label}</span>
-      <input
-        type="time"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-1 h-8 w-full bg-transparent text-[20px] font-black leading-7 outline-none"
-      />
-    </label>
   );
 }
