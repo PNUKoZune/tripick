@@ -8,6 +8,7 @@ import type { ItineraryItemDto } from '@tripick/types';
 describe('PlannerService hard constraints', () => {
   it('rebuilds an invalid AI draft with deterministic CRAG fallback before saving', async () => {
     const harness = createHarness();
+    // 1회차(AI 초안)는 제약 위반, 이후(폴백 초안)는 통과하도록 구성한다.
     harness.constraintEngine.validate
       .mockResolvedValueOnce({ valid: false, issues: ['AI route gap'], items: [] })
       .mockImplementation(async (items: ItineraryItemDto[]) => ({ valid: true, issues: [], items }));
@@ -15,10 +16,15 @@ describe('PlannerService hard constraints', () => {
     const result = await harness.service.generateItinerary(TRIP.id);
 
     expect(result).toHaveLength(1);
+    // AI 초안 검증(실패) + 폴백 초안 검증(통과)으로 최소 2회 호출 → 재구성 경로가 실행됐음을 증명.
+    expect(harness.constraintEngine.validate.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(harness.itineraryService.replaceTripItems).toHaveBeenCalledTimes(1);
+
     const stored = harness.itineraryService.replaceTripItems.mock.calls[0]?.[1] ?? [];
-    expect(stored[0]?.memo).toContain('AI planner fallback');
-    expect(stored[0]?.memo).toContain('CRAG 후보 순위 기반 배치');
+    expect(stored).toHaveLength(1);
+    expect(stored[0]?.name).toBe('광안리 카페');
+    // memo 는 사용자 메모 공간이라 생성 단계 AI 추론을 저장하지 않는다(의도된 동작).
+    expect(stored[0]?.memo).toBeUndefined();
     expect(harness.tripsRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: 'confirmed' }));
   });
 
