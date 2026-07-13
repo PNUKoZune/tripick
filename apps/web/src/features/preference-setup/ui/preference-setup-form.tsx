@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ActivityIntensity,
@@ -30,7 +29,6 @@ import {
 } from '@/entities/preferences/api/preferences-api';
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { startDemoSession } from '@/entities/session/api/auth-api';
-import { ensureActiveTrip } from '@/entities/trip/api/trip-api';
 import { queryKeys } from '@/shared/api/query-keys';
 import { InlineNotice, PrimaryButton, SegmentedOption } from '@/shared/ui/app-frame';
 import { TimeField } from '@/shared/ui';
@@ -42,11 +40,9 @@ type Notice = {
 };
 
 export function PreferenceSetupForm() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const hydrated = useRef(false);
   const [form, setForm] = useState<PreferenceFormState>(DEFAULT_PREFERENCE_FORM);
-  const [hasSavedPreference, setHasSavedPreference] = useState(false);
   const [hasSession, setHasSession] = useState(() => Boolean(getStoredSession()));
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -69,7 +65,6 @@ export function PreferenceSetupForm() {
     }
     hydrated.current = true;
     setForm({ ...DEFAULT_PREFERENCE_FORM, ...preferenceQuery.data.profile });
-    setHasSavedPreference(true);
   }, [preferenceQuery.data]);
 
   useEffect(() => {
@@ -89,33 +84,18 @@ export function PreferenceSetupForm() {
     form.wakeTime < form.sleepTime;
 
   const savePreferenceMutation = useMutation({
-    mutationFn: async ({
-      nextForm,
-    }: {
-      nextForm: PreferenceFormState;
-      shouldStayAfterSave: boolean;
-    }) => {
+    mutationFn: async (nextForm: PreferenceFormState) => {
       const session = getStoredSession() ?? (await startDemoSession());
-      const [preference, activeTrip] = await Promise.all([
-        savePreferences(session.tokens.accessToken, nextForm),
-        ensureActiveTrip(session.tokens.accessToken),
-      ]);
-      return { activeTrip, preference };
+      return savePreferences(session.tokens.accessToken, nextForm);
     },
-    onSuccess: ({ activeTrip, preference }, { shouldStayAfterSave }) => {
+    onSuccess: (preference) => {
       queryClient.setQueryData(queryKeys.preferences.me, preference);
-      queryClient.setQueryData(queryKeys.trips.active, activeTrip);
       setHasSession(true);
-      setHasSavedPreference(true);
-      if (shouldStayAfterSave) {
-        setNotice({
-          title: '저장 완료',
-          description: '취향을 저장했습니다.',
-          tone: 'green',
-        });
-        return;
-      }
-      router.push('/friends');
+      setNotice({
+        title: '저장 완료',
+        description: '취향을 저장했습니다.',
+        tone: 'green',
+      });
     },
     onError: (error) => {
       setNotice({
@@ -136,10 +116,7 @@ export function PreferenceSetupForm() {
       return;
     }
     setNotice(null);
-    savePreferenceMutation.mutate({
-      nextForm: form,
-      shouldStayAfterSave: hasSavedPreference,
-    });
+    savePreferenceMutation.mutate(form);
   }
 
   return (
@@ -313,11 +290,7 @@ export function PreferenceSetupForm() {
       ) : null}
       <div className="lg:max-w-[360px]">
         <PrimaryButton disabled={savePreferenceMutation.isPending || !ready} onClick={handleSubmit}>
-          {savePreferenceMutation.isPending
-            ? '저장 중'
-            : hasSavedPreference
-              ? '취향 저장'
-              : '취향 저장하고 멤버 추가'}
+          {savePreferenceMutation.isPending ? '저장 중' : '취향 저장'}
         </PrimaryButton>
       </div>
     </div>

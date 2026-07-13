@@ -34,7 +34,7 @@ export function AuthStartActions() {
     setNotice(null);
     try {
       await startDemoSession();
-      router.push('/preferences');
+      router.push('/');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : '임시 세션을 만들지 못했습니다.');
     } finally {
