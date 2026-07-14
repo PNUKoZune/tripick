@@ -247,6 +247,7 @@ export class PlannerService {
               sameDayPrevious.coordinates,
               seed.coordinates,
               trip.transportMode,
+              currentAt, // 이전 장소를 떠나는 시각(대중교통 시간표 기준)
             )
           : 0;
 
@@ -529,10 +530,11 @@ export class PlannerService {
     from: PlaceDto['coordinates'],
     to: PlaceDto['coordinates'],
     transportMode: TripEntity['transportMode'],
+    departAt?: Date,
   ): Promise<number> {
     const eta = transportMode === 'car'
-      ? await this.routeHelper.getDrivingEta(from, to)
-      : await this.routeHelper.getTransitEta(from, to);
+      ? await this.routeHelper.getDrivingEta(from, to, departAt)
+      : await this.routeHelper.getTransitEta(from, to, departAt);
     return Math.max(15, Math.ceil(eta.durationSec / 60));
   }
 

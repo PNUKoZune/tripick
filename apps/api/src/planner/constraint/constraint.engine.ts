@@ -54,12 +54,14 @@ export class ConstraintEngine {
 
       if (current.tripId !== next.tripId || current.day !== next.day) continue;
 
+      const currentEnd = new Date(current.scheduledAt).getTime() + current.durationMin * 60000;
+      const departAt = new Date(currentEnd); // 앞 일정 종료 = 다음 장소로 출발하는 시각
+
       const eta = options.transportMode === 'car'
-        ? await this.routeHelper.getDrivingEta(current.coordinates, next.coordinates)
-        : await this.routeHelper.getTransitEta(current.coordinates, next.coordinates);
+        ? await this.routeHelper.getDrivingEta(current.coordinates, next.coordinates, departAt)
+        : await this.routeHelper.getTransitEta(current.coordinates, next.coordinates, departAt);
 
       const etaMin = Math.ceil(eta.durationSec / 60);
-      const currentEnd = new Date(current.scheduledAt).getTime() + current.durationMin * 60000;
       const nextStart = new Date(next.scheduledAt).getTime();
       const bufferMs = nextStart - currentEnd;
 

@@ -374,14 +374,24 @@ export class MainPlannerService {
     const warnings: string[] = [];
 
     if (prev) {
-      const inbound = await this.travelMinutes(trip, prev.coordinates, item.coordinates);
+      const inbound = await this.travelMinutes(
+        trip,
+        prev.coordinates,
+        item.coordinates,
+        this.departureFrom(prev),
+      );
       item.travelTimeMin = inbound;
       this.pushGapWarning(warnings, prev, item, inbound);
     }
     await this.itemsRepo.save(item);
 
     if (next) {
-      const outbound = await this.travelMinutes(trip, item.coordinates, next.coordinates);
+      const outbound = await this.travelMinutes(
+        trip,
+        item.coordinates,
+        next.coordinates,
+        this.departureFrom(item),
+      );
       next.travelTimeMin = outbound;
       await this.itemsRepo.save(next);
       this.pushGapWarning(warnings, item, next, outbound);
@@ -545,6 +555,7 @@ export class MainPlannerService {
           trip,
           items[i - 1]!.coordinates,
           entry.coordinates,
+          this.departureFrom(items[i - 1]!),
         );
       }
     }
@@ -576,16 +587,22 @@ export class MainPlannerService {
     return new Date(`${dateStr}T${hhmm}:00+09:00`);
   }
 
-  /** 교통수단에 맞춰 두 좌표 사이 이동 시간(분)을 계산 (API 키 없으면 로컬 추정). */
+  /** 좌표 소유 항목의 출발 시각(= 해당 항목 종료 시각)을 구한다. 대중교통 시간표 조회용. */
+  private departureFrom(item: { scheduledAt: Date; durationMin: number }): Date {
+    return new Date(new Date(item.scheduledAt).getTime() + item.durationMin * 60000);
+  }
+
+  /** 교통수단에 맞춰 두 좌표 사이 이동 시간(분)을 계산 (OTP 미가동 시 로컬 추정). */
   private async travelMinutes(
     trip: TripEntity,
     from: { lat: number; lng: number },
     to: { lat: number; lng: number },
+    departAt?: Date,
   ): Promise<number> {
     const eta =
       trip.transportMode === 'car'
-        ? await this.routeHelper.getDrivingEta(from, to)
-        : await this.routeHelper.getTransitEta(from, to);
+        ? await this.routeHelper.getDrivingEta(from, to, departAt)
+        : await this.routeHelper.getTransitEta(from, to, departAt);
     return Math.max(1, Math.round(eta.durationSec / 60));
   }
 
