@@ -7,6 +7,7 @@ import {
   HttpCode,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -77,6 +78,16 @@ export class UsersController {
     @Body('platform') platform?: string,
   ) {
     await this.fcmTokens.register(user.id, fcmToken, platform);
+    return { success: true };
+  }
+
+  @Delete('me/fcm-token')
+  @ApiOperation({ summary: 'FCM 토큰 해제 (로그아웃/기기 정리)' })
+  async removeFcmToken(
+    @CurrentUser() user: UserEntity,
+    @Query('fcmToken') fcmToken: string,
+  ) {
+    await this.fcmTokens.removeForUser(user.id, fcmToken);
     return { success: true };
   }
 

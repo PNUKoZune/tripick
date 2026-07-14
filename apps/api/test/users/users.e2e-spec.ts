@@ -152,6 +152,35 @@ describe('Users (e2e)', () => {
       const rows = await fcmTokens.findBy({ token: 'dupe-token' });
       expect(rows).toHaveLength(1);
     });
+
+    it('removes the caller’s fcm token on logout', async () => {
+      const uid = await newUser();
+      await fcmTokens.save(fcmTokens.create({ userId: uid, token: 'logout-token' }));
+
+      const res = await http
+        .delete('/users/me/fcm-token')
+        .query({ fcmToken: 'logout-token' })
+        .set('x-test-user-id', uid)
+        .expect(200);
+      expect(res.body).toEqual({ success: true });
+
+      expect(await fcmTokens.findOneBy({ token: 'logout-token' })).toBeNull();
+    });
+
+    it('does not remove a token owned by another user', async () => {
+      const owner = await newUser();
+      const attacker = await newUser();
+      await fcmTokens.save(fcmTokens.create({ userId: owner, token: 'owned-token' }));
+
+      await http
+        .delete('/users/me/fcm-token')
+        .query({ fcmToken: 'owned-token' })
+        .set('x-test-user-id', attacker)
+        .expect(200);
+
+      // 스코프가 userId 라 남의 토큰은 그대로 남아있어야 한다.
+      expect(await fcmTokens.findOneBy({ token: 'owned-token' })).not.toBeNull();
+    });
   });
 
   describe('profile image', () => {

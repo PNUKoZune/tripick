@@ -39,4 +39,14 @@ export class FcmTokenService {
     await this.repo.delete({ token });
     this.logger.debug(`removed fcm token ${token.slice(0, 12)}…`);
   }
+
+  /**
+   * 특정 사용자 소유의 토큰만 제거(로그아웃/계정 삭제 시). userId 로 스코프를 좁혀
+   * 다른 사용자의 기기 토큰을 실수/악의로 지우는 것을 막는다.
+   */
+  async removeForUser(userId: string, token: string): Promise<void> {
+    const trimmed = token?.trim();
+    if (!trimmed) return;
+    await this.repo.delete({ userId, token: trimmed });
+  }
 }

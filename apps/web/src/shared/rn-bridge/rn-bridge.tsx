@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { updateFcmToken } from '@/entities/user';
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { queryKeys } from '@/shared/api/query-keys';
+import { getLastFcmToken, setLastFcmToken } from './fcm-token-storage';
 
 type RnBridgeMessage =
   | { type: 'FCM_TOKEN'; token: string }
@@ -41,10 +42,9 @@ export function useRnBridge() {
       if (msg.type === 'FCM_TOKEN' && msg.token) {
         // 세션 없으면 등록할 데가 없음. 로그인 후 다시 토큰을 받게 RN 측에서 재전송하도록 후속에서 보강.
         if (!getStoredSession()) return;
-        const last = sessionStorage.getItem(LAST_FCM_KEY);
-        if (last === msg.token) return;
+        if (getLastFcmToken() === msg.token) return;
         updateFcmToken(msg.token)
-          .then(() => sessionStorage.setItem(LAST_FCM_KEY, msg.token))
+          .then(() => setLastFcmToken(msg.token))
           .catch((err) => console.warn('[rn-bridge] fcm-token update failed:', err));
         return;
       }
@@ -59,8 +59,6 @@ export function useRnBridge() {
     return () => window.removeEventListener('message', handle);
   }, [queryClient]);
 }
-
-const LAST_FCM_KEY = 'tripick.fcm.lastToken';
 
 export function RnBridge() {
   useRnBridge();
