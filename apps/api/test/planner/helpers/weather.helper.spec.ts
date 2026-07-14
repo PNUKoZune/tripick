@@ -36,6 +36,40 @@ describe('WeatherHelper', () => {
     });
   });
 
+  describe('getMidForecast', () => {
+    it('returns an empty map and skips the API call when KMA key is unset', async () => {
+      helper = new WeatherHelper(config());
+      const result = await helper.getMidForecast(37.5665, 126.978);
+
+      expect(result.size).toBe(0);
+      expect(mockedAxios.get).not.toHaveBeenCalled();
+    });
+
+    it('merges 중기육상예보 + 중기기온 into per-day forecasts', async () => {
+      helper = new WeatherHelper(config({ KMA_API_KEY: 'test-key' }));
+      const now = new Date('2026-07-14T10:00:00+09:00'); // tmFc 202607140600 → day3 = 2026-07-17
+
+      mockedAxios.get.mockImplementation((url: string) => {
+        if (url.includes('getMidLandFcst')) {
+          return Promise.resolve({
+            data: { response: { body: { items: { item: [{ wf3Am: '맑음', rnSt3Am: 20, wf3Pm: '흐리고 비', rnSt3Pm: 80 }] } } } },
+          });
+        }
+        return Promise.resolve({
+          data: { response: { body: { items: { item: [{ taMin3: 21, taMax3: 29 }] } } } },
+        });
+      });
+
+      const result = await helper.getMidForecast(37.5665, 126.978, now);
+
+      expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+      const pm = result.get('20260717_1500')!;
+      expect(pm.temperature).toBe(29);
+      expect(pm.precipitationProbability).toBe(80);
+      expect(pm.precipitationType).toBe(1);
+    });
+  });
+
   describe('buildWeatherHint', () => {
     beforeEach(() => {
       helper = new WeatherHelper(config());

@@ -96,6 +96,7 @@ function createHarness() {
   };
   const weatherHelper = {
     getForecast: jest.fn().mockResolvedValue(new Map()),
+    getExtendedForecast: jest.fn().mockResolvedValue(new Map()),
     buildWeatherHint: jest.fn().mockReturnValue('날씨 양호'),
   };
   const routeHelper = {

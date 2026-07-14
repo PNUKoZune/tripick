@@ -46,6 +46,7 @@ import { TripEntity } from '../trips/trip.entity';
     PlaceEmbeddingRepository,
     KakaoLocalService,
     RouteHelper,
+    WeatherHelper,
   ],
 })
 export class PlannerModule {}

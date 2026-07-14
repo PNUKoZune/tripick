@@ -8,7 +8,6 @@ import { TripMembersModule } from '../trip-members/trip-members.module';
 import { TripEntity } from '../trips/trip.entity';
 import { TripsModule } from '../trips/trips.module';
 import { DestinationsService } from './destinations.service';
-import { WeatherHelper } from '../planner/helpers/weather.helper';
 import { PlannerModule } from '../planner/planner.module';
 import { MainPlannerController } from './main-planner.controller';
 import { SharedItineraryController } from './shared-itinerary.controller';
@@ -22,10 +21,11 @@ import { MainPlannerService } from './main-planner.service';
     FriendsModule,
     PreferencesModule,
     InboxModule,
-    // 기본 추천 대안에 CRAG/임베딩 검색(PlaceRetrievalService)과 Kakao 직검색을 쓴다
+    // 기본 추천 대안에 CRAG/임베딩 검색(PlaceRetrievalService)과 Kakao 직검색을 쓴다.
+    // WeatherHelper 도 PlannerModule 에서 export 된 단일 인스턴스를 공유한다(Redis 커넥션 1개).
     PlannerModule,
   ],
   controllers: [MainPlannerController, SharedItineraryController],
-  providers: [MainPlannerService, DestinationsService, WeatherHelper],
+  providers: [MainPlannerService, DestinationsService],
 })
 export class MainPlannerModule {}
