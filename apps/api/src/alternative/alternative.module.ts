@@ -7,6 +7,8 @@ import { REPLAN_QUEUE } from '../replanning/replanning.constants';
 import { PlannerModule } from '../planner/planner.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { ReplanningModule } from '../replanning/replanning.module';
+import { InboxModule } from '../inbox/inbox.module';
+import { TripMembersModule } from '../trip-members/trip-members.module';
 
 @Module({
   imports: [
@@ -14,6 +16,8 @@ import { ReplanningModule } from '../replanning/replanning.module';
     PlannerModule,
     RealtimeModule,
     ReplanningModule,
+    InboxModule,
+    TripMembersModule,
   ],
   controllers: [AlternativeController],
   providers: [AlternativeProcessor, AlternativeGateway],

@@ -11,6 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { randomBytes } from 'node:crypto';
 import { StorageService } from '../storage/storage.service';
+import { FcmTokenService } from '../notification/fcm-token.service';
 import { UserEntity } from './user.entity';
 import { DEFAULT_NOTIFICATION_PREFERENCES } from './notification-preferences.constants';
 import {
@@ -24,7 +25,7 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
 
 export type PublicProfile = Omit<
   UserEntity,
-  'passwordHash' | 'pendingPasswordHash' | 'fcmToken'
+  'passwordHash' | 'pendingPasswordHash'
 >;
 
 @Injectable()
@@ -35,6 +36,7 @@ export class UsersService implements OnModuleInit {
     @InjectRepository(UserEntity)
     private readonly repo: Repository<UserEntity>,
     private readonly storage: StorageService,
+    private readonly fcmTokens: FcmTokenService,
   ) {}
 
   /** 핸들 없이 만들어진 기존 사용자들에 핸들 backfill (synchronize 환경 기준 1회성). */
@@ -54,10 +56,9 @@ export class UsersService implements OnModuleInit {
 
   /** 클라이언트에 돌려줘도 되는 프로필. passwordHash 등 민감 컬럼을 제거한다. */
   publicProfile(user: UserEntity): PublicProfile {
-    const { passwordHash, pendingPasswordHash, fcmToken, ...safe } = user;
+    const { passwordHash, pendingPasswordHash, ...safe } = user;
     void passwordHash;
     void pendingPasswordHash;
-    void fcmToken;
     return safe;
   }
 
@@ -250,10 +251,6 @@ export class UsersService implements OnModuleInit {
     return merged[effectiveKey] !== false;
   }
 
-  async updateFcmToken(id: string, fcmToken: string): Promise<void> {
-    await this.repo.update(id, { fcmToken });
-  }
-
   /** 프로필 이미지 업로드 — 기존에 우리가 발급한 URL 이 있으면 같이 삭제. */
   async uploadProfileImage(
     id: string,
@@ -312,6 +309,8 @@ export class UsersService implements OnModuleInit {
   async remove(id: string): Promise<void> {
     const user = await this.findById(id);
     if (!user) throw new NotFoundException(`User ${id} not found`);
+    // 사용자 삭제 전에 등록된 모든 FCM 토큰을 정리(orphan row 방지).
+    await this.fcmTokens.removeAllForUser(id);
     await this.repo.remove(user);
   }
 }

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { LoginResponseDto } from '@tripick/types';
 import { redirectToKakao, startDemoSession } from '@/entities/session/api/auth-api';
 import { storeSession } from '@/entities/session/model/session-storage';
+import { flushPendingFcmToken } from '@/entities/user';
 import { AppFrame, InlineNotice, PrimaryButton, SecondaryButton } from '@/shared/ui/app-frame';
 
 type CallbackState = { status: 'checking' } | { status: 'error'; message: string };
@@ -32,6 +33,7 @@ export function KakaoCallbackView() {
     try {
       const session = decodeSession(payload);
       storeSession(session);
+      void flushPendingFcmToken();
       window.history.replaceState(null, '', '/auth/kakao/callback');
       router.replace('/');
     } catch {

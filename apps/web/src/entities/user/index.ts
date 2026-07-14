@@ -4,6 +4,8 @@ export {
   updateNotificationPreferences,
   deleteMe,
   updateFcmToken,
+  deleteFcmToken,
+  flushPendingFcmToken,
   uploadProfileImage,
   removeProfileImage,
 } from './api';

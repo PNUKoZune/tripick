@@ -57,10 +57,6 @@ export class UserEntity {
   @Column({ nullable: true })
   profileImageUrl?: string;
 
-  /** Firebase FCM 디바이스 토큰 */
-  @Column({ nullable: true })
-  fcmToken?: string;
-
   /** 인박스 카테고리별 수신 여부 (jsonb). 미설정 카테고리는 DEFAULT_NOTIFICATION_PREFERENCES 적용 */
   @Column({ type: 'jsonb', default: () => `'${JSON.stringify(DEFAULT_NOTIFICATION_PREFERENCES)}'::jsonb` })
   notificationPreferences: NotificationPreferencesDto;

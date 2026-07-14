@@ -88,22 +88,18 @@ export class InboxService {
     );
 
     // 푸시 발송은 인박스 저장 결과와 독립 — 실패해도 인박스 row 는 살아있다.
-    if (receiver?.fcmToken) {
-      void this.notificationService.send(
-        {
-          userId: dto.userId,
-          type: dto.category,
-          title: dto.title,
-          body: dto.body,
-          data: this.stringifyPayload({
-            notificationId: saved.id,
-            category: dto.category,
-            ...(dto.payload ?? {}),
-          }),
-        },
-        receiver.fcmToken,
-      );
-    }
+    // sendToUser 가 사용자의 모든 기기 토큰으로 발송하고 만료 토큰은 스스로 정리한다.
+    void this.notificationService.sendToUser({
+      userId: dto.userId,
+      type: dto.category,
+      title: dto.title,
+      body: dto.body,
+      data: this.stringifyPayload({
+        notificationId: saved.id,
+        category: dto.category,
+        ...(dto.payload ?? {}),
+      }),
+    });
 
     return saved;
   }

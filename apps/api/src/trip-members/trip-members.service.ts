@@ -76,6 +76,27 @@ export class TripMembersService {
     return this.membersRepo.count({ where: { tripId } });
   }
 
+  /**
+   * 재계획 결과 등 여행 단위 알림을 받을 사용자들.
+   * owner + accepted 상태이면서 실제 계정(userId)이 연결된 멤버. 트립 없으면 빈 결과.
+   */
+  async getNotificationTargets(
+    tripId: string,
+  ): Promise<{ tripTitle: string; userIds: string[] }> {
+    const trip = await this.tripsRepo.findOneBy({ id: tripId });
+    if (!trip) {
+      return { tripTitle: '', userIds: [] };
+    }
+    const members = await this.membersRepo.find({
+      where: { tripId, status: 'accepted' },
+    });
+    const userIds = new Set<string>([trip.userId]);
+    for (const member of members) {
+      if (member.userId) userIds.add(member.userId);
+    }
+    return { tripTitle: trip.title, userIds: [...userIds] };
+  }
+
   async canAccessTrip(tripId: string, userId: string): Promise<boolean> {
     const trip = await this.tripsRepo.findOneBy({ id: tripId });
     if (!trip) {
