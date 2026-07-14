@@ -2,7 +2,12 @@
 
 import type { PlannerItineraryItemDto } from '@tripick/types';
 
+import { InfoTooltip } from '@/shared/ui';
+
 import { estimateEtaMinutes, formatDistance } from '../model/estimate-eta';
+
+const ETA_DISCLAIMER =
+  '실시간 교통 상황은 반영되지 않은 예상 시간이에요. 실제와 다를 수 있으니 정확한 경로는 지도 길찾기로 확인해 주세요.';
 
 type Props = {
   /** 다음 예정 항목 (없으면 렌더 안 함) */
@@ -41,9 +46,14 @@ export function NextStopBar({ item, distanceM, transportLabel, etaMinOtp }: Prop
         </div>
       </div>
       {distanceM !== null && etaMin !== null ? (
-        <div className="shrink-0 text-right">
-          <div className="text-[15px] font-bold leading-5 text-[#3182F6]">약 {etaMin}분</div>
-          <div className="text-[11px] font-medium text-[#6B7684]">{formatDistance(distanceM)}</div>
+        <div className="flex shrink-0 items-center gap-1.5 text-right">
+          <div>
+            <div className="text-[15px] font-bold leading-5 text-[#3182F6]">약 {etaMin}분</div>
+            <div className="text-[11px] font-medium text-[#6B7684]">
+              {formatDistance(distanceM)}
+            </div>
+          </div>
+          <InfoTooltip message={ETA_DISCLAIMER} align="right" widthClass="w-[220px]" />
         </div>
       ) : (
         <div className="shrink-0 text-[12px] font-medium text-[#8B95A1]">위치 확인 중…</div>
