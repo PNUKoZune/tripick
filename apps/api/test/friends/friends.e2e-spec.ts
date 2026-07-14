@@ -10,6 +10,7 @@ import { UserEntity } from '../../src/users/user.entity';
 import { FriendEntity } from '../../src/friends/friend.entity';
 import { FriendsController } from '../../src/friends/friends.controller';
 import { FriendsService } from '../../src/friends/friends.service';
+import { InboxService } from '../../src/inbox/inbox.service';
 import { JwtAuthGuard } from '../../src/auth/guards/jwt-auth.guard';
 
 describe('Friends (e2e)', () => {
@@ -17,12 +18,13 @@ describe('Friends (e2e)', () => {
   let http: ReturnType<typeof request>;
   let alice: string;
   let bob: string;
+  const notifyFriendRequest = jest.fn().mockResolvedValue(undefined);
 
   beforeAll(async () => {
     app = await createE2EApp({
       entities: [UserEntity, FriendEntity],
       controllers: [FriendsController],
-      providers: [FriendsService],
+      providers: [FriendsService, { provide: InboxService, useValue: { notifyFriendRequest } }],
       overrideGuards: [{ guard: JwtAuthGuard, useValue: TestAuthGuard }],
     });
     http = request(app.getHttpServer());
@@ -41,6 +43,7 @@ describe('Friends (e2e)', () => {
 
   describe('POST /friends', () => {
     it('adding a registered user creates a pending link and an incoming request on the other side', async () => {
+      notifyFriendRequest.mockClear();
       const res = await http.post('/friends').set('x-test-user-id', alice).send({ handle: '@bob' }).expect(201);
       expect(res.body).toMatchObject({ handle: '@bob', status: 'pending' });
 
@@ -49,6 +52,12 @@ describe('Friends (e2e)', () => {
       const fromAlice = bobFriends.find((f) => f.status === 'incoming');
       expect(fromAlice).toBeDefined();
       expect(fromAlice?.nickname).toBe('앨리스');
+
+      // 신규 incoming 요청이 생기면 수신자(bob)에게 푸시가 발송돼야 한다.
+      expect(notifyFriendRequest).toHaveBeenCalledTimes(1);
+      const [recipient, requester] = notifyFriendRequest.mock.calls[0];
+      expect(recipient.id).toBe(bob);
+      expect(requester.id).toBe(alice);
     });
 
     it('adding an unregistered handle registers it directly as accepted', async () => {

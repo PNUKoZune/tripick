@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { InboxService } from '../inbox/inbox.service';
 import { UserEntity } from '../users/user.entity';
 import { FriendEntity } from './friend.entity';
 import type { AddFriendRequestDto, FriendDto, FriendStatus } from '@tripick/types';
@@ -21,6 +22,7 @@ export class FriendsService {
     private readonly friendsRepo: Repository<FriendEntity>,
     @InjectRepository(UserEntity)
     private readonly usersRepo: Repository<UserEntity>,
+    private readonly inboxService: InboxService,
   ) {}
 
   async list(ownerId: string): Promise<FriendDto[]> {
@@ -141,6 +143,9 @@ export class FriendsService {
         statusMessage: '친구 요청을 보냈어요.',
       }),
     );
+
+    // 새 incoming 요청이 생성된 경우에만 푸시 — 중복 요청(early return)엔 재발송하지 않는다.
+    await this.inboxService.notifyFriendRequest(recipient, requester);
   }
 
   private async findOwned(id: string, ownerId: string): Promise<FriendEntity> {
