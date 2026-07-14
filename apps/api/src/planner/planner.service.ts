@@ -142,7 +142,7 @@ export class PlannerService {
 
     const firstCandidate = candidates[0];
     const forecast = firstCandidate
-      ? await this.weatherHelper.getForecast(firstCandidate.coordinates.lat, firstCandidate.coordinates.lng, new Date(trip.startDate))
+      ? await this.weatherHelper.getExtendedForecast(firstCandidate.coordinates.lat, firstCandidate.coordinates.lng, new Date(trip.startDate))
       : new Map();
     const weatherHint = this.weatherHelper.buildWeatherHint(forecast);
     const agentPlan = await this.plannerAgent.plan({

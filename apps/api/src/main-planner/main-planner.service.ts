@@ -747,9 +747,9 @@ export class MainPlannerService {
   }
 
   /**
-   * 기상청 단기예보를 일자별 PlannerWeatherDto 로 변환한다.
-   * - center 좌표로 예보를 1회 조회하고, 각 일자의 fcstDate 로 필터링해 매핑한다.
-   * - 예보 범위(~3일) 밖이거나 KMA_API_KEY 미설정 시 "확인 전" 폴백을 유지한다.
+   * 기상청 예보를 일자별 PlannerWeatherDto 로 변환한다.
+   * - center 좌표로 단기(~3일)+중기(+3~+10일) 예보를 조회해 각 일자의 fcstDate 로 매핑한다.
+   * - 예보 범위(~10일) 밖이거나 KMA_API_KEY 미설정 시 "확인 전" 폴백을 유지한다.
    */
   private async buildWeather(
     center: PlannerTripDto['mapCenter'],
@@ -765,7 +765,7 @@ export class MainPlannerService {
 
     let forecasts: Map<string, ParsedForecast>;
     try {
-      forecasts = await this.weatherHelper.getForecast(center.lat, center.lng);
+      forecasts = await this.weatherHelper.getExtendedForecast(center.lat, center.lng);
     } catch {
       return days.map(fallback);
     }
