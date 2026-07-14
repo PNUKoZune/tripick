@@ -11,16 +11,20 @@ type Props = {
   distanceM: number | null;
   /** 이동수단 라벨 (meta.transportLabel) */
   transportLabel?: string | undefined;
+  /** OTP 실경로 기준 ETA(분). 있으면 휴리스틱보다 우선 표시. 없으면 직선거리로 추정. */
+  etaMinOtp?: number | null;
 };
 
 /**
  * Live 화면 상단의 "다음 장소" 안내 바.
  * 다음 예정 일정까지 남은 거리·예상 소요 시간을 보여준다.
+ * ETA 는 OTP 실경로 값(etaMinOtp)을 우선 쓰고, 없으면 직선거리 휴리스틱으로 폴백한다.
  */
-export function NextStopBar({ item, distanceM, transportLabel }: Props) {
+export function NextStopBar({ item, distanceM, transportLabel, etaMinOtp }: Props) {
   if (!item) return null;
 
-  const etaMin = distanceM !== null ? estimateEtaMinutes(distanceM, transportLabel) : null;
+  const etaMin =
+    etaMinOtp ?? (distanceM !== null ? estimateEtaMinutes(distanceM, transportLabel) : null);
 
   return (
     <div className="mb-3 flex items-center gap-3 rounded-[14px] border border-[#D6E4FF] bg-[#EAF2FF] px-4 py-3">

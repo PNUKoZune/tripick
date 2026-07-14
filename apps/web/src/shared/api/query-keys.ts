@@ -15,6 +15,10 @@ export const queryKeys = {
   user: {
     me: ['user', 'me'] as const,
   },
+  routes: {
+    // 좌표를 소수 4자리로 양자화해 GPS 미세 흔들림마다 캐시가 갈리지 않게 한다.
+    eta: (from: string, to: string, mode: string) => ['routes', 'eta', from, to, mode] as const,
+  },
   planner: {
     trips: ['planner', 'trips'] as const,
     trip: (tripId: string) => ['planner', 'trips', tripId] as const,
