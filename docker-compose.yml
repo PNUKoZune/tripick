@@ -71,6 +71,41 @@ services:
       MP_SMTP_AUTH_ACCEPT_ANY: 1
       MP_SMTP_AUTH_ALLOW_INSECURE: 1
 
+  # OpenTripPlanner 2 — GTFS(대중교통) + OSM(자동차/도보) 통합 길찾기 서버
+  # 별도 테스트용. profile 로 분리되어 기본 `docker compose up` 에는 포함되지 않는다.
+  #   1) 그래프 빌드 (최초 1회 / 데이터 교체 시):
+  #        docker compose --profile otp-build up otp-build
+  #   2) 서버 기동:
+  #        docker compose --profile otp up -d otp
+  # 데이터·설정 파일은 infra/otp/data 에 두면 컨테이너의 /var/opentripplanner 로 마운트된다.
+  otp-build:
+    image: opentripplanner/opentripplanner:2.9.0
+    container_name: tripick-otp-build
+    profiles: ["otp-build"]
+    environment:
+      # 전국 GTFS+OSM 빌드는 stop_times 매핑 피크 때문에 13g 필요(8g는 OOM).
+      # 권역만 빌드하면 OTP_MAX_HEAP 로 낮춘다.
+      JAVA_TOOL_OPTIONS: "-Xmx${OTP_MAX_HEAP:-13g}"
+    volumes:
+      - ./infra/otp/data:/var/opentripplanner
+    command: ["--build", "--save"]
+    restart: "no"
+
+  otp:
+    image: opentripplanner/opentripplanner:2.9.0
+    container_name: tripick-otp
+    profiles: ["otp"]
+    restart: unless-stopped
+    environment:
+      # 전국 그래프(graph.obj 1.3GB) 로딩 + Raptor 인덱스 서빙에 10g 상주(실측 ~10.6GiB).
+      # 권역만 서빙하면 낮춰도 된다.
+      JAVA_TOOL_OPTIONS: "-Xmx${OTP_MAX_HEAP:-10g}"
+    ports:
+      - "8090:8080"   # 호스트 8090 → 컨테이너 8080 (LLM 서버와 포트 충돌 회피)
+    volumes:
+      - ./infra/otp/data:/var/opentripplanner
+    command: ["--load", "--serve"]
+
   # MinIO 버킷 초기화
   minio-init:
     image: minio/mc:latest
