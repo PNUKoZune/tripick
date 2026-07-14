@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { getApps } from '@react-native-firebase/app';
-import notifee, { AndroidImportance } from '@notifee/react-native';
+import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
 import Geolocation from 'react-native-geolocation-service';
 
 type FirebaseMessagingModule = typeof import('@react-native-firebase/messaging');
@@ -45,6 +45,7 @@ type BridgeMessage =
   | { type: 'START_LOCATION_TRACKING' }
   | { type: 'STOP_LOCATION_TRACKING' }
   | { type: 'OPEN_EXTERNAL'; url: string }
+  | { type: 'WEB_READY' }
   | { type: 'NAV_STATE'; canGoBack: boolean };
 
 const WEB_APP_HOST = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
@@ -74,6 +75,8 @@ export default function App() {
   const webViewRef = useRef<InstanceType<typeof WebView>>(null);
   const watchIdRef = useRef<number | null>(null);
   const nativeSubsRef = useRef<EmitterSubscription[]>([]);
+  // 앱이 종료 상태에서 푸시 탭으로 켜졌을 때, WebView 로드가 끝나기 전 도착한 탭을 보관했다가 flush.
+  const pendingTapRef = useRef<Record<string, string> | null>(null);
   const [canGoBack, setCanGoBack] = useState(false);
 
   useEffect(() => {
@@ -142,9 +145,11 @@ export default function App() {
 
       const {
         AuthorizationStatus,
+        getInitialNotification,
         getMessaging,
         getToken,
         onMessage,
+        onNotificationOpenedApp,
         onTokenRefresh,
         requestPermission,
       } = require<FirebaseMessagingModule>('@react-native-firebase/messaging');
@@ -180,6 +185,8 @@ export default function App() {
           await notifee.displayNotification({
             title,
             body,
+            // 탭 시 onForegroundEvent(PRESS) 가 이 data 로 라우팅하도록 payload 를 실어둔다.
+            ...(data ? { data } : {}),
             android: {
               channelId: 'tripick-default',
               importance: AndroidImportance.HIGH,
@@ -191,9 +198,29 @@ export default function App() {
         postToWeb({ type: 'PUSH_NOTIFICATION', data: remoteMessage });
       });
 
+      // 포그라운드에서 notifee 알림을 탭한 경우 → 해당 화면으로 라우팅.
+      const unsubscribeForegroundEvent = notifee.onForegroundEvent(({ type, detail }) => {
+        if (type === EventType.PRESS) {
+          dispatchNotificationTap(detail.notification?.data);
+        }
+      });
+
+      // 백그라운드(앱 실행 중, OS 표시 알림)에서 탭 → 앱 포그라운드 전환 시 라우팅.
+      const unsubscribeOpenedApp = onNotificationOpenedApp(messaging, (remoteMessage) => {
+        dispatchNotificationTap(remoteMessage?.data);
+      });
+
+      // 종료 상태에서 탭으로 앱이 켜진 경우 → WebView 로드 완료 후 flush 하도록 보관.
+      const initial = await getInitialNotification(messaging);
+      if (initial?.data) {
+        pendingTapRef.current = normalizeTapData(initial.data);
+      }
+
       return () => {
         unsubscribeRefresh();
         unsubscribeMessage();
+        unsubscribeForegroundEvent();
+        unsubscribeOpenedApp();
       };
     } catch (error) {
       // Firebase 자격 파일(google-services.json / GoogleService-Info.plist) 미배치 시 정상적으로 건너뛴다.
@@ -287,6 +314,21 @@ export default function App() {
     webViewRef.current?.injectJavaScript(js);
   }
 
+  // FCM data 값은 string | object 로 올 수 있어 웹이 기대하는 Record<string,string> 로 보정.
+  function normalizeTapData(data?: Record<string, unknown>): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(data ?? {})) {
+      if (value === undefined || value === null) continue;
+      out[key] = typeof value === 'string' ? value : JSON.stringify(value);
+    }
+    return out;
+  }
+
+  // 푸시 탭 → 웹으로 라우팅 신호. 웹의 rn-bridge 가 category/tripId 로 이동 경로를 정한다.
+  function dispatchNotificationTap(data?: Record<string, unknown>) {
+    postToWeb({ type: 'NOTIFICATION_TAP', data: normalizeTapData(data) });
+  }
+
   function handleMessage(event: WebViewMessageEvent) {
     let msg: BridgeMessage | null = null;
     try {
@@ -309,6 +351,14 @@ export default function App() {
     }
     if (msg.type === 'OPEN_EXTERNAL' && msg.url) {
       Linking.openURL(msg.url).catch(() => undefined);
+      return;
+    }
+    if (msg.type === 'WEB_READY') {
+      // 웹이 message 리스너를 붙인 시점 — 종료 상태 탭으로 보관해둔 라우팅을 이제 안전하게 전달.
+      if (pendingTapRef.current) {
+        dispatchNotificationTap(pendingTapRef.current);
+        pendingTapRef.current = null;
+      }
     }
   }
 
