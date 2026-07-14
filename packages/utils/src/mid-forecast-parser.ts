@@ -12,8 +12,10 @@
  * @see https://www.data.go.kr/data/15059468/openapi.do
  */
 
-import { toKmaDate } from './date';
+import { getKstParts } from './date';
 import type { ParsedForecast } from './weather-parser';
+
+const pad2 = (n: number): string => String(n).padStart(2, '0');
 
 /** getMidLandFcst 응답의 item (동적 dayN 필드) */
 export type MidLandItem = Record<string, string | number | undefined>;
@@ -60,11 +62,15 @@ function num(value: string | number | undefined): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-/** base 기준 dayOffset 일 뒤의 YYYYMMDD */
+/**
+ * base(발표일을 담은 Date) 기준 dayOffset 일 뒤의 YYYYMMDD.
+ * tmFcToDate 가 UTC 자정으로 만든 Date 를 UTC 정수 연산으로만 다뤄
+ * 서버 타임존과 무관하게 캘린더 날짜만 계산한다.
+ */
 function shiftKmaDate(base: Date, dayOffset: number): string {
-  const d = new Date(base);
-  d.setDate(d.getDate() + dayOffset);
-  return toKmaDate(d);
+  const d = new Date(base.getTime());
+  d.setUTCDate(d.getUTCDate() + dayOffset);
+  return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}`;
 }
 
 /**
@@ -137,30 +143,34 @@ export function parseMidTermForecast(
 }
 
 /**
- * 중기예보 발표시각(tmFc) 계산. 발표는 매일 06시·18시.
- * 발표 후 API 반영까지 여유를 두고 가장 최근 확정 발표시각을 고른다.
+ * 중기예보 발표시각(tmFc) 계산 (Asia/Seoul 기준). 발표는 매일 06시·18시.
+ * 서버 타임존과 무관하게 KST 로 가장 최근 확정 발표시각을 고른다.
  *
  * @returns "YYYYMMDD0600" | "YYYYMMDD1800"
  */
 export function getMidTmFc(now: Date = new Date()): string {
-  const hour = now.getHours();
+  const { year, month, day, hour } = getKstParts(now);
+  const today = `${year}${pad2(month)}${pad2(day)}`;
 
   if (hour < 6) {
     // 06시 발표 전 → 전날 18시 발표
-    const y = new Date(now);
-    y.setDate(y.getDate() - 1);
-    return `${toKmaDate(y)}1800`;
+    const prev = new Date(Date.UTC(year, month - 1, day));
+    prev.setUTCDate(prev.getUTCDate() - 1);
+    return `${prev.getUTCFullYear()}${pad2(prev.getUTCMonth() + 1)}${pad2(prev.getUTCDate())}1800`;
   }
   if (hour < 18) {
-    return `${toKmaDate(now)}0600`;
+    return `${today}0600`;
   }
-  return `${toKmaDate(now)}1800`;
+  return `${today}1800`;
 }
 
-/** tmFc 문자열("YYYYMMDD0600")의 날짜 부분을 Date 로 파싱 */
+/**
+ * tmFc 문자열("YYYYMMDD0600")의 날짜 부분을 UTC 자정 Date 로 파싱.
+ * shiftKmaDate 가 UTC 정수 연산으로 dayN 날짜를 계산하도록 UTC 기준으로 만든다.
+ */
 export function tmFcToDate(tmFc: string): Date {
   const y = Number(tmFc.slice(0, 4));
   const m = Number(tmFc.slice(4, 6));
   const d = Number(tmFc.slice(6, 8));
-  return new Date(y, m - 1, d);
+  return new Date(Date.UTC(y, m - 1, d));
 }

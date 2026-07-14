@@ -43,15 +43,24 @@ export interface ParsedForecast {
 /**
  * 강수량 문자열 파싱 (기상청 특수 문자열 처리)
  *
- * @returns mm 값, "강수없음" → null, "1mm 미만" → 0.5 (추정값)
+ * 기상청 PCP/SNO 는 "강수없음", "1.0mm 미만", "30.0~50.0mm", "50.0mm 이상" 등
+ * 다양한 표기로 온다.
+ *
+ * @returns mm 값. "강수없음" → null, "~mm 미만" → 0.5(추정),
+ *          범위("a~b mm") → 하한값 a, "b mm 이상" → b, 그 외 첫 숫자값.
  */
 export function parsePrecipitation(value: string): number | null {
   const trimmed = value.trim();
-  if (trimmed === '강수없음') return null;
-  if (trimmed === '1mm 미만') return 0.5;
+  if (trimmed === '' || trimmed === '강수없음') return null;
+  // "1mm 미만" / "1.0mm 미만" 등 미만 구간은 0.5mm 로 추정
+  if (trimmed.includes('미만')) return 0.5;
 
-  const match = /^([\d.]+)mm?/.exec(trimmed);
-  if (match?.[1]) return parseFloat(match[1]);
+  // "30.0~50.0mm"(범위)·"50.0mm 이상"·"1.2mm" → 첫 숫자값(범위는 하한)
+  const match = /([\d.]+)/.exec(trimmed);
+  if (match?.[1]) {
+    const n = parseFloat(match[1]);
+    return Number.isFinite(n) ? n : null;
+  }
 
   return null;
 }
@@ -103,30 +112,4 @@ export function groupForecastItems(
   }
 
   return map;
-}
-
-/**
- * 기상청 base_time 계산
- * 발표 후 10분 이후의 가장 가까운 base_time 반환
- *
- * @param now 현재 시각 (기본값: new Date())
- * @returns "0200" | "0500" | "0800" | "1100" | "1400" | "1700" | "2000" | "2300"
- */
-export function getBaseTime(now: Date = new Date()): string {
-  const BASE_TIMES = [2, 5, 8, 11, 14, 17, 20, 23];
-  const DELAY_MINUTES = 10;
-
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
-  const totalMinutes = hours * 60 + minutes - DELAY_MINUTES;
-
-  let baseHour = BASE_TIMES[0]!;
-  for (let i = BASE_TIMES.length - 1; i >= 0; i--) {
-    if (totalMinutes >= (BASE_TIMES[i] ?? 0) * 60) {
-      baseHour = BASE_TIMES[i]!;
-      break;
-    }
-  }
-
-  return String(baseHour).padStart(2, '0') + '00';
 }

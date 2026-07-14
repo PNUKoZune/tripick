@@ -4,9 +4,8 @@ import axios from 'axios';
 import { Redis } from 'ioredis';
 import {
   latLngToGrid,
-  getBaseTime,
+  getBaseDateTime,
   groupForecastItems,
-  toKmaDate,
   latLngToMidRegion,
   parseMidTermForecast,
   getMidTmFc,
@@ -27,6 +26,8 @@ export class WeatherHelper implements OnModuleDestroy {
   private readonly CACHE_TTL_SEC = 3 * 60 * 60;
   // 중기예보는 매일 06·18시 2회 발표되므로 그 주기만큼 캐싱한다.
   private readonly MID_CACHE_TTL_SEC = 12 * 60 * 60;
+  // 육상·기온 중 한쪽만 성공한 부분 결과는 곧 재조회하도록 짧게만 캐싱한다.
+  private readonly MID_PARTIAL_TTL_SEC = 30 * 60;
   private readonly redis: Redis;
 
   constructor(private readonly config: ConfigService) {
@@ -45,10 +46,15 @@ export class WeatherHelper implements OnModuleDestroy {
     this.redis.disconnect();
   }
 
+  /**
+   * 기상청 단기예보 조회.
+   * @param now 발표시각 산정 기준(기본 현재). 예보 대상일이 아니라 "언제 발표된 것을
+   *            조회할지" 기준이므로 항상 현재여야 한다. 대상일 필터는 소비 측에서 fcstDate 로 한다.
+   */
   async getForecast(
     lat: number,
     lng: number,
-    date: Date = new Date(),
+    now: Date = new Date(),
   ): Promise<Map<string, ParsedForecast>> {
     const apiKey = this.config.get<string>('KMA_API_KEY', '');
     if (!apiKey) {
@@ -56,8 +62,7 @@ export class WeatherHelper implements OnModuleDestroy {
     }
 
     const { nx, ny } = latLngToGrid({ lat, lng });
-    const baseDate = toKmaDate(date);
-    const baseTime = getBaseTime(date);
+    const { baseDate, baseTime } = getBaseDateTime(now);
     const cacheKey = `weather:forecast:${nx}:${ny}:${baseDate}:${baseTime}`;
 
     const cached = await this.readCache(cacheKey);
@@ -143,7 +148,9 @@ export class WeatherHelper implements OnModuleDestroy {
       }
 
       const forecasts = parseMidTermForecast(land, ta, tmFcToDate(tmFc));
-      await this.writeCache(cacheKey, forecasts, this.MID_CACHE_TTL_SEC);
+      // 한쪽만 성공한 부분 결과는 짧게만 캐시해, 일시 오류가 반나절 고착되지 않게 한다.
+      const ttl = land && ta ? this.MID_CACHE_TTL_SEC : this.MID_PARTIAL_TTL_SEC;
+      await this.writeCache(cacheKey, forecasts, ttl);
       return forecasts;
     } catch (err) {
       this.logger.error(`기상청 중기예보 조회 실패 (${region.name}, tmFc=${tmFc}):`, err);
@@ -182,14 +189,16 @@ export class WeatherHelper implements OnModuleDestroy {
    * 단기예보(~3일)와 중기예보(+3~+10일)를 병합한 확장 예보맵을 반환한다.
    * - 단기예보가 존재하는 날짜는 더 정밀하므로 우선하고, 중기예보 슬롯은 배제한다.
    * - 나머지 날짜는 중기예보로 채워 최대 10일까지 커버한다.
+   *
+   * 두 조회 모두 "지금 발표분" 기준이며, 대상일 필터는 소비 측에서 fcstDate 로 한다.
+   * (여행 시작일 등 미래 날짜를 발표 기준으로 넘기면 NO_DATA 가 나므로 받지 않는다.)
    */
   async getExtendedForecast(
     lat: number,
     lng: number,
-    date: Date = new Date(),
   ): Promise<Map<string, ParsedForecast>> {
     const [shortTerm, midTerm] = await Promise.all([
-      this.getForecast(lat, lng, date),
+      this.getForecast(lat, lng),
       this.getMidForecast(lat, lng),
     ]);
 

@@ -36,7 +36,7 @@ describe('parseMidWeather', () => {
 });
 
 describe('parseMidTermForecast', () => {
-  const base = new Date(2026, 6, 14); // tmFc 기준일 2026-07-14
+  const base = tmFcToDate('202607140600'); // tmFc 기준일 2026-07-14 (UTC 자정)
 
   const land: MidLandItem = {
     wf3Am: '맑음',
@@ -94,23 +94,27 @@ describe('parseMidTermForecast', () => {
 
 describe('getMidTmFc', () => {
   it('06시 이전은 전날 18시 발표', () => {
-    expect(getMidTmFc(new Date(2026, 6, 14, 5, 0))).toBe('202607131800');
+    expect(getMidTmFc(new Date('2026-07-14T05:00:00+09:00'))).toBe('202607131800');
   });
 
   it('06~18시는 당일 06시 발표', () => {
-    expect(getMidTmFc(new Date(2026, 6, 14, 10, 0))).toBe('202607140600');
+    expect(getMidTmFc(new Date('2026-07-14T10:00:00+09:00'))).toBe('202607140600');
   });
 
   it('18시 이후는 당일 18시 발표', () => {
-    expect(getMidTmFc(new Date(2026, 6, 14, 20, 0))).toBe('202607141800');
+    expect(getMidTmFc(new Date('2026-07-14T20:00:00+09:00'))).toBe('202607141800');
+  });
+
+  it('서버 TZ 무관: 05시 KST(=전날 20시 UTC)도 전날 18시 발표', () => {
+    expect(getMidTmFc(new Date('2026-07-13T20:00:00Z'))).toBe('202607131800');
   });
 });
 
 describe('tmFcToDate', () => {
-  it('tmFc 날짜부를 Date 로 파싱', () => {
+  it('tmFc 날짜부를 UTC 자정 Date 로 파싱(서버 TZ 무관)', () => {
     const d = tmFcToDate('202607140600');
-    expect(d.getFullYear()).toBe(2026);
-    expect(d.getMonth()).toBe(6);
-    expect(d.getDate()).toBe(14);
+    expect(d.getUTCFullYear()).toBe(2026);
+    expect(d.getUTCMonth()).toBe(6);
+    expect(d.getUTCDate()).toBe(14);
   });
 });

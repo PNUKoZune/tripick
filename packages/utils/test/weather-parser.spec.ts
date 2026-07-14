@@ -3,7 +3,6 @@
 import {
   parsePrecipitation,
   groupForecastItems,
-  getBaseTime,
   type WeatherItem,
 } from '../src/weather-parser';
 
@@ -25,8 +24,24 @@ describe('parsePrecipitation', () => {
     expect(parsePrecipitation('  강수없음 ')).toBeNull();
   });
 
+  it('maps "1.0mm 미만"(소수 표기)도 0.5 로', () => {
+    expect(parsePrecipitation('1.0mm 미만')).toBe(0.5);
+  });
+
+  it('범위 표기 "30.0~50.0mm" 는 하한값으로 파싱', () => {
+    expect(parsePrecipitation('30.0~50.0mm')).toBe(30);
+  });
+
+  it('"50.0mm 이상" 은 하한값 50 으로 파싱', () => {
+    expect(parsePrecipitation('50.0mm 이상')).toBe(50);
+  });
+
   it('returns null for unrecognised strings', () => {
     expect(parsePrecipitation('알수없음')).toBeNull();
+  });
+
+  it('returns null for empty string', () => {
+    expect(parsePrecipitation('')).toBeNull();
   });
 });
 
@@ -72,25 +87,5 @@ describe('groupForecastItems', () => {
     ]);
     expect(map.size).toBe(2);
     expect(map.get('20260703_1500')!.temperature).toBe(29);
-  });
-});
-
-describe('getBaseTime', () => {
-  it('picks the previous slot when the 10-minute delay has not elapsed', () => {
-    // 05:05 → 발표(0500) 후 10분이 안 지났으니 이전 슬롯 0200
-    expect(getBaseTime(new Date(2026, 6, 3, 5, 5))).toBe('0200');
-  });
-
-  it('picks the current slot once the delay has elapsed', () => {
-    // 05:15 → 0500 발표가 확정됨
-    expect(getBaseTime(new Date(2026, 6, 3, 5, 15))).toBe('0500');
-  });
-
-  it('falls back to the first slot in the early morning', () => {
-    expect(getBaseTime(new Date(2026, 6, 3, 1, 0))).toBe('0200');
-  });
-
-  it('returns the last slot late at night', () => {
-    expect(getBaseTime(new Date(2026, 6, 3, 23, 30))).toBe('2300');
   });
 });

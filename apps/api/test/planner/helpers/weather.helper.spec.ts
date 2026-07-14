@@ -47,7 +47,7 @@ describe('WeatherHelper', () => {
 
     it('merges 중기육상예보 + 중기기온 into per-day forecasts', async () => {
       helper = new WeatherHelper(config({ KMA_API_KEY: 'test-key' }));
-      const now = new Date(2026, 6, 14, 10, 0); // tmFc 202607140600 → day3 = 2026-07-17
+      const now = new Date('2026-07-14T10:00:00+09:00'); // tmFc 202607140600 → day3 = 2026-07-17
 
       mockedAxios.get.mockImplementation((url: string) => {
         if (url.includes('getMidLandFcst')) {
