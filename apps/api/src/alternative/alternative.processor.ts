@@ -85,11 +85,16 @@ export class AlternativeProcessor extends WorkerHost {
           ? `${label} 일정이 업데이트됐어요. 확인해 보세요.`
           : `${label} 재계획에 실패했어요. 잠시 후 다시 시도해 주세요.`;
 
+      // 날씨 트리거 재계획은 weather_alert 카테고리로 발신 — 수신 토글은 replan_ready 와 공유(prefersCategory).
+      // NOTE(backlog): trigger:'weather' 로 replan 잡을 enqueue 하는 진입점(스케줄러)은 아직 없다.
+      // 붙는 순간 이 분기가 자동으로 올바른 카테고리를 발신한다.
+      const category = trigger === 'weather' ? 'weather_alert' : 'replan_ready';
+
       await Promise.all(
         userIds.map((userId) =>
           this.inboxService.create({
             userId,
-            category: 'replan_ready',
+            category,
             title,
             body,
             payload: { tripId, jobId, trigger, status },

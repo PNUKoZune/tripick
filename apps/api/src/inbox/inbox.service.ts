@@ -104,6 +104,27 @@ export class InboxService {
     return saved;
   }
 
+  /**
+   * 친구 요청 푸시. 인박스 목록에는 friends 테이블 기반 가상 row 로 이미 노출되므로
+   * NotificationEntity 로 영속하지 않고 푸시만 발송한다(중복 인박스 row 방지).
+   * friend_request 수신 토글이 꺼져 있으면 no-op. 푸시 실패는 friends 흐름에 영향 없음.
+   */
+  async notifyFriendRequest(recipient: UserEntity, requester: UserEntity): Promise<void> {
+    if (!this.usersService.prefersCategory(recipient, 'friend_request')) {
+      return;
+    }
+    void this.notificationService.sendToUser({
+      userId: recipient.id,
+      type: 'friend_request',
+      title: '새 친구 요청',
+      body: `${requester.nickname} 님이 친구를 신청했어요.`,
+      data: this.stringifyPayload({
+        category: 'friend_request',
+        requesterId: requester.id,
+      }),
+    });
+  }
+
   /** FCM data payload 는 모든 값이 string 이어야 함 — 타입 보정. */
   private stringifyPayload(payload: Record<string, unknown>): Record<string, string> {
     const out: Record<string, string> = {};
