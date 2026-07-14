@@ -24,7 +24,7 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
 
 export type PublicProfile = Omit<
   UserEntity,
-  'passwordHash' | 'pendingPasswordHash' | 'fcmToken'
+  'passwordHash' | 'pendingPasswordHash'
 >;
 
 @Injectable()
@@ -54,10 +54,9 @@ export class UsersService implements OnModuleInit {
 
   /** 클라이언트에 돌려줘도 되는 프로필. passwordHash 등 민감 컬럼을 제거한다. */
   publicProfile(user: UserEntity): PublicProfile {
-    const { passwordHash, pendingPasswordHash, fcmToken, ...safe } = user;
+    const { passwordHash, pendingPasswordHash, ...safe } = user;
     void passwordHash;
     void pendingPasswordHash;
-    void fcmToken;
     return safe;
   }
 
@@ -248,10 +247,6 @@ export class UsersService implements OnModuleInit {
     };
     const effectiveKey = key === 'weather_alert' ? 'replan_ready' : key;
     return merged[effectiveKey] !== false;
-  }
-
-  async updateFcmToken(id: string, fcmToken: string): Promise<void> {
-    await this.repo.update(id, { fcmToken });
   }
 
   /** 프로필 이미지 업로드 — 기존에 우리가 발급한 URL 이 있으면 같이 삭제. */

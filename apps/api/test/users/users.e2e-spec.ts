@@ -8,6 +8,8 @@ import { createE2EApp, TestAuthGuard } from '../e2e/create-e2e-app';
 import { UserEntity } from '../../src/users/user.entity';
 import { UsersController } from '../../src/users/users.controller';
 import { UsersService } from '../../src/users/users.service';
+import { FcmTokenEntity } from '../../src/notification/fcm-token.entity';
+import { FcmTokenService } from '../../src/notification/fcm-token.service';
 import { StorageService } from '../../src/storage/storage.service';
 import { JwtAuthGuard } from '../../src/auth/guards/jwt-auth.guard';
 
@@ -15,6 +17,7 @@ describe('Users (e2e)', () => {
   let app: INestApplication;
   let http: ReturnType<typeof request>;
   let users: Repository<UserEntity>;
+  let fcmTokens: Repository<FcmTokenEntity>;
   // 스토리지 미설정 상태를 흉내내 업로드 503 경로를 검증한다.
   const storage = {
     isReady: jest.fn().mockReturnValue(false),
@@ -25,13 +28,18 @@ describe('Users (e2e)', () => {
 
   beforeAll(async () => {
     app = await createE2EApp({
-      entities: [UserEntity],
+      entities: [UserEntity, FcmTokenEntity],
       controllers: [UsersController],
-      providers: [UsersService, { provide: StorageService, useValue: storage }],
+      providers: [
+        UsersService,
+        FcmTokenService,
+        { provide: StorageService, useValue: storage },
+      ],
       overrideGuards: [{ guard: JwtAuthGuard, useValue: TestAuthGuard }],
     });
     http = request(app.getHttpServer());
     users = app.get(getRepositoryToken(UserEntity));
+    fcmTokens = app.get(getRepositoryToken(FcmTokenEntity));
   });
 
   afterAll(async () => {
@@ -48,10 +56,9 @@ describe('Users (e2e)', () => {
 
   describe('GET /users/me', () => {
     it('returns the profile without sensitive columns', async () => {
-      const uid = await newUser({ fcmToken: 'device-token', passwordHash: 'secret-hash' });
+      const uid = await newUser({ passwordHash: 'secret-hash' });
       const res = await http.get('/users/me').set('x-test-user-id', uid).expect(200);
       expect(res.body.id).toBe(uid);
-      expect(res.body).not.toHaveProperty('fcmToken');
       expect(res.body).not.toHaveProperty('passwordHash');
       expect(res.body).not.toHaveProperty('pendingPasswordHash');
     });
@@ -119,17 +126,31 @@ describe('Users (e2e)', () => {
       expect(res.body.replan_ready).toBe(false);
     });
 
-    it('registers an fcm token', async () => {
+    it('registers an fcm token into the token table', async () => {
       const uid = await newUser();
       const res = await http
         .patch('/users/me/fcm-token')
         .set('x-test-user-id', uid)
-        .send({ fcmToken: 'new-device-token' })
+        .send({ fcmToken: 'new-device-token', platform: 'android' })
         .expect(200);
       expect(res.body).toEqual({ success: true });
 
-      const reloaded = await users.findOneBy({ id: uid });
-      expect(reloaded?.fcmToken).toBe('new-device-token');
+      const saved = await fcmTokens.findOneBy({ token: 'new-device-token' });
+      expect(saved?.userId).toBe(uid);
+      expect(saved?.platform).toBe('android');
+    });
+
+    it('re-registering the same token upserts instead of duplicating', async () => {
+      const uid = await newUser();
+      for (let i = 0; i < 2; i++) {
+        await http
+          .patch('/users/me/fcm-token')
+          .set('x-test-user-id', uid)
+          .send({ fcmToken: 'dupe-token' })
+          .expect(200);
+      }
+      const rows = await fcmTokens.findBy({ token: 'dupe-token' });
+      expect(rows).toHaveLength(1);
     });
   });
 

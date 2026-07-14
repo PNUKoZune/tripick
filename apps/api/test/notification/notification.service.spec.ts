@@ -23,6 +23,14 @@ function config(overrides: Record<string, string> = {}) {
   } as any;
 }
 
+function tokenService(tokens: string[] = []) {
+  return {
+    listTokens: jest.fn(async () => tokens),
+    remove: jest.fn(async () => undefined),
+    register: jest.fn(async () => undefined),
+  } as any;
+}
+
 const FIREBASE_ENV = {
   FIREBASE_PROJECT_ID: 'proj',
   FIREBASE_CLIENT_EMAIL: 'svc@proj.iam',
@@ -46,37 +54,37 @@ describe('NotificationService', () => {
   });
 
   it('skips initialization when firebase env is incomplete', () => {
-    const svc = new NotificationService(config());
+    const svc = new NotificationService(config(), tokenService());
     svc.onModuleInit();
     expect(mockedInitApp).not.toHaveBeenCalled();
   });
 
   it('initializes firebase-admin when env is complete', () => {
-    const svc = new NotificationService(config(FIREBASE_ENV));
+    const svc = new NotificationService(config(FIREBASE_ENV), tokenService());
     svc.onModuleInit();
     expect(mockedInitApp).toHaveBeenCalledTimes(1);
   });
 
   it('is a no-op send when the fcm token is missing', async () => {
-    const svc = new NotificationService(config(FIREBASE_ENV));
+    const svc = new NotificationService(config(FIREBASE_ENV), tokenService());
     svc.onModuleInit();
-    await svc.send(push, null);
+    expect(await svc.send(push, null)).toBe('skipped');
     expect(send).not.toHaveBeenCalled();
   });
 
   it('is a no-op send when firebase was never initialized', async () => {
-    const svc = new NotificationService(config()); // env 없음 → app undefined
+    const svc = new NotificationService(config(), tokenService()); // env 없음 → app undefined
     svc.onModuleInit();
-    await svc.send(push, 'token-abc');
+    expect(await svc.send(push, 'token-abc')).toBe('skipped');
     expect(send).not.toHaveBeenCalled();
   });
 
   it('sends a message with notification + data payload when configured', async () => {
     send.mockResolvedValue('msg-id');
-    const svc = new NotificationService(config(FIREBASE_ENV));
+    const svc = new NotificationService(config(FIREBASE_ENV), tokenService());
     svc.onModuleInit();
 
-    await svc.send({ ...push, data: { tripId: 't1' } }, 'token-abc');
+    expect(await svc.send({ ...push, data: { tripId: 't1' } }, 'token-abc')).toBe('ok');
 
     expect(send).toHaveBeenCalledTimes(1);
     const arg = send.mock.calls[0][0];
@@ -85,19 +93,66 @@ describe('NotificationService', () => {
     expect(arg.data).toEqual({ type: 'replan_ready', tripId: 't1' });
   });
 
-  it('swallows expired/unregistered token errors without throwing', async () => {
+  it('reports expired/unregistered token as invalid without throwing', async () => {
     send.mockRejectedValue({ code: 'messaging/registration-token-not-registered' });
-    const svc = new NotificationService(config(FIREBASE_ENV));
+    const svc = new NotificationService(config(FIREBASE_ENV), tokenService());
     svc.onModuleInit();
 
-    await expect(svc.send(push, 'stale-token')).resolves.toBeUndefined();
+    await expect(svc.send(push, 'stale-token')).resolves.toBe('invalid');
   });
 
   it('swallows generic send failures without throwing', async () => {
     send.mockRejectedValue(new Error('network'));
-    const svc = new NotificationService(config(FIREBASE_ENV));
+    const svc = new NotificationService(config(FIREBASE_ENV), tokenService());
     svc.onModuleInit();
 
-    await expect(svc.send(push, 'token-abc')).resolves.toBeUndefined();
+    await expect(svc.send(push, 'token-abc')).resolves.toBe('skipped');
+  });
+
+  it('sendToUser fans out to every device token', async () => {
+    send.mockResolvedValue('msg-id');
+    const tokens = tokenService(['tok-a', 'tok-b']);
+    const svc = new NotificationService(config(FIREBASE_ENV), tokens);
+    svc.onModuleInit();
+
+    await svc.sendToUser(push);
+
+    expect(tokens.listTokens).toHaveBeenCalledWith('u1');
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(tokens.remove).not.toHaveBeenCalled();
+  });
+
+  it('sendToUser removes tokens rejected as invalid', async () => {
+    send
+      .mockRejectedValueOnce({ code: 'messaging/invalid-registration-token' })
+      .mockResolvedValueOnce('msg-id');
+    const tokens = tokenService(['stale', 'fresh']);
+    const svc = new NotificationService(config(FIREBASE_ENV), tokens);
+    svc.onModuleInit();
+
+    await svc.sendToUser(push);
+
+    expect(tokens.remove).toHaveBeenCalledTimes(1);
+    expect(tokens.remove).toHaveBeenCalledWith('stale');
+  });
+
+  it('sendToUser never rejects even if token cleanup throws', async () => {
+    send.mockRejectedValue({ code: 'messaging/invalid-registration-token' });
+    const tokens = tokenService(['stale']);
+    tokens.remove.mockRejectedValue(new Error('db down'));
+    const svc = new NotificationService(config(FIREBASE_ENV), tokens);
+    svc.onModuleInit();
+
+    await expect(svc.sendToUser(push)).resolves.toBeUndefined();
+  });
+
+  it('sendToUser is a no-op when the user has no tokens', async () => {
+    const tokens = tokenService([]);
+    const svc = new NotificationService(config(FIREBASE_ENV), tokens);
+    svc.onModuleInit();
+
+    await svc.sendToUser(push);
+
+    expect(send).not.toHaveBeenCalled();
   });
 });

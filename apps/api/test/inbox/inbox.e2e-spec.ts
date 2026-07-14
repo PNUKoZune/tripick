@@ -30,7 +30,7 @@ describe('Inbox (e2e)', () => {
         InboxService,
         // list/markRead/markAllRead 는 이 둘을 쓰지 않지만 DI 충족을 위해 스텁 제공.
         { provide: UsersService, useValue: { findById: jest.fn(), prefersCategory: jest.fn() } },
-        { provide: NotificationService, useValue: { send: jest.fn() } },
+        { provide: NotificationService, useValue: { sendToUser: jest.fn() } },
       ],
       overrideGuards: [{ guard: JwtAuthGuard, useValue: TestAuthGuard }],
     });

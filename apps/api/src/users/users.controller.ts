@@ -21,6 +21,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { FcmTokenService } from '../notification/fcm-token.service';
 import { UsersService } from './users.service';
 import { UserEntity } from './user.entity';
 import type {
@@ -39,7 +40,10 @@ interface UploadedImage {
 @UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly fcmTokens: FcmTokenService,
+  ) {}
 
   @Get('me')
   @ApiOperation({ summary: '내 프로필 조회' })
@@ -66,12 +70,13 @@ export class UsersController {
   }
 
   @Patch('me/fcm-token')
-  @ApiOperation({ summary: 'FCM 토큰 등록/갱신' })
+  @ApiOperation({ summary: 'FCM 토큰 등록/갱신 (기기별 다건 지원)' })
   async updateFcmToken(
     @CurrentUser() user: UserEntity,
     @Body('fcmToken') fcmToken: string,
+    @Body('platform') platform?: string,
   ) {
-    await this.usersService.updateFcmToken(user.id, fcmToken);
+    await this.fcmTokens.register(user.id, fcmToken, platform);
     return { success: true };
   }
 
