@@ -7,7 +7,7 @@ import type {
   LoginResponseDto,
 } from '@tripick/types';
 import { api, apiUrl } from '@/shared/api/client';
-import { deleteFcmToken } from '@/entities/user';
+import { deleteFcmToken, flushPendingFcmToken } from '@/entities/user';
 import { clearLastFcmToken, getLastFcmToken } from '@/shared/rn-bridge/fcm-token-storage';
 import { clearSession, getStoredSession, storeSession } from '../model/session-storage';
 
@@ -20,6 +20,7 @@ export async function signupWithEmail(dto: EmailSignupDto): Promise<AuthOpResult
 export async function loginWithEmail(dto: EmailLoginDto): Promise<LoginResponseDto> {
   const session = await api.post<LoginResponseDto>('/auth/login', dto);
   storeSession(session);
+  void flushPendingFcmToken();
   return session;
 }
 
@@ -44,6 +45,7 @@ export function resetPassword(token: string, password: string) {
 export async function startDemoSession(nickname = '여행자'): Promise<LoginResponseDto> {
   const session = await api.post<LoginResponseDto>('/auth/demo', { nickname });
   storeSession(session);
+  void flushPendingFcmToken();
   return session;
 }
 

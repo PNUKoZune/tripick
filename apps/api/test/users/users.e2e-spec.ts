@@ -205,5 +205,15 @@ describe('Users (e2e)', () => {
       await http.delete('/users/me').set('x-test-user-id', uid).expect(204);
       expect(await users.findOneBy({ id: uid })).toBeNull();
     });
+
+    it('also clears the user’s fcm tokens', async () => {
+      const uid = await newUser();
+      await fcmTokens.save(fcmTokens.create({ userId: uid, token: 'dev-a' }));
+      await fcmTokens.save(fcmTokens.create({ userId: uid, token: 'dev-b' }));
+
+      await http.delete('/users/me').set('x-test-user-id', uid).expect(204);
+
+      expect(await fcmTokens.findBy({ userId: uid })).toHaveLength(0);
+    });
   });
 });

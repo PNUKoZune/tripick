@@ -11,6 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { randomBytes } from 'node:crypto';
 import { StorageService } from '../storage/storage.service';
+import { FcmTokenService } from '../notification/fcm-token.service';
 import { UserEntity } from './user.entity';
 import { DEFAULT_NOTIFICATION_PREFERENCES } from './notification-preferences.constants';
 import {
@@ -35,6 +36,7 @@ export class UsersService implements OnModuleInit {
     @InjectRepository(UserEntity)
     private readonly repo: Repository<UserEntity>,
     private readonly storage: StorageService,
+    private readonly fcmTokens: FcmTokenService,
   ) {}
 
   /** 핸들 없이 만들어진 기존 사용자들에 핸들 backfill (synchronize 환경 기준 1회성). */
@@ -307,6 +309,8 @@ export class UsersService implements OnModuleInit {
   async remove(id: string): Promise<void> {
     const user = await this.findById(id);
     if (!user) throw new NotFoundException(`User ${id} not found`);
+    // 사용자 삭제 전에 등록된 모든 FCM 토큰을 정리(orphan row 방지).
+    await this.fcmTokens.removeAllForUser(id);
     await this.repo.remove(user);
   }
 }

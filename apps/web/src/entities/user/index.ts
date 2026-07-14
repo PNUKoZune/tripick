@@ -5,6 +5,7 @@ export {
   deleteMe,
   updateFcmToken,
   deleteFcmToken,
+  flushPendingFcmToken,
   uploadProfileImage,
   removeProfileImage,
 } from './api';

@@ -49,4 +49,9 @@ export class FcmTokenService {
     if (!trimmed) return;
     await this.repo.delete({ userId, token: trimmed });
   }
+
+  /** 사용자의 모든 토큰 제거(계정 삭제 시 orphan row 방지). */
+  async removeAllForUser(userId: string): Promise<void> {
+    await this.repo.delete({ userId });
+  }
 }
