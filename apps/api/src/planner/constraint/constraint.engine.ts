@@ -48,6 +48,8 @@ export class ConstraintEngine {
       }
     }
 
+    // 구간 ETA 는 서로 독립적이라 병렬화가 자연스러워 보이지만, OTP 는 동시 Raptor 질의를
+    // 감당하지 못한다(실측: 같은 4구간이 순차 7.5초 vs 병렬 80초). 반드시 순차로 조회한다.
     for (let index = 0; index < bounded.length - 1; index += 1) {
       const current = bounded[index]!;
       const next = bounded[index + 1]!;
@@ -62,8 +64,7 @@ export class ConstraintEngine {
         : await this.routeHelper.getTransitEta(current.coordinates, next.coordinates, departAt);
 
       const etaMin = Math.ceil(eta.durationSec / 60);
-      const nextStart = new Date(next.scheduledAt).getTime();
-      const bufferMs = nextStart - currentEnd;
+      const bufferMs = new Date(next.scheduledAt).getTime() - currentEnd;
 
       if (bufferMs < etaMin * 60000) {
         issues.push(

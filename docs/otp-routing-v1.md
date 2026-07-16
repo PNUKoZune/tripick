@@ -54,10 +54,11 @@
 planner.service.estimateTravelTime(from, to, mode, currentAt)      # 이전 장소 출발 시각
 main-planner.travelMinutes(trip, from, to, departureFrom(item))     # 항목 종료 시각
 constraint.engine.validate(...) → getDrivingEta/TransitEta(.., currentEnd)
-  → RouteHelper.queryOtp(from, to, modes, departAt)
-      → POST {OTP_BASE_URL}/otp/gtfs/v1  (GraphQL plan)
-          ├ 성공 → { durationSec, distanceM(=leg 거리 합) }
-          └ 실패/경로없음/타임아웃(5s) → 직선거리 로컬 추정 폴백
+  → RouteHelper.getEta(from, to, mode, departAt)
+      ├ Redis 캐시 hit → 즉시 반환 (departAt 있는 질의만 캐싱)
+      └ miss → POST {OTP_BASE_URL}/otp/gtfs/v1  (GraphQL plan)
+          ├ 성공 → { durationSec, distanceM(=leg 거리 합), source:'otp' } → 캐시 저장
+          └ 실패/경로없음/타임아웃(15s) → 직선거리 추정 (source:'estimate', 캐시 안 함)
 ```
 
 - `departAt` 이 있으면 KST `date`/`time` 인자를 붙여 시간표 기반으로 조회 (밤/새벽 왜곡 방지)
@@ -130,15 +131,49 @@ self-review 에서 나온 결함을 수정했다. 설계 의도가 코드에 안
 `source` 도입 배경: OTP 콜드 스타트 1회가 5s axios 타임아웃을 넘겨 폴백된 적이 있는데
 (직선거리 ÷ 폴백속도 값이 그대로 나옴), 응답만 보고는 실경로인지 구분할 수 없었다.
 
+## 6-2. ETA 캐싱 (Redis)
+
+`WeatherHelper` 와 같은 인라인 ioredis 패턴. 일정 1건 생성이 같은 구간을 여러 번(제약 검증
+재시도 등) 조회하므로 적중률이 높다.
+
+- 키: `route:eta:{mode}:{lat,lng}:{lat,lng}:{departAt|any}` — 좌표는 소수 5자리(~1m)로 정규화
+- TTL: **6시간** (같은 그래프면 결과가 결정적)
+- **departAt 이 있는 질의만 캐싱**. 없으면 OTP 가 "현재 시각"으로 계산해 결과가 벽시계에
+  의존하는데, 이를 캐싱하면 Live 폴링 ETA 가 얼어붙어 폴링이 무의미해진다
+- **`source='estimate'`(폴백)는 캐싱하지 않는다** — OTP 장애가 지나가도 나쁜 추정치가 TTL 동안 박제된다
+- `car`/`walk` 는 OTP 에 교통량 모델이 없어 시각과 무관 → 키에서 출발시각을 빼 적중률을 높인다.
+  `transit` 만 시간표에 의존하므로 분 단위 출발시각을 키에 넣는다(10분 버킷 같은 근사는
+  09:00 의 답을 09:09 질의에 주게 되어 틀린 값이 된다)
+- Redis 장애는 조회를 막지 않는다 (read/write 전부 try/catch, `lazyConnect`+`enableOfflineQueue:false`)
+
+실측 (서울 시내 4구간, 미워밍 날짜): **콜드 11.3초 → 캐시 적중 2ms**.
+
+### ⚠️ 병렬 조회 금지 (실측으로 뒤집힌 가정)
+
+"구간별 ETA 는 서로 독립적이니 `Promise.all` 로 묶으면 빠르다"는 최적화를 넣었다가 되돌렸다.
+OTP 는 동시 Raptor 질의를 감당하지 못한다 (10g 힙을 16GB 머신에서 쓰는 구성 탓도 있다).
+
+| 같은 4구간 | 소요 |
+| ---------- | ---- |
+| 순차 | **7.5초** |
+| 병렬(`Promise.all`) | **80초** (개별 27.8 / 78.1 / 80.1 / 80.2초) |
+
+병렬이 약 10배 느리고, 5초 타임아웃과 겹치면 4건 전부 폴백해 추정치로 응답했다.
+`constraint.engine` 과 `main-planner.recomputeDayTravelTimes` 는 **반드시 순차**를 유지할 것.
+
+부수로 OTP 는 서비스 날짜별 transit 레이어를 lazy 로 만들어 **날짜당 첫 질의가 ~3초**
+(같은 날짜 재질의 ~0.85초)다. 기존 5초 타임아웃은 여유가 부족해 실제로 폴백이 발생했고,
+`OTP_TIMEOUT_MS` 를 15초로 올렸다.
+
 ## 7. 알려진 제한 / 후속
 
 - OTP 는 GTFS 시간표 기반이라 **실시간 교통량(도로 혼잡)은 미반영** → UI 에 info 툴팁으로 안내, "지도 길찾기로 정확히 확인" 유도
 - 전국 그래프는 16GB 물리 메모리에 빡빡 — 실사용은 권역 샤딩(경계 넘는 경로 손실 주의) 또는 RAM 증설 필요
-- Live 폴링은 60초/사용자 1회 — OTP 단일 인스턴스 동시성 부하는 사용자 수 증가 시 재검토
-- **좌표쌍 ETA 캐싱 미적용** — 일정 1건 생성에 9~45회를 순차 호출한다. `WeatherHelper` 의
-  Redis 캐시 패턴을 좌표쌍+모드+출발시각 버킷 키로 적용하고, 독립 구간은 `Promise.all` 로
-  묶는 것이 다음 과제 (이 작업의 원래 출발점이었다)
-- OTP 콜드 스타트 첫 질의가 5s 타임아웃을 넘겨 1회 폴백될 수 있음 (워밍업 후 WALK 169ms /
-  CAR 53ms / TRANSIT 1265ms). `source=estimate` 로 식별 가능하며 자동 회복된다
+- **OTP 동시성이 사실상 1** (6-2 참고) — Live 폴링은 60초/사용자 1회라 지금은 견디지만,
+  동시 사용자가 늘면 질의가 겹치는 순간 급격히 느려진다. 스케일아웃하려면 OTP 인스턴스를
+  늘리고 앞단에 큐/직렬화를 두는 구조가 필요하다. 현 구성은 사실상 단일 사용자 개발용
+- 일정 1건 생성은 여전히 캐시 미스 시 9~45회를 순차 조회한다 (4구간 ~11초 실측).
+  일정 규모가 커지면 생성 지연이 선형으로 늘어난다 — BullMQ 비동기 처리 검토 필요
+- 날짜별 첫 질의 ~3초는 lazy 레이어 빌드 탓 — 자주 쓰는 날짜를 미리 워밍하는 것도 방법
 - `graph.obj`·GTFS·OSM 대용량 파일은 커밋 제외(gitignore), 각자 로컬에서 빌드
 - GTFS 데이터 품질(정류장 좌표, 노선 커버리지)에 결과가 좌우됨 — 피드 갱신 주기 관리 필요

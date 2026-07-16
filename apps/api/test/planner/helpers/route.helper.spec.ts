@@ -6,6 +6,22 @@ import { RouteHelper } from '../../../src/planner/helpers/route.helper';
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
+// 캐시 적중/미적중을 실제로 검증하기 위한 인메모리 Redis.
+const mockRedisStore = new Map<string, string>();
+jest.mock('ioredis', () => ({
+  Redis: jest.fn().mockImplementation(() => ({
+    get: jest.fn(async (key: string) => mockRedisStore.get(key) ?? null),
+    set: jest.fn(async (key: string, value: string) => {
+      mockRedisStore.set(key, value);
+      return 'OK';
+    }),
+    on: jest.fn(),
+    disconnect: jest.fn(),
+  })),
+}));
+
+const DEPART = new Date('2026-07-15T00:30:00Z'); // 09:30 KST
+
 /** 지정한 env 만 덮어쓰고 나머지는 호출부 기본값을 돌려주는 ConfigService 스텁. */
 function config(overrides: Record<string, string> = {}) {
   return {
@@ -32,7 +48,10 @@ function otpResponse(durationSec: number, legDistancesM: number[]) {
 }
 
 describe('RouteHelper', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRedisStore.clear();
+  });
 
   describe('getDrivingEta', () => {
     it('falls back to a local distance estimate when OTP_BASE_URL is unset', async () => {
@@ -189,6 +208,83 @@ describe('RouteHelper', () => {
 
       const eta = await helper.getDrivingEta(SEOUL, BUSAN);
       expect(eta.source).toBe('otp');
+    });
+  });
+
+  describe('캐싱', () => {
+    const otp = () => new RouteHelper(config({ OTP_BASE_URL: 'http://otp:8090' }));
+
+    it('departAt 이 같은 동일 구간 재조회는 OTP 를 다시 때리지 않는다', async () => {
+      mockedAxios.post.mockResolvedValue(otpResponse(1200, [8500]));
+      const helper = otp();
+
+      const first = await helper.getTransitEta(SEOUL, BUSAN, DEPART);
+      const second = await helper.getTransitEta(SEOUL, BUSAN, DEPART);
+
+      expect(mockedAxios.post).toHaveBeenCalledTimes(1); // 2번째는 캐시 적중
+      expect(second).toEqual(first);
+    });
+
+    // Live 폴링은 departAt 없이 "현재 시각" 기준이라, 캐싱하면 ETA 가 얼어붙는다.
+    it('departAt 이 없으면 캐싱하지 않는다 (Live 폴링 신선도 유지)', async () => {
+      mockedAxios.post.mockResolvedValue(otpResponse(1200, [8500]));
+      const helper = otp();
+
+      await helper.getTransitEta(SEOUL, BUSAN);
+      await helper.getTransitEta(SEOUL, BUSAN);
+
+      expect(mockedAxios.post).toHaveBeenCalledTimes(2);
+      expect(mockRedisStore.size).toBe(0);
+    });
+
+    it('transit 은 출발 시각이 다르면 따로 조회한다 (시간표 의존)', async () => {
+      mockedAxios.post.mockResolvedValue(otpResponse(1200, [8500]));
+      const helper = otp();
+
+      await helper.getTransitEta(SEOUL, BUSAN, DEPART);
+      await helper.getTransitEta(SEOUL, BUSAN, new Date('2026-07-15T03:30:00Z'));
+
+      expect(mockedAxios.post).toHaveBeenCalledTimes(2);
+    });
+
+    // OTP 는 CAR 에 교통량 모델이 없어 출발 시각이 결과를 바꾸지 않는다.
+    it('car 는 출발 시각이 달라도 캐시를 공유한다', async () => {
+      mockedAxios.post.mockResolvedValue(otpResponse(600, [5000]));
+      const helper = otp();
+
+      await helper.getDrivingEta(SEOUL, BUSAN, DEPART);
+      await helper.getDrivingEta(SEOUL, BUSAN, new Date('2026-07-15T03:30:00Z'));
+
+      expect(mockedAxios.post).toHaveBeenCalledTimes(1);
+    });
+
+    it('폴백 추정치는 캐싱하지 않는다 (OTP 복구 후 나쁜 값이 남으면 안 됨)', async () => {
+      mockedAxios.post.mockRejectedValue(new Error('ECONNREFUSED'));
+      const helper = otp();
+
+      const first = await helper.getTransitEta(SEOUL, BUSAN, DEPART);
+      expect(first.source).toBe('estimate');
+      expect(mockRedisStore.size).toBe(0);
+
+      // OTP 가 살아나면 곧바로 실경로가 나와야 한다 (추정치가 박제되지 않음)
+      mockedAxios.post.mockResolvedValue(otpResponse(1200, [8500]));
+      const second = await helper.getTransitEta(SEOUL, BUSAN, DEPART);
+      expect(second.source).toBe('otp');
+      expect(second.durationSec).toBe(1200);
+    });
+
+    it('Redis 장애는 조회를 막지 않는다', async () => {
+      const { Redis } = jest.requireMock('ioredis') as { Redis: jest.Mock };
+      Redis.mockImplementationOnce(() => ({
+        get: jest.fn().mockRejectedValue(new Error('redis down')),
+        set: jest.fn().mockRejectedValue(new Error('redis down')),
+        on: jest.fn(),
+        disconnect: jest.fn(),
+      }));
+      mockedAxios.post.mockResolvedValue(otpResponse(1200, [8500]));
+
+      const eta = await otp().getTransitEta(SEOUL, BUSAN, DEPART);
+      expect(eta).toEqual({ durationSec: 1200, distanceM: 8500, source: 'otp' });
     });
   });
 
