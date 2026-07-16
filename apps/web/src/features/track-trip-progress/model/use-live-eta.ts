@@ -25,9 +25,9 @@ interface UseLiveEtaParams {
 }
 
 interface LiveEta {
-  /** OTP 실경로 기준 예상 소요 분. 조회 전/실패 시 null → 호출부에서 휴리스틱 폴백. */
+  /** OTP 실경로 기준 예상 소요 분. 조회 전/실패/폴백 시 null → 호출부에서 휴리스틱 폴백. */
   etaMin: number | null;
-  /** OTP 실경로 총 거리(m). 조회 전/실패 시 null. */
+  /** OTP 실경로 총 거리(m). etaMin 과 항상 같은 경로에서 나온 짝. */
   distanceM: number | null;
 }
 
@@ -69,8 +69,12 @@ export function useLiveEta({
     staleTime: POLL_INTERVAL_MS,
   });
 
+  // 서버가 폴백(source=estimate)한 값은 직선거리 추정이라 클라 휴리스틱과 품질이 같은데
+  // 60초까지 묵을 수 있다. 그럴 바엔 GPS 마다 갱신되는 클라 휴리스틱이 낫다 → null 로 넘긴다.
+  const routed = data?.source === 'otp' ? data : null;
+
   return {
-    etaMin: data ? Math.max(1, Math.round(data.durationSec / 60)) : null,
-    distanceM: data ? data.distanceM : null,
+    etaMin: routed ? Math.max(1, Math.round(routed.durationSec / 60)) : null,
+    distanceM: routed ? routed.distanceM : null,
   };
 }

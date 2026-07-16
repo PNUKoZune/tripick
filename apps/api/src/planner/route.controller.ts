@@ -29,7 +29,7 @@ export class RouteController {
     const from = this.parseCoord(fromLat, fromLng, 'from');
     const to = this.parseCoord(toLat, toLng, 'to');
     const eta = await this.routeHelper.getEta(from, to, this.parseMode(mode));
-    return { durationSec: eta.durationSec, distanceM: eta.distanceM };
+    return { durationSec: eta.durationSec, distanceM: eta.distanceM, source: eta.source };
   }
 
   /** 위경도 파싱 + 지구 범위 검증. 범위를 벗어나면 그럴듯한 가짜 ETA 대신 400 을 낸다. */

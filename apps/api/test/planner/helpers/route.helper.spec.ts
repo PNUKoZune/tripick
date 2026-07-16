@@ -49,7 +49,7 @@ describe('RouteHelper', () => {
       const helper = new RouteHelper(config({ OTP_BASE_URL: 'http://otp:8090' }));
 
       const eta = await helper.getDrivingEta(SEOUL, BUSAN);
-      expect(eta).toEqual({ durationSec: 1200, distanceM: 8500 });
+      expect(eta).toEqual({ durationSec: 1200, distanceM: 8500, source: 'otp' });
 
       const [url, body] = mockedAxios.post.mock.calls[0]!;
       expect(url).toBe('http://otp:8090/otp/gtfs/v1');
@@ -80,7 +80,7 @@ describe('RouteHelper', () => {
       const helper = new RouteHelper(config({ OTP_BASE_URL: 'http://otp:8090' }));
 
       const eta = await helper.getTransitEta(SEOUL, BUSAN);
-      expect(eta).toEqual({ durationSec: 2400, distanceM: 9200 });
+      expect(eta).toEqual({ durationSec: 2400, distanceM: 9200, source: 'otp' });
 
       const [, body] = mockedAxios.post.mock.calls[0]!;
       const query = (body as { query: string }).query;
@@ -126,7 +126,7 @@ describe('RouteHelper', () => {
       const helper = new RouteHelper(config({ OTP_BASE_URL: 'http://otp:8090' }));
 
       const eta = await helper.getWalkingEta(SEOUL, BUSAN);
-      expect(eta).toEqual({ durationSec: 900, distanceM: 1100 });
+      expect(eta).toEqual({ durationSec: 900, distanceM: 1100, source: 'otp' });
 
       const query = (mockedAxios.post.mock.calls[0]![1] as { query: string }).query;
       expect(query).toContain('mode: WALK');
@@ -158,6 +158,50 @@ describe('RouteHelper', () => {
 
       const query = (mockedAxios.post.mock.calls[0]![1] as { query: string }).query;
       expect(query).not.toContain('TRANSIT');
+    });
+  });
+
+  describe('source (폴백이 조용히 섞이지 않도록)', () => {
+    it.each([
+      ['OTP_BASE_URL 미설정', () => new RouteHelper(config({ OTP_BASE_URL: '' }))],
+      [
+        'OTP 오류',
+        () => {
+          mockedAxios.post.mockRejectedValue(new Error('ECONNREFUSED'));
+          return new RouteHelper(config({ OTP_BASE_URL: 'http://otp:8090' }));
+        },
+      ],
+      [
+        'OTP 경로 없음',
+        () => {
+          mockedAxios.post.mockResolvedValue({ data: { data: { plan: { itineraries: [] } } } });
+          return new RouteHelper(config({ OTP_BASE_URL: 'http://otp:8090' }));
+        },
+      ],
+    ])('%s 이면 source=estimate', async (_label, make) => {
+      const eta = await make().getDrivingEta(SEOUL, BUSAN);
+      expect(eta.source).toBe('estimate');
+    });
+
+    it('실경로면 source=otp', async () => {
+      mockedAxios.post.mockResolvedValue(otpResponse(600, [500]));
+      const helper = new RouteHelper(config({ OTP_BASE_URL: 'http://otp:8090' }));
+
+      const eta = await helper.getDrivingEta(SEOUL, BUSAN);
+      expect(eta.source).toBe('otp');
+    });
+  });
+
+  describe('폴백 거리 (haversine)', () => {
+    // 기존 근사는 경도 1도를 88km 로 고정했는데 이는 위도 37.5°(서울) 전용 값이다.
+    // 제주(위도 33.5°)에선 경도 1도가 약 92.8km 라 5% 넘게 어긋난다.
+    it('제주 동서 구간을 실제 대권거리(약 55.6km) 오차 2% 내로 계산한다', async () => {
+      const helper = new RouteHelper(config({ OTP_BASE_URL: '' }));
+      const eta = await helper.getDrivingEta({ lat: 33.5, lng: 126.3 }, { lat: 33.5, lng: 126.9 });
+
+      // 옛 88km/도 근사면 52.8km 가 나와 이 범위를 벗어난다.
+      expect(eta.distanceM / 1000).toBeGreaterThan(55.6 * 0.98);
+      expect(eta.distanceM / 1000).toBeLessThan(55.6 * 1.02);
     });
   });
 });

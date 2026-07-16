@@ -145,6 +145,7 @@ function TripProgressContent() {
               distanceM={deviation.distanceM}
               transportLabel={trip?.meta.transportLabel}
               etaMinOtp={liveEta.etaMin}
+              distanceMOtp={liveEta.distanceM}
             />
             <TripProgressTimeline
               items={progressItems}
@@ -193,6 +194,7 @@ function TripProgressContent() {
                 distanceM={deviation.distanceM}
                 transportLabel={trip?.meta.transportLabel}
                 etaMinOtp={liveEta.etaMin}
+                distanceMOtp={liveEta.distanceM}
               />
               <TripProgressTimeline
                 items={progressItems}

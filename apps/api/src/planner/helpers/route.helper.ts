@@ -1,11 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import type { Coordinates, RouteTransportMode } from '@tripick/types';
+import { haversineMeters } from '@tripick/utils';
+import type { Coordinates, RouteEtaSource, RouteTransportMode } from '@tripick/types';
 
 interface EtaResult {
   durationSec: number;
   distanceM: number;
+  source: RouteEtaSource;
 }
 
 interface OtpPlanResponse {
@@ -28,6 +30,8 @@ interface OtpPlanResponse {
 @Injectable()
 export class RouteHelper {
   private readonly logger = new Logger(RouteHelper.name);
+  /** OTP_BASE_URL 미설정 warn 을 1회로 제한하기 위한 플래그. */
+  private warnedNoOtp = false;
 
   constructor(private readonly config: ConfigService) {}
 
@@ -69,6 +73,13 @@ export class RouteHelper {
   ): Promise<EtaResult> {
     const baseUrl = this.config.get<string>('OTP_BASE_URL', 'http://localhost:8090');
     if (!baseUrl) {
+      // 매 호출 warn 은 로그를 덮으므로 1회만 — 폴백이 조용히 상시화되는 것만 막는다.
+      if (!this.warnedNoOtp) {
+        this.warnedNoOtp = true;
+        this.logger.warn(
+          'OTP_BASE_URL 미설정 — 모든 ETA 가 직선거리 추정치(source=estimate)로 응답됩니다.',
+        );
+      }
       return this.buildLocalEstimate(from, to, fallbackKmPerHour);
     }
 
@@ -110,6 +121,7 @@ export class RouteHelper {
       return {
         durationSec: Math.round(itinerary.duration),
         distanceM: Math.round(distanceM),
+        source: 'otp',
       };
     } catch (err) {
       this.logger.error('OTP ETA 조회 실패:', err);
@@ -117,18 +129,14 @@ export class RouteHelper {
     }
   }
 
+  /** 직선거리 기반 폴백 추정. 실경로가 아니므로 source=estimate 로 표시한다. */
   private buildLocalEstimate(from: Coordinates, to: Coordinates, kmPerHour: number): EtaResult {
-    const distanceKm = this.getDistanceKm(from, to);
+    const distanceKm = haversineMeters(from, to) / 1000;
     return {
       distanceM: Math.round(distanceKm * 1000),
       durationSec: Math.max(600, Math.round((distanceKm / kmPerHour) * 3600)),
+      source: 'estimate',
     };
-  }
-
-  private getDistanceKm(from: Coordinates, to: Coordinates): number {
-    const latDelta = (from.lat - to.lat) * 111;
-    const lngDelta = (from.lng - to.lng) * 88;
-    return Math.sqrt(latDelta ** 2 + lngDelta ** 2);
   }
 
   /** Date → Asia/Seoul 기준 YYYY-MM-DD. */

@@ -12,7 +12,8 @@
 포함:
 
 - OTP2 도커 스택(`otp-build`/`otp`)을 `docker-compose` 에 추가 (compose `profiles` 로 기본 up 과 분리)
-- `RouteHelper.getDrivingEta`/`getTransitEta` 를 OTP GraphQL 질의로 교체 (자동차 CAR, 대중교통 TRANSIT+WALK)
+- `RouteHelper` 를 OTP GraphQL 질의로 교체 — 자동차 CAR / 대중교통 TRANSIT+WALK / 도보 WALK,
+  `getEta(from, to, mode, departAt)` 로 정본 `transportMode` 분기
 - 대중교통 시간표 왜곡 방지: 계획상 출발 시각(`departAt`)을 KST date/time 으로 전달
 - Live 화면: `GET /routes/eta` 신설 + 현재 위치→다음 장소 60초 폴링, 실패 시 직선거리 휴리스틱 폴백
 - 이동시간 추정치 UI 에 "실시간 교통 미반영" info 툴팁
@@ -112,10 +113,32 @@ cd apps/api && npx jest test/planner test/main-planner
 - `next lint` 는 현 Next 버전에서 서브커맨드 미동작(기존 이슈) → typecheck 로 대체
 - Live 화면 info 툴팁은 브라우저 hover 렌더 미확인 (인증+진행중 여행 데이터 필요)
 
+## 6-1. 리뷰 후 보강 (커밋 `64d4faf`, `700c1b0`)
+
+self-review 에서 나온 결함을 수정했다. 설계 의도가 코드에 안 지켜지고 있던 것들이라 기록해 둔다.
+
+| # | 결함 | 수정 |
+| - | ---- | ---- |
+| 1 | `useLiveEta` 의 queryKey 에 GPS 좌표가 있어 11m 이동마다 새 키 → 캐시 미스 → 즉시 재조회. `refetchInterval` 이 무력해 이동 중 최대 60배 요청 | 키를 목적지+수단으로 고정, 위치는 `ref` 로 읽어 폴링 주기가 실제 상한이 되게 함 |
+| 2 | 표시용 한글 라벨을 부분문자열로 역추론해 `'도보 중심'` 이 transit 으로 붕괴 (라벨을 `'자가용'` 으로 바꾸면 car 도 조용히 깨짐) | `PlannerTripMetaDto.transportMode` (정본) 추가, `getWalkingEta`/`getEta` 로 walk 를 WALK 로 조회 |
+| 3 | Live 스크롤 컨테이너 최상단에서 위로 뜨는 툴팁이 클리핑 | `InfoTooltip` 에 `side` prop, NextStopBar 는 아래로 |
+| 4 | 폴백 거리가 경도 1도=88km 고정 근사 (위도 37.5° 전용) — 제주에서 5% 이상 오차 | `@tripick/utils` 의 `haversineMeters` 재사용 |
+| 6 | 폴백이 조용히 섞여 추정치가 실경로처럼 서빙됨 | `EtaResult`/`RouteEtaDto` 에 `source: 'otp' \| 'estimate'` 노출, `OTP_BASE_URL` 미설정 시 1회 warn |
+| 7 | 훅의 `distanceM` 미사용 + 화면이 경로시간과 직선거리를 섞어 표시 | 시간·거리를 같은 출처끼리 짝지어 표시, `source=estimate` 면 클라 휴리스틱 사용 |
+| 8 | 좌표 범위·mode 미검증 → `lat=999` 가 가짜 ETA 200 으로 응답 | mode 화이트리스트 + 위경도 범위 검증 → 400 |
+
+`source` 도입 배경: OTP 콜드 스타트 1회가 5s axios 타임아웃을 넘겨 폴백된 적이 있는데
+(직선거리 ÷ 폴백속도 값이 그대로 나옴), 응답만 보고는 실경로인지 구분할 수 없었다.
+
 ## 7. 알려진 제한 / 후속
 
 - OTP 는 GTFS 시간표 기반이라 **실시간 교통량(도로 혼잡)은 미반영** → UI 에 info 툴팁으로 안내, "지도 길찾기로 정확히 확인" 유도
 - 전국 그래프는 16GB 물리 메모리에 빡빡 — 실사용은 권역 샤딩(경계 넘는 경로 손실 주의) 또는 RAM 증설 필요
 - Live 폴링은 60초/사용자 1회 — OTP 단일 인스턴스 동시성 부하는 사용자 수 증가 시 재검토
+- **좌표쌍 ETA 캐싱 미적용** — 일정 1건 생성에 9~45회를 순차 호출한다. `WeatherHelper` 의
+  Redis 캐시 패턴을 좌표쌍+모드+출발시각 버킷 키로 적용하고, 독립 구간은 `Promise.all` 로
+  묶는 것이 다음 과제 (이 작업의 원래 출발점이었다)
+- OTP 콜드 스타트 첫 질의가 5s 타임아웃을 넘겨 1회 폴백될 수 있음 (워밍업 후 WALK 169ms /
+  CAR 53ms / TRANSIT 1265ms). `source=estimate` 로 식별 가능하며 자동 회복된다
 - `graph.obj`·GTFS·OSM 대용량 파일은 커밋 제외(gitignore), 각자 로컬에서 빌드
 - GTFS 데이터 품질(정류장 좌표, 노선 커버리지)에 결과가 좌우됨 — 피드 갱신 주기 관리 필요
