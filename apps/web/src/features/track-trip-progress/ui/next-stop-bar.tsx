@@ -53,7 +53,13 @@ export function NextStopBar({ item, distanceM, transportLabel, etaMinOtp }: Prop
               {formatDistance(distanceM)}
             </div>
           </div>
-          <InfoTooltip message={ETA_DISCLAIMER} align="right" widthClass="w-[220px]" />
+          {/* Live 화면 스크롤 컨테이너 최상단이라 위로 띄우면 잘린다 → 아래로 */}
+          <InfoTooltip
+            message={ETA_DISCLAIMER}
+            align="right"
+            side="bottom"
+            widthClass="w-[220px]"
+          />
         </div>
       ) : (
         <div className="shrink-0 text-[12px] font-medium text-[#8B95A1]">위치 확인 중…</div>

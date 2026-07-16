@@ -83,7 +83,7 @@ function TripProgressContent() {
   const liveEta = useLiveEta({
     position,
     next: nextPlace ? { lat: nextPlace.lat, lng: nextPlace.lng } : null,
-    transportLabel: trip?.meta.transportLabel,
+    transportMode: trip?.meta.transportMode,
     enabled: Boolean(active),
   });
 

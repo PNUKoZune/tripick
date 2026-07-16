@@ -750,6 +750,7 @@ export class MainPlannerService {
         endDate: trip.endDate,
         durationLabel: this.durationLabel(trip.startDate, trip.endDate),
         transportLabel: this.transportLabel(trip.transportMode),
+        transportMode: trip.transportMode,
         wakeTime: trip.wakeTime ?? '08:00',
         sleepTime: trip.sleepTime ?? '23:00',
         tasteTags: tasteTags ?? { food: [], mood: [], environment: [] },

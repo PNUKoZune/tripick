@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import type { Coordinates } from '@tripick/types';
+import type { Coordinates, RouteTransportMode } from '@tripick/types';
 
 interface EtaResult {
   durationSec: number;
@@ -41,6 +41,22 @@ export class RouteHelper {
 
   async getTransitEta(from: Coordinates, to: Coordinates, departAt?: Date): Promise<EtaResult> {
     return this.queryOtp(from, to, '[{ mode: TRANSIT }, { mode: WALK }]', 20, departAt);
+  }
+
+  async getWalkingEta(from: Coordinates, to: Coordinates, departAt?: Date): Promise<EtaResult> {
+    return this.queryOtp(from, to, '[{ mode: WALK }]', 4.5, departAt);
+  }
+
+  /** 교통수단 값으로 조회 메서드를 고른다. 표시용 라벨이 아닌 정본 mode 를 받는다. */
+  async getEta(
+    from: Coordinates,
+    to: Coordinates,
+    mode: RouteTransportMode,
+    departAt?: Date,
+  ): Promise<EtaResult> {
+    if (mode === 'car') return this.getDrivingEta(from, to, departAt);
+    if (mode === 'walk') return this.getWalkingEta(from, to, departAt);
+    return this.getTransitEta(from, to, departAt);
   }
 
   /** OTP GraphQL plan 질의. 실패하면 fallbackKmPerHour 로 로컬 추정. */

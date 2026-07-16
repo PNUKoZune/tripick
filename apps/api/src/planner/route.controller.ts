@@ -1,6 +1,6 @@
 import { BadRequestException, Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import type { RouteEtaDto } from '@tripick/types';
+import type { Coordinates, RouteEtaDto, RouteTransportMode } from '@tripick/types';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RouteHelper } from './helpers/route.helper';
 
@@ -26,17 +26,31 @@ export class RouteController {
     @Query('toLng') toLng: string,
     @Query('mode') mode: string,
   ): Promise<RouteEtaDto> {
-    const from = { lat: Number(fromLat), lng: Number(fromLng) };
-    const to = { lat: Number(toLat), lng: Number(toLng) };
-    if ([from.lat, from.lng, to.lat, to.lng].some((v) => !Number.isFinite(v))) {
-      throw new BadRequestException('fromLat/fromLng/toLat/toLng 는 숫자여야 합니다.');
-    }
-
-    const eta =
-      mode === 'car'
-        ? await this.routeHelper.getDrivingEta(from, to)
-        : await this.routeHelper.getTransitEta(from, to);
-
+    const from = this.parseCoord(fromLat, fromLng, 'from');
+    const to = this.parseCoord(toLat, toLng, 'to');
+    const eta = await this.routeHelper.getEta(from, to, this.parseMode(mode));
     return { durationSec: eta.durationSec, distanceM: eta.distanceM };
+  }
+
+  /** 위경도 파싱 + 지구 범위 검증. 범위를 벗어나면 그럴듯한 가짜 ETA 대신 400 을 낸다. */
+  private parseCoord(lat: string, lng: string, field: string): Coordinates {
+    const parsed = { lat: Number(lat), lng: Number(lng) };
+    const valid =
+      Number.isFinite(parsed.lat) &&
+      Number.isFinite(parsed.lng) &&
+      Math.abs(parsed.lat) <= 90 &&
+      Math.abs(parsed.lng) <= 180;
+    if (!valid) {
+      throw new BadRequestException(
+        `${field}Lat/${field}Lng 는 유효한 위경도(lat ±90, lng ±180)여야 합니다.`,
+      );
+    }
+    return parsed;
+  }
+
+  /** mode 화이트리스트. 오타가 조용히 transit 으로 처리되지 않도록 400 을 낸다. */
+  private parseMode(mode: string): RouteTransportMode {
+    if (mode === 'car' || mode === 'transit' || mode === 'walk') return mode;
+    throw new BadRequestException('mode 는 car | transit | walk 여야 합니다.');
   }
 }

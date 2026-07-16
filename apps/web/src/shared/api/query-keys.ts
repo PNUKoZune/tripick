@@ -16,8 +16,9 @@ export const queryKeys = {
     me: ['user', 'me'] as const,
   },
   routes: {
-    // 좌표를 소수 4자리로 양자화해 GPS 미세 흔들림마다 캐시가 갈리지 않게 한다.
-    eta: (from: string, to: string, mode: string) => ['routes', 'eta', from, to, mode] as const,
+    // 목적지+수단으로만 키를 잡는다. 현재 위치를 키에 넣으면 GPS 갱신마다 캐시가 갈려
+    // 폴링 주기가 무력해지므로, 위치는 queryFn 안에서 ref 로 읽는다.
+    eta: (to: string, mode: string) => ['routes', 'eta', to, mode] as const,
   },
   planner: {
     trips: ['planner', 'trips'] as const,

@@ -119,4 +119,45 @@ describe('RouteHelper', () => {
       expect(query).not.toContain('time:');
     });
   });
+
+  describe('getWalkingEta', () => {
+    it('requests WALK-only mode', async () => {
+      mockedAxios.post.mockResolvedValue(otpResponse(900, [1100]));
+      const helper = new RouteHelper(config({ OTP_BASE_URL: 'http://otp:8090' }));
+
+      const eta = await helper.getWalkingEta(SEOUL, BUSAN);
+      expect(eta).toEqual({ durationSec: 900, distanceM: 1100 });
+
+      const query = (mockedAxios.post.mock.calls[0]![1] as { query: string }).query;
+      expect(query).toContain('mode: WALK');
+      expect(query).not.toContain('mode: TRANSIT');
+    });
+  });
+
+  describe('getEta', () => {
+    // 표시용 라벨이 아닌 정본 mode 로 분기하는지 — walk 가 transit 으로 붕괴되면 안 된다.
+    it.each([
+      ['car', 'mode: CAR'],
+      ['transit', 'mode: TRANSIT'],
+      ['walk', 'mode: WALK'],
+    ] as const)('dispatches %s to the matching OTP mode', async (mode, expected) => {
+      mockedAxios.post.mockResolvedValue(otpResponse(600, [500]));
+      const helper = new RouteHelper(config({ OTP_BASE_URL: 'http://otp:8090' }));
+
+      await helper.getEta(SEOUL, BUSAN, mode);
+
+      const query = (mockedAxios.post.mock.calls[0]![1] as { query: string }).query;
+      expect(query).toContain(expected);
+    });
+
+    it('does not route walk through TRANSIT', async () => {
+      mockedAxios.post.mockResolvedValue(otpResponse(600, [500]));
+      const helper = new RouteHelper(config({ OTP_BASE_URL: 'http://otp:8090' }));
+
+      await helper.getEta(SEOUL, BUSAN, 'walk');
+
+      const query = (mockedAxios.post.mock.calls[0]![1] as { query: string }).query;
+      expect(query).not.toContain('TRANSIT');
+    });
+  });
 });
