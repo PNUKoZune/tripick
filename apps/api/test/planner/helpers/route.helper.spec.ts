@@ -22,6 +22,15 @@ jest.mock('ioredis', () => ({
 
 const DEPART = new Date('2026-07-15T00:30:00Z'); // 09:30 KST
 
+/** 완료 시점을 수동으로 제어하는 axios 응답 (게이트 점유 테스트용). */
+function deferredResponse() {
+  let resolve!: (v: unknown) => void;
+  const promise = new Promise((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 /** 지정한 env 만 덮어쓰고 나머지는 호출부 기본값을 돌려주는 ConfigService 스텁. */
 function config(overrides: Record<string, string> = {}) {
   return {
@@ -285,6 +294,70 @@ describe('RouteHelper', () => {
 
       const eta = await otp().getTransitEta(SEOUL, BUSAN, DEPART);
       expect(eta).toEqual({ durationSec: 1200, distanceM: 8500, source: 'otp' });
+    });
+  });
+
+  describe('동시성 게이트', () => {
+    const otp = () => new RouteHelper(config({ OTP_BASE_URL: 'http://otp:8090' }));
+
+    it('OTP 질의를 동시에 보내지 않는다 (겹치면 OTP 가 붕괴한다)', async () => {
+      let inFlight = 0;
+      let peak = 0;
+      mockedAxios.post.mockImplementation(async () => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise((r) => setImmediate(r));
+        inFlight -= 1;
+        return otpResponse(600, [500]);
+      });
+      const helper = otp();
+
+      // 서로 다른 구간 4건을 동시에 요청 (캐시 적중 없음)
+      await Promise.all([
+        helper.getTransitEta(SEOUL, { lat: 35.1, lng: 129.0 }, DEPART),
+        helper.getTransitEta(SEOUL, { lat: 35.2, lng: 129.1 }, DEPART),
+        helper.getTransitEta(SEOUL, { lat: 35.3, lng: 129.2 }, DEPART),
+        helper.getTransitEta(SEOUL, { lat: 35.4, lng: 129.3 }, DEPART),
+      ]);
+
+      expect(mockedAxios.post).toHaveBeenCalledTimes(4);
+      expect(peak).toBe(1); // 직렬화됨
+    });
+
+    it('캐시 적중은 게이트에서 대기하지 않는다', async () => {
+      mockedAxios.post.mockResolvedValue(otpResponse(600, [500]));
+      const helper = otp();
+      await helper.getTransitEta(SEOUL, BUSAN, DEPART); // 캐시 적재
+
+      // OTP 질의 1건을 붙잡아 게이트를 점유시킨다.
+      const held = deferredResponse();
+      mockedAxios.post.mockImplementationOnce(() => held.promise);
+      const blocking = helper.getTransitEta(SEOUL, { lat: 36, lng: 128 }, DEPART);
+
+      // 게이트가 점유된 상태에서도 캐시 적중은 즉시 반환돼야 한다.
+      const cached = await helper.getTransitEta(SEOUL, BUSAN, DEPART);
+      expect(cached.durationSec).toBe(600);
+
+      held.resolve(otpResponse(600, [500]));
+      await blocking;
+    });
+
+    it('대기 중 다른 호출이 캐싱하면 중복 질의하지 않는다', async () => {
+      const held = deferredResponse();
+      mockedAxios.post.mockImplementationOnce(() => held.promise);
+      mockedAxios.post.mockResolvedValue(otpResponse(600, [500]));
+      const helper = otp();
+
+      // 같은 구간 2건이 동시에 들어온다 — 1건은 게이트에서 대기
+      const first = helper.getTransitEta(SEOUL, BUSAN, DEPART);
+      const second = helper.getTransitEta(SEOUL, BUSAN, DEPART);
+      await new Promise((r) => setImmediate(r));
+
+      held.resolve(otpResponse(1200, [8500]));
+      const [a, b] = await Promise.all([first, second]);
+
+      expect(a).toEqual(b);
+      expect(mockedAxios.post).toHaveBeenCalledTimes(1); // 2번째는 대기 후 캐시 적중
     });
   });
 
