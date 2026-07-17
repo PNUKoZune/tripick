@@ -546,8 +546,8 @@ export class MainPlannerService {
     const items = (await this.itemsRepo.find({ where: { tripId: trip.id, day } })).sort(
       (a, b) => a.order - b.order,
     );
-    // 구간이 서로 독립적이라 병렬화가 자연스러워 보이지만, OTP 는 동시 Raptor 질의를
-    // 감당하지 못한다(실측: 4구간 순차 7.5초 vs 병렬 80초). 반드시 순차로 조회한다.
+    // 구간이 독립적이라 병렬화할 수 있지만, 이득이 근소한 반면(4구간 순차 1.6초 vs
+    // 병렬 1.35초) 동시 사용자가 겹칠 때 OTP 부하만 배로 키워 순차로 둔다.
     for (let i = 0; i < items.length; i += 1) {
       const entry = items[i]!;
       if (i === 0) {

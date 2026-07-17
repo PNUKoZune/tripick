@@ -48,8 +48,9 @@ export class ConstraintEngine {
       }
     }
 
-    // 구간 ETA 는 서로 독립적이라 병렬화가 자연스러워 보이지만, OTP 는 동시 Raptor 질의를
-    // 감당하지 못한다(실측: 같은 4구간이 순차 7.5초 vs 병렬 80초). 반드시 순차로 조회한다.
+    // 구간 ETA 는 독립적이라 병렬화할 수 있지만, 순차로 둔다. 힙이 넉넉하면 4구간 기준
+    // 순차 1.6초 vs 병렬 1.35초로 이득이 근소한 반면, 동시 사용자가 겹칠 때 OTP 부하만
+    // 배로 키운다. 캐시 적중 시에는 어차피 즉시 반환된다.
     for (let index = 0; index < bounded.length - 1; index += 1) {
       const current = bounded[index]!;
       const next = bounded[index + 1]!;

@@ -97,9 +97,10 @@ services:
     profiles: ["otp"]
     restart: unless-stopped
     environment:
-      # 전국 그래프(graph.obj 1.3GB) 로딩 + Raptor 인덱스 서빙에 10g 상주(실측 ~10.6GiB).
-      # 권역만 서빙하면 낮춰도 된다.
-      JAVA_TOOL_OPTIONS: "-Xmx${OTP_MAX_HEAP:-10g}"
+      # 전국 그래프는 로딩만으로 힙을 ~10.5GiB 채운다. 10g 를 주면 검색할 여유가 없어
+      # GC 가 폭주하고, 동시 Raptor 질의 4건이 80초까지 무너진다(실측). 13g 는 여유가 생겨
+      # 같은 4건이 1.35초. 권역만 서빙하면 훨씬 낮춰도 된다.
+      JAVA_TOOL_OPTIONS: "-Xmx${OTP_MAX_HEAP:-13g}"
     ports:
       - "8090:8080"   # 호스트 8090 → 컨테이너 8080 (LLM 서버와 포트 충돌 회피)
     volumes:

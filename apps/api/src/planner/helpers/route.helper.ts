@@ -4,7 +4,6 @@ import axios from 'axios';
 import { Redis } from 'ioredis';
 import { haversineMeters } from '@tripick/utils';
 import type { Coordinates, RouteEtaSource, RouteTransportMode } from '@tripick/types';
-import { Semaphore } from '../../common/util/semaphore';
 
 interface EtaResult {
   durationSec: number;
@@ -25,22 +24,12 @@ interface OtpPlanResponse {
 }
 
 /**
- * OTP 는 서비스 날짜별 transit 레이어를 lazy 로 만들어, 특정 날짜의 첫 질의가 실측 ~3초
- * (같은 날짜 재질의는 ~0.85초)까지 걸린다. 기존 5초는 여유가 2초도 안 돼 실제로 타임아웃 →
- * 조용히 폴백하는 일이 있었다. 폴백 추정치를 내보내느니 조금 더 기다리는 편이 낫다.
- * (Live 폴링은 날짜를 안 넘겨 오늘 레이어를 쓰므로 ~0.85초, 이 값에 닿지 않는다.)
+ * OTP 는 서비스 날짜별 transit 레이어를 lazy 로 만들어, 특정 날짜의 첫 질의가 ~1.8초
+ * (같은 날짜 재질의는 ~0.9초)다. 평소엔 여유가 크지만, 힙이 부족하면 GC 가 폭주해 같은
+ * 질의가 수십 초까지 늘어난다(compose 의 OTP 힙 주석 참고). 그때 폴백 추정치를 조용히
+ * 내보내느니 조금 더 기다리는 편이 나아 여유를 크게 잡는다.
  */
 const OTP_TIMEOUT_MS = 15_000;
-
-/**
- * OTP 동시 질의 상한. 실측상 같은 4구간이 순차 7.5초 vs 병렬 80초로, OTP 는 동시 Raptor
- * 질의를 사실상 감당하지 못한다. 재계획 워커·일정 수정 HTTP·Live 폴링이 서로 겹칠 때
- * 붕괴하므로, 경로와 무관하게 프로세스 전체에서 1개만 통과시킨다.
- *
- * 프로세스 내 게이트라 API 를 다중 인스턴스로 띄우면 인스턴스 수만큼 동시 질의가 생긴다.
- * 그때는 Redis 세마포어로 교체할 것 (Redis 는 이미 이 클래스가 캐시로 쓰고 있다).
- */
-const OTP_CONCURRENCY = 1;
 
 /** 교통수단별 OTP transportModes 인자. */
 const MODE_QUERY: Record<RouteTransportMode, string> = {
@@ -73,8 +62,6 @@ const TIME_DEPENDENT: Record<RouteTransportMode, boolean> = {
  * - OTP 미가동·경로 없음·오류 시 직선거리 로컬 추정으로 폴백 (source='estimate')
  * - departAt 이 있는 질의는 결과가 결정적이라 Redis 에 캐싱한다. 일정 생성 1건이
  *   같은 구간을 여러 번(제약 검증 재시도 등) 조회하므로 적중률이 높다.
- * - OTP 질의는 세마포어로 직렬화한다. OTP 가 동시 질의에 붕괴하기 때문이며,
- *   캐시 적중은 게이트를 거치지 않아 대기하지 않는다.
  */
 @Injectable()
 export class RouteHelper implements OnModuleDestroy {
@@ -84,8 +71,6 @@ export class RouteHelper implements OnModuleDestroy {
   /** 같은 그래프면 (출발지·도착지·수단·출발시각) 결과가 결정적이라 길게 잡는다. */
   private readonly CACHE_TTL_SEC = 6 * 60 * 60;
   private readonly redis: Redis;
-  /** OTP 질의 동시 실행 게이트 (캐시 적중은 통과시키지 않는다). */
-  private readonly otpGate = new Semaphore(OTP_CONCURRENCY);
 
   constructor(private readonly config: ConfigService) {
     this.redis = new Redis({
@@ -133,15 +118,7 @@ export class RouteHelper implements OnModuleDestroy {
       if (cached) return cached;
     }
 
-    // 게이트는 캐시 뒤에만 — 캐시 적중은 OTP 를 안 쓰므로 대기시킬 이유가 없다.
-    // 대기 중 다른 호출이 같은 구간을 캐싱했을 수 있어, 슬롯을 잡은 뒤 한 번 더 확인한다.
-    const eta = await this.otpGate.run(async () => {
-      if (cacheKey) {
-        const cached = await this.readCache(cacheKey);
-        if (cached) return cached;
-      }
-      return this.queryOtp(from, to, mode, departAt);
-    });
+    const eta = await this.queryOtp(from, to, mode, departAt);
 
     // 폴백 추정치는 캐싱하지 않는다 — OTP 장애가 지나가도 나쁜 값이 TTL 동안 박제된다.
     if (cacheKey && eta.source === 'otp') {
