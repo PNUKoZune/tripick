@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { fitsInAwakeWindow, getAwakeWindow, getKstMinutes } from '@tripick/utils';
 import { RouteHelper } from '../helpers/route.helper';
 import { ScheduleConstraint } from '../helpers/schedule.constraint';
 import type { ItineraryItemDto, RouteMode } from '@tripick/types';
@@ -14,8 +15,6 @@ export interface ConstraintValidationOptions {
   sleepTime?: string;
   transportMode?: RouteMode;
 }
-
-const KST_OFFSET_MINUTES = 9 * 60;
 
 @Injectable()
 export class ConstraintEngine {
@@ -95,25 +94,13 @@ export class ConstraintEngine {
     const [, startHour, startMinute, endHour, endMinute] = match;
     const start = Number(startHour) * 60 + Number(startMinute);
     const end = Number(endHour) * 60 + Number(endMinute);
-    const visitStart = this.getKstMinutes(new Date(item.scheduledAt));
+    const visitStart = getKstMinutes(new Date(item.scheduledAt));
     const visitEnd = visitStart + item.durationMin;
     return visitStart >= start && visitEnd <= end;
   }
 
   private checkScheduleBounds(item: ItineraryItemDto, wakeTime: string, sleepTime: string): boolean {
-    const wake = this.timeToMinutes(wakeTime);
-    const sleep = this.timeToMinutes(sleepTime);
-    const visitStart = this.getKstMinutes(new Date(item.scheduledAt));
-    const visitEnd = visitStart + item.durationMin;
-    return visitStart >= wake && visitEnd <= sleep;
-  }
-
-  private timeToMinutes(value: string): number {
-    const [hour, minute] = value.split(':').map(Number);
-    return (hour ?? 0) * 60 + (minute ?? 0);
-  }
-
-  private getKstMinutes(date: Date): number {
-    return ((date.getUTCHours() * 60 + date.getUTCMinutes()) + KST_OFFSET_MINUTES) % (24 * 60);
+    const window = getAwakeWindow(wakeTime, sleepTime);
+    return fitsInAwakeWindow(getKstMinutes(new Date(item.scheduledAt)), item.durationMin, window);
   }
 }

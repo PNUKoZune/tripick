@@ -64,6 +64,52 @@ describe('ScheduleConstraint.apply', () => {
     const [adjusted] = constraint.apply([original], { wakeTime: '21:30', sleepTime: '23:00' });
     expect(adjusted!.scheduledAt).toBe(original.scheduledAt);
   });
+
+  it('pulls back a post-sleep item instead of pushing it to the next day', () => {
+    // 23:30 은 취침(23:00) 이후라 수면 구간이지만, 다음 기상까지 미는 것보다 당기는 쪽이
+    // 가깝다. 하루를 건너뛰면 다음 날 일정과 겹친다.
+    const [adjusted] = constraint.apply(
+      [item({ scheduledAt: kst('2026-07-10', '23:30'), durationMin: 60 })],
+      { wakeTime: '07:00', sleepTime: '23:00' },
+    );
+    expect(kstClock(adjusted!.scheduledAt)).toBe('22:00');
+  });
+
+  describe('자정을 넘는 취침 시간 (기상 08:00 / 취침 01:00)', () => {
+    const nightOwl = { wakeTime: '08:00', sleepTime: '01:00' };
+
+    it('leaves a daytime item untouched', () => {
+      const original = item({ scheduledAt: kst('2026-07-10', '10:00'), durationMin: 60 });
+      const [adjusted] = constraint.apply([original], nightOwl);
+      expect(adjusted!.scheduledAt).toBe(original.scheduledAt);
+    });
+
+    it('leaves a past-midnight item inside the window untouched', () => {
+      // 00:00 시작 + 60분 = 01:00 취침에 정확히 맞물린다.
+      const original = item({ scheduledAt: kst('2026-07-11', '00:00'), durationMin: 60 });
+      const [adjusted] = constraint.apply([original], nightOwl);
+      expect(adjusted!.scheduledAt).toBe(original.scheduledAt);
+    });
+
+    it('pulls back an item that would run past the post-midnight sleep time', () => {
+      // 00:30 + 60분 = 01:30 → 취침(01:00) 초과 → 00:00 으로 당긴다.
+      const [adjusted] = constraint.apply(
+        [item({ scheduledAt: kst('2026-07-11', '00:30'), durationMin: 60 })],
+        nightOwl,
+      );
+      expect(kstClock(adjusted!.scheduledAt)).toBe('00:00');
+      // 같은 날 밤으로 당겨야 한다 — 날짜가 밀리면 안 된다.
+      expect(adjusted!.scheduledAt).toBe(kst('2026-07-11', '00:00'));
+    });
+
+    it('pushes an item scheduled in the sleep gap forward to wake time', () => {
+      const [adjusted] = constraint.apply(
+        [item({ scheduledAt: kst('2026-07-10', '05:00'), durationMin: 60 })],
+        nightOwl,
+      );
+      expect(adjusted!.scheduledAt).toBe(kst('2026-07-10', '08:00'));
+    });
+  });
 });
 
 describe('ScheduleConstraint.describeConstraints', () => {

@@ -74,12 +74,22 @@ describe('Trips (e2e)', () => {
         .expect(400);
     });
 
-    it('rejects a trip whose wakeTime is not before sleepTime (400)', async () => {
+    it('rejects a trip whose wakeTime equals sleepTime (400)', async () => {
       await http
         .post('/trips')
         .set('x-test-user-id', userA)
-        .send({ ...validTrip(), wakeTime: '23:00', sleepTime: '07:00' })
+        .send({ ...validTrip(), wakeTime: '08:00', sleepTime: '08:00' })
         .expect(400);
+    });
+
+    it('accepts a trip whose sleepTime crosses midnight', async () => {
+      // 야행성 사용자(08:00 기상 / 01:00 취침). 벽시계로 비교하면 취침이 기상보다 이르지만
+      // 자정을 넘는 정상 구간이므로 거부하면 안 된다.
+      await http
+        .post('/trips')
+        .set('x-test-user-id', userA)
+        .send({ ...validTrip(), wakeTime: '08:00', sleepTime: '01:00' })
+        .expect(201);
     });
   });
 
