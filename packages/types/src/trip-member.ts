@@ -1,4 +1,5 @@
 import type { TasteTagDto } from './preference';
+import type { RouteMode } from './trip';
 
 export type TripMemberStatus = 'accepted' | 'pending';
 export type TripMemberRole = 'owner' | 'companion';
@@ -8,7 +9,7 @@ export interface TripMemberPreferenceDto {
   food: string[];
   mood: string[];
   environment: string[];
-  transportMode: 'walk' | 'transit' | 'car';
+  transportMode: RouteMode;
   budgetLevel: TripBudgetLevel;
 }
 

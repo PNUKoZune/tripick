@@ -6,14 +6,12 @@ import type { ItineraryItemDto } from '@tripick/types';
 
 describe('ConstraintEngine', () => {
   const routeHelper = {
-    getDrivingEta: jest.fn(),
-    getTransitEta: jest.fn(),
+    getEta: jest.fn(),
   };
   const engine = new ConstraintEngine(routeHelper as any, new ScheduleConstraint());
 
   beforeEach(() => {
-    routeHelper.getDrivingEta.mockReset();
-    routeHelper.getTransitEta.mockReset();
+    routeHelper.getEta.mockReset();
   });
 
   it('marks visits outside opening hours as invalid', async () => {
@@ -31,11 +29,11 @@ describe('ConstraintEngine', () => {
 
     expect(result.valid).toBe(false);
     expect(result.issues.join('\n')).toContain('영업시간 외');
-    expect(routeHelper.getTransitEta).not.toHaveBeenCalled();
+    expect(routeHelper.getEta).not.toHaveBeenCalled();
   });
 
   it('marks schedules with insufficient route buffer as invalid', async () => {
-    routeHelper.getTransitEta.mockResolvedValue({ durationSec: 30 * 60, distanceM: 2500 });
+    routeHelper.getEta.mockResolvedValue({ durationSec: 30 * 60, distanceM: 2500 });
 
     const result = await engine.validate(
       [
@@ -58,7 +56,23 @@ describe('ConstraintEngine', () => {
 
     expect(result.valid).toBe(false);
     expect(result.issues.join('\n')).toContain('이동 시간 부족');
-    expect(routeHelper.getTransitEta).toHaveBeenCalledTimes(1);
+    expect(routeHelper.getEta).toHaveBeenCalledTimes(1);
+    expect(routeHelper.getEta).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'transit');
+  });
+
+  it('passes walk through as walk instead of collapsing it to transit', async () => {
+    // walk 가 transit 으로 새면 걸어서 못 가는 일정이 통과한다.
+    routeHelper.getEta.mockResolvedValue({ durationSec: 30 * 60, distanceM: 2500 });
+
+    await engine.validate(
+      [
+        item({ id: 'first', name: '첫 장소', scheduledAt: kst('2026-07-10', '09:00'), durationMin: 60 }),
+        item({ id: 'second', name: '다음 장소', order: 2, scheduledAt: kst('2026-07-10', '10:10'), durationMin: 60 }),
+      ],
+      { wakeTime: '08:00', sleepTime: '22:00', transportMode: 'walk' },
+    );
+
+    expect(routeHelper.getEta).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'walk');
   });
 
   it('marks visits outside wake and sleep bounds as invalid', async () => {

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { RouteHelper } from '../helpers/route.helper';
 import { ScheduleConstraint } from '../helpers/schedule.constraint';
-import type { ItineraryItemDto } from '@tripick/types';
+import type { ItineraryItemDto, RouteMode } from '@tripick/types';
 
 export interface ValidationResult {
   valid: boolean;
@@ -12,7 +12,7 @@ export interface ValidationResult {
 export interface ConstraintValidationOptions {
   wakeTime?: string;
   sleepTime?: string;
-  transportMode?: string;
+  transportMode?: RouteMode;
 }
 
 const KST_OFFSET_MINUTES = 9 * 60;
@@ -33,6 +33,8 @@ export class ConstraintEngine {
     const issues: string[] = [];
     const wakeTime = options.wakeTime ?? '07:00';
     const sleepTime = options.sleepTime ?? '23:00';
+    // trips.service 의 기본 이동 수단과 맞춘다.
+    const mode = options.transportMode ?? 'transit';
 
     const bounded = this.scheduleConstraint.apply(items, {
       wakeTime,
@@ -48,17 +50,25 @@ export class ConstraintEngine {
       }
     }
 
+    const legs: Array<{ current: ItineraryItemDto; next: ItineraryItemDto }> = [];
     for (let index = 0; index < bounded.length - 1; index += 1) {
       const current = bounded[index]!;
       const next = bounded[index + 1]!;
 
       if (current.tripId !== next.tripId || current.day !== next.day) continue;
+      legs.push({ current, next });
+    }
 
-      const eta = options.transportMode === 'car'
-        ? await this.routeHelper.getDrivingEta(current.coordinates, next.coordinates)
-        : await this.routeHelper.getTransitEta(current.coordinates, next.coordinates);
+    // 구간끼리 의존이 없으므로 병렬로 조회한다. 순차로 돌리면 캐시 미스 시 외부 API
+    // 왕복이 구간 수만큼 직렬로 쌓여 createTrip 응답이 그만큼 늦어진다.
+    const etas = await Promise.all(
+      legs.map((leg) =>
+        this.routeHelper.getEta(leg.current.coordinates, leg.next.coordinates, mode),
+      ),
+    );
 
-      const etaMin = Math.ceil(eta.durationSec / 60);
+    legs.forEach(({ current, next }, index) => {
+      const etaMin = Math.ceil(etas[index]!.durationSec / 60);
       const currentEnd = new Date(current.scheduledAt).getTime() + current.durationMin * 60000;
       const nextStart = new Date(next.scheduledAt).getTime();
       const bufferMs = nextStart - currentEnd;
@@ -68,7 +78,7 @@ export class ConstraintEngine {
           `"${current.name}" → "${next.name}" 이동 시간 부족 (필요: ${etaMin}분, 여유: ${Math.floor(bufferMs / 60000)}분)`,
         );
       }
-    }
+    });
 
     if (issues.length > 0) {
       this.logger.warn(`Constraint violations: ${issues.join('; ')}`);

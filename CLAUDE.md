@@ -77,7 +77,7 @@
 ### EXTERNAL TOOL LAYER
 
 - **카카오맵 / Local API**: place search, map rendering
-- **Naver / Google / TMAP / ODsay**: route ETA, public transit
+- **카카오 모빌리티 / ODsay**: route ETA (car), public transit
 - **Korea Meteorological Admin.**: weather forecast (기상청 단기예보, nx·ny 격자 변환)
 - **Instagram Graph API**: user media import (MVP는 직접 업로드 우선, Graph API는 추후)
 - **Firebase FCM**: push notification
@@ -209,8 +209,9 @@ src/
 | ----------- | ----------------------------- | ------------------------------------- | ----------------------- |
 | 지도·렌더링 | 카카오맵 JS SDK               | 지도 렌더링, 마커, 길찾기 UI          | 웹뷰(Next.js) 내 로드   |
 | 장소 검색   | 카카오 로컬 API               | 키워드 장소 검색, 좌표 반환           |                         |
-| 경로·ETA    | TMAP API                      | 자동차 경로, 실시간 교통, 장소 혼잡도 | 국내 도로 품질 우수     |
-| 대중교통    | ODsay / Naver                 | 대중교통 경로, 버스·지하철            |                         |
+| 경로·ETA    | 카카오 모빌리티 길찾기        | 자동차 경로, 실시간 교통              | `KAKAO_REST_API_KEY` 공용 |
+| 대중교통    | ODsay                         | 대중교통 경로, 버스·지하철            | Referer 헤더 필수       |
+| 도보        | (외부 API 없음)               | 직선거리 기반 로컬 추정               | `RouteHelper` 내부 계산 |
 | 관광정보    | 한국관광공사 국문 관광정보    | 관광지 기본정보, 영업시간, 좌표       | Constraint Engine 활용  |
 | 관광정보    | 한국관광공사 연관 관광지      | 재계획 대안 후보 탐색                 | AlternativeModule 활용  |
 | 관광정보    | 한국관광공사 방문자 추이 예측 | 혼잡도 예측, 시간대 배치 최적화       | 향후 30일 예측          |
@@ -218,6 +219,15 @@ src/
 | 인증        | 카카오 OAuth 2.0              | 로그인, JWT 발급                      |                         |
 | 이미지      | Instagram Graph API           | 취향 사진 수집                        | MVP는 직접 업로드 우선  |
 | 푸시        | Firebase FCM + APNs           | 재계획·날씨 변화 푸시 알림            | notifee 라이브러리 조합 |
+
+**길찾기 API 주의사항**
+
+- ODsay 는 키 발급 시 등록한 서비스 URL 을 `Referer` 헤더로 검증한다. 헤더가 없으면 HTTP 200 + `[ApiKeyAuthFailed]` 로 실패하므로 `ODSAY_SERVICE_URL` 을 등록 도메인과 정확히 일치시켜야 한다 (로컬 `http://localhost:4000`)
+- 카카오 모빌리티·ODsay 모두 **길찾기 실패를 HTTP 200 본문으로 반환**한다 (카카오 `routes[].result_code`, ODsay `error[]`). axios 가 던지지 않으므로 catch 로는 안 잡히고, 응답 본문을 직접 검사해야 한다
+- 카카오 모빌리티 `origin`/`destination` 은 `x,y` = **경도,위도** 순서. `summary.duration`=초, `summary.distance`=미터
+- ODsay `totalTime`=분, `totalDistance`=**미터** (km 아님)
+- 경로 조회 실패 시 `RouteHelper` 는 직선거리 기반 추정치로 조용히 폴백한다. 이동시간이 이상하면 폴백을 타고 있는지부터 확인할 것
+- 이동 수단 분기는 표시용 라벨이 아니라 정본 `RouteMode`('walk'|'transit'|'car')로 한다
 
 **기상청 API 주의사항**
 

@@ -530,9 +530,7 @@ export class PlannerService {
     to: PlaceDto['coordinates'],
     transportMode: TripEntity['transportMode'],
   ): Promise<number> {
-    const eta = transportMode === 'car'
-      ? await this.routeHelper.getDrivingEta(from, to)
-      : await this.routeHelper.getTransitEta(from, to);
+    const eta = await this.routeHelper.getEta(from, to, transportMode ?? 'transit');
     return Math.max(15, Math.ceil(eta.durationSec / 60));
   }
 

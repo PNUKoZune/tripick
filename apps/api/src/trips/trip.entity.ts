@@ -8,7 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { UserEntity } from '../users/user.entity';
-import type { TripStatus } from '@tripick/types';
+import type { RouteMode, TripStatus } from '@tripick/types';
 
 @Entity('trips')
 export class TripEntity {
@@ -44,7 +44,7 @@ export class TripEntity {
   wakeTime?: string;
 
   @Column({ default: 'transit' })
-  transportMode: 'walk' | 'transit' | 'car';
+  transportMode: RouteMode;
 
   @Column({ type: 'text', nullable: true })
   notes: string | null;
