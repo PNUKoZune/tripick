@@ -6,6 +6,23 @@ import { RouteHelper } from '../../../src/planner/helpers/route.helper';
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
+/**
+ * 인메모리 Redis 스텁. 실제 ioredis 를 쓰면 개발 머신에 Redis 가 떠 있는지에 따라
+ * 앞 테스트가 캐싱한 값을 뒤 테스트가 읽어 결과가 달라진다.
+ */
+const mockRedisStore = new Map<string, string>();
+jest.mock('ioredis', () => ({
+  Redis: jest.fn().mockImplementation(() => ({
+    get: async (key: string) => mockRedisStore.get(key) ?? null,
+    set: async (key: string, value: string) => {
+      mockRedisStore.set(key, value);
+      return 'OK';
+    },
+    on: () => undefined,
+    disconnect: () => undefined,
+  })),
+}));
+
 /** 지정한 env 만 덮어쓰고 나머지는 호출부 기본값을 돌려주는 ConfigService 스텁. */
 function config(overrides: Record<string, string> = {}) {
   return {
@@ -20,7 +37,10 @@ const BUSAN = { lat: 35.1796, lng: 129.0756 };
 const ODSAY_ENV = { ODSAY_API_KEY: 'k', ODSAY_SERVICE_URL: 'http://localhost:4000' };
 
 describe('RouteHelper', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRedisStore.clear();
+  });
 
   describe('getDrivingEta', () => {
     it('falls back to a local distance estimate when the Kakao key is unset', async () => {
@@ -141,6 +161,82 @@ describe('RouteHelper', () => {
 
       const eta = await helper.getTransitEta(SEOUL, BUSAN);
       expect(eta.durationSec).toBeGreaterThanOrEqual(600);
+    });
+  });
+
+  describe('caching', () => {
+    const kakaoOk = {
+      data: { routes: [{ result_code: 0, summary: { duration: 1989, distance: 10240 } }] },
+    };
+    const odsayOk = {
+      data: { result: { path: [{ info: { totalTime: 40, totalDistance: 10764 } }] } },
+    };
+
+    it('serves a repeated lookup from cache without calling the API again', async () => {
+      mockedAxios.get.mockResolvedValue(kakaoOk);
+      const helper = new RouteHelper(config({ KAKAO_REST_API_KEY: 'k' }));
+
+      const first = await helper.getDrivingEta(SEOUL, BUSAN);
+      const second = await helper.getDrivingEta(SEOUL, BUSAN);
+
+      expect(second).toEqual(first);
+      expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+    });
+
+    it('shares the cache across instances, since each request builds its own helper', async () => {
+      mockedAxios.get.mockResolvedValue(odsayOk);
+
+      await new RouteHelper(config(ODSAY_ENV)).getTransitEta(SEOUL, BUSAN);
+      await new RouteHelper(config(ODSAY_ENV)).getTransitEta(SEOUL, BUSAN);
+
+      expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+    });
+
+    it('never caches a fallback estimate', async () => {
+      // 폴백을 캐싱하면 API 장애가 지나가도 나쁜 값이 TTL 동안 박제된다.
+      mockedAxios.get.mockRejectedValueOnce(new Error('502')).mockResolvedValue(kakaoOk);
+      const helper = new RouteHelper(config({ KAKAO_REST_API_KEY: 'k' }));
+
+      const fallback = await helper.getDrivingEta(SEOUL, BUSAN);
+      expect(fallback).not.toEqual({ durationSec: 1989, distanceM: 10240 });
+      expect(mockRedisStore.size).toBe(0);
+
+      // 장애가 지나가면 곧바로 진짜 값을 받아야 한다.
+      expect(await helper.getDrivingEta(SEOUL, BUSAN)).toEqual({ durationSec: 1989, distanceM: 10240 });
+    });
+
+    it('keys car and transit separately for the same coordinates', async () => {
+      mockedAxios.get.mockResolvedValueOnce(kakaoOk).mockResolvedValueOnce(odsayOk);
+      const helper = new RouteHelper(config({ KAKAO_REST_API_KEY: 'k', ...ODSAY_ENV }));
+
+      const car = await helper.getDrivingEta(SEOUL, BUSAN);
+      const transit = await helper.getTransitEta(SEOUL, BUSAN);
+
+      // 같은 좌표라도 교통수단이 다르면 서로의 캐시를 먹으면 안 된다.
+      expect(car).toEqual({ durationSec: 1989, distanceM: 10240 });
+      expect(transit).toEqual({ durationSec: 2400, distanceM: 10764 });
+      expect(mockRedisStore.size).toBe(2);
+    });
+
+    it('keys direction-sensitively, since A→B and B→A can differ', async () => {
+      mockedAxios.get.mockResolvedValue(kakaoOk);
+      const helper = new RouteHelper(config({ KAKAO_REST_API_KEY: 'k' }));
+
+      await helper.getDrivingEta(SEOUL, BUSAN);
+      await helper.getDrivingEta(BUSAN, SEOUL);
+
+      expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('still returns an ETA when Redis is unreachable', async () => {
+      mockedAxios.get.mockResolvedValue(kakaoOk);
+      const helper = new RouteHelper(config({ KAKAO_REST_API_KEY: 'k' }));
+      const broken = { get: async () => { throw new Error('ECONNREFUSED'); },
+                       set: async () => { throw new Error('ECONNREFUSED'); } };
+      (helper as any).redis = broken;
+
+      // 캐시 장애가 조회를 깨뜨리면 안 된다.
+      expect(await helper.getDrivingEta(SEOUL, BUSAN)).toEqual({ durationSec: 1989, distanceM: 10240 });
     });
   });
 });
