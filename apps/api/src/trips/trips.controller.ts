@@ -15,7 +15,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserEntity } from '../users/user.entity';
 import { TripsService } from './trips.service';
-import type { CreateTripDto, UpdateTripDto } from '@tripick/types';
+import { CreateTripBodyDto, UpdateTripBodyDto } from './dto/trip.dto';
 
 @ApiTags('Trips')
 @ApiBearerAuth()
@@ -38,7 +38,7 @@ export class TripsController {
 
   @Post()
   @ApiOperation({ summary: '여행 생성 (일정 자동 생성 트리거)' })
-  create(@CurrentUser() user: UserEntity, @Body() dto: CreateTripDto) {
+  create(@CurrentUser() user: UserEntity, @Body() dto: CreateTripBodyDto) {
     return this.tripsService.create(user.id, dto);
   }
 
@@ -47,7 +47,7 @@ export class TripsController {
   update(
     @CurrentUser() user: UserEntity,
     @Param('id') id: string,
-    @Body() dto: UpdateTripDto,
+    @Body() dto: UpdateTripBodyDto,
   ) {
     return this.tripsService.update(id, user.id, dto);
   }

@@ -15,7 +15,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UserEntity } from '../users/user.entity';
 import { TripMembersService } from './trip-members.service';
-import type { CreateTripMemberDto, UpdateTripMemberDto } from '@tripick/types';
+import { CreateTripMemberBodyDto, UpdateTripMemberBodyDto } from './dto/trip-member.dto';
 
 @ApiTags('Trip members')
 @ApiBearerAuth()
@@ -35,7 +35,7 @@ export class TripMembersController {
   create(
     @CurrentUser() user: UserEntity,
     @Param('tripId') tripId: string,
-    @Body() dto: CreateTripMemberDto,
+    @Body() dto: CreateTripMemberBodyDto,
   ) {
     return this.tripMembersService.create(tripId, user.id, dto);
   }
@@ -46,7 +46,7 @@ export class TripMembersController {
     @CurrentUser() user: UserEntity,
     @Param('tripId') tripId: string,
     @Param('memberId') memberId: string,
-    @Body() dto: UpdateTripMemberDto,
+    @Body() dto: UpdateTripMemberBodyDto,
   ) {
     return this.tripMembersService.update(tripId, memberId, user.id, dto);
   }
