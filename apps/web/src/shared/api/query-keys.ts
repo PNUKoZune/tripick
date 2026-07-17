@@ -15,6 +15,11 @@ export const queryKeys = {
   user: {
     me: ['user', 'me'] as const,
   },
+  routes: {
+    // 목적지+수단으로만 키를 잡는다. 현재 위치를 키에 넣으면 GPS 갱신마다 캐시가 갈려
+    // 폴링 주기가 무력해지므로, 위치는 queryFn 안에서 ref 로 읽는다.
+    eta: (to: string, mode: string) => ['routes', 'eta', to, mode] as const,
+  },
   planner: {
     trips: ['planner', 'trips'] as const,
     trip: (tripId: string) => ['planner', 'trips', tripId] as const,

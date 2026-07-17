@@ -4,6 +4,7 @@
  */
 
 import type { ReplanBudget, ReplanPace, ReplanPlaceDto } from './replanning';
+import type { RouteTransportMode } from './route';
 
 export type PlannerItemType = 'attraction' | 'restaurant' | 'cafe' | 'transport';
 export type PlannerBadgeTone = 'urgent' | 'recommend' | 'local';
@@ -111,7 +112,10 @@ export interface PlannerTripMetaDto {
   startDate: string;
   endDate: string;
   durationLabel: string;
+  /** 표시용 라벨 (예: '차량 이동'). 로직 분기에 쓰지 말 것 — transportMode 를 쓴다. */
   transportLabel: string;
+  /** 정본 교통수단 값. 경로 조회 등 로직 분기는 이 값을 쓴다. */
+  transportMode: RouteTransportMode;
   wakeTime: string;
   sleepTime: string;
   tasteTags: {

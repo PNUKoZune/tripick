@@ -6,6 +6,7 @@ import { WeatherHelper } from './helpers/weather.helper';
 import { RouteHelper } from './helpers/route.helper';
 import { ScheduleConstraint } from './helpers/schedule.constraint';
 import { ConstraintEngine } from './constraint/constraint.engine';
+import { RouteController } from './route.controller';
 import { CragEvaluatorService } from './retrieval/crag-evaluator.service';
 import { IngestCursorRepository } from './retrieval/ingest-cursor.repository';
 import { KakaoLocalService } from './retrieval/kakao-local.service';
@@ -25,6 +26,7 @@ import { TripEntity } from '../trips/trip.entity';
     PreferencesModule,
     EmbeddingModule,
   ],
+  controllers: [RouteController],
   providers: [
     PlannerService,
     PlannerAgentService,

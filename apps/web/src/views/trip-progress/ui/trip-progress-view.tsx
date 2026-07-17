@@ -18,7 +18,7 @@ import {
   type NextPlace,
 } from '@/features/detect-route-deviation';
 import { ReplanToast, useReplanSubscription } from '@/features/subscribe-replan-result';
-import { NextStopBar, useTripProgress } from '@/features/track-trip-progress';
+import { NextStopBar, useLiveEta, useTripProgress } from '@/features/track-trip-progress';
 import { queryKeys } from '@/shared/api/query-keys';
 import { LocationPermissionBanner, useCurrentLocation } from '@/shared/location';
 import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
@@ -79,6 +79,14 @@ function TripProgressContent() {
     enabled: Boolean(active),
   });
 
+  // Live 화면에서 다음 장소까지 실경로 ETA 를 60초마다 폴링 (실패 시 NextStopBar 가 휴리스틱 폴백)
+  const liveEta = useLiveEta({
+    position,
+    next: nextPlace ? { lat: nextPlace.lat, lng: nextPlace.lng } : null,
+    transportMode: trip?.meta.transportMode,
+    enabled: Boolean(active),
+  });
+
   const dayMarkers = useMemo(() => {
     if (!trip) return [];
     const ids = new Set(itemsForDay.map((item) => item.id));
@@ -136,6 +144,8 @@ function TripProgressContent() {
               item={nextItem}
               distanceM={deviation.distanceM}
               transportLabel={trip?.meta.transportLabel}
+              etaMinOtp={liveEta.etaMin}
+              distanceMOtp={liveEta.distanceM}
             />
             <TripProgressTimeline
               items={progressItems}
@@ -183,6 +193,8 @@ function TripProgressContent() {
                 item={nextItem}
                 distanceM={deviation.distanceM}
                 transportLabel={trip?.meta.transportLabel}
+                etaMinOtp={liveEta.etaMin}
+                distanceMOtp={liveEta.distanceM}
               />
               <TripProgressTimeline
                 items={progressItems}

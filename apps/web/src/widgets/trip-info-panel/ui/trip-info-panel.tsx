@@ -1,12 +1,13 @@
 'use client';
 
-import { FiInfo } from 'react-icons/fi';
-
 import type { PlannerTripDto, PlannerTripMetaDto } from '@tripick/types';
 
 import { MemberAvatars } from '@/entities/member';
 import { TASTE_TAG_LABELS } from '@/entities/preferences/model/options';
-import { Chip, SurfaceCard } from '@/shared/ui';
+import { Chip, InfoTooltip, SurfaceCard } from '@/shared/ui';
+
+const TRAVEL_DISCLAIMER =
+  '실시간 교통 상황은 반영되지 않은 예상치예요. 실제와 다를 수 있으니 정확한 경로는 지도 길찾기로 확인해 주세요.';
 
 type Props = {
   trip: PlannerTripDto;
@@ -53,7 +54,11 @@ export function TripInfoPanel({ trip }: Props) {
             value={`${meta.stats.waitingCount}건`}
             tone={meta.stats.waitingCount > 0 ? 'warning' : 'neutral'}
           />
-          <StatTile label="예상 이동" value={`${meta.stats.estimatedTravelKm}km`} />
+          <StatTile
+            label="예상 이동"
+            value={`${meta.stats.estimatedTravelKm}km`}
+            hint={TRAVEL_DISCLAIMER}
+          />
         </div>
       </SurfaceCard>
 
@@ -71,7 +76,10 @@ export function TripInfoPanel({ trip }: Props) {
                 </span>
                 <span className="text-[14px] font-semibold text-[#191F28]">{w.label}</span>
                 {!w.forecasted ? (
-                  <WeatherHint />
+                  <InfoTooltip
+                    message="기상청 단기예보는 여행 3일 전부터 확인할 수 있어요."
+                    widthClass="w-[180px]"
+                  />
                 ) : null}
               </div>
               <span className="text-[13px] font-semibold text-[#6B7684]">{w.tempLabel}</span>
@@ -80,27 +88,6 @@ export function TripInfoPanel({ trip }: Props) {
         </ul>
       </SurfaceCard>
     </div>
-  );
-}
-
-function WeatherHint() {
-  const message = '기상청 단기예보는 여행 3일 전부터 확인할 수 있어요.';
-  return (
-    <span className="group/hint relative inline-flex">
-      <button
-        type="button"
-        aria-label={message}
-        className="flex items-center justify-center text-[#8B95A1]"
-      >
-        <FiInfo aria-hidden className="h-[15px] w-[15px]" />
-      </button>
-      <span
-        role="tooltip"
-        className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 z-10 w-[180px] -translate-x-1/2 rounded-[8px] bg-[#191F28] px-2.5 py-1.5 text-[11px] font-medium leading-[16px] text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/hint:opacity-100 group-focus-within/hint:opacity-100"
-      >
-        {message}
-      </span>
-    </span>
   );
 }
 
@@ -117,15 +104,20 @@ function StatTile({
   label,
   value,
   tone = 'neutral',
+  hint,
 }: {
   label: string;
   value: string;
   tone?: 'neutral' | 'warning';
+  hint?: string;
 }) {
   const valueClass = tone === 'warning' ? 'text-[#FF8A00]' : 'text-[#191F28]';
   return (
     <div className="rounded-[12px] border border-[#E5E8EB] bg-white px-3 py-3 text-center">
-      <div className="text-[11px] font-semibold text-[#8B95A1]">{label}</div>
+      <div className="flex items-center justify-center gap-1 text-[11px] font-semibold text-[#8B95A1]">
+        {label}
+        {hint ? <InfoTooltip message={hint} widthClass="w-[200px]" /> : null}
+      </div>
       <div className={`mt-1 text-[16px] font-bold ${valueClass}`}>{value}</div>
     </div>
   );

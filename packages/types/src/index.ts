@@ -4,6 +4,7 @@ export * from './trip';
 export * from './itinerary';
 export * from './preference';
 export * from './place';
+export * from './route';
 export * from './replanning';
 export * from './notification';
 export * from './main-planner';

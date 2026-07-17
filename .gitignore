@@ -60,3 +60,14 @@ web-build
 # Firebase client config
 apps/mobile/android/app/google-services.json
 apps/mobile/ios/TriPick/GoogleService-Info.plist
+
+# OTP (OpenTripPlanner) — 대용량 입력 데이터·빌드 산출물은 커밋 금지
+# 설정(json)·README·.gitkeep 은 유지
+infra/otp/data/*
+!infra/otp/data/.gitkeep
+!infra/otp/data/*.json
+# infra/otp 루트에 임시로 둔 원본/백업 대용량 파일도 제외
+infra/otp/*.zip
+infra/otp/*.pbf
+infra/otp/*.bak
+infra/otp/*.obj
