@@ -109,8 +109,10 @@ export class TripsService {
     if (endDate < startDate) {
       throw new BadRequestException('endDate must be on or after startDate');
     }
-    if (wakeTime && sleepTime && wakeTime >= sleepTime) {
-      throw new BadRequestException('wakeTime must be earlier than sleepTime');
+    // 취침이 기상보다 이른 건 자정을 넘는 활동 구간(예: 08:00 기상 / 01:00 취침)이라 정상이다.
+    // 같은 시각만 거부한다 — 활동 0분과 24시간 중 무엇을 뜻하는지 정할 수 없다.
+    if (wakeTime && sleepTime && wakeTime === sleepTime) {
+      throw new BadRequestException('wakeTime and sleepTime must differ');
     }
   }
 }

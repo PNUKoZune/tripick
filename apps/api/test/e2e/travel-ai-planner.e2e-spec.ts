@@ -4,6 +4,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import { io, type Socket } from 'socket.io-client';
+import { fitsInAwakeWindow, getAwakeWindow, getKstMinutes } from '@tripick/utils';
 import type {
   ItineraryItemDto,
   LoginResponseDto,
@@ -80,12 +81,15 @@ describe('Travel AI planner E2E', () => {
     expect(preference.tasteTags.food).toContain('cafe');
     expect(preference.profile?.wakeTime).toBe('09:00');
 
+    // 아직 오지 않은 날이라야 status 가 'upcoming' 이다. 날짜를 고정하면 그 날이 지나는
+    // 순간 'done' 이 되어 테스트가 시한폭탄이 된다.
+    const tripDate = isoDateFromToday(2);
     const trip = await post<TripSummaryDto>('/main-planner/trips', {
       title: `PDF E2E 부산 여행 ${Date.now()}`,
       destination: '부산',
-      startDate: '2026-07-10',
+      startDate: tripDate,
       startTime: '09:00',
-      endDate: '2026-07-10',
+      endDate: tripDate,
       endTime: '21:00',
       members: [],
       notes: '바다, 카페, 무리하지 않는 동선 위주',
@@ -102,8 +106,9 @@ describe('Travel AI planner E2E', () => {
 
     const itinerary = await get<ItineraryItemDto[]>(`/trips/${trip.id}/itinerary`);
     expect(itinerary.length).toBe(planner.items.length);
-    expect(itinerary.some((item) => item.memo?.includes('CRAG'))).toBe(true);
-    expect(itinerary.some((item) => item.memo?.includes('AI planner'))).toBe(true);
+    // memo 는 사용자 메모 공간이라 생성 단계의 AI 추론(취향·confidence·CRAG 근거)을
+    // 담지 않는다(186e5df). 생성이 여기에 쓰기 시작하면 사용자 메모를 덮어쓴다.
+    expect(itinerary.every((item) => !item.memo)).toBe(true);
     expect(itinerary.every((item) => isWithinKstBounds(item.scheduledAt, item.durationMin, '09:00', '22:00'))).toBe(true);
 
     const socket = await connectSocket(accessToken, trip.id);
@@ -125,8 +130,10 @@ describe('Travel AI planner E2E', () => {
     expect(result.status).toBe('completed');
     expect(result.tripId).toBe(trip.id);
     expect(result.updatedItems?.length).toBeGreaterThanOrEqual(3);
+    // 재계획 반영 여부는 항목 이름으로 본다. 재계획 사유도 memo 에 쓰지 않는다 —
+    // 쓰면 사용자가 직접 남긴 메모를 덮어쓴다.
     expect(result.updatedItems?.some((item) => item.name.includes('waiting 대응'))).toBe(true);
-    expect(result.updatedItems?.some((item) => item.memo?.includes('웨이팅'))).toBe(true);
+    expect(result.updatedItems?.every((item) => !item.memo)).toBe(true);
 
     const replanned = await get<ItineraryItemDto[]>(`/trips/${trip.id}/itinerary`);
     expect(replanned.some((item) => item.name.includes('waiting 대응'))).toBe(true);
@@ -232,19 +239,22 @@ function waitForReplan(socket: Socket): Promise<ReplanResultDto> {
   });
 }
 
+/**
+ * 서버 로컬 날짜 기준 오늘 + offsetDays 일 ("YYYY-MM-DD").
+ * main-planner 의 summaryStatus 가 로컬 날짜로 여행 상태를 정하므로 같은 기준을 쓴다.
+ */
+function isoDateFromToday(offsetDays: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function isWithinKstBounds(iso: string, durationMin: number, wakeTime: string, sleepTime: string): boolean {
-  const start = kstMinutes(new Date(iso));
-  const end = start + durationMin;
-  return start >= timeToMinutes(wakeTime) && end <= timeToMinutes(sleepTime);
-}
-
-function kstMinutes(date: Date): number {
-  return ((date.getUTCHours() * 60 + date.getUTCMinutes()) + 9 * 60) % (24 * 60);
-}
-
-function timeToMinutes(value: string): number {
-  const [hour, minute] = value.split(':').map(Number);
-  return (hour ?? 0) * 60 + (minute ?? 0);
+  // 판정은 프로덕션과 같은 정본을 쓴다 — 여기서 따로 계산하면 자정을 넘는 구간에서 어긋난다.
+  return fitsInAwakeWindow(getKstMinutes(new Date(iso)), durationMin, getAwakeWindow(wakeTime, sleepTime));
 }
 
 function globalBaseRealtimeUrl(): string {

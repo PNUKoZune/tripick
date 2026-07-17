@@ -10,11 +10,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import type { AddFriendRequestDto } from '@tripick/types';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UserEntity } from '../users/user.entity';
 import { FriendsService } from './friends.service';
+import { AddFriendRequestBodyDto } from './dto/friend.dto';
 
 @ApiTags('Friends')
 @ApiBearerAuth()
@@ -31,7 +31,7 @@ export class FriendsController {
 
   @Post()
   @ApiOperation({ summary: '친구 추가 또는 요청 생성' })
-  add(@CurrentUser() user: UserEntity, @Body() dto: AddFriendRequestDto) {
+  add(@CurrentUser() user: UserEntity, @Body() dto: AddFriendRequestBodyDto) {
     return this.friendsService.add(user, dto);
   }
 

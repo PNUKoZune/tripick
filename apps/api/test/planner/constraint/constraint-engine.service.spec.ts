@@ -90,6 +90,40 @@ describe('ConstraintEngine', () => {
     expect(result.valid).toBe(false);
     expect(result.issues.join('\n')).toContain('기상/취침 시간 범위 밖');
   });
+
+  describe('자정을 넘는 취침 시간 (기상 08:00 / 취침 01:00)', () => {
+    const nightOwl = { wakeTime: '08:00', sleepTime: '01:00', transportMode: 'transit' } as const;
+
+    it('accepts a daytime visit', async () => {
+      const result = await engine.validate(
+        [item({ name: '경복궁', scheduledAt: kst('2026-07-10', '10:00'), durationMin: 60 })],
+        nightOwl,
+      );
+
+      expect(result.issues).toEqual([]);
+      expect(result.valid).toBe(true);
+    });
+
+    it('accepts a visit that runs up to the post-midnight sleep time', async () => {
+      const result = await engine.validate(
+        [item({ name: '심야 포차', scheduledAt: kst('2026-07-11', '00:00'), durationMin: 60 })],
+        nightOwl,
+      );
+
+      expect(result.valid).toBe(true);
+    });
+
+    it('marks a visit inside the sleep gap as invalid', async () => {
+      // ScheduleConstraint 가 기상 이후로 밀지 못할 만큼 긴 일정이라야 위반으로 남는다.
+      const result = await engine.validate(
+        [item({ name: '새벽 일정', scheduledAt: kst('2026-07-10', '03:00'), durationMin: 22 * 60 })],
+        nightOwl,
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.issues.join('\n')).toContain('기상/취침 시간 범위 밖');
+    });
+  });
 });
 
 function item(overrides: Partial<ItineraryItemDto>): ItineraryItemDto {

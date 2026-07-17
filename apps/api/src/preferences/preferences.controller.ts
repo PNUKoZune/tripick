@@ -4,7 +4,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserEntity } from '../users/user.entity';
 import { PreferencesService } from './preferences.service';
-import type { UpdatePreferenceDto } from '@tripick/types';
+import { UpdatePreferenceBodyDto } from './dto/preference.dto';
 
 @ApiTags('Preferences')
 @ApiBearerAuth()
@@ -21,7 +21,7 @@ export class PreferencesController {
 
   @Put()
   @ApiOperation({ summary: '취향 설정 저장/갱신' })
-  upsertPreferences(@CurrentUser() user: UserEntity, @Body() dto: UpdatePreferenceDto) {
+  upsertPreferences(@CurrentUser() user: UserEntity, @Body() dto: UpdatePreferenceBodyDto) {
     return this.preferencesService.upsert(user.id, dto);
   }
 }

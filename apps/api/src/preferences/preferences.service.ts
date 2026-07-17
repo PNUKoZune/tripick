@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PreferenceEntity } from './preference.entity';
@@ -90,6 +90,13 @@ export class PreferencesService {
       sleepTime: dto?.profile?.sleepTime ?? pref?.profile?.sleepTime ?? DEFAULT_PROFILE.sleepTime,
       wakeTime: dto?.profile?.wakeTime ?? pref?.profile?.wakeTime ?? DEFAULT_PROFILE.wakeTime,
     };
+
+    // 병합 결과로 본다 — 한쪽만 보내도 나머지는 저장값·기본값에서 오므로, 들어온 필드만
+    // 검사하면 같은 시각이 저장된다. 이 값은 여행 생성에 그대로 주입돼 trips 가드에 걸리므로,
+    // 여기서 막지 않으면 사용자가 원인을 알 수 없는 지점에서 여행 생성이 실패한다.
+    if (nextProfile.wakeTime === nextProfile.sleepTime) {
+      throw new BadRequestException('기상 시간과 취침 시간은 달라야 합니다.');
+    }
 
     // photoUrls 는 지정된 경우에만 통째로 교체, 아니면 기존 유지
     const nextPhotoUrls = dto?.photoUrls ?? pref?.photoUrls ?? [];
