@@ -164,6 +164,61 @@ describe('RouteHelper', () => {
     });
   });
 
+  describe('getWalkingEta', () => {
+    it('estimates locally without calling any route API', async () => {
+      const helper = new RouteHelper(config({ KAKAO_REST_API_KEY: 'k', ...ODSAY_ENV }));
+      const eta = await helper.getWalkingEta(SEOUL, { lat: 37.5765, lng: 126.988 });
+
+      expect(mockedAxios.get).not.toHaveBeenCalled();
+      expect(eta.distanceM).toBeGreaterThan(0);
+    });
+
+    it('does not floor short walks at the 10-minute fallback minimum', async () => {
+      const helper = new RouteHelper(config());
+      // 약 300m — 폴백의 10분 바닥을 씌우면 없는 이동이 생긴다.
+      const eta = await helper.getWalkingEta(SEOUL, { lat: 37.5692, lng: 126.978 });
+
+      expect(eta.durationSec).toBeLessThan(600);
+      expect(eta.durationSec).toBeGreaterThanOrEqual(60);
+    });
+  });
+
+  describe('getEta', () => {
+    it('routes walk to the local estimate rather than the transit API', async () => {
+      // walk 가 transit 으로 새면 도보 2시간 30분 구간이 버스 40분으로 계산된다.
+      mockedAxios.get.mockResolvedValue({
+        data: { result: { path: [{ info: { totalTime: 40, totalDistance: 10764 } }] } },
+      });
+      const helper = new RouteHelper(config(ODSAY_ENV));
+
+      const walk = await helper.getEta(SEOUL, BUSAN, 'walk');
+      expect(mockedAxios.get).not.toHaveBeenCalled();
+      expect(walk.durationSec).not.toBe(2400);
+    });
+
+    it('dispatches car and transit to their APIs', async () => {
+      mockedAxios.get.mockResolvedValueOnce({
+        data: { routes: [{ result_code: 0, summary: { duration: 1989, distance: 10240 } }] },
+      });
+      const helper = new RouteHelper(config({ KAKAO_REST_API_KEY: 'k', ...ODSAY_ENV }));
+
+      expect(await helper.getEta(SEOUL, BUSAN, 'car')).toEqual({ durationSec: 1989, distanceM: 10240 });
+
+      mockedAxios.get.mockResolvedValueOnce({
+        data: { result: { path: [{ info: { totalTime: 40, totalDistance: 10764 } }] } },
+      });
+      expect(await helper.getEta(SEOUL, BUSAN, 'transit')).toEqual({ durationSec: 2400, distanceM: 10764 });
+    });
+
+    it('estimates walking slower than transit over the same distance', async () => {
+      const helper = new RouteHelper(config());
+
+      const walk = await helper.getEta(SEOUL, BUSAN, 'walk');
+      const transit = await helper.getEta(SEOUL, BUSAN, 'transit');
+      expect(walk.durationSec).toBeGreaterThan(transit.durationSec);
+    });
+  });
+
   describe('caching', () => {
     const kakaoOk = {
       data: { routes: [{ result_code: 0, summary: { duration: 1989, distance: 10240 } }] },
@@ -226,6 +281,43 @@ describe('RouteHelper', () => {
       await helper.getDrivingEta(BUSAN, SEOUL);
 
       expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('coalesces concurrent lookups of the same pair into one API call', async () => {
+      // 캐시는 응답이 온 뒤에야 채워지므로, 병합이 없으면 콜드 구간에서 동시 요청이 전부 API 를 친다.
+      mockedAxios.get.mockImplementation(
+        () => new Promise((resolve) => setTimeout(() => resolve(kakaoOk), 20)),
+      );
+      const helper = new RouteHelper(config({ KAKAO_REST_API_KEY: 'k' }));
+
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () => helper.getDrivingEta(SEOUL, BUSAN)),
+      );
+
+      expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+      for (const eta of results) expect(eta).toEqual({ durationSec: 1989, distanceM: 10240 });
+    });
+
+    it('does not coalesce different pairs', async () => {
+      mockedAxios.get.mockResolvedValue(kakaoOk);
+      const helper = new RouteHelper(config({ KAKAO_REST_API_KEY: 'k' }));
+
+      await Promise.all([helper.getDrivingEta(SEOUL, BUSAN), helper.getDrivingEta(BUSAN, SEOUL)]);
+      expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects a cached value whose shape no longer matches EtaResult', async () => {
+      // 형식이 바뀌면 이전 키가 TTL 동안 남는다. 그대로 믿으면 호출부 산술이 NaN 이 된다.
+      mockRedisStore.set(
+        'route:eta:car:37.56650,126.97800:35.17960,129.07560',
+        JSON.stringify({ durationSec: 'oops' }),
+      );
+      mockedAxios.get.mockResolvedValue(kakaoOk);
+      const helper = new RouteHelper(config({ KAKAO_REST_API_KEY: 'k' }));
+
+      const eta = await helper.getDrivingEta(SEOUL, BUSAN);
+      expect(eta).toEqual({ durationSec: 1989, distanceM: 10240 });
+      expect(Number.isFinite(eta.durationSec)).toBe(true);
     });
 
     it('still returns an ETA when Redis is unreachable', async () => {

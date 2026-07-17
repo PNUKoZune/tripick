@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import type { ReplanTrigger, TasteTagDto } from '@tripick/types';
+import type { ReplanTrigger, RouteMode, TasteTagDto } from '@tripick/types';
 import type { CandidatePlace } from '../retrieval/types';
 
 export interface PlannerAgentOptions {
@@ -10,7 +10,7 @@ export interface PlannerAgentOptions {
   endDate: string;
   wakeTime: string;
   sleepTime: string;
-  transportMode: 'walk' | 'transit' | 'car';
+  transportMode: RouteMode;
   dayCount: number;
   itemsPerDay: number;
   candidates: CandidatePlace[];

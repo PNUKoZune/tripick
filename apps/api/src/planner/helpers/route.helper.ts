@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { Redis } from 'ioredis';
-import type { Coordinates } from '@tripick/types';
+import type { Coordinates, RouteMode } from '@tripick/types';
 
 interface EtaResult {
   durationSec: number;
@@ -17,6 +17,7 @@ const KAKAO_TOO_CLOSE = 104;
 /**
  * 카카오 모빌리티는 실시간 교통을 반영하므로 오래 캐싱하면 그 값이 무의미해진다.
  * 반대로 ODsay 는 시간표 기반이라 하루 내내 같은 값이다. 그래서 TTL 을 나눈다.
+ * walk 는 외부 API 를 타지 않아 캐싱 대상이 아니다.
  */
 const CACHE_TTL_SEC: Record<'car' | 'transit', number> = {
   car: 60 * 60,
@@ -26,11 +27,34 @@ const CACHE_TTL_SEC: Record<'car' | 'transit', number> = {
 /** 좌표 캐시 키 자릿수. 5자리 ≈ 1m — 부동소수 잡음만 흡수하고 다른 장소는 섞지 않는다. */
 const COORD_PRECISION = 5;
 
+/**
+ * 직선거리에 적용하는 실효 속도(km/h). 실제 경로는 직선보다 우회하므로 실주행 속도보다 낮다.
+ * walk 는 도보 4.5km/h 에 우회 1.3배를 반영한 값으로, 폴백이 아니라 정식 추정 모델이다
+ * (도보 경로를 주는 국내 API 가 마땅치 않아 로컬 추정으로 간다).
+ */
+const EFFECTIVE_KMH: Record<RouteMode, number> = {
+  car: 28,
+  transit: 20,
+  walk: 3.5,
+};
+
+/**
+ * 로컬 추정의 최소 이동시간(초). API 가 없어 거리만 아는 폴백에는 보수적으로 10분을 깔지만,
+ * walk 는 거리 기반 추정 자체가 정답이라 바닥만 막는다.
+ */
+const MIN_DURATION_SEC: Record<RouteMode, number> = {
+  car: 600,
+  transit: 600,
+  walk: 60,
+};
+
 @Injectable()
 export class RouteHelper implements OnModuleDestroy {
   private readonly logger = new Logger(RouteHelper.name);
   /** 설정 누락 warn 은 일정당 좌표쌍마다 반복되므로 키별로 1회만 남긴다. */
   private readonly warnedKeys = new Set<string>();
+  /** 진행 중인 동일 좌표쌍 조회. 캐시가 채워지기 전 동시 요청이 API 를 중복으로 치는 걸 막는다. */
+  private readonly inFlight = new Map<string, Promise<EtaResult>>();
   private readonly redis: Redis;
 
   constructor(private readonly config: ConfigService) {
@@ -61,14 +85,36 @@ export class RouteHelper implements OnModuleDestroy {
     return `route:eta:${mode}:${at(from)}:${at(to)}`;
   }
 
+  /**
+   * 캐시 값의 형태를 검증한다. EtaResult 모양이 바뀌면 이전 형식으로 저장된 키가 TTL 동안
+   * 남아, 검증 없이 믿으면 undefined 가 호출부의 산술로 흘러들어 NaN 이 된다.
+   */
   private async readCache(key: string): Promise<EtaResult | null> {
     try {
       const raw = await this.redis.get(key);
       if (!raw) return null;
-      return JSON.parse(raw) as EtaResult;
+      const parsed: unknown = JSON.parse(raw);
+      if (typeof parsed !== 'object' || parsed === null) return null;
+      const { durationSec, distanceM } = parsed as Record<string, unknown>;
+      if (!Number.isFinite(durationSec) || !Number.isFinite(distanceM)) return null;
+      return { durationSec: durationSec as number, distanceM: distanceM as number };
     } catch {
       return null;
     }
+  }
+
+  /**
+   * 같은 키의 조회가 이미 진행 중이면 그 Promise 를 함께 기다린다. 캐시는 응답이 온
+   * 뒤에야 채워지므로, 이게 없으면 콜드 구간에서 동시 요청이 전부 외부 API 를 친다.
+   * 프로세스 내에서만 병합된다 — 여러 인스턴스에 걸친 중복은 캐시 TTL 로만 줄어든다.
+   */
+  private async coalesce(key: string, load: () => Promise<EtaResult>): Promise<EtaResult> {
+    const existing = this.inFlight.get(key);
+    if (existing) return existing;
+
+    const pending = load().finally(() => this.inFlight.delete(key));
+    this.inFlight.set(key, pending);
+    return pending;
   }
 
   /**
@@ -83,17 +129,50 @@ export class RouteHelper implements OnModuleDestroy {
     }
   }
 
+  /**
+   * 정본 이동 수단으로 경로를 조회한다. 표시용 라벨이 아닌 RouteMode 를 받으므로,
+   * 값이 늘면 아래 switch 가 컴파일 타임에 누락을 잡는다.
+   */
+  async getEta(from: Coordinates, to: Coordinates, mode: RouteMode): Promise<EtaResult> {
+    switch (mode) {
+      case 'car':
+        return this.getDrivingEta(from, to);
+      case 'transit':
+        return this.getTransitEta(from, to);
+      case 'walk':
+        return this.getWalkingEta(from, to);
+      default: {
+        const exhaustive: never = mode;
+        throw new Error(`지원하지 않는 이동 수단: ${String(exhaustive)}`);
+      }
+    }
+  }
+
+  /** 도보는 외부 경로 API 없이 거리 기반으로 추정한다(EFFECTIVE_KMH.walk 참고). */
+  async getWalkingEta(from: Coordinates, to: Coordinates): Promise<EtaResult> {
+    return this.buildLocalEstimate(from, to, 'walk');
+  }
+
   async getDrivingEta(from: Coordinates, to: Coordinates): Promise<EtaResult> {
     const apiKey = this.config.get<string>('KAKAO_REST_API_KEY', '');
     if (!apiKey) {
       this.warnOnce('KAKAO_REST_API_KEY', 'KAKAO_REST_API_KEY 미설정 — 자동차 ETA 를 로컬 추정치로 대체합니다.');
-      return this.buildLocalEstimate(from, to, 28);
+      return this.buildLocalEstimate(from, to, 'car');
     }
 
     const cacheKey = this.buildCacheKey(from, to, 'car');
     const cached = await this.readCache(cacheKey);
     if (cached) return cached;
 
+    return this.coalesce(cacheKey, () => this.fetchDrivingEta(from, to, cacheKey, apiKey));
+  }
+
+  private async fetchDrivingEta(
+    from: Coordinates,
+    to: Coordinates,
+    cacheKey: string,
+    apiKey: string,
+  ): Promise<EtaResult> {
     try {
       const res = await axios.get<{
         routes: Array<{
@@ -114,7 +193,7 @@ export class RouteHelper implements OnModuleDestroy {
       const route = res.data.routes?.[0];
       if (!route) {
         this.logger.error('카카오 모빌리티 경로 없음 — 로컬 추정치로 대체합니다.');
-        return this.buildLocalEstimate(from, to, 28);
+        return this.buildLocalEstimate(from, to, 'car');
       }
 
       // 길찾기 실패는 HTTP 200 + result_code 로 온다. 던지지 않으므로 직접 본다.
@@ -127,7 +206,7 @@ export class RouteHelper implements OnModuleDestroy {
         this.logger.error(
           `카카오 모빌리티 길찾기 실패 (${route.result_code}: ${route.result_msg}) — 로컬 추정치로 대체합니다.`,
         );
-        return this.buildLocalEstimate(from, to, 28);
+        return this.buildLocalEstimate(from, to, 'car');
       }
 
       // summary.duration=초, summary.distance=미터. 변환 없이 그대로 쓴다.
@@ -136,7 +215,7 @@ export class RouteHelper implements OnModuleDestroy {
       return eta;
     } catch (err) {
       this.logger.error('카카오 모빌리티 ETA 조회 실패:', err);
-      return this.buildLocalEstimate(from, to, 28);
+      return this.buildLocalEstimate(from, to, 'car');
     }
   }
 
@@ -144,7 +223,7 @@ export class RouteHelper implements OnModuleDestroy {
     const apiKey = this.config.get<string>('ODSAY_API_KEY', '');
     if (!apiKey) {
       this.warnOnce('ODSAY_API_KEY', 'ODSAY_API_KEY 미설정 — 대중교통 ETA 를 로컬 추정치로 대체합니다.');
-      return this.buildLocalEstimate(from, to, 20);
+      return this.buildLocalEstimate(from, to, 'transit');
     }
 
     // ODsay 는 발급 시 등록한 서비스 URL 을 Referer 로 검증한다. 헤더가 없으면 무조건 ApiKeyAuthFailed.
@@ -154,13 +233,23 @@ export class RouteHelper implements OnModuleDestroy {
         'ODSAY_SERVICE_URL',
         'ODSAY_SERVICE_URL 미설정 — ODsay 인증이 실패하므로 로컬 추정치로 대체합니다.',
       );
-      return this.buildLocalEstimate(from, to, 20);
+      return this.buildLocalEstimate(from, to, 'transit');
     }
 
     const cacheKey = this.buildCacheKey(from, to, 'transit');
     const cached = await this.readCache(cacheKey);
     if (cached) return cached;
 
+    return this.coalesce(cacheKey, () => this.fetchTransitEta(from, to, cacheKey, apiKey, serviceUrl));
+  }
+
+  private async fetchTransitEta(
+    from: Coordinates,
+    to: Coordinates,
+    cacheKey: string,
+    apiKey: string,
+    serviceUrl: string,
+  ): Promise<EtaResult> {
     try {
       const res = await axios.get<{
         error?: Array<{ code: string; message: string }>;
@@ -183,13 +272,13 @@ export class RouteHelper implements OnModuleDestroy {
         this.logger.error(
           `ODsay 길찾기 실패 (${error.code}: ${error.message}) — 로컬 추정치로 대체합니다.`,
         );
-        return this.buildLocalEstimate(from, to, 20);
+        return this.buildLocalEstimate(from, to, 'transit');
       }
 
       const info = res.data.result?.path?.[0]?.info;
       if (!info) {
         this.logger.error('ODsay 경로 없음 — 로컬 추정치로 대체합니다.');
-        return this.buildLocalEstimate(from, to, 20);
+        return this.buildLocalEstimate(from, to, 'transit');
       }
 
       // totalTime=분, totalDistance=미터. 시간만 초로 바꾼다.
@@ -198,21 +287,30 @@ export class RouteHelper implements OnModuleDestroy {
       return eta;
     } catch (err) {
       this.logger.error('ODsay ETA 조회 실패:', err);
-      return this.buildLocalEstimate(from, to, 20);
+      return this.buildLocalEstimate(from, to, 'transit');
     }
   }
 
-  private buildLocalEstimate(from: Coordinates, to: Coordinates, kmPerHour: number): EtaResult {
+  private buildLocalEstimate(from: Coordinates, to: Coordinates, mode: RouteMode): EtaResult {
     const distanceKm = this.getDistanceKm(from, to);
     return {
       distanceM: Math.round(distanceKm * 1000),
-      durationSec: Math.max(600, Math.round((distanceKm / kmPerHour) * 3600)),
+      durationSec: Math.max(
+        MIN_DURATION_SEC[mode],
+        Math.round((distanceKm / EFFECTIVE_KMH[mode]) * 3600),
+      ),
     };
   }
 
+  /**
+   * 직선거리(km). 경도 1도의 실제 길이는 위도에 따라 줄어들므로 두 지점의 중간 위도로
+   * 보정한다 — 고정 상수를 쓰면 서울 기준에 맞춘 값이 제주에서 5% 어긋난다.
+   */
   private getDistanceKm(from: Coordinates, to: Coordinates): number {
-    const latDelta = (from.lat - to.lat) * 111;
-    const lngDelta = (from.lng - to.lng) * 88;
-    return Math.sqrt(latDelta ** 2 + lngDelta ** 2);
+    const KM_PER_DEGREE = 111;
+    const midLatRad = (((from.lat + to.lat) / 2) * Math.PI) / 180;
+    const latDelta = (from.lat - to.lat) * KM_PER_DEGREE;
+    const lngDelta = (from.lng - to.lng) * KM_PER_DEGREE * Math.cos(midLatRad);
+    return Math.hypot(latDelta, lngDelta);
   }
 }

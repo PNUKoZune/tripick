@@ -582,10 +582,7 @@ export class MainPlannerService {
     from: { lat: number; lng: number },
     to: { lat: number; lng: number },
   ): Promise<number> {
-    const eta =
-      trip.transportMode === 'car'
-        ? await this.routeHelper.getDrivingEta(from, to)
-        : await this.routeHelper.getTransitEta(from, to);
+    const eta = await this.routeHelper.getEta(from, to, trip.transportMode ?? 'transit');
     return Math.max(1, Math.round(eta.durationSec / 60));
   }
 
