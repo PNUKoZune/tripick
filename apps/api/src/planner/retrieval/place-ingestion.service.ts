@@ -6,7 +6,7 @@ import { KAKAO_CATEGORY_CODES, KakaoLocalService } from './kakao-local.service';
 import { IngestCursorRepository } from './ingest-cursor.repository';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
-import { TourApiService } from './tour-api.service';
+import { KtoCallBudget, TourApiService } from './tour-api.service';
 import { inferPlaceTags, parseSigungu } from './place-seeds';
 import type { IngestPlace, IngestRegionResult, IngestSource, IngestSummary } from './ingestion.types';
 
@@ -82,11 +82,19 @@ export class PlaceIngestionService {
       this.logger.log('append 모드: 지역별 페이지 커서를 이어받아 새 페이지부터 적재합니다.');
     }
 
+    // 실행 1회의 KTO 호출 예산. 소진되면 이후 지역의 KTO 수집을 멈춰 일일 한도를 지킨다.
+    const budget = this.tourApi.createCallBudget();
     const regions: IngestRegionResult[] = [];
     for (const sido of targets) {
       regions.push(
-        await this.ingestRegion(sido.code, sido.name, sources, maxPerRegion, reseed, allowHash, append),
+        await this.ingestRegion(sido.code, sido.name, sources, maxPerRegion, reseed, allowHash, append, budget),
       );
+      if (budget.isExhausted) {
+        this.logger.warn(
+          `KTO 호출량 예산 소진 — 남은 지역 적재를 중단합니다. --append 로 다음 실행에 이어받으세요.`,
+        );
+        break;
+      }
     }
 
     const summary: IngestSummary = {
@@ -112,6 +120,7 @@ export class PlaceIngestionService {
     reseed: boolean,
     allowHash: boolean,
     append: boolean,
+    budget: KtoCallBudget,
   ): Promise<IngestRegionResult> {
     const deleted = reseed ? await this.repository.deleteRegion(region) : 0;
     if (deleted > 0) {
@@ -127,7 +136,7 @@ export class PlaceIngestionService {
     if (sources.includes('tour')) {
       // reseed 는 항상 처음부터. append 는 커서를 이어받되 reseed 와 겹치면 처음부터.
       const startPage = append && !reseed ? await this.cursors.getNextPage(region, 'tour') : 1;
-      const res = await this.tourApi.fetchByArea(areaCode, region, maxPerRegion, startPage);
+      const res = await this.tourApi.fetchByArea(areaCode, region, maxPerRegion, startPage, budget);
       tourPlaces = res.places;
       collected.push(...tourPlaces);
       if (append) {

@@ -107,6 +107,69 @@ function toArray<T>(item: T | T[] | undefined): T[] {
   return Array.isArray(item) ? item : [item];
 }
 
+/** KTO 일일 호출량 초과를 정상 '데이터 없음'과 구분하기 위한 신호. */
+export class KtoQuotaExceededError extends Error {
+  constructor(path: string) {
+    super(`KTO 일일 호출량 초과 (${path})`);
+    this.name = 'KtoQuotaExceededError';
+  }
+}
+
+/**
+ * KTO 응답이 일일 호출량 초과인지 판정한다. data.go.kr 은 초과를 두 형태로 준다:
+ * 1) 서비스 응답 JSON header.resultCode=22
+ * 2) 게이트웨이 XML 문자열 (_type=json 이어도 XML 로 옴) — returnReasonCode 22 /
+ *    LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR
+ * 둘 다 axios 가 던지지 않으므로(HTTP 200) 본문을 직접 봐야 한다.
+ */
+export function detectKtoQuota(data: unknown): boolean {
+  if (typeof data === 'string') {
+    return (
+      data.includes('LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS') ||
+      /<returnReasonCode>\s*22\s*<\/returnReasonCode>/.test(data)
+    );
+  }
+  if (data && typeof data === 'object') {
+    const header = (data as { response?: { header?: { resultCode?: unknown; resultMsg?: unknown } } })
+      .response?.header;
+    if (!header) return false;
+    const code = String(header.resultCode ?? '');
+    const msg = String(header.resultMsg ?? '');
+    return code === '22' || msg.includes('LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS');
+  }
+  return false;
+}
+
+/**
+ * 1회 적재 실행의 KTO 호출 예산. 일일 한도(1000)를 넘지 않도록 실행당 호출 수를 캡한다.
+ * 소진되거나 초과 응답을 만나면(markExhausted) 이후 호출을 막아 헛호출을 끊는다.
+ * 런타임 조회(수동 추가)는 저볼륨이라 예산 없이(감지만) 동작한다.
+ */
+export class KtoCallBudget {
+  private remaining: number;
+  private exhausted = false;
+
+  constructor(limit: number) {
+    this.remaining = Math.max(0, Math.floor(limit));
+  }
+
+  get isExhausted(): boolean {
+    return this.exhausted || this.remaining <= 0;
+  }
+
+  /** 호출 1건을 예산에서 차감한다. 남으면 true, 소진이면 false(호출 금지). */
+  consume(): boolean {
+    if (this.isExhausted) return false;
+    this.remaining -= 1;
+    return true;
+  }
+
+  /** 초과 응답을 만났을 때 남은 예산과 무관하게 즉시 소진 처리한다. */
+  markExhausted(): void {
+    this.exhausted = true;
+  }
+}
+
 /**
  * 한국관광공사 국문관광정보(KorService2)에서 지역 기반 관광 장소를 수집한다.
  * - ldongCode2: 법정동 시도 코드(lDongRegnCd) 목록
@@ -162,9 +225,10 @@ export class TourApiService {
     region: string,
     maxItems: number,
     startPage = 1,
-  ): Promise<{ places: IngestPlace[]; nextPage: number }> {
+    budget?: KtoCallBudget,
+  ): Promise<{ places: IngestPlace[]; nextPage: number; quotaExceeded: boolean }> {
     const apiKey = this.apiKey();
-    if (!apiKey) return { places: [], nextPage: startPage };
+    if (!apiKey) return { places: [], nextPage: startPage, quotaExceeded: false };
 
     const batchSize = Math.min(Math.max(1, maxItems), 100); // KTO numOfRows 상한 100
     const pagesToFetch = Math.max(1, Math.ceil(maxItems / batchSize));
@@ -174,29 +238,40 @@ export class TourApiService {
     const pending: Array<{ place: IngestPlace; contentTypeId: string }> = [];
     let page = startPage;
     let ended = false;
+    let quotaExceeded = false;
 
-    for (let i = 0; i < pagesToFetch; i += 1) {
-      const rows = await this.fetchPage(apiKey, lDongRegnCd, page, batchSize);
-      page += 1;
-      if (rows.length === 0) {
-        ended = true;
-        break;
+    try {
+      for (let i = 0; i < pagesToFetch; i += 1) {
+        const rows = await this.fetchPage(apiKey, lDongRegnCd, page, batchSize, budget);
+        page += 1;
+        if (rows.length === 0) {
+          ended = true;
+          break;
+        }
+        for (const row of rows) {
+          const place = this.toIngestPlace(row, region);
+          if (!place) continue;
+          collected.push(place);
+          pending.push({ place, contentTypeId: String(row.contenttypeid ?? '') });
+        }
+        if (rows.length < batchSize) {
+          ended = true;
+          break;
+        }
       }
-      for (const row of rows) {
-        const place = this.toIngestPlace(row, region);
-        if (!place) continue;
-        collected.push(place);
-        pending.push({ place, contentTypeId: String(row.contenttypeid ?? '') });
-      }
-      if (rows.length < batchSize) {
-        ended = true;
-        break;
+
+      quotaExceeded = await this.attachOpeningHours(apiKey, pending, budget);
+    } catch (error) {
+      // 호출량 초과는 남은 페이지·영업시간 조회를 멈추고 지금까지 모은 것만 반환한다.
+      if (error instanceof KtoQuotaExceededError) {
+        this.logger.warn(`[${region}] KTO 호출량 초과 — 이 지역 수집을 중단합니다.`);
+        quotaExceeded = true;
+      } else {
+        throw error;
       }
     }
 
-    await this.attachOpeningHours(apiKey, pending);
-
-    return { places: collected, nextPage: ended ? 1 : page };
+    return { places: collected, nextPage: ended ? 1 : page, quotaExceeded };
   }
 
   /**
@@ -207,43 +282,63 @@ export class TourApiService {
   private async attachOpeningHours(
     apiKey: string,
     pending: Array<{ place: IngestPlace; contentTypeId: string }>,
-  ): Promise<void> {
-    if (!this.openingHoursEnabled()) return;
+    budget?: KtoCallBudget,
+  ): Promise<boolean> {
+    if (!this.openingHoursEnabled()) return false;
 
     // 영업시간 필드가 정의된 타입만 조회한다 (여행코스 등은 애초에 영업시간이 없다).
     const targets = pending.filter(
       ({ place, contentTypeId }) => OPENING_HOURS_FIELD[contentTypeId] && place.tourismApiId,
     );
-    if (targets.length === 0) return;
+    if (targets.length === 0) return false;
 
     const concurrency = this.introConcurrency();
     let filled = 0;
-    for (let i = 0; i < targets.length; i += concurrency) {
-      const chunk = targets.slice(i, i + concurrency);
-      const hours = await Promise.all(
-        chunk.map(({ place, contentTypeId }) =>
-          this.fetchOpeningHours(apiKey, place.tourismApiId!, contentTypeId),
-        ),
-      );
-      chunk.forEach(({ place }, index) => {
-        const value = hours[index];
-        if (value) {
-          place.openingHours = value;
-          filled += 1;
-        }
-      });
+    try {
+      for (let i = 0; i < targets.length; i += concurrency) {
+        // 예산이 이미 소진됐으면 다음 청크를 아예 시작하지 않는다.
+        if (budget?.isExhausted) throw new KtoQuotaExceededError('detailIntro2');
+        const chunk = targets.slice(i, i + concurrency);
+        const hours = await Promise.all(
+          chunk.map(({ place, contentTypeId }) =>
+            this.fetchOpeningHours(apiKey, place.tourismApiId!, contentTypeId, budget),
+          ),
+        );
+        chunk.forEach(({ place }, index) => {
+          const value = hours[index];
+          if (value) {
+            place.openingHours = value;
+            filled += 1;
+          }
+        });
+      }
+    } catch (error) {
+      if (error instanceof KtoQuotaExceededError) {
+        this.logger.warn(
+          `detailIntro2 호출량 초과 — ${filled}/${targets.length}건까지만 확보하고 중단합니다.`,
+        );
+        return true;
+      }
+      throw error;
     }
     this.logger.log(`detailIntro2 영업시간 ${filled}/${targets.length}건 확보`);
+    return false;
   }
 
-  /** contentId 1건의 영업시간을 'HH:MM-HH:MM' 로 조회한다. 실패·미해석 시 undefined. */
+  /**
+   * contentId 1건의 영업시간을 'HH:MM-HH:MM' 로 조회한다. 실패·미해석 시 undefined.
+   * budget 이 주어지면 호출 전 예산을 차감하고, 호출량 초과 응답을 만나면
+   * {@link KtoQuotaExceededError} 를 던져(개별 실패와 구분) 상위에서 배치를 끊게 한다.
+   */
   private async fetchOpeningHours(
     apiKey: string,
     contentId: string,
     contentTypeId: string,
+    budget?: KtoCallBudget,
   ): Promise<string | undefined> {
     const field = OPENING_HOURS_FIELD[contentTypeId];
     if (!field) return undefined;
+    if (budget && !budget.consume()) throw new KtoQuotaExceededError('detailIntro2');
 
     try {
       const res = await axios.get<TourIntroResponse>(`${this.BASE}/detailIntro2`, {
@@ -259,6 +354,10 @@ export class TourApiService {
         },
         timeout: 10000,
       });
+      if (detectKtoQuota(res.data)) {
+        budget?.markExhausted();
+        throw new KtoQuotaExceededError('detailIntro2');
+      }
       const items = res.data.response?.body?.items;
       // 소개정보가 아예 없는 콘텐츠는 items 를 빈 문자열로 준다.
       const item = toArray(items && typeof items !== 'string' ? items.item : undefined)[0];
@@ -266,6 +365,7 @@ export class TourApiService {
       const raw = item[field];
       return typeof raw === 'string' ? parseOpeningHours(raw) : undefined;
     } catch (error) {
+      if (error instanceof KtoQuotaExceededError) throw error; // 초과는 상위로 전파해 배치 중단
       this.logger.warn(
         `KTO detailIntro2 실패 (contentId=${contentId}, type=${contentTypeId}): ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -292,7 +392,16 @@ export class TourApiService {
     if (!match) return undefined;
     // 영업시간 필드가 정의된 타입만 detailIntro2 를 부른다 (여행코스·숙박 등은 제외).
     if (!OPENING_HOURS_FIELD[match.contentTypeId]) return undefined;
-    return this.fetchOpeningHours(apiKey, match.contentId, match.contentTypeId);
+    try {
+      // 런타임 경로는 예산 없이(저볼륨) 동작하되, 호출량 초과는 조용히 영업시간 없이 넘긴다.
+      return await this.fetchOpeningHours(apiKey, match.contentId, match.contentTypeId);
+    } catch (error) {
+      if (error instanceof KtoQuotaExceededError) {
+        this.logger.warn('KTO 호출량 초과 — 수동 추가 장소 영업시간 조회를 건너뜁니다.');
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   /**
@@ -318,6 +427,10 @@ export class TourApiService {
         },
         timeout: 10000,
       });
+      if (detectKtoQuota(res.data)) {
+        this.logger.warn(`KTO searchKeyword2 호출량 초과 (keyword=${keyword})`);
+        return null;
+      }
       const items = res.data.response?.body?.items;
       const rows = toArray(items && typeof items !== 'string' ? items.item : undefined);
 
@@ -359,7 +472,9 @@ export class TourApiService {
     lDongRegnCd: string,
     pageNo: number,
     numOfRows: number,
+    budget?: KtoCallBudget,
   ): Promise<TourAreaItem[]> {
+    if (budget && !budget.consume()) throw new KtoQuotaExceededError('areaBasedList2');
     try {
       const res = await axios.get<TourAreaResponse>(`${this.BASE}/areaBasedList2`, {
         params: {
@@ -374,9 +489,14 @@ export class TourApiService {
         },
         timeout: 10000,
       });
+      if (detectKtoQuota(res.data)) {
+        budget?.markExhausted();
+        throw new KtoQuotaExceededError('areaBasedList2');
+      }
       const items = res.data.response?.body?.items;
       return toArray(items && typeof items !== 'string' ? items.item : undefined);
     } catch (error) {
+      if (error instanceof KtoQuotaExceededError) throw error; // 초과는 상위로 전파해 수집 중단
       this.logger.warn(
         `KTO areaBasedList2 실패 (lDongRegnCd=${lDongRegnCd}, page=${pageNo}): ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -426,5 +546,15 @@ export class TourApiService {
   private introConcurrency(): number {
     const value = Number(this.config.get<string | number>('KTO_INTRO_CONCURRENCY', 4));
     return Number.isFinite(value) && value > 0 ? Math.min(Math.floor(value), 16) : 4;
+  }
+
+  /**
+   * 1회 적재 실행의 KTO 호출 예산을 만든다. KTO 일일 한도(API별 1000)를 넘지 않도록
+   * 기본 900 으로 두고, 초과 시 적재는 --append 로 며칠에 나눠 이어받는다.
+   */
+  createCallBudget(): KtoCallBudget {
+    const value = Number(this.config.get<string | number>('KTO_DAILY_CALL_BUDGET', 900));
+    const limit = Number.isFinite(value) && value > 0 ? Math.floor(value) : 900;
+    return new KtoCallBudget(limit);
   }
 }
