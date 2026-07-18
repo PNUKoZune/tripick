@@ -8,9 +8,11 @@ import { TripEntity } from '../trips/trip.entity';
 import { InboxService } from '../inbox/inbox.service';
 import { TripMembersService } from '../trip-members/trip-members.service';
 import { WeatherHelper } from '../planner/helpers/weather.helper';
+import { getKstParts, latLngToGrid } from '@tripick/utils';
 import {
   ALERT_DEDUPE_TTL_SEC,
   FORECAST_HORIZON_DAYS,
+  MAX_TRIP_DAYS,
   MIN_RAINY_SLOTS,
   RAIN_PROBABILITY_THRESHOLD,
   WEATHER_SENSITIVE_TYPES,
@@ -107,8 +109,8 @@ export class WeatherAlertService implements OnModuleInit, OnModuleDestroy {
    * draft·cancelled·completed 는 알릴 대상이 아니다.
    */
   private async findTripsInForecastWindow(now: Date): Promise<TripEntity[]> {
-    const today = this.toIsoDate(now);
-    const horizon = this.toIsoDate(this.addDays(now, FORECAST_HORIZON_DAYS));
+    const today = this.kstToday(now);
+    const horizon = this.addDaysIso(today, FORECAST_HORIZON_DAYS);
 
     return this.tripsRepo.find({
       where: {
@@ -127,62 +129,73 @@ export class WeatherAlertService implements OnModuleInit, OnModuleDestroy {
       return 0;
     }
 
-    const center = this.averageCenter(items);
-    const forecasts = await this.weatherHelper.getExtendedForecast(center.lat, center.lng);
-    if (forecasts.size === 0) {
-      return 0;
-    }
+    const todayIso = this.kstToday(now);
+    // 지난 날짜와 일정이 없는 날은 볼 필요가 없다.
+    const candidates = this.tripDays(trip)
+      .filter(({ iso }) => iso >= todayIso)
+      .map(({ day, iso }) => ({ day, iso, items: items.filter((item) => item.day === day) }))
+      .filter(({ items: dayItems }) => dayItems.length > 0);
 
-    const rainyDays = this.findRainyDays(trip, items, forecasts, now);
+    // 같은 격자에 떨어지는 날끼리는 예보를 1회만 조회한다.
+    const forecastByGrid = new Map<string, Map<string, ParsedForecast>>();
     let alerted = 0;
-    for (const rainy of rainyDays) {
-      if (await this.alreadyAlerted(trip.id, rainy.iso)) continue;
-      await this.notify(trip, rainy);
-      await this.markAlerted(trip.id, rainy.iso);
-      alerted += 1;
+
+    for (const candidate of candidates) {
+      const center = this.averageCenter(candidate.items);
+      const { nx, ny } = latLngToGrid({ lat: center.lat, lng: center.lng });
+      const gridKey = `${nx}:${ny}`;
+
+      let forecasts = forecastByGrid.get(gridKey);
+      if (!forecasts) {
+        forecasts = await this.weatherHelper.getExtendedForecast(center.lat, center.lng);
+        forecastByGrid.set(gridKey, forecasts);
+      }
+
+      const rainy = this.evaluateDay(candidate, forecasts);
+      if (!rainy) continue;
+
+      // 발송 전에 중복 억제 키를 선점한다 — 발송 후에 기록하면 중간 실패 시
+      // BullMQ 재시도가 같은 알림을 다시 보낸다.
+      if (!(await this.claimAlert(trip.id, rainy.iso))) continue;
+
+      try {
+        await this.notify(trip, rainy);
+        alerted += 1;
+      } catch (err) {
+        // 선점한 키는 일부러 되돌리지 않는다 — 일부 멤버가 이미 받았을 수 있어
+        // 재발송(중복)보다 미발송을 택한다.
+        this.logger.error(`날씨 알림 발송 실패 (trip ${trip.id}, ${rainy.iso}):`, err);
+      }
     }
     return alerted;
   }
 
   /**
-   * 여행 일자 중 "비 올 것 같은" 날을 고른다. 조건 3개를 모두 만족해야 한다.
-   * 1) 오늘 이후(지난 날짜는 알릴 의미 없음)이고 예보가 존재하는 날
-   * 2) 강수 슬롯이 MIN_RAINY_SLOTS 이상 — 새벽 한 슬롯만 걸린 날은 제외
-   * 3) 그 날 야외(attraction) 일정이 하나라도 있는 날
+   * 해당 일자가 "비 올 것 같은" 날인지 판정한다. 조건 2개를 모두 만족해야 한다.
+   * 1) 강수 슬롯이 MIN_RAINY_SLOTS 이상 — 새벽 한 슬롯만 걸린 날은 제외
+   * 2) 야외(attraction) 일정이 하나라도 있는 날
    */
-  private findRainyDays(
-    trip: TripEntity,
-    items: ItineraryItemEntity[],
+  private evaluateDay(
+    candidate: { day: number; iso: string; items: ItineraryItemEntity[] },
     forecasts: Map<string, ParsedForecast>,
-    now: Date,
-  ): RainyDay[] {
-    const slots = [...forecasts.values()];
-    const todayIso = this.toIsoDate(now);
-    const rainyDays: RainyDay[] = [];
+  ): RainyDay | null {
+    const kmaDate = candidate.iso.replace(/-/g, '');
+    const rainySlots = [...forecasts.values()].filter(
+      (slot) => slot.date === kmaDate && this.isRainy(slot),
+    );
+    if (rainySlots.length < MIN_RAINY_SLOTS) return null;
 
-    for (const { day, iso } of this.tripDays(trip)) {
-      if (iso < todayIso) continue;
+    const exposed = candidate.items.filter((item) => WEATHER_SENSITIVE_TYPES.includes(item.type));
+    if (exposed.length === 0) return null;
 
-      const daySlots = slots.filter((s) => s.date === iso.replace(/-/g, ''));
-      const rainySlots = daySlots.filter((s) => this.isRainy(s));
-      if (rainySlots.length < MIN_RAINY_SLOTS) continue;
-
-      const exposed = items.filter(
-        (item) => item.day === day && WEATHER_SENSITIVE_TYPES.includes(item.type),
-      );
-      if (exposed.length === 0) continue;
-
-      rainyDays.push({
-        day,
-        iso,
-        maxProbability: Math.max(
-          ...rainySlots.map((s) => s.precipitationProbability ?? RAIN_PROBABILITY_THRESHOLD),
-        ),
-        exposedPlaces: exposed.slice(0, 2).map((item) => item.name),
-      });
-    }
-
-    return rainyDays;
+    return {
+      day: candidate.day,
+      iso: candidate.iso,
+      maxProbability: Math.max(
+        ...rainySlots.map((s) => s.precipitationProbability ?? RAIN_PROBABILITY_THRESHOLD),
+      ),
+      exposedPlaces: exposed.slice(0, 2).map((item) => item.name),
+    };
   }
 
   /** 강수형태(PTY)가 잡혔거나 강수확률이 임계값 이상이면 강수 슬롯으로 본다. */
@@ -191,14 +204,18 @@ export class WeatherAlertService implements OnModuleInit, OnModuleDestroy {
     return (slot.precipitationProbability ?? 0) >= RAIN_PROBABILITY_THRESHOLD;
   }
 
-  /** 여행 기간의 (일차, iso) 목록. startDate~endDate 양끝 포함. */
+  /**
+   * 여행 기간의 (일차, iso) 목록. startDate~endDate 양끝 포함.
+   * 날짜 문자열 산술만 쓰므로 Date 파싱 TZ 에 좌우되지 않는다.
+   * MAX_TRIP_DAYS 는 endDate 가 깨진 데이터일 때 무한 루프를 막는 안전장치.
+   */
   private tripDays(trip: TripEntity): Array<{ day: number; iso: string }> {
-    const start = new Date(`${trip.startDate}T00:00:00`);
-    const end = new Date(`${trip.endDate}T00:00:00`);
     const days: Array<{ day: number; iso: string }> = [];
+    let iso = trip.startDate;
 
-    for (let cursor = start, day = 1; cursor <= end; cursor = this.addDays(cursor, 1), day += 1) {
-      days.push({ day, iso: this.toIsoDate(cursor) });
+    for (let day = 1; iso <= trip.endDate && day <= MAX_TRIP_DAYS; day += 1) {
+      days.push({ day, iso });
+      iso = this.addDaysIso(iso, 1);
     }
     return days;
   }
@@ -248,22 +265,24 @@ export class WeatherAlertService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 같은 (여행, 일자) 에 이미 알렸는지 확인한다.
-   * Redis 장애 시 false 를 반환 — 알림이 중복될 수는 있어도 누락되지는 않게 한다.
+   * 같은 (여행, 일자) 발송 권한을 선점한다. SET NX 라 확인·기록이 한 번에 원자적으로 끝나,
+   * 발송 도중 죽어도 재시도가 중복 발송하지 않는다.
+   *
+   * Redis 장애 시 true — 알림이 중복될 수는 있어도 누락되지는 않게 한다.
+   * @returns 이번 스캔이 발송해도 되면 true, 이미 누가 선점했으면 false
    */
-  private async alreadyAlerted(tripId: string, iso: string): Promise<boolean> {
+  private async claimAlert(tripId: string, iso: string): Promise<boolean> {
     try {
-      return (await this.redis.exists(this.dedupeKey(tripId, iso))) === 1;
+      const res = await this.redis.set(
+        this.dedupeKey(tripId, iso),
+        '1',
+        'EX',
+        ALERT_DEDUPE_TTL_SEC,
+        'NX',
+      );
+      return res === 'OK';
     } catch {
-      return false;
-    }
-  }
-
-  private async markAlerted(tripId: string, iso: string): Promise<void> {
-    try {
-      await this.redis.set(this.dedupeKey(tripId, iso), '1', 'EX', ALERT_DEDUPE_TTL_SEC);
-    } catch {
-      // 중복 억제 실패는 알림 발송 자체를 되돌리지 않는다.
+      return true;
     }
   }
 
@@ -271,16 +290,21 @@ export class WeatherAlertService implements OnModuleInit, OnModuleDestroy {
     return `weather:alert:sent:${tripId}:${iso}`;
   }
 
-  private toIsoDate(date: Date): string {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+  /**
+   * 오늘(KST) 을 YYYY-MM-DD 로 반환한다.
+   * 서버 로컬 TZ 를 쓰면 UTC 컨테이너에서 하루가 밀려 기상청 fcstDate(KST) 와 어긋나므로
+   * 반드시 KST 기준으로 뽑는다.
+   */
+  private kstToday(now: Date): string {
+    const { year, month, day } = getKstParts(now);
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   }
 
-  private addDays(date: Date, days: number): Date {
-    const next = new Date(date);
-    next.setDate(next.getDate() + days);
-    return next;
+  /** YYYY-MM-DD 에 일수를 더한다. UTC 기준 산술이라 서버 TZ·서머타임에 영향받지 않는다. */
+  private addDaysIso(iso: string, days: number): string {
+    const [y = 0, m = 1, d = 1] = iso.split('-').map(Number);
+    const utc = new Date(Date.UTC(y, m - 1, d));
+    utc.setUTCDate(utc.getUTCDate() + days);
+    return utc.toISOString().slice(0, 10);
   }
 }

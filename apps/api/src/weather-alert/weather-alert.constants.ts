@@ -14,6 +14,9 @@ export const WEATHER_ALERT_CRON = '10 2,5,8,11,14,17,20,23 * * *';
 /** 예보로 커버되는 최대 일수(단기 ~3일 + 중기 ~10일). 이 밖의 여행일은 스캔하지 않는다. */
 export const FORECAST_HORIZON_DAYS = 10;
 
+/** 여행 일자 순회 상한 — endDate 가 깨진 데이터여도 루프가 발산하지 않게 하는 안전장치. */
+export const MAX_TRIP_DAYS = 366;
+
 /** 강수확률(POP) 이 이 값 이상이면 "비 올 것 같다" 로 본다. */
 export const RAIN_PROBABILITY_THRESHOLD = 60;
 
