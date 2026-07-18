@@ -6,17 +6,23 @@ import type { ParsedForecast } from '@tripick/utils';
 // ioredis 는 실제 연결 없이 동작하도록 인메모리 스텁으로 대체한다.
 // SET 은 NX 플래그를 실제 Redis 와 같게 흉내낸다(이미 있으면 null) — 중복 억제가
 // 선점(SET NX)에 의존하므로 여기서 대충 넘기면 테스트가 계약을 못 지킨다.
+// mockRedisFailure 를 세팅하면 모든 명령이 실패한다 — Redis 장애 시 degrade 계약을 검증하기 위함.
 const redisStore = new Map<string, string>();
+let mockRedisFailure: Error | null = null;
+const mockRedisSet = jest.fn(async (key: string, value: string, ...args: unknown[]) => {
+  if (mockRedisFailure) throw mockRedisFailure;
+  if (args.includes('NX') && redisStore.has(key)) return null;
+  redisStore.set(key, value);
+  return 'OK';
+});
 jest.mock('ioredis', () => ({
   Redis: jest.fn(() => ({
     on: jest.fn(),
-    connect: jest.fn(async () => undefined),
-    disconnect: jest.fn(),
-    set: jest.fn(async (key: string, value: string, ...args: unknown[]) => {
-      if (args.includes('NX') && redisStore.has(key)) return null;
-      redisStore.set(key, value);
-      return 'OK';
+    connect: jest.fn(async () => {
+      if (mockRedisFailure) throw mockRedisFailure;
     }),
+    disconnect: jest.fn(),
+    set: mockRedisSet,
   })),
 }));
 
@@ -91,6 +97,7 @@ function build(opts: {
 describe('WeatherAlertService', () => {
   beforeEach(() => {
     redisStore.clear();
+    mockRedisFailure = null;
     jest.clearAllMocks();
   });
 
@@ -231,6 +238,59 @@ describe('WeatherAlertService', () => {
 
     // 재시도: 이미 선점된 키라 다시 보내지 않는다
     expect(await service.scanUpcomingTrips(NOW)).toBe(0);
+    expect(inboxService.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('중복 억제를 SET NX 로 원자적으로 선점한다', async () => {
+    const { service } = build({
+      items: [item(1, 'attraction', '불국사')],
+      forecasts: forecastMap('20260719', 4),
+    });
+
+    await service.scanUpcomingTrips(NOW);
+
+    // exists+set 으로 되돌리면 확인과 기록 사이가 벌어져 중복 발송이 되살아난다.
+    const [key, value, ...opts] = mockRedisSet.mock.calls[0] as unknown[];
+    expect(key).toBe('weather:alert:sent:trip-1:2026-07-19');
+    expect(value).toBe('1');
+    expect(opts).toContain('NX');
+    expect(opts).toContain('EX');
+  });
+
+  it('Redis 장애 시에도 알림은 보낸다 — 누락보다 중복을 택한다', async () => {
+    const { service, inboxService } = build({
+      items: [item(1, 'attraction', '불국사')],
+      forecasts: forecastMap('20260719', 4),
+    });
+    mockRedisFailure = new Error('redis down');
+
+    expect(await service.scanUpcomingTrips(NOW)).toBe(1);
+    expect(inboxService.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('Redis 장애가 이어지면 중복 억제가 풀려 재스캔이 재발송한다 (문서화된 degrade)', async () => {
+    const { service, inboxService } = build({
+      items: [item(1, 'attraction', '불국사')],
+      forecasts: forecastMap('20260719', 4),
+    });
+    mockRedisFailure = new Error('redis down');
+
+    await service.scanUpcomingTrips(NOW);
+    await service.scanUpcomingTrips(NOW);
+
+    // 선점 기록을 남길 수 없으니 중복이 난다 — 알림 누락을 피하려고 감수한 트레이드오프
+    expect(inboxService.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('Redis 연결 실패로 부팅해도 스캔은 계속 동작한다', async () => {
+    const { service, inboxService } = build({
+      items: [item(1, 'attraction', '불국사')],
+      forecasts: forecastMap('20260719', 4),
+    });
+    mockRedisFailure = new Error('connect ECONNREFUSED');
+
+    await expect(service.onModuleInit()).resolves.toBeUndefined();
+    expect(await service.scanUpcomingTrips(NOW)).toBe(1);
     expect(inboxService.create).toHaveBeenCalledTimes(1);
   });
 
