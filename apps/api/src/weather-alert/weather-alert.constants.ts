@@ -14,6 +14,18 @@ export const WEATHER_ALERT_CRON = '10 2,5,8,11,14,17,20,23 * * *';
 /** 예보로 커버되는 최대 일수(단기 ~3일 + 중기 ~10일). 이 밖의 여행일은 스캔하지 않는다. */
 export const FORECAST_HORIZON_DAYS = 10;
 
+/**
+ * 반복 잡 등록 응답 대기 상한(ms). Redis 무응답 시 queue.add 는 던지지 않고
+ * 오프라인 큐에 버퍼링되어 영영 안 끝나므로, 기다리지 않고 재시도로 넘긴다.
+ */
+export const SCHEDULE_REGISTER_TIMEOUT_MS = 10_000;
+
+/** 등록 재시도 백오프 시작 간격(ms). 시도마다 2배로 늘어난다. */
+export const SCHEDULE_RETRY_BASE_MS = 5_000;
+
+/** 등록 재시도 백오프 상한(ms). 5분마다 계속 재시도한다. */
+export const SCHEDULE_RETRY_MAX_MS = 5 * 60_000;
+
 /** 여행 일자 순회 상한 — endDate 가 깨진 데이터여도 루프가 발산하지 않게 하는 안전장치. */
 export const MAX_TRIP_DAYS = 366;
 
