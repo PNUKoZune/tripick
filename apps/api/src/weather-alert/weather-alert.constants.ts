@@ -39,10 +39,18 @@ export const RAIN_PROBABILITY_THRESHOLD = 60;
 export const MIN_RAINY_SLOTS = 2;
 
 /**
- * 같은 (여행, 일자) 조합 재알림 억제 기간(초). 24시간.
- * 예보가 3시간마다 갱신되지만 같은 비 예보로 하루에 8번 알릴 이유는 없다.
+ * 중복 억제 키의 최소 TTL(초).
+ *
+ * 억제 기간은 고정값이 아니라 "대상 날짜가 KST 로 끝날 때까지" 로 계산한다
+ * (dedupeTtlSec). 같은 (여행, 일자) 알림은 평생 1회만 나가므로, 사용자가 일정을
+ * 바꾸든 그대로 두든 같은 날짜로 다시 알리지 않는다.
+ *
+ * 24시간 고정이던 시절엔 날짜가 올 때까지 매일 재알림이 나가, 5일 전 시작한
+ * 4일 여행이면 알림이 10건 넘게 쌓였다.
+ *
+ * 이 상수는 대상 날짜가 이미 끝나가는 경계(EX 가 0 이하로 계산되는 경우)에서만 쓰인다.
  */
-export const ALERT_DEDUPE_TTL_SEC = 24 * 60 * 60;
+export const MIN_DEDUPE_TTL_SEC = 60;
 
 /**
  * 비에 영향을 받는 일정 유형. restaurant·cafe·accommodation 은 실내이고

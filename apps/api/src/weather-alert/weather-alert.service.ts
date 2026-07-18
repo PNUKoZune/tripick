@@ -10,9 +10,9 @@ import { TripMembersService } from '../trip-members/trip-members.service';
 import { WeatherHelper } from '../planner/helpers/weather.helper';
 import { getKstParts, latLngToGrid } from '@tripick/utils';
 import {
-  ALERT_DEDUPE_TTL_SEC,
   FORECAST_HORIZON_DAYS,
   MAX_TRIP_DAYS,
+  MIN_DEDUPE_TTL_SEC,
   MIN_RAINY_SLOTS,
   RAIN_PROBABILITY_THRESHOLD,
   WEATHER_SENSITIVE_TYPES,
@@ -156,7 +156,7 @@ export class WeatherAlertService implements OnModuleInit, OnModuleDestroy {
 
       // 발송 전에 중복 억제 키를 선점한다 — 발송 후에 기록하면 중간 실패 시
       // BullMQ 재시도가 같은 알림을 다시 보낸다.
-      if (!(await this.claimAlert(trip.id, rainy.iso))) continue;
+      if (!(await this.claimAlert(trip.id, rainy.iso, now))) continue;
 
       try {
         await this.notify(trip, rainy);
@@ -268,22 +268,35 @@ export class WeatherAlertService implements OnModuleInit, OnModuleDestroy {
    * 같은 (여행, 일자) 발송 권한을 선점한다. SET NX 라 확인·기록이 한 번에 원자적으로 끝나,
    * 발송 도중 죽어도 재시도가 중복 발송하지 않는다.
    *
+   * TTL 이 대상 날짜 끝까지라 알림은 (여행, 일자)당 1회만 나간다 — 사용자가 일정을
+   * 바꾸든 그대로 두든 같은 날짜로 다시 알리지 않는다.
+   *
    * Redis 장애 시 true — 알림이 중복될 수는 있어도 누락되지는 않게 한다.
    * @returns 이번 스캔이 발송해도 되면 true, 이미 누가 선점했으면 false
    */
-  private async claimAlert(tripId: string, iso: string): Promise<boolean> {
+  private async claimAlert(tripId: string, iso: string, now: Date): Promise<boolean> {
     try {
       const res = await this.redis.set(
         this.dedupeKey(tripId, iso),
         '1',
         'EX',
-        ALERT_DEDUPE_TTL_SEC,
+        this.dedupeTtlSec(iso, now),
         'NX',
       );
       return res === 'OK';
     } catch {
       return true;
     }
+  }
+
+  /**
+   * 대상 날짜(iso)가 KST 로 끝날 때까지 남은 초.
+   * 오프셋을 명시해 파싱하므로 서버 TZ 와 무관하게 KST 자정을 기준으로 계산한다.
+   */
+  private dedupeTtlSec(iso: string, now: Date): number {
+    const endOfDayKst = Date.parse(`${this.addDaysIso(iso, 1)}T00:00:00+09:00`);
+    const remainSec = Math.ceil((endOfDayKst - now.getTime()) / 1000);
+    return Math.max(remainSec, MIN_DEDUPE_TTL_SEC);
   }
 
   private dedupeKey(tripId: string, iso: string): string {

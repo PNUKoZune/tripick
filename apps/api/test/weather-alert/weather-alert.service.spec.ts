@@ -257,6 +257,40 @@ describe('WeatherAlertService', () => {
     expect(opts).toContain('EX');
   });
 
+  it('억제 기간이 대상 날짜 끝(KST)까지라 여행 일자당 1회만 알린다', async () => {
+    const { service } = build({
+      items: [item(1, 'attraction', '불국사')],
+      forecasts: forecastMap('20260719', 4),
+    });
+    // KST 2026-07-18 09:00 시점에 07-19 알림 → 07-20 00:00 KST 까지 억제
+    const now = new Date('2026-07-18T00:00:00Z');
+
+    await service.scanUpcomingTrips(now);
+
+    const opts = mockRedisSet.mock.calls[0] as unknown[];
+    const ttl = opts[opts.indexOf('EX') + 1] as number;
+    const expected = (Date.parse('2026-07-20T00:00:00+09:00') - now.getTime()) / 1000;
+    expect(ttl).toBe(expected);
+    // 24시간 고정이던 시절엔 하루 뒤 재알림이 나갔다 — 이제 날짜가 지나야 풀린다
+    expect(ttl).toBeGreaterThan(24 * 60 * 60);
+  });
+
+  it('사용자가 알림을 확인하고 하루가 지나도 같은 날짜로 재알림하지 않는다', async () => {
+    const { service, inboxService } = build({
+      trips: [trip({ startDate: '2026-07-21', endDate: '2026-07-21' })],
+      items: [item(1, 'attraction', '불국사')],
+      forecasts: forecastMap('20260721', 4),
+    });
+
+    // 스캔은 하루 8회 + 며칠에 걸쳐 반복되지만 알림은 최초 1회뿐이어야 한다
+    await service.scanUpcomingTrips(new Date('2026-07-18T00:00:00Z'));
+    await service.scanUpcomingTrips(new Date('2026-07-18T09:00:00Z'));
+    await service.scanUpcomingTrips(new Date('2026-07-19T00:00:00Z'));
+    await service.scanUpcomingTrips(new Date('2026-07-20T00:00:00Z'));
+
+    expect(inboxService.create).toHaveBeenCalledTimes(1);
+  });
+
   it('Redis 장애 시에도 알림은 보낸다 — 누락보다 중복을 택한다', async () => {
     const { service, inboxService } = build({
       items: [item(1, 'attraction', '불국사')],
