@@ -45,6 +45,7 @@ import { TripEntity } from '../trips/trip.entity';
     PlaceRetrievalService,
     PlaceEmbeddingRepository,
     KakaoLocalService,
+    TourApiService,
     RouteHelper,
     WeatherHelper,
   ],

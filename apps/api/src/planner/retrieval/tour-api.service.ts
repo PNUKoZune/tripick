@@ -4,6 +4,7 @@ import axios from 'axios';
 import { OPENING_HOURS_FIELD, parseOpeningHours } from './opening-hours.parser';
 import { parseSigungu } from './place-seeds';
 import type { IngestPlace } from './ingestion.types';
+import type { Coordinates } from '@tripick/types';
 
 /** ldongCode2 응답 아이템 (법정동 시도 / 시군구 공통). code=lDongRegnCd/lDongSignguCd */
 interface LdongCodeItem {
@@ -58,6 +59,23 @@ interface TourIntroResponse {
   };
 }
 
+/** searchKeyword2 응답 아이템 (이름 검색). 좌표 대조 후 contentid/contenttypeid 를 detailIntro2 로 넘긴다. */
+interface TourKeywordItem {
+  contentid: string | number;
+  contenttypeid?: string | number;
+  title: string;
+  mapx?: string | number; // 경도(lng)
+  mapy?: string | number; // 위도(lat)
+}
+
+interface TourKeywordResponse {
+  response?: {
+    body?: {
+      items?: '' | { item?: TourKeywordItem | TourKeywordItem[] };
+    };
+  };
+}
+
 /** contentTypeId → 내부 category 매핑 (KorService2 기준) */
 const CONTENT_TYPE_CATEGORY: Record<string, string> = {
   '12': 'attraction', // 관광지
@@ -103,6 +121,12 @@ function toArray<T>(item: T | T[] | undefined): T[] {
 export class TourApiService {
   private readonly logger = new Logger(TourApiService.name);
   private readonly BASE = 'https://apis.data.go.kr/B551011/KorService2';
+  /**
+   * 이름 검색 후보를 같은 장소로 인정할 좌표 반경(m). KTO 좌표와 카카오/사용자 좌표는
+   * 지오코딩 출처가 달라 같은 장소도 수십~수백 m 어긋나므로, 적재 dedupe(≈100m)보다
+   * 여유 있게 잡되 인접 타지점(보통 수백 m~km)은 배제되도록 250m 로 둔다.
+   */
+  private static readonly MATCH_RADIUS_M = 250;
 
   constructor(private readonly config: ConfigService) {}
 
@@ -247,6 +271,87 @@ export class TourApiService {
       );
       return undefined;
     }
+  }
+
+  /**
+   * 이름+좌표로 KTO 장소를 찾아 영업시간을 'HH:MM-HH:MM' 로 조회한다.
+   * 적재 카탈로그(place_embeddings)에 없는 수동 추가 장소를 런타임에 보강하기 위한 경로.
+   *
+   * searchKeyword2(이름) 결과 중 좌표가 coords 와 {@link MATCH_RADIUS_M} 이내인 가장 가까운
+   * 후보만 채택한다 — 이름 검색은 동명·타지점을 함께 주므로(예: '불국사'→경주/서울)
+   * 좌표 대조 없이는 오매칭 위험이 크다. 반경 밖이면 매칭 실패로 보고 undefined.
+   * KTO 미등록 장소(카페·프랜차이즈 다수)는 검색 0건 → undefined.
+   */
+  async resolveOpeningHours(name: string, coords: Coordinates): Promise<string | undefined> {
+    if (!this.openingHoursEnabled()) return undefined;
+    const apiKey = this.apiKey();
+    const keyword = name.trim();
+    if (!apiKey || !keyword) return undefined;
+
+    const match = await this.searchKeywordNearest(apiKey, keyword, coords);
+    if (!match) return undefined;
+    // 영업시간 필드가 정의된 타입만 detailIntro2 를 부른다 (여행코스·숙박 등은 제외).
+    if (!OPENING_HOURS_FIELD[match.contentTypeId]) return undefined;
+    return this.fetchOpeningHours(apiKey, match.contentId, match.contentTypeId);
+  }
+
+  /**
+   * searchKeyword2 결과에서 coords 에 가장 가까운(반경 내) 후보의 contentId·contentTypeId 를 반환.
+   * 반경 밖이거나 결과가 없으면 null.
+   */
+  private async searchKeywordNearest(
+    apiKey: string,
+    keyword: string,
+    coords: Coordinates,
+  ): Promise<{ contentId: string; contentTypeId: string } | null> {
+    try {
+      const res = await axios.get<TourKeywordResponse>(`${this.BASE}/searchKeyword2`, {
+        params: {
+          serviceKey: apiKey,
+          numOfRows: 20,
+          pageNo: 1,
+          MobileOS: 'ETC',
+          MobileApp: 'TriPick',
+          _type: 'json',
+          arrange: 'A',
+          keyword,
+        },
+        timeout: 10000,
+      });
+      const items = res.data.response?.body?.items;
+      const rows = toArray(items && typeof items !== 'string' ? items.item : undefined);
+
+      let best: { contentId: string; contentTypeId: string; distanceM: number } | null = null;
+      for (const row of rows) {
+        const lat = Number(row.mapy);
+        const lng = Number(row.mapx);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+        const distanceM = this.distanceMeters(coords, { lat, lng });
+        if (distanceM > TourApiService.MATCH_RADIUS_M) continue;
+        if (!best || distanceM < best.distanceM) {
+          best = {
+            contentId: String(row.contentid),
+            contentTypeId: String(row.contenttypeid ?? ''),
+            distanceM,
+          };
+        }
+      }
+      return best ? { contentId: best.contentId, contentTypeId: best.contentTypeId } : null;
+    } catch (error) {
+      this.logger.warn(
+        `KTO searchKeyword2 실패 (keyword=${keyword}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+  }
+
+  /** 두 좌표의 직선거리(m). 경도는 위도에 따라 줄어들므로 중간 위도로 보정한다. */
+  private distanceMeters(a: Coordinates, b: Coordinates): number {
+    const KM_PER_DEGREE = 111;
+    const midLatRad = (((a.lat + b.lat) / 2) * Math.PI) / 180;
+    const latDelta = (a.lat - b.lat) * KM_PER_DEGREE;
+    const lngDelta = (a.lng - b.lng) * KM_PER_DEGREE * Math.cos(midLatRad);
+    return Math.hypot(latDelta, lngDelta) * 1000;
   }
 
   private async fetchPage(

@@ -16,6 +16,7 @@ import { RouteHelper } from '../planner/helpers/route.helper';
 import { KakaoLocalService } from '../planner/retrieval/kakao-local.service';
 import { PlaceEmbeddingRepository } from '../planner/retrieval/place-embedding.repository';
 import { PlaceRetrievalService } from '../planner/retrieval/place-retrieval.service';
+import { TourApiService } from '../planner/retrieval/tour-api.service';
 import type { CandidatePlace, RawPlaceCandidate } from '../planner/retrieval/types';
 import type { ParsedForecast } from '@tripick/utils';
 import type {
@@ -91,6 +92,7 @@ export class MainPlannerService {
     private readonly kakaoLocal: KakaoLocalService,
     private readonly placeRetrieval: PlaceRetrievalService,
     private readonly placeEmbeddings: PlaceEmbeddingRepository,
+    private readonly tourApi: TourApiService,
     private readonly routeHelper: RouteHelper,
   ) {}
 
@@ -427,12 +429,11 @@ export class MainPlannerService {
         ?.coordinates ??
       MainPlannerService.DEFAULT_COORDINATES;
 
+    const hasCoords = dto.lat !== undefined && dto.lng !== undefined;
+    const coordinates = hasCoords ? { lat: dto.lat!, lng: dto.lng! } : fallback;
+
     const kakaoPlaceId = dto.kakaoPlaceId?.trim();
-    // 지도에서 고른 장소가 이미 적재돼 있으면 저장된 영업시간을 재사용한다(외부 API 왕복 없음).
-    // 그래야 제약 엔진·플래너가 이 수동 추가 항목도 영업시간 밖 방문으로 잡아낼 수 있다.
-    const openingHours = kakaoPlaceId
-      ? await this.placeEmbeddings.findOpeningHoursByKakaoId(kakaoPlaceId)
-      : null;
+    const openingHours = await this.resolveManualOpeningHours(name, kakaoPlaceId, hasCoords ? coordinates : null);
 
     const item = this.itemsRepo.create({
       tripId,
@@ -441,10 +442,7 @@ export class MainPlannerService {
       type: dto.type ?? 'attraction',
       name,
       address: dto.address?.trim() || `${name} 인근`,
-      coordinates:
-        dto.lat !== undefined && dto.lng !== undefined
-          ? { lat: dto.lat, lng: dto.lng }
-          : fallback,
+      coordinates,
       scheduledAt: this.combineScheduledAt(this.dayBaseDate(trip, dto.day), dto.scheduledAt),
       durationMin: dto.durationMin ?? 60,
       ...(dto.memo?.trim() ? { memo: dto.memo.trim() } : {}),
@@ -454,6 +452,28 @@ export class MainPlannerService {
     const saved = await this.itemsRepo.save(item);
     await this.recomputeDayTravelTimes(trip, dto.day);
     return this.toPlannerItem(await this.findItem(tripId, saved.id));
+  }
+
+  /**
+   * 수동 추가 장소의 영업시간을 구한다. 순서:
+   * 1) 적재 카탈로그에 있으면(kakaoPlaceId) 저장값 재사용 — 외부 API 왕복 없음
+   * 2) miss 이고 좌표가 있으면 KTO 이름+좌표 매칭으로 런타임 조회 (searchKeyword2 → detailIntro2)
+   * 좌표가 없으면(자유 입력) 이름만으로는 오매칭 위험이 커 KTO 조회를 건너뛴다.
+   */
+  private async resolveManualOpeningHours(
+    name: string,
+    kakaoPlaceId: string | undefined,
+    coords: { lat: number; lng: number } | null,
+  ): Promise<string | null> {
+    if (kakaoPlaceId) {
+      const stored = await this.placeEmbeddings.findOpeningHoursByKakaoId(kakaoPlaceId);
+      if (stored) return stored;
+    }
+    if (coords) {
+      const resolved = await this.tourApi.resolveOpeningHours(name, coords);
+      if (resolved) return resolved;
+    }
+    return null;
   }
 
   /** 일정 항목 부분 수정 (시간·메모·이름·체류시간) */

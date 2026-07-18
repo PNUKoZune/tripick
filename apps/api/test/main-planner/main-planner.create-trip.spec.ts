@@ -53,6 +53,7 @@ function createHarness() {
     noop, // kakaoLocal
     noop, // placeRetrieval
     noop, // placeEmbeddings
+    noop, // tourApi
     noop, // routeHelper
   );
   const user = { id: 'u1', nickname: '앨리스' } as any;
