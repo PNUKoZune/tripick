@@ -86,7 +86,7 @@ export class PlannerAgentService {
           {
             role: 'system',
             content:
-              'You are TriPick Planner Agent. Use only provided candidate places. Return strict JSON only. Do not invent places, addresses, or coordinates.',
+              'You are TriPick Planner Agent. Build balanced full-day routes from provided candidate places only. Return strict JSON only. Do not invent places, addresses, or coordinates.',
           },
           {
             role: 'user',
@@ -132,8 +132,26 @@ export class PlannerAgentService {
         `day must be between 1 and ${options.dayCount}.`,
         `order must be between 1 and ${options.itemsPerDay}.`,
         'durationMin must be 45-150.',
-        'Prefer high confidence candidates and diverse categories.',
+        'Prefer high confidence candidates, but category balance beats small confidence differences.',
+        '카페는 하루 최대 1개만 배치한다. 후보가 부족할 때만 예외로 2개까지 허용하고 memo에 이유를 쓴다.',
+        '같은 category를 연속 배치하지 않는다. 특히 cafe-cafe, restaurant-restaurant 연속 배치는 피한다.',
+        '하루마다 attraction, park, cultural 계열 후보를 가능한 2개 이상 포함해 여행 목적지를 실제로 둘러보게 한다.',
+        'restaurant는 점심/저녁 역할로 하루 1-2개 배치하고, cafe는 이동 중 휴식 슬롯으로만 쓴다.',
+        '하루 방문 체류 시간 합계가 기상-취침 가능 시간의 70-85%가 되도록 durationMin을 적극적으로 사용한다.',
+        '짧은 cafe/restaurant 위주로 일찍 끝나는 일정을 만들지 말고, 긴 체류 attraction을 중심축으로 둔다.',
         'Respect wake/sleep/opening hours as much as possible.',
+      ],
+      durationGuide: {
+        cafe: '45-70 minutes, never used as the main day filler',
+        restaurant: '75-100 minutes around meal slots',
+        attraction: '110-150 minutes for core destination visits',
+        park: '90-150 minutes for walks or outdoor anchor visits',
+      },
+      dayRhythmGuide: [
+        'morning: attraction/park anchor',
+        'midday: restaurant',
+        'afternoon: attraction/cultural anchor',
+        'late day: cafe or additional attraction, not a second cafe unless unavoidable',
       ],
       outputSchema: {
         items: [

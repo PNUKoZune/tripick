@@ -51,6 +51,45 @@ describe('PlannerAgentService', () => {
     expect(plan[0]!.memo).toContain('카페 선호');
   });
 
+  it('sends daily balance and time-fill rules to the planner model', async () => {
+    mockedAxios.post.mockResolvedValueOnce({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                items: [
+                  { candidateId: 'busan-cafe', day: 1, order: 1, durationMin: 65, memo: '휴식용 카페' },
+                  { candidateId: 'busan-food', day: 1, order: 2, durationMin: 90, memo: '식사 시간대 식당' },
+                ],
+              }),
+            },
+          },
+        ],
+      },
+    });
+
+    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
+    await service.plan(baseOptions());
+
+    expect(mockedAxios.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            role: 'user',
+            content: expect.stringContaining('카페는 하루 최대 1개'),
+          }),
+          expect.objectContaining({
+            role: 'user',
+            content: expect.stringContaining('하루 방문 체류 시간 합계가 기상-취침 가능 시간의 70-85%'),
+          }),
+        ]),
+      }),
+      expect.any(Object),
+    );
+  });
+
   it('falls back to deterministic CRAG order when the LLM is disabled', async () => {
     const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'false' }));
     const plan = await service.plan(baseOptions());
