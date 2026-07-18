@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { OPENING_HOURS_FIELD, parseOpeningHours } from './opening-hours.parser';
 import { parseSigungu } from './place-seeds';
 import type { IngestPlace } from './ingestion.types';
 
@@ -39,6 +40,20 @@ interface TourAreaResponse {
     body?: {
       totalCount?: number;
       items?: '' | { item?: TourAreaItem | TourAreaItem[] };
+    };
+  };
+}
+
+/**
+ * detailIntro2 응답 아이템. 필드 구성이 contentTypeId 마다 완전히 다르므로
+ * (관광지 usetime / 음식점 opentimefood / …) 키를 열어 두고 OPENING_HOURS_FIELD 로 고른다.
+ */
+type TourIntroItem = Record<string, unknown>;
+
+interface TourIntroResponse {
+  response?: {
+    body?: {
+      items?: '' | { item?: TourIntroItem | TourIntroItem[] };
     };
   };
 }
@@ -130,6 +145,9 @@ export class TourApiService {
     const batchSize = Math.min(Math.max(1, maxItems), 100); // KTO numOfRows 상한 100
     const pagesToFetch = Math.max(1, Math.ceil(maxItems / batchSize));
     const collected: IngestPlace[] = [];
+    // 영업시간은 목록(areaBasedList2)에 없고 detailIntro2 로만 온다. 타입별 필드명이
+    // 달라 contentTypeId 를 장소와 함께 들고 있어야 한다.
+    const pending: Array<{ place: IngestPlace; contentTypeId: string }> = [];
     let page = startPage;
     let ended = false;
 
@@ -142,7 +160,9 @@ export class TourApiService {
       }
       for (const row of rows) {
         const place = this.toIngestPlace(row, region);
-        if (place) collected.push(place);
+        if (!place) continue;
+        collected.push(place);
+        pending.push({ place, contentTypeId: String(row.contenttypeid ?? '') });
       }
       if (rows.length < batchSize) {
         ended = true;
@@ -150,7 +170,83 @@ export class TourApiService {
       }
     }
 
+    await this.attachOpeningHours(apiKey, pending);
+
     return { places: collected, nextPage: ended ? 1 : page };
+  }
+
+  /**
+   * 수집한 장소에 detailIntro2 영업시간을 채운다. 장소 1건당 호출 1건이 늘어나므로
+   * 동시성을 제한하고(KTO 일일 트래픽 상한 보호), 개별 실패는 삼켜 적재를 계속한다
+   * — 영업시간은 부가 정보이고, 없으면 소비측이 '제약 없음'으로 처리한다.
+   */
+  private async attachOpeningHours(
+    apiKey: string,
+    pending: Array<{ place: IngestPlace; contentTypeId: string }>,
+  ): Promise<void> {
+    if (!this.openingHoursEnabled()) return;
+
+    // 영업시간 필드가 정의된 타입만 조회한다 (여행코스 등은 애초에 영업시간이 없다).
+    const targets = pending.filter(
+      ({ place, contentTypeId }) => OPENING_HOURS_FIELD[contentTypeId] && place.tourismApiId,
+    );
+    if (targets.length === 0) return;
+
+    const concurrency = this.introConcurrency();
+    let filled = 0;
+    for (let i = 0; i < targets.length; i += concurrency) {
+      const chunk = targets.slice(i, i + concurrency);
+      const hours = await Promise.all(
+        chunk.map(({ place, contentTypeId }) =>
+          this.fetchOpeningHours(apiKey, place.tourismApiId!, contentTypeId),
+        ),
+      );
+      chunk.forEach(({ place }, index) => {
+        const value = hours[index];
+        if (value) {
+          place.openingHours = value;
+          filled += 1;
+        }
+      });
+    }
+    this.logger.log(`detailIntro2 영업시간 ${filled}/${targets.length}건 확보`);
+  }
+
+  /** contentId 1건의 영업시간을 'HH:MM-HH:MM' 로 조회한다. 실패·미해석 시 undefined. */
+  private async fetchOpeningHours(
+    apiKey: string,
+    contentId: string,
+    contentTypeId: string,
+  ): Promise<string | undefined> {
+    const field = OPENING_HOURS_FIELD[contentTypeId];
+    if (!field) return undefined;
+
+    try {
+      const res = await axios.get<TourIntroResponse>(`${this.BASE}/detailIntro2`, {
+        params: {
+          serviceKey: apiKey,
+          numOfRows: 1,
+          pageNo: 1,
+          MobileOS: 'ETC',
+          MobileApp: 'TriPick',
+          _type: 'json',
+          contentId,
+          contentTypeId,
+        },
+        timeout: 10000,
+      });
+      const items = res.data.response?.body?.items;
+      // 소개정보가 아예 없는 콘텐츠는 items 를 빈 문자열로 준다.
+      const item = toArray(items && typeof items !== 'string' ? items.item : undefined)[0];
+      if (!item) return undefined;
+      const raw = item[field];
+      return typeof raw === 'string' ? parseOpeningHours(raw) : undefined;
+    } catch (error) {
+      this.logger.warn(
+        `KTO detailIntro2 실패 (contentId=${contentId}, type=${contentTypeId}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return undefined;
+    }
   }
 
   private async fetchPage(
@@ -215,5 +311,15 @@ export class TourApiService {
 
   private apiKey(): string {
     return this.config.get<string>('KTO_API_KEY', '');
+  }
+
+  /** detailIntro2 영업시간 조회 스위치. KTO 일일 트래픽이 빠듯하면 끄고 적재할 수 있다. */
+  private openingHoursEnabled(): boolean {
+    return this.config.get<string>('KTO_FETCH_OPENING_HOURS', 'true') !== 'false';
+  }
+
+  private introConcurrency(): number {
+    const value = Number(this.config.get<string | number>('KTO_INTRO_CONCURRENCY', 4));
+    return Number.isFinite(value) && value > 0 ? Math.min(Math.floor(value), 16) : 4;
   }
 }

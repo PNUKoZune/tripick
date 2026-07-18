@@ -149,6 +149,8 @@ export class PlaceIngestionService {
     let inserted = 0;
     let updated = 0;
     let unchanged = 0;
+    // 재임베딩 없이 영업시간만 채운 건수 (해시가 같아 unchanged 로 분류된 기존 행)
+    let openingHoursFilled = 0;
     for (const place of deduped) {
       const text = this.buildText(place);
       const textHash = createHash('sha256').update(text).digest('hex');
@@ -161,6 +163,13 @@ export class PlaceIngestionService {
 
       // 텍스트·모델이 모두 동일하면 재임베딩 없이 유지 (증분 적재의 핵심)
       if (existing && existing.textHash === textHash && existing.embeddingModel === model) {
+        // 영업시간은 임베딩 텍스트 밖이라 해시가 같아도 달라질 수 있다(신규 확보·KTO 갱신).
+        // 이 행은 재임베딩 대상이 아니므로 영업시간만 따로 채운다.
+        const next = place.openingHours ?? null;
+        if (next !== null && next !== existing.openingHours) {
+          await this.repository.updateOpeningHours(existing.id, next);
+          openingHoursFilled += 1;
+        }
         unchanged += 1;
         continue;
       }
@@ -177,6 +186,7 @@ export class PlaceIngestionService {
           regionSigungu: place.sigungu ?? null,
           coordinates: place.coordinates,
           imageUrl: place.imageUrl ?? null,
+          openingHours: place.openingHours ?? null,
           textHash,
           embeddingModel: source === 'remote' ? model : 'hash',
         },
@@ -197,7 +207,8 @@ export class PlaceIngestionService {
       deleted,
     };
     this.logger.log(
-      `[${region}] 수집 ${result.fetched} → dedupe ${result.deduped} → 신규 ${inserted} / 갱신 ${updated} / 유지 ${unchanged} (삭제 ${deleted})`,
+      `[${region}] 수집 ${result.fetched} → dedupe ${result.deduped} → 신규 ${inserted} / 갱신 ${updated} / 유지 ${unchanged} (삭제 ${deleted})` +
+        (openingHoursFilled > 0 ? ` · 영업시간 backfill ${openingHoursFilled}` : ''),
     );
     return result;
   }

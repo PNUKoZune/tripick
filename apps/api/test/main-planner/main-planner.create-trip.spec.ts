@@ -52,6 +52,7 @@ function createHarness() {
     noop, // weatherHelper
     noop, // kakaoLocal
     noop, // placeRetrieval
+    noop, // placeEmbeddings
     noop, // routeHelper
   );
   const user = { id: 'u1', nickname: '앨리스' } as any;

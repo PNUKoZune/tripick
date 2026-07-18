@@ -14,6 +14,7 @@ import { UserEntity } from '../users/user.entity';
 import { WeatherHelper } from '../planner/helpers/weather.helper';
 import { RouteHelper } from '../planner/helpers/route.helper';
 import { KakaoLocalService } from '../planner/retrieval/kakao-local.service';
+import { PlaceEmbeddingRepository } from '../planner/retrieval/place-embedding.repository';
 import { PlaceRetrievalService } from '../planner/retrieval/place-retrieval.service';
 import type { CandidatePlace, RawPlaceCandidate } from '../planner/retrieval/types';
 import type { ParsedForecast } from '@tripick/utils';
@@ -89,6 +90,7 @@ export class MainPlannerService {
     private readonly weatherHelper: WeatherHelper,
     private readonly kakaoLocal: KakaoLocalService,
     private readonly placeRetrieval: PlaceRetrievalService,
+    private readonly placeEmbeddings: PlaceEmbeddingRepository,
     private readonly routeHelper: RouteHelper,
   ) {}
 
@@ -425,6 +427,13 @@ export class MainPlannerService {
         ?.coordinates ??
       MainPlannerService.DEFAULT_COORDINATES;
 
+    const kakaoPlaceId = dto.kakaoPlaceId?.trim();
+    // 지도에서 고른 장소가 이미 적재돼 있으면 저장된 영업시간을 재사용한다(외부 API 왕복 없음).
+    // 그래야 제약 엔진·플래너가 이 수동 추가 항목도 영업시간 밖 방문으로 잡아낼 수 있다.
+    const openingHours = kakaoPlaceId
+      ? await this.placeEmbeddings.findOpeningHoursByKakaoId(kakaoPlaceId)
+      : null;
+
     const item = this.itemsRepo.create({
       tripId,
       day: dto.day,
@@ -439,7 +448,8 @@ export class MainPlannerService {
       scheduledAt: this.combineScheduledAt(this.dayBaseDate(trip, dto.day), dto.scheduledAt),
       durationMin: dto.durationMin ?? 60,
       ...(dto.memo?.trim() ? { memo: dto.memo.trim() } : {}),
-      ...(dto.kakaoPlaceId?.trim() ? { kakaoPlaceId: dto.kakaoPlaceId.trim() } : {}),
+      ...(kakaoPlaceId ? { kakaoPlaceId } : {}),
+      ...(openingHours ? { openingHours } : {}),
     });
     const saved = await this.itemsRepo.save(item);
     await this.recomputeDayTravelTimes(trip, dto.day);
