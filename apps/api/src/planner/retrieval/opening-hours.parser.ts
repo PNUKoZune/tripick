@@ -27,8 +27,12 @@ export const OPENING_HOURS_FIELD: Record<string, string> = {
 const ALWAYS_OPEN = '00:00-23:59';
 const MAX_MINUTE = 23 * 60 + 59;
 
-/** '상시 개방', '24시간' 등 범위 없이 연중 개방을 뜻하는 표현. */
-const ALWAYS_OPEN_PATTERN = /상시|항시|24\s*시간|연중\s*무휴/;
+/**
+ * 범위 없이 '하루 종일 영업'을 뜻하는 표현만 넣는다.
+ * '연중무휴'는 제외 — 휴무일이 없다(매일 영업)는 뜻이지 24시간 영업이 아니다.
+ * (시간 정보가 아니므로 00:00-23:59 로 오해석하면 밤 시간 방문도 통과시켜 버린다.)
+ */
+const ALWAYS_OPEN_PATTERN = /상시|항시|24\s*시간/;
 
 /** 'HH:MM~HH:MM' (구분자는 ~ - – —). 계절별·브레이크타임 등으로 여러 번 나올 수 있다. */
 const RANGE_PATTERN = /(\d{1,2}):(\d{2})\s*[~\-–—]\s*(\d{1,2}):(\d{2})/g;

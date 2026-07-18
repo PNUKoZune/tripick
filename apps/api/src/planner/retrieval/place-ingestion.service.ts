@@ -186,7 +186,10 @@ export class PlaceIngestionService {
           regionSigungu: place.sigungu ?? null,
           coordinates: place.coordinates,
           imageUrl: place.imageUrl ?? null,
-          openingHours: place.openingHours ?? null,
+          // 이번 실행에 영업시간이 없으면(fetch 비활성·일시 실패·해당 없음) 기존 값을 보존한다.
+          // 재임베딩(update) 경로가 무조건 null 로 덮어써 저장된 영업시간을 날리던 것을 막는다.
+          // insert 시엔 existing 이 없어 null → 정상. backfill(unchanged) 경로와 대칭.
+          openingHours: place.openingHours ?? existing?.openingHours ?? null,
           textHash,
           embeddingModel: source === 'remote' ? model : 'hash',
         },
