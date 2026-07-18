@@ -23,6 +23,8 @@ export interface UpsertPlaceInput {
   regionSigungu?: string | null;
   coordinates: Coordinates;
   imageUrl?: string | null;
+  /** 'HH:MM-HH:MM' 영업시간 (KTO detailIntro2). 없으면 소비측이 제약 없음으로 처리한다. */
+  openingHours?: string | null;
   /** 임베딩 대상 텍스트 해시 (증분 upsert 판정용) */
   textHash?: string | null;
   /** 임베딩에 사용한 모델 식별자 */
@@ -34,6 +36,8 @@ export interface PlaceProvenance {
   id: string;
   textHash: string | null;
   embeddingModel: string | null;
+  /** 영업시간은 임베딩 텍스트에 없어 해시로 변화를 감지할 수 없다. 값 비교용으로 함께 읽는다. */
+  openingHours: string | null;
 }
 
 /** 취향 벡터 기반 지역 추천 1건. */
@@ -66,6 +70,7 @@ interface PlaceEmbeddingRow {
   destination_region?: string | null;
   coordinates?: Coordinates | string | null;
   image_url?: string | null;
+  opening_hours?: string | null;
   similarity?: number | string | null;
   preference_similarity?: number | string | null;
 }
@@ -110,6 +115,7 @@ export class PlaceEmbeddingRepository {
                destination_region,
                coordinates,
                image_url,
+               opening_hours,
                1 - (embedding <=> $1::vector) AS similarity,
                ${preferenceSelect}
         FROM place_embeddings
@@ -233,6 +239,7 @@ export class PlaceEmbeddingRepository {
           category: place.category,
           region,
           coordinates: place.coordinates,
+          openingHours: place.openingHours ?? null,
         },
         embedding,
       );
@@ -260,15 +267,56 @@ export class PlaceEmbeddingRepository {
             params: [dedupe.region.toLowerCase(), dedupe.name],
           };
 
-    const rows: Array<{ id: string; text_hash: string | null; embedding_model: string | null }> =
-      await this.dataSource.query(
-        `SELECT id, text_hash, embedding_model FROM place_embeddings WHERE ${clause.sql} LIMIT 1`,
-        clause.params,
-      );
+    const rows: Array<{
+      id: string;
+      text_hash: string | null;
+      embedding_model: string | null;
+      opening_hours: string | null;
+    }> = await this.dataSource.query(
+      `SELECT id, text_hash, embedding_model, opening_hours FROM place_embeddings WHERE ${clause.sql} LIMIT 1`,
+      clause.params,
+    );
     const row = rows[0];
     return row
-      ? { id: row.id, textHash: row.text_hash, embeddingModel: row.embedding_model }
+      ? {
+          id: row.id,
+          textHash: row.text_hash,
+          embeddingModel: row.embedding_model,
+          openingHours: row.opening_hours,
+        }
       : null;
+  }
+
+  /**
+   * 영업시간만 갱신한다(재임베딩 없음). 영업시간은 임베딩 텍스트에 들어가지 않으므로
+   * 텍스트 해시가 그대로인 기존 행은 증분 적재에서 건너뛰어져 값이 영영 안 채워진다.
+   * 그 행들을 --reseed(전량 재임베딩) 없이 채우기 위한 경로.
+   */
+  async updateOpeningHours(id: string, openingHours: string | null): Promise<void> {
+    await this.dataSource.query(
+      'UPDATE place_embeddings SET opening_hours = $2, updated_at = NOW() WHERE id = $1',
+      [id, openingHours],
+    );
+  }
+
+  /**
+   * 카카오 장소 ID 로 적재된 영업시간을 조회한다. 사용자가 지도에서 고른 장소를 일정에
+   * 수동 추가할 때, 이미 적재된 값이 있으면 외부 API 왕복 없이 재사용하기 위한 경로.
+   * 적재 안 됐거나 영업시간이 없으면 null.
+   */
+  async findOpeningHoursByKakaoId(kakaoPlaceId: string): Promise<string | null> {
+    try {
+      const rows: Array<{ opening_hours: string | null }> = await this.dataSource.query(
+        'SELECT opening_hours FROM place_embeddings WHERE kakao_place_id = $1 LIMIT 1',
+        [kakaoPlaceId],
+      );
+      return rows[0]?.opening_hours ?? null;
+    } catch (error) {
+      this.logger.warn(
+        `opening_hours lookup by kakaoPlaceId failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
   }
 
   /**
@@ -294,9 +342,10 @@ export class PlaceEmbeddingRepository {
           region_sigungu = $6,
           coordinates = $7::jsonb,
           image_url = $8,
-          embedding = $9::vector,
-          text_hash = $10,
-          embedding_model = $11,
+          opening_hours = $9,
+          embedding = $10::vector,
+          text_hash = $11,
+          embedding_model = $12,
           updated_at = NOW()
         WHERE id = $1
         `,
@@ -309,6 +358,7 @@ export class PlaceEmbeddingRepository {
           place.regionSigungu ?? null,
           JSON.stringify(place.coordinates),
           place.imageUrl ?? null,
+          place.openingHours ?? null,
           vector,
           place.textHash ?? null,
           place.embeddingModel ?? null,
@@ -329,12 +379,13 @@ export class PlaceEmbeddingRepository {
         region_sigungu,
         coordinates,
         image_url,
+        opening_hours,
         embedding,
         text_hash,
         embedding_model,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::vector, $11, $12, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::vector, $12, $13, NOW())
       `,
       [
         place.kakaoPlaceId ?? null,
@@ -346,6 +397,7 @@ export class PlaceEmbeddingRepository {
         place.regionSigungu ?? null,
         JSON.stringify(place.coordinates),
         place.imageUrl ?? null,
+        place.openingHours ?? null,
         vector,
         place.textHash ?? null,
         place.embeddingModel ?? null,
@@ -401,6 +453,7 @@ export class PlaceEmbeddingRepository {
       address: row.address ?? '',
       coordinates,
       ...(row.image_url ? { imageUrl: row.image_url } : {}),
+      ...(row.opening_hours ? { openingHours: row.opening_hours } : {}),
     };
 
     const similarity = this.numberOrUndefined(row.similarity);

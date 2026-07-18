@@ -17,6 +17,8 @@ export interface IngestPlace {
   /** 시군구 라벨 (예: '경주시'). 시/군 단위 정밀 필터용 */
   sigungu?: string;
   imageUrl?: string;
+  /** 'HH:MM-HH:MM' 정규화 영업시간 (KTO detailIntro2). 카카오 소스는 제공하지 않아 비어 있다. */
+  openingHours?: string;
   source: IngestSource;
 }
 

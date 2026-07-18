@@ -6,7 +6,7 @@ import { KAKAO_CATEGORY_CODES, KakaoLocalService } from './kakao-local.service';
 import { IngestCursorRepository } from './ingest-cursor.repository';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
-import { TourApiService } from './tour-api.service';
+import { KtoCallBudget, TourApiService } from './tour-api.service';
 import { inferPlaceTags, parseSigungu } from './place-seeds';
 import type { IngestPlace, IngestRegionResult, IngestSource, IngestSummary } from './ingestion.types';
 
@@ -82,11 +82,19 @@ export class PlaceIngestionService {
       this.logger.log('append 모드: 지역별 페이지 커서를 이어받아 새 페이지부터 적재합니다.');
     }
 
+    // 실행 1회의 KTO 호출 예산. 소진되면 이후 지역의 KTO 수집을 멈춰 일일 한도를 지킨다.
+    const budget = this.tourApi.createCallBudget();
     const regions: IngestRegionResult[] = [];
     for (const sido of targets) {
       regions.push(
-        await this.ingestRegion(sido.code, sido.name, sources, maxPerRegion, reseed, allowHash, append),
+        await this.ingestRegion(sido.code, sido.name, sources, maxPerRegion, reseed, allowHash, append, budget),
       );
+      if (budget.isExhausted) {
+        this.logger.warn(
+          `KTO 호출량 예산 소진 — 남은 지역 적재를 중단합니다. --append 로 다음 실행에 이어받으세요.`,
+        );
+        break;
+      }
     }
 
     const summary: IngestSummary = {
@@ -112,6 +120,7 @@ export class PlaceIngestionService {
     reseed: boolean,
     allowHash: boolean,
     append: boolean,
+    budget: KtoCallBudget,
   ): Promise<IngestRegionResult> {
     const deleted = reseed ? await this.repository.deleteRegion(region) : 0;
     if (deleted > 0) {
@@ -127,7 +136,7 @@ export class PlaceIngestionService {
     if (sources.includes('tour')) {
       // reseed 는 항상 처음부터. append 는 커서를 이어받되 reseed 와 겹치면 처음부터.
       const startPage = append && !reseed ? await this.cursors.getNextPage(region, 'tour') : 1;
-      const res = await this.tourApi.fetchByArea(areaCode, region, maxPerRegion, startPage);
+      const res = await this.tourApi.fetchByArea(areaCode, region, maxPerRegion, startPage, budget);
       tourPlaces = res.places;
       collected.push(...tourPlaces);
       if (append) {
@@ -149,6 +158,8 @@ export class PlaceIngestionService {
     let inserted = 0;
     let updated = 0;
     let unchanged = 0;
+    // 재임베딩 없이 영업시간만 채운 건수 (해시가 같아 unchanged 로 분류된 기존 행)
+    let openingHoursFilled = 0;
     for (const place of deduped) {
       const text = this.buildText(place);
       const textHash = createHash('sha256').update(text).digest('hex');
@@ -161,6 +172,13 @@ export class PlaceIngestionService {
 
       // 텍스트·모델이 모두 동일하면 재임베딩 없이 유지 (증분 적재의 핵심)
       if (existing && existing.textHash === textHash && existing.embeddingModel === model) {
+        // 영업시간은 임베딩 텍스트 밖이라 해시가 같아도 달라질 수 있다(신규 확보·KTO 갱신).
+        // 이 행은 재임베딩 대상이 아니므로 영업시간만 따로 채운다.
+        const next = place.openingHours ?? null;
+        if (next !== null && next !== existing.openingHours) {
+          await this.repository.updateOpeningHours(existing.id, next);
+          openingHoursFilled += 1;
+        }
         unchanged += 1;
         continue;
       }
@@ -177,6 +195,10 @@ export class PlaceIngestionService {
           regionSigungu: place.sigungu ?? null,
           coordinates: place.coordinates,
           imageUrl: place.imageUrl ?? null,
+          // 이번 실행에 영업시간이 없으면(fetch 비활성·일시 실패·해당 없음) 기존 값을 보존한다.
+          // 재임베딩(update) 경로가 무조건 null 로 덮어써 저장된 영업시간을 날리던 것을 막는다.
+          // insert 시엔 existing 이 없어 null → 정상. backfill(unchanged) 경로와 대칭.
+          openingHours: place.openingHours ?? existing?.openingHours ?? null,
           textHash,
           embeddingModel: source === 'remote' ? model : 'hash',
         },
@@ -197,7 +219,8 @@ export class PlaceIngestionService {
       deleted,
     };
     this.logger.log(
-      `[${region}] 수집 ${result.fetched} → dedupe ${result.deduped} → 신규 ${inserted} / 갱신 ${updated} / 유지 ${unchanged} (삭제 ${deleted})`,
+      `[${region}] 수집 ${result.fetched} → dedupe ${result.deduped} → 신규 ${inserted} / 갱신 ${updated} / 유지 ${unchanged} (삭제 ${deleted})` +
+        (openingHoursFilled > 0 ? ` · 영업시간 backfill ${openingHoursFilled}` : ''),
     );
     return result;
   }
