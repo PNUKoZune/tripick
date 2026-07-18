@@ -17,6 +17,7 @@ import { RealtimeModule } from './realtime/realtime.module';
 import { NotificationModule } from './notification/notification.module';
 import { PlannerModule } from './planner/planner.module';
 import { AlternativeModule } from './alternative/alternative.module';
+import { WeatherAlertModule } from './weather-alert/weather-alert.module';
 import { PreferenceAnalyzerModule } from './preference-analyzer/preference-analyzer.module';
 import { MainPlannerModule } from './main-planner/main-planner.module';
 import { TripMembersModule } from './trip-members/trip-members.module';
@@ -79,6 +80,7 @@ import { InboxModule } from './inbox/inbox.module';
     NotificationModule,
     PlannerModule,
     AlternativeModule,
+    WeatherAlertModule,
     PreferenceAnalyzerModule,
     MainPlannerModule,
     TripMembersModule,

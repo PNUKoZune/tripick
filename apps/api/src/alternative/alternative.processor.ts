@@ -86,8 +86,8 @@ export class AlternativeProcessor extends WorkerHost {
           : `${label} 재계획에 실패했어요. 잠시 후 다시 시도해 주세요.`;
 
       // 날씨 트리거 재계획은 weather_alert 카테고리로 발신 — 수신 토글은 replan_ready 와 공유(prefersCategory).
-      // NOTE(backlog): trigger:'weather' 로 replan 잡을 enqueue 하는 진입점(스케줄러)은 아직 없다.
-      // 붙는 순간 이 분기가 자동으로 올바른 카테고리를 발신한다.
+      // NOTE: 날씨 스캐너(WeatherAlertModule)는 자동 재계획을 걸지 않고 "변경할까요?" 알림만 보낸다.
+      // 사용자가 여행 화면에서 직접 재계획을 요청하면 trigger:'weather' 로 이 분기를 탄다.
       const category = trigger === 'weather' ? 'weather_alert' : 'replan_ready';
 
       await Promise.all(
