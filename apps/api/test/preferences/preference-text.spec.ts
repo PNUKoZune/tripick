@@ -51,12 +51,71 @@ describe('buildPreferenceText', () => {
     expect(text).toBe('');
   });
 
-  it('deduplicates repeated tokens across sources', () => {
+  it('adds Korean keywords for taste tags so photo signal overlaps place text', () => {
     const text = buildPreferenceText(
-      { ...EMPTY_TAGS, food: ['cafe'] },
+      { ...EMPTY_TAGS, food: ['japanese'], confidence: 0.8 },
+      BASE_PROFILE,
+    );
+    const tokens = text.split(', ');
+    expect(tokens).toContain('japanese');
+    expect(tokens).toContain('일식');
+  });
+});
+
+/**
+ * 토큰 반복이 곧 비중이다 (원격 모델 평균 풀링·해시 폴백 누적 양쪽 모두).
+ * 예전에는 Set 으로 중복을 지워서 사진 태그가 프로필 확장 토큰에 묻히고
+ * 두 소스가 합의했다는 정보도 사라졌다.
+ */
+describe('buildPreferenceText 가중치', () => {
+  const count = (text: string, token: string) =>
+    text.split(', ').filter((t) => t === token).length;
+
+  it('repeats a token when both photo and profile point at it', () => {
+    const text = buildPreferenceText(
+      { ...EMPTY_TAGS, food: ['cafe'], confidence: 0.9 },
       { ...BASE_PROFILE, likedThemes: ['cafe_dessert'] },
     );
-    const cafeCount = text.split(', ').filter((t) => t === 'cafe').length;
-    expect(cafeCount).toBe(1);
+    // 사진(신뢰도 0.9 → 3) + 프로필(1) = 4
+    expect(count(text, 'cafe')).toBe(4);
+  });
+
+  it('weights photo tags by confidence', () => {
+    const high = buildPreferenceText(
+      { ...EMPTY_TAGS, environment: ['hotspring'], confidence: 1 },
+      BASE_PROFILE,
+    );
+    const low = buildPreferenceText(
+      { ...EMPTY_TAGS, environment: ['hotspring'], confidence: 0 },
+      BASE_PROFILE,
+    );
+    expect(count(high, 'hotspring')).toBe(3);
+    expect(count(low, 'hotspring')).toBe(1);
+  });
+
+  it('gives photo tags at least as much weight as profile tokens', () => {
+    const text = buildPreferenceText(
+      { ...EMPTY_TAGS, food: ['seafood'], confidence: 0.5 },
+      { ...BASE_PROFILE, likedThemes: ['exhibition'] },
+    );
+    expect(count(text, 'seafood')).toBeGreaterThan(count(text, 'cultural'));
+  });
+
+  it('caps repetition so one token cannot dominate the vector', () => {
+    const text = buildPreferenceText(
+      { ...EMPTY_TAGS, food: ['cafe'], mood: ['healing'], confidence: 1 },
+      // cafe_dessert·park_garden·local_street 가 모두 cafe/healing 을 밀어 올린다
+      { ...BASE_PROFILE, likedThemes: ['cafe_dessert', 'park_garden', 'local_street'] },
+    );
+    expect(count(text, 'cafe')).toBeLessThanOrEqual(4);
+    expect(count(text, 'healing')).toBeLessThanOrEqual(4);
+  });
+
+  it('orders tokens by weight, strongest first', () => {
+    const text = buildPreferenceText(
+      { ...EMPTY_TAGS, environment: ['island'], confidence: 1 },
+      { ...BASE_PROFILE, likedThemes: ['exhibition'] },
+    );
+    expect(text.split(', ')[0]).toBe('island');
   });
 });

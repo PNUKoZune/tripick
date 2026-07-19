@@ -58,20 +58,109 @@ const SEEDS_BY_REGION: Record<string, SeedPlace[]> = {
   default: DEFAULT_SEEDS,
 };
 
-const TAG_HINTS: Array<[string, string[]]> = [
+/**
+ * 장소 이름·카테고리·주소에서 취향 태그를 유추하는 키워드 사전.
+ *
+ * 여기서 나오는 태그가 사용자 취향 태그(FOOD/MOOD/ENVIRONMENT_PREFERENCES)와 같은 어휘여야
+ * 개인화 검색이 성립한다. 취향 어휘에 값을 추가하면 여기에도 대응 키워드를 넣어야
+ * 그 태그가 붙는 장소가 생긴다.
+ */
+const TAG_HINTS: Array<[string | RegExp, string[]]> = [
+  // food
   ['카페', ['cafe', 'healing']],
   ['커피', ['cafe', 'healing']],
+  ['로스터리', ['cafe', 'trendy']],
   ['식당', ['korean', 'family']],
   ['한식', ['korean', 'family']],
+  ['국밥', ['korean', 'nostalgic']],
+  ['백반', ['korean', 'nostalgic']],
   ['브런치', ['western', 'cafe']],
+  ['파스타', ['western']],
+  ['스테이크', ['western', 'luxury']],
+  ['일식', ['japanese']],
+  ['스시', ['japanese', 'luxury']],
+  ['초밥', ['japanese']],
+  ['라멘', ['japanese']],
+  ['오마카세', ['japanese', 'luxury']],
+  ['돈카츠', ['japanese']],
+  ['중식', ['chinese']],
+  ['중화', ['chinese']],
+  ['짬뽕', ['chinese']],
+  ['마라', ['chinese', 'trendy']],
+  ['비건', ['vegan', 'healing']],
+  ['채식', ['vegan', 'healing']],
+  ['샐러드', ['vegan', 'healing']],
+  ['분식', ['bunsik', 'nostalgic']],
+  ['떡볶이', ['bunsik', 'nostalgic']],
+  ['김밥', ['bunsik']],
+  ['고기', ['meat', 'family']],
+  ['구이', ['meat', 'family']],
+  ['갈비', ['meat', 'family']],
+  ['삼겹', ['meat']],
+  ['곱창', ['meat']],
+  ['횟집', ['seafood']],
+  ['물회', ['seafood']],
+  ['해물', ['seafood']],
+  ['해산물', ['seafood']],
+  ['조개', ['seafood', 'beach']],
+  ['수산', ['seafood']],
+  ['베이커리', ['bakery', 'cafe']],
+  ['빵', ['bakery', 'cafe']],
+  ['제과', ['bakery', 'cafe']],
+  ['디저트', ['bakery', 'cafe']],
+  ['케이크', ['bakery', 'cafe']],
+  // mood
+  ['시장', ['nostalgic', 'korean', 'village']],
+  ['노포', ['nostalgic', 'korean']],
+  ['레트로', ['nostalgic', 'trendy']],
+  ['복고', ['nostalgic']],
+  ['핫플', ['trendy', 'city']],
+  ['편집', ['trendy', 'city']],
+  ['소품', ['trendy', 'city']],
+  ['호텔', ['luxury', 'city']],
+  ['리조트', ['luxury', 'healing']],
+  ['프리미엄', ['luxury']],
+  ['테마파크', ['adventure', 'family']],
+  ['놀이공원', ['adventure', 'family']],
+  ['서핑', ['adventure', 'beach']],
+  ['등산', ['adventure', 'mountain']],
+  ['체험', ['adventure', 'family']],
+  ['박물관', ['cultural', 'family']],
+  ['미술관', ['cultural', 'city']],
+  ['전시', ['cultural', 'city']],
+  ['문화', ['cultural', 'city']],
+  ['고궁', ['cultural', 'nostalgic']],
+  ['사찰', ['cultural', 'healing']],
+  ['유적', ['cultural']],
+  // environment
   ['해변', ['beach', 'nature']],
   ['바다', ['beach', 'nature']],
+  ['해수욕장', ['beach', 'nature']],
+  ['해안', ['beach', 'nature']],
   ['숲', ['nature', 'healing']],
-  ['산', ['mountain', 'nature']],
-  ['박물관', ['cultural', 'family']],
-  ['문화', ['cultural', 'city']],
+  ['수목원', ['nature', 'healing']],
+  ['공원', ['nature', 'city']],
+  // '산' 은 부산·울산 주소와 산업·산책 같은 단어에 걸려 오탐이 심하다.
+  // 지명형(북한산·남산)만 잡도록 앞뒤 글자를 제한한다.
+  [/(?<![부울마경])산(?![가-힣])/u, ['mountain', 'nature']],
+  ['계곡', ['mountain', 'nature']],
+  ['호수', ['lake', 'nature']],
+  ['저수지', ['lake', 'nature']],
+  ['강변', ['lake', 'nature']],
+  ['수변', ['lake', 'nature']],
+  ['섬', ['island', 'nature']],
+  ['해상', ['island', 'beach']],
+  ['온천', ['hotspring', 'healing']],
+  ['스파', ['hotspring', 'healing']],
+  ['찜질', ['hotspring', 'healing']],
+  ['워터파크', ['hotspring', 'family']],
+  ['야경', ['nightview', 'romantic', 'city']],
+  ['전망', ['nightview', 'romantic']],
+  ['전망대', ['nightview', 'romantic']],
+  ['루프탑', ['nightview', 'romantic', 'trendy']],
+  ['노을', ['nightview', 'romantic']],
   ['마을', ['village', 'cultural']],
-  ['야경', ['romantic', 'city']],
+  ['골목', ['village', 'nostalgic']],
   ['산책', ['walk', 'healing']],
 ];
 
@@ -126,8 +215,10 @@ export function inferPlaceTags(
 ): string[] {
   const tags = new Set<string>();
   const haystack = `${place.name} ${place.category} ${place.address} ${place.categoryDetail ?? ''}`;
-  for (const [keyword, hints] of TAG_HINTS) {
-    if (haystack.includes(keyword)) {
+  for (const [pattern, hints] of TAG_HINTS) {
+    const matched =
+      typeof pattern === 'string' ? haystack.includes(pattern) : pattern.test(haystack);
+    if (matched) {
       hints.forEach((hint) => tags.add(hint));
     }
   }

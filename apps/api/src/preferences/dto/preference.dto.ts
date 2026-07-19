@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsNumber,
   IsOptional,
@@ -12,45 +13,31 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import type {
-  ActivityIntensity,
-  CrowdPreference,
-  EnvironmentPreference,
-  FoodPreference,
-  MoodPreference,
-  PreferenceProfileDto,
-  TasteTagDto,
-  ThemePreference,
-  TransportPreference,
-  TravelPace,
-  UpdatePreferenceDto,
+import {
+  ALL_TASTE_TAGS,
+  ENVIRONMENT_PREFERENCES,
+  FOOD_PREFERENCES,
+  MOOD_PREFERENCES,
+  type ActivityIntensity,
+  type CrowdPreference,
+  type EnvironmentPreference,
+  type FoodPreference,
+  type MoodPreference,
+  type PreferenceProfileDto,
+  type TasteTagDto,
+  type TasteTagValue,
+  type ThemePreference,
+  type TogglePhotoTagDto,
+  type TransportPreference,
+  type TravelPace,
+  type UpdatePreferenceDto,
 } from '@tripick/types';
 import { HH_MM } from '../../common/validation/patterns';
 
-const FOOD = [
-  'korean',
-  'japanese',
-  'western',
-  'chinese',
-  'vegan',
-  'cafe',
-] as const satisfies readonly FoodPreference[];
-
-const MOOD = [
-  'healing',
-  'adventure',
-  'romantic',
-  'family',
-  'cultural',
-] as const satisfies readonly MoodPreference[];
-
-const ENVIRONMENT = [
-  'nature',
-  'city',
-  'beach',
-  'mountain',
-  'village',
-] as const satisfies readonly EnvironmentPreference[];
+// 어휘는 @tripick/types 가 정본 — 여기에 다시 적으면 어휘를 늘릴 때 조용히 뒤처진다.
+const FOOD = FOOD_PREFERENCES;
+const MOOD = MOOD_PREFERENCES;
+const ENVIRONMENT = ENVIRONMENT_PREFERENCES;
 
 const TRANSPORT = [
   'transit',
@@ -168,4 +155,16 @@ export class UpdatePreferenceBodyDto implements UpdatePreferenceDto {
   @IsString({ each: true })
   @IsUrl({ require_tld: false }, { each: true })
   photoUrls?: string[];
+}
+
+export class TogglePhotoTagBodyDto implements TogglePhotoTagDto {
+  @IsString()
+  @IsUrl({ require_tld: false })
+  url!: string;
+
+  @IsIn(ALL_TASTE_TAGS)
+  tag!: TasteTagValue;
+
+  @IsBoolean()
+  enabled!: boolean;
 }

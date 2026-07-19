@@ -1,13 +1,22 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FiImage, FiLoader, FiThumbsDown, FiThumbsUp, FiX } from 'react-icons/fi';
+import {
+  FiCheck,
+  FiImage,
+  FiLoader,
+  FiPlus,
+  FiThumbsDown,
+  FiThumbsUp,
+  FiX,
+} from 'react-icons/fi';
 import {
   MAX_PREFERENCE_PHOTOS,
   MAX_PREFERENCE_UPLOAD,
   type PreferenceAnalysisJobDto,
   type TasteTagDto,
+  type TasteTagValue,
   type ThemePreference,
   type TransportPreference,
 } from '@tripick/types';
@@ -26,9 +35,11 @@ import {
   forgetAnalysisJob,
   getMyPreferences,
   getPreferenceAnalysisJob,
+  getPreferencePhotoTags,
   readAnalysisJob,
   rememberAnalysisJob,
   savePreferences,
+  togglePreferencePhotoTag,
   type PreferenceFormState,
 } from '@/entities/preferences/api/preferences-api';
 import { getStoredSession } from '@/entities/session/model/session-storage';
@@ -155,6 +166,8 @@ export function PreferenceSetupForm() {
     setActiveJobId(null);
     forgetAnalysisJob();
     queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
+    // 새로 분석된 사진의 태그 목록을 받아온다.
+    queryClient.invalidateQueries({ queryKey: queryKeys.preferences.photoTags });
 
     if (analysisJob.status === 'failed') {
       setNotice({
@@ -280,6 +293,37 @@ export function PreferenceSetupForm() {
     },
   });
 
+  // 사진별로 어떤 태그가 나왔는지 + 사용자가 켜둔 상태
+  const photoTagsQuery = useQuery({
+    queryKey: queryKeys.preferences.photoTags,
+    queryFn: async () => {
+      const session = getStoredSession();
+      if (!session) return [];
+      return getPreferencePhotoTags(session.tokens.accessToken);
+    },
+    enabled: hasSession,
+  });
+
+  const togglePhotoTagMutation = useMutation({
+    mutationFn: async (input: { url: string; tag: TasteTagValue; enabled: boolean }) => {
+      const session = getStoredSession() ?? (await startDemoSession());
+      return togglePreferencePhotoTag(session.tokens.accessToken, input);
+    },
+    onSuccess: (result) => {
+      // 서버가 남은 태그로 다시 집계한 결과를 그대로 반영한다.
+      setAnalyzedTags(result.tasteTags);
+      queryClient.setQueryData(queryKeys.preferences.photoTags, result.photos);
+      queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
+    },
+    onError: (error) => {
+      setNotice({
+        title: '태그 변경 실패',
+        description: error instanceof Error ? error.message : '태그를 변경하지 못했습니다.',
+        tone: 'red',
+      });
+    },
+  });
+
   const deletePhotoMutation = useMutation({
     mutationFn: async (url: string) => {
       const session = getStoredSession() ?? (await startDemoSession());
@@ -289,6 +333,7 @@ export function PreferenceSetupForm() {
       setSavedPhotoUrls(result.photoUrls);
       // 남은 사진으로 태그가 다시 집계되므로 화면 태그도 갱신한다.
       if (result.tasteTags) setAnalyzedTags(result.tasteTags);
+      queryClient.setQueryData(queryKeys.preferences.photoTags, result.photos);
       queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
     },
     onError: (error) => {
@@ -299,6 +344,11 @@ export function PreferenceSetupForm() {
       });
     },
   });
+
+  const photoTagsByUrl = useMemo(
+    () => new Map((photoTagsQuery.data ?? []).map((photo) => [photo.url, photo.tags])),
+    [photoTagsQuery.data],
+  );
 
   function handleSubmit() {
     if (!ready) {
@@ -456,25 +506,30 @@ export function PreferenceSetupForm() {
           {savedPhotoUrls.length > 0 ? (
             <div className="mb-3">
               <div className="mb-1.5 text-[12px] font-semibold text-[#8B95A1]">
-                저장된 사진 {savedPhotoUrls.length}장
+                저장된 사진 {savedPhotoUrls.length}장 · 태그를 눌러 켜고 끌 수 있어요
               </div>
-              <div className="flex flex-wrap gap-2">
-                {savedPhotoUrls.map((url) => (
-                  <div key={url} className="relative size-20 overflow-hidden rounded-[12px]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={url} alt="" className="size-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => deletePhotoMutation.mutate(url)}
-                      disabled={deletePhotoMutation.isPending}
-                      aria-label="사진 삭제"
-                      className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-black/55 text-white disabled:opacity-50"
-                    >
-                      <FiX className="size-3" aria-hidden />
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <ul className="space-y-2">
+                {savedPhotoUrls.map((url) => {
+                  const photoTags = photoTagsByUrl.get(url) ?? [];
+                  return (
+                    <SavedPhotoRow
+                      key={url}
+                      url={url}
+                      tags={photoTags}
+                      // 태그가 아직 없는 사진은, 분석 잡이 돌거나 목록을 불러오는 중이면
+                      // "취향 없음" 이 아니라 "분석 중" 으로 보여야 한다.
+                      pending={
+                        photoTags.length === 0 && (analyzing || photoTagsQuery.isLoading)
+                      }
+                      busy={togglePhotoTagMutation.isPending || deletePhotoMutation.isPending}
+                      onToggle={(tag, enabled) =>
+                        togglePhotoTagMutation.mutate({ url, tag, enabled })
+                      }
+                      onDelete={() => deletePhotoMutation.mutate(url)}
+                    />
+                  );
+                })}
+              </ul>
             </div>
           ) : null}
           <div
@@ -721,6 +776,80 @@ function ChoiceCard({
       <span className="text-[14px] font-bold leading-5">{label}</span>
       {hint ? <span className="text-[11px] font-medium leading-4 opacity-70">{hint}</span> : null}
     </button>
+  );
+}
+
+/**
+ * 저장된 사진 한 장 + 그 사진에서 뽑힌 태그.
+ * 태그 칩을 누르면 집계에서 빼거나 다시 넣는다 (분석 결과 자체는 서버에 남아 복원 가능).
+ */
+function SavedPhotoRow({
+  url,
+  tags,
+  pending,
+  busy,
+  onToggle,
+  onDelete,
+}: {
+  url: string;
+  tags: Array<{ tag: TasteTagValue; enabled: boolean }>;
+  pending: boolean;
+  busy: boolean;
+  onToggle: (tag: TasteTagValue, enabled: boolean) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <li className="flex gap-3 rounded-[14px] border border-[color:var(--line)] p-2">
+      <div className="relative size-16 shrink-0 overflow-hidden rounded-[12px]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={url} alt="" className="size-full object-cover" />
+      </div>
+      <div className="min-w-0 flex-1">
+        {tags.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {tags.map(({ tag, enabled }) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => onToggle(tag, !enabled)}
+                disabled={busy}
+                aria-pressed={enabled}
+                className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[13px] font-bold transition disabled:opacity-50 ${
+                  enabled
+                    ? 'bg-[color:var(--blue-50)] text-[color:var(--blue-700)]'
+                    : 'bg-[color:var(--soft-bg)] text-[color:var(--text-tertiary)] line-through'
+                }`}
+              >
+                {enabled ? (
+                  <FiCheck className="size-3" aria-hidden />
+                ) : (
+                  <FiPlus className="size-3" aria-hidden />
+                )}
+                {TASTE_TAG_LABELS[tag] ?? tag}
+              </button>
+            ))}
+          </div>
+        ) : pending ? (
+          <p className="flex items-center gap-1.5 text-[13px] font-medium text-[color:var(--text-tertiary)]">
+            <FiLoader className="size-3.5 animate-spin" aria-hidden />
+            취향을 분석하고 있어요…
+          </p>
+        ) : (
+          <p className="text-[13px] font-medium text-[color:var(--text-tertiary)]">
+            이 사진에서는 뚜렷한 취향을 찾지 못했어요.
+          </p>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onDelete}
+        disabled={busy}
+        aria-label="사진 삭제"
+        className="size-7 shrink-0 self-start rounded-full text-[color:var(--text-tertiary)] transition hover:bg-[color:var(--soft-bg)] disabled:opacity-50"
+      >
+        <FiX className="mx-auto size-4" aria-hidden />
+      </button>
+    </li>
   );
 }
 

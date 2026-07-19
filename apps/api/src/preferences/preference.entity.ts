@@ -8,7 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { UserEntity } from '../users/user.entity';
-import type { TasteTagDto } from '@tripick/types';
+import type { TasteTagDto, TasteTagValue } from '@tripick/types';
 import type { PreferenceProfileDto } from '@tripick/types';
 
 @Entity('preferences')
@@ -39,6 +39,13 @@ export class PreferenceEntity {
    */
   @Column({ type: 'jsonb', default: '{}' })
   photoTags: Record<string, TasteTagDto>;
+
+  /**
+   * 사용자가 직접 끈 사진별 태그 (key = 사진 URL).
+   * 분석 결과(photoTags)는 그대로 두고 집계에서만 빼서, 다시 켜면 원래 값이 살아난다.
+   */
+  @Column({ type: 'jsonb', default: '{}' })
+  disabledPhotoTags: Record<string, TasteTagValue[]>;
 
   @Column({ nullable: true })
   embeddingId?: string;

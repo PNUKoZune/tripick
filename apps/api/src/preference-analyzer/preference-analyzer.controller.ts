@@ -1,6 +1,8 @@
 import {
+  Body,
   Controller,
   Get,
+  Patch,
   Post,
   Delete,
   Param,
@@ -23,7 +25,16 @@ import {
   MAX_PREFERENCE_PHOTOS,
   MAX_PREFERENCE_UPLOAD,
   type PreferenceAnalysisJobDto,
+  type PreferencePhotoTagsDto,
 } from '@tripick/types';
+import {
+  buildPhotoTagsView,
+  effectivePhotoTags,
+  pruneToPhotos,
+  tagsOf,
+  toggleDisabledTag,
+} from '../preferences/photo-taste';
+import { TogglePhotoTagBodyDto } from '../preferences/dto/preference.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserEntity } from '../users/user.entity';
@@ -182,18 +193,65 @@ export class PreferenceAnalyzerController {
 
     // 남은 사진의 분석 결과만으로 취향 태그를 다시 만든다 — 지운 사진의 취향이 남지 않도록.
     const nextUrls = current.filter((item) => item !== url);
-    const nextPhotoTags = Object.fromEntries(
-      Object.entries(preference?.photoTags ?? {}).filter(([photoUrl]) =>
-        nextUrls.includes(photoUrl),
-      ),
-    );
-    const tasteTags = this.visionAnalyzer.aggregate(Object.values(nextPhotoTags));
-    const updated = await this.preferencesService.upsert(user.id, {
-      tasteTags,
+    const state = {
       photoUrls: nextUrls,
-      photoTags: nextPhotoTags,
+      photoTags: pruneToPhotos(preference?.photoTags ?? {}, nextUrls),
+      disabledPhotoTags: pruneToPhotos(preference?.disabledPhotoTags ?? {}, nextUrls),
+    };
+    const updated = await this.preferencesService.upsert(user.id, {
+      tasteTags: this.visionAnalyzer.aggregate(effectivePhotoTags(state)),
+      photoUrls: nextUrls,
+      photoTags: state.photoTags,
+      disabledPhotoTags: state.disabledPhotoTags,
     });
 
-    return { photoUrls: updated.photoUrls, tasteTags: updated.tasteTags };
+    return {
+      photoUrls: updated.photoUrls,
+      tasteTags: updated.tasteTags,
+      photos: buildPhotoTagsView(state),
+    };
+  }
+
+  @Get('photos/tags')
+  @ApiOperation({ summary: '사진별 추출 태그와 on/off 상태 조회' })
+  async listPhotoTags(@CurrentUser() user: UserEntity): Promise<PreferencePhotoTagsDto[]> {
+    const preference = await this.preferencesService.findByUser(user.id);
+    return buildPhotoTagsView({
+      photoUrls: preference?.photoUrls ?? [],
+      photoTags: preference?.photoTags ?? {},
+      disabledPhotoTags: preference?.disabledPhotoTags ?? {},
+    });
+  }
+
+  @Patch('photos/tags')
+  @ApiOperation({ summary: '특정 사진에서 추출된 특정 태그를 켜거나 끈다 (재집계 포함)' })
+  async togglePhotoTag(@CurrentUser() user: UserEntity, @Body() dto: TogglePhotoTagBodyDto) {
+    const preference = await this.preferencesService.findByUser(user.id);
+    const photoUrls = preference?.photoUrls ?? [];
+    // 본인 사진이 아니거나, 그 사진에서 나오지 않은 태그는 건드릴 수 없다.
+    if (!photoUrls.includes(dto.url)) {
+      throw new NotFoundException('해당 취향 사진을 찾을 수 없습니다.');
+    }
+    const analyzed = preference?.photoTags?.[dto.url];
+    if (!analyzed || !tagsOf(analyzed).includes(dto.tag)) {
+      throw new BadRequestException('이 사진에서 추출된 태그가 아닙니다.');
+    }
+
+    const state = {
+      photoUrls,
+      photoTags: preference?.photoTags ?? {},
+      disabledPhotoTags: toggleDisabledTag(
+        preference?.disabledPhotoTags ?? {},
+        dto.url,
+        dto.tag,
+        dto.enabled,
+      ),
+    };
+    const updated = await this.preferencesService.upsert(user.id, {
+      tasteTags: this.visionAnalyzer.aggregate(effectivePhotoTags(state)),
+      disabledPhotoTags: state.disabledPhotoTags,
+    });
+
+    return { tasteTags: updated.tasteTags, photos: buildPhotoTagsView(state) };
   }
 }

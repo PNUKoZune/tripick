@@ -50,4 +50,44 @@ describe('inferPlaceTags', () => {
     // '카페' 힌트가 categoryDetail 에서 잡혀야 함
     expect(tags).toContain('cafe');
   });
+
+  it("'산' 이 들어간 지명에 mountain 을 붙인다", () => {
+    expect(
+      inferPlaceTags({ name: '북한산 둘레길', category: 'attraction', address: '서울특별시 강북구' }),
+    ).toContain('mountain');
+  });
+
+  it("부산·울산 주소나 '산업'·'산책' 같은 단어에는 mountain 을 붙이지 않는다", () => {
+    // 주소에 '산' 이 들어간다는 이유로 부산 전역이 산으로 태깅되던 오탐 방지
+    expect(
+      inferPlaceTags({ name: '해운대 블루라인파크', category: 'attraction', address: '부산광역시 해운대구' }),
+    ).not.toContain('mountain');
+    expect(
+      inferPlaceTags({ name: '울산대공원', category: 'park', address: '울산광역시 남구' }),
+    ).not.toContain('mountain');
+    expect(
+      inferPlaceTags({ name: '산업기술박물관', category: 'attraction', address: '경기도 성남시' }),
+    ).not.toContain('mountain');
+  });
+
+  it('확장된 취향 어휘를 장소에서도 뽑아낸다', () => {
+    expect(
+      inferPlaceTags({ name: '스시 오마카세', category: 'restaurant', address: '서울특별시 강남구' }),
+    ).toEqual(expect.arrayContaining(['japanese', 'luxury']));
+    expect(
+      inferPlaceTags({ name: '광장시장 떡볶이', category: 'restaurant', address: '서울특별시 종로구' }),
+    ).toEqual(expect.arrayContaining(['bunsik', 'nostalgic']));
+    expect(
+      inferPlaceTags({ name: '온양온천', category: 'attraction', address: '충청남도 아산시' }),
+    ).toContain('hotspring');
+    expect(
+      inferPlaceTags({ name: '청평호수', category: 'attraction', address: '경기도 가평군' }),
+    ).toContain('lake');
+    expect(
+      inferPlaceTags({ name: '남이섬', category: 'attraction', address: '강원도 춘천시' }),
+    ).toContain('island');
+    expect(
+      inferPlaceTags({ name: 'N서울타워 전망대', category: 'attraction', address: '서울특별시 중구' }),
+    ).toContain('nightview');
+  });
 });

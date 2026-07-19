@@ -1,6 +1,56 @@
-export type FoodPreference = 'korean' | 'japanese' | 'western' | 'chinese' | 'vegan' | 'cafe';
-export type MoodPreference = 'healing' | 'adventure' | 'romantic' | 'family' | 'cultural';
-export type EnvironmentPreference = 'nature' | 'city' | 'beach' | 'mountain' | 'village';
+/**
+ * 취향 태그 어휘. 사진 분석(VisionAnalyzer)·장소 태깅(inferPlaceTags)·임베딩 직렬화가
+ * 모두 이 배열을 정본으로 쓴다. 여기에 값을 추가하면 장소 쪽 키워드(TAG_HINTS)도
+ * 같이 늘려야 매칭될 장소가 생긴다.
+ */
+export const FOOD_PREFERENCES = [
+  'korean',
+  'japanese',
+  'western',
+  'chinese',
+  'vegan',
+  'cafe',
+  'bunsik',
+  'meat',
+  'seafood',
+  'bakery',
+] as const;
+
+export const MOOD_PREFERENCES = [
+  'healing',
+  'adventure',
+  'romantic',
+  'family',
+  'cultural',
+  'nostalgic',
+  'trendy',
+  'luxury',
+] as const;
+
+export const ENVIRONMENT_PREFERENCES = [
+  'nature',
+  'city',
+  'beach',
+  'mountain',
+  'village',
+  'lake',
+  'island',
+  'hotspring',
+  'nightview',
+] as const;
+
+export type FoodPreference = (typeof FOOD_PREFERENCES)[number];
+export type MoodPreference = (typeof MOOD_PREFERENCES)[number];
+export type EnvironmentPreference = (typeof ENVIRONMENT_PREFERENCES)[number];
+
+/** 세 축을 합친 취향 태그 값. 사진별 태그 on/off 처럼 축을 가리지 않는 곳에서 쓴다. */
+export type TasteTagValue = FoodPreference | MoodPreference | EnvironmentPreference;
+
+export const ALL_TASTE_TAGS: readonly TasteTagValue[] = [
+  ...FOOD_PREFERENCES,
+  ...MOOD_PREFERENCES,
+  ...ENVIRONMENT_PREFERENCES,
+];
 export type TransportPreference = 'transit' | 'walk' | 'car' | 'rental_car';
 
 /**
@@ -63,6 +113,8 @@ export interface PreferenceDto {
   photoUrls?: string[];
   /** 사진별 분석 결과 (key = 사진 URL). 사진 추가·삭제 시 재집계에 쓰인다. */
   photoTags?: Record<string, TasteTagDto>;
+  /** 사용자가 끈 사진별 태그 (key = 사진 URL). 분석 결과는 그대로 두고 집계에서만 제외한다. */
+  disabledPhotoTags?: Record<string, TasteTagValue[]>;
   /** pgvector 임베딩 ID 참조 */
   embeddingId?: string;
   createdAt: string;
@@ -92,6 +144,23 @@ export interface UpdatePreferenceDto {
   photoUrls?: string[];
   /** 지정 시 사진별 분석 결과를 통째로 교체 (key = 사진 URL) */
   photoTags?: Record<string, TasteTagDto>;
+  /** 지정 시 사진별 비활성 태그 목록을 통째로 교체 (key = 사진 URL) */
+  disabledPhotoTags?: Record<string, TasteTagValue[]>;
+}
+
+/** 특정 사진에서 추출된 특정 태그를 켜고 끈다. */
+export interface TogglePhotoTagDto {
+  /** 대상 사진 URL */
+  url: string;
+  tag: TasteTagValue;
+  /** true = 집계에 반영, false = 제외 */
+  enabled: boolean;
+}
+
+/** 사진 한 장과 그 사진에서 뽑힌 태그의 on/off 상태. */
+export interface PreferencePhotoTagsDto {
+  url: string;
+  tags: Array<{ tag: TasteTagValue; enabled: boolean }>;
 }
 
 /** 한 번에 업로드할 수 있는 취향 사진 수 */

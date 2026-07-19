@@ -9,6 +9,7 @@ import type {
 } from '@tripick/types';
 import { VisionAnalyzer } from './vision.analyzer';
 import { PreferencesService } from '../preferences/preferences.service';
+import { effectivePhotoTags, pruneToPhotos } from '../preferences/photo-taste';
 import { StorageService } from '../storage/storage.service';
 import { NotificationService } from '../notification/notification.service';
 import {
@@ -153,14 +154,25 @@ export class PreferenceAnalysisService {
     const preference = await this.preferencesService.findByUser(userId);
     // 저장된 사진 목록에 없는 결과는 버린다 (분석 중에 삭제된 사진).
     const livePhotoUrls = preference?.photoUrls ?? jobPhotoUrls;
-    const livePhotoTags = Object.fromEntries(
-      Object.entries({ ...(preference?.photoTags ?? {}), ...analyzed }).filter(([url]) =>
-        livePhotoUrls.includes(url),
-      ),
+    const livePhotoTags = pruneToPhotos(
+      { ...(preference?.photoTags ?? {}), ...analyzed },
+      livePhotoUrls,
     );
+    const disabledPhotoTags = pruneToPhotos(preference?.disabledPhotoTags ?? {}, livePhotoUrls);
 
-    const tasteTags = this.visionAnalyzer.aggregate(Object.values(livePhotoTags));
-    await this.preferencesService.upsert(userId, { tasteTags, photoTags: livePhotoTags });
+    // 사용자가 꺼둔 태그는 집계에서 뺀다 — 새 사진을 올려도 기존 선택이 유지되어야 한다.
+    const tasteTags = this.visionAnalyzer.aggregate(
+      effectivePhotoTags({
+        photoUrls: livePhotoUrls,
+        photoTags: livePhotoTags,
+        disabledPhotoTags,
+      }),
+    );
+    await this.preferencesService.upsert(userId, {
+      tasteTags,
+      photoTags: livePhotoTags,
+      disabledPhotoTags,
+    });
     return livePhotoUrls;
   }
 

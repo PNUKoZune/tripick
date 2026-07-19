@@ -1,35 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import type {
-  EnvironmentPreference,
-  FoodPreference,
-  MoodPreference,
-  TasteTagDto,
+import {
+  ENVIRONMENT_PREFERENCES as ENVIRONMENT_TAGS,
+  FOOD_PREFERENCES as FOOD_TAGS,
+  MOOD_PREFERENCES as MOOD_TAGS,
+  type TasteTagDto,
 } from '@tripick/types';
-
-const FOOD_TAGS: readonly FoodPreference[] = [
-  'korean',
-  'japanese',
-  'western',
-  'chinese',
-  'vegan',
-  'cafe',
-];
-const MOOD_TAGS: readonly MoodPreference[] = [
-  'healing',
-  'adventure',
-  'romantic',
-  'family',
-  'cultural',
-];
-const ENVIRONMENT_TAGS: readonly EnvironmentPreference[] = [
-  'nature',
-  'city',
-  'beach',
-  'mountain',
-  'village',
-];
 
 /** 카테고리당 채택할 최대 태그 수. 너무 많으면 프롬프트 주입 시 취향 신호가 흐려진다. */
 const MAX_TAGS_PER_CATEGORY = 3;
@@ -53,10 +30,7 @@ export interface VisionResult {
  * 사용자가 직접 올린 사진 → 여행 취향 태그(Taste Tag) 추출.
  * 로컬 Gemma(llama.cpp + mmproj) 의 OpenAI 호환 chat/completions 에 data URL 이미지를 실어 보낸다.
  *
- * 분류:
- * - Food: korean, japanese, western, chinese, vegan, cafe
- * - Mood: healing, adventure, romantic, family, cultural
- * - Environment: nature, city, beach, mountain, village
+ * 분류 어휘는 @tripick/types 의 FOOD/MOOD/ENVIRONMENT_PREFERENCES 가 정본이다.
  */
 @Injectable()
 export class VisionAnalyzer {

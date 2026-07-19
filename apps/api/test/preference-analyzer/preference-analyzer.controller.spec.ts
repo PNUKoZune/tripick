@@ -196,6 +196,136 @@ describe('PreferenceAnalyzerController.deletePhoto', () => {
   });
 });
 
+describe('PreferenceAnalyzerController.togglePhotoTag', () => {
+  const stored = {
+    photoUrls: ['http://s/a.png', 'http://s/b.png'],
+    photoTags: {
+      'http://s/a.png': tags({ food: ['cafe'], mood: ['healing'], confidence: 0.8 }),
+      'http://s/b.png': tags({ food: ['cafe'], mood: ['romantic'], confidence: 0.6 }),
+    },
+    disabledPhotoTags: {},
+  };
+
+  it('turns a tag off and re-aggregates without it', async () => {
+    const upsert = jest.fn().mockResolvedValue({ tasteTags: tags({ food: ['cafe'] }) });
+    const { controller } = makeController({
+      findByUser: jest.fn().mockResolvedValue(stored),
+      upsert,
+    });
+
+    // healing 은 a 에서만 나온 태그라, 끄면 집계에서 완전히 사라진다
+    const result = await controller.togglePhotoTag(user, {
+      url: 'http://s/a.png',
+      tag: 'healing',
+      enabled: false,
+    });
+
+    const [, dto] = upsert.mock.calls[0];
+    expect(dto.disabledPhotoTags).toEqual({ 'http://s/a.png': ['healing'] });
+    expect(dto.tasteTags.mood).not.toContain('healing');
+    // 다른 사진에서도 나온 cafe 는 그대로 남는다
+    expect(dto.tasteTags.food).toEqual(['cafe']);
+    // 화면이 바로 반영할 수 있게 사진별 상태를 함께 돌려준다
+    expect(result.photos[0]).toEqual({
+      url: 'http://s/a.png',
+      tags: [
+        { tag: 'cafe', enabled: true },
+        { tag: 'healing', enabled: false },
+      ],
+    });
+  });
+
+  it('turns a tag back on', async () => {
+    const upsert = jest.fn().mockResolvedValue({ tasteTags: tags() });
+    const { controller } = makeController({
+      findByUser: jest
+        .fn()
+        .mockResolvedValue({ ...stored, disabledPhotoTags: { 'http://s/a.png': ['cafe'] } }),
+      upsert,
+    });
+
+    await controller.togglePhotoTag(user, {
+      url: 'http://s/a.png',
+      tag: 'cafe',
+      enabled: true,
+    });
+
+    const [, dto] = upsert.mock.calls[0];
+    expect(dto.disabledPhotoTags).toEqual({});
+    expect(dto.tasteTags.food).toEqual(['cafe']);
+  });
+
+  it('does not touch photoUrls or photoTags when toggling', async () => {
+    const upsert = jest.fn().mockResolvedValue({ tasteTags: tags() });
+    const { controller } = makeController({
+      findByUser: jest.fn().mockResolvedValue(stored),
+      upsert,
+    });
+
+    await controller.togglePhotoTag(user, {
+      url: 'http://s/a.png',
+      tag: 'cafe',
+      enabled: false,
+    });
+
+    const [, dto] = upsert.mock.calls[0];
+    // 분석 결과와 사진 목록은 건드리지 않아야 다시 켰을 때 복원된다
+    expect(dto.photoTags).toBeUndefined();
+    expect(dto.photoUrls).toBeUndefined();
+  });
+
+  it("rejects a photo that is not the user's", async () => {
+    const { controller } = makeController({ findByUser: jest.fn().mockResolvedValue(stored) });
+
+    await expect(
+      controller.togglePhotoTag(user, {
+        url: 'http://s/someone-else.png',
+        tag: 'cafe',
+        enabled: false,
+      }),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('rejects a tag that photo never produced', async () => {
+    const { controller } = makeController({ findByUser: jest.fn().mockResolvedValue(stored) });
+
+    await expect(
+      controller.togglePhotoTag(user, {
+        url: 'http://s/a.png',
+        tag: 'hotspring',
+        enabled: false,
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+});
+
+describe('PreferenceAnalyzerController.listPhotoTags', () => {
+  it('returns per-photo tags with their on/off state', async () => {
+    const { controller } = makeController({
+      findByUser: jest.fn().mockResolvedValue({
+        photoUrls: ['http://s/a.png'],
+        photoTags: { 'http://s/a.png': tags({ food: ['cafe'], mood: ['healing'] }) },
+        disabledPhotoTags: { 'http://s/a.png': ['healing'] },
+      }),
+    });
+
+    await expect(controller.listPhotoTags(user)).resolves.toEqual([
+      {
+        url: 'http://s/a.png',
+        tags: [
+          { tag: 'cafe', enabled: true },
+          { tag: 'healing', enabled: false },
+        ],
+      },
+    ]);
+  });
+
+  it('returns an empty list when the user has no preferences yet', async () => {
+    const { controller } = makeController();
+    await expect(controller.listPhotoTags(user)).resolves.toEqual([]);
+  });
+});
+
 describe('PreferenceAnalyzerController.getJob', () => {
   it('returns the job status', async () => {
     const { controller } = makeController({
