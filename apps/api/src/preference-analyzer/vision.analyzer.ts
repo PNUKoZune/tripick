@@ -14,6 +14,17 @@ const MAX_TAGS_PER_CATEGORY = 3;
 const EMPTY_TAGS: TasteTagDto = { food: [], mood: [], environment: [], confidence: 0 };
 
 /**
+ * 분석 결과 + 성공 여부.
+ *
+ * "분석은 됐는데 뚜렷한 취향이 없음"과 "호출이 실패함"은 둘 다 빈 태그로 보이지만
+ * 후자는 재시도해야 한다. 호출자가 구분할 수 있도록 ok 를 함께 돌려준다.
+ */
+export interface VisionResult {
+  tags: TasteTagDto;
+  ok: boolean;
+}
+
+/**
  * Vision Preference Analyzer
  *
  * 사용자가 직접 올린 사진 → 여행 취향 태그(Taste Tag) 추출.
@@ -27,7 +38,8 @@ export class VisionAnalyzer {
 
   constructor(private readonly config: ConfigService) {}
 
-  async analyzeImage(imageUrl: string): Promise<TasteTagDto> {
+  /** 사진 한 장을 분석한다. 여러 장은 호출자(분석 잡)가 순차로 돌린다. */
+  async analyzePhoto(imageUrl: string): Promise<VisionResult> {
     // vision 전용 서버를 따로 띄운 경우에만 분리, 기본은 플래너와 같은 LLM 서버(mmproj 로드됨)
     const baseUrl = this.config.get<string>(
       'LLM_VISION_BASE_URL',
@@ -70,19 +82,14 @@ export class VisionAnalyzer {
       );
 
       const content = res.data.choices[0]?.message.content ?? '';
-      return this.parseTasteTags(content);
+      // 응답은 받았으니 성공 — 태그가 비어도 "이 사진엔 뚜렷한 취향이 없다"는 유효한 결론이다.
+      return { tags: this.parseTasteTags(content), ok: true };
     } catch (err) {
       this.logger.error(
         `Vision 분석 실패: ${err instanceof Error ? err.message : String(err)}`,
       );
-      return { ...EMPTY_TAGS };
+      return { tags: { ...EMPTY_TAGS }, ok: false };
     }
-  }
-
-  async analyzeMultiple(imageUrls: string[]): Promise<TasteTagDto> {
-    if (imageUrls.length === 0) return { ...EMPTY_TAGS };
-    const results = await this.mapWithConcurrency(imageUrls, (url) => this.analyzeImage(url));
-    return this.aggregate(results);
   }
 
   /**
@@ -119,6 +126,7 @@ export class VisionAnalyzer {
       `environment: ${ENVIRONMENT_TAGS.join(' | ')}`,
       '',
       'confidence 는 이 사진만으로 취향을 판단한 확신도(0.0~1.0).',
+      // 상수와 어긋나면 상수를 올려도 모델이 안 따라온다 — 한 곳에서만 정한다.
       `카테고리당 최대 ${MAX_TAGS_PER_CATEGORY}개까지만. 애매하면 넣지 말 것.`,
       '',
       'JSON 형식:',
@@ -129,7 +137,7 @@ export class VisionAnalyzer {
   /**
    * 모델 응답에서 취향 태그를 뽑아낸다.
    * llama.cpp 는 response_format 을 줘도 코드펜스나 짧은 서두를 붙일 때가 있어
-   * 첫 JSON 객체만 잘라 쓰고, 정해진 값에 없는 태그는 버린다.
+   * 바깥쪽 중괄호 구간만 잘라 쓰고, 정해진 값에 없는 태그는 버린다.
    */
   private parseTasteTags(content: string): TasteTagDto {
     const json = this.extractJsonObject(content);
@@ -160,6 +168,10 @@ export class VisionAnalyzer {
     };
   }
 
+  /**
+   * 첫 '{' 부터 마지막 '}' 까지를 잘라낸다.
+   * 서두·코드펜스는 이걸로 걷히고, 그래도 깨진 JSON 이면 호출부의 파싱 실패로 걸러진다.
+   */
   private extractJsonObject(content: string): string | null {
     const start = content.indexOf('{');
     const end = content.lastIndexOf('}');
@@ -198,26 +210,6 @@ export class VisionAnalyzer {
       .sort((a, b) => b[1] - a[1])
       .slice(0, MAX_TAGS_PER_CATEGORY)
       .map(([tag]) => tag);
-  }
-
-  /** 로컬 LLM 서버는 보통 단일 인스턴스라 동시 요청을 몰면 오히려 느려진다. */
-  private async mapWithConcurrency<T, R>(
-    items: T[],
-    fn: (item: T) => Promise<R>,
-  ): Promise<R[]> {
-    const limit = Math.max(1, this.readNumber('LLM_VISION_CONCURRENCY', 1));
-    const results = new Array<R>(items.length);
-    let cursor = 0;
-
-    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (cursor < items.length) {
-        const index = cursor++;
-        results[index] = await fn(items[index] as T);
-      }
-    });
-
-    await Promise.all(workers);
-    return results;
   }
 
   private clampConfidence(value: number): number {

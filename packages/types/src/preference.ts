@@ -180,7 +180,10 @@ export interface PreferenceAnalysisJobDto {
   total: number;
   /** 완료 시에만 채워지는 최종 취향 태그 */
   tasteTags?: TasteTagDto;
-  /** 이번 잡으로 보관된 사진을 포함한 전체 사진 URL */
+  /**
+   * 보관 중인 전체 사진 URL. **완료 시에만 채워진다** —
+   * 진행 중에는 조회할 이유가 없어 빈 배열이다(폴링마다 DB 를 보지 않기 위해).
+   */
   photoUrls: string[];
   /** 실패 사유 (status=failed) */
   error?: string;

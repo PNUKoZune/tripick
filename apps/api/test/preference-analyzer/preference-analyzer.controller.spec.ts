@@ -19,6 +19,7 @@ function file(mimetype = 'image/png') {
 function makeController(overrides: {
   findByUser?: jest.Mock;
   upsert?: jest.Mock;
+  setPhotoUrls?: jest.Mock;
   isReady?: jest.Mock;
   putObject?: jest.Mock;
   enqueue?: jest.Mock;
@@ -33,6 +34,8 @@ function makeController(overrides: {
   const preferencesService = {
     findByUser: overrides.findByUser ?? jest.fn().mockResolvedValue(null),
     upsert: overrides.upsert ?? jest.fn().mockResolvedValue({ photoUrls: [], tasteTags: tags() }),
+    setPhotoUrls:
+      overrides.setPhotoUrls ?? jest.fn().mockResolvedValue({ photoUrls: [], tasteTags: tags() }),
   };
   const storage = {
     isReady: overrides.isReady ?? jest.fn().mockReturnValue(true),
@@ -58,12 +61,33 @@ describe('PreferenceAnalyzerController.uploadImages', () => {
 
     expect(result).toMatchObject({ jobId: 'job-1' });
     // 분석 전이라도 올린 사진은 바로 보여야 하므로 photoUrls 를 먼저 저장한다.
-    const [, dto] = preferencesService.upsert.mock.calls[0];
-    expect(dto.photoUrls).toHaveLength(2);
+    const [, urls] = preferencesService.setPhotoUrls.mock.calls[0];
+    expect(urls).toHaveLength(2);
+    // 태그가 아직 안 바뀌었으므로 재임베딩을 부르는 upsert 는 타지 않는다.
+    expect(preferencesService.upsert).not.toHaveBeenCalled();
     expect(analysisService.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'u1', photoUrls: expect.any(Array) }),
       expect.any(Array),
     );
+  });
+
+  it('re-queues photos a previous job failed to analyze', async () => {
+    const { controller, analysisService } = makeController({
+      findByUser: jest.fn().mockResolvedValue({
+        photoUrls: ['http://s/done.png', 'http://s/stranded.png'],
+        // stranded 는 이전 잡이 재시도까지 실패해 결과가 없다
+        photoTags: { 'http://s/done.png': tags({ food: ['cafe'], confidence: 0.8 }) },
+      }),
+    });
+
+    await controller.uploadImages(user, [file()] as any);
+
+    const [jobData] = analysisService.enqueue.mock.calls[0];
+    expect(jobData.photoUrls).toHaveLength(2);
+    expect(jobData.photoUrls[0]).toBe('http://s/stranded.png');
+    expect(jobData.storageKeys[0]).toBe('stranded.png');
+    // 이미 분석된 사진은 다시 태우지 않는다
+    expect(jobData.photoUrls).not.toContain('http://s/done.png');
   });
 
   it('appends to the photos already stored', async () => {
@@ -73,9 +97,9 @@ describe('PreferenceAnalyzerController.uploadImages', () => {
 
     await controller.uploadImages(user, [file()] as any);
 
-    const [, dto] = preferencesService.upsert.mock.calls[0];
-    expect(dto.photoUrls[0]).toBe('http://s/old.png');
-    expect(dto.photoUrls).toHaveLength(2);
+    const [, urls] = preferencesService.setPhotoUrls.mock.calls[0];
+    expect(urls[0]).toBe('http://s/old.png');
+    expect(urls).toHaveLength(2);
   });
 
   it('rejects uploads that would exceed the total photo cap', async () => {
