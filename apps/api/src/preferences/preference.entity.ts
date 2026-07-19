@@ -33,6 +33,13 @@ export class PreferenceEntity {
   @Column({ type: 'jsonb', default: '[]' })
   photoUrls: string[];
 
+  /**
+   * 사진별 분석 결과 (key = 사진 URL).
+   * 사진을 추가할 때 새 사진만 분석하고, 삭제할 때는 남은 사진으로 다시 집계하기 위해 보관한다.
+   */
+  @Column({ type: 'jsonb', default: '{}' })
+  photoTags: Record<string, TasteTagDto>;
+
   @Column({ nullable: true })
   embeddingId?: string;
 

@@ -2,8 +2,15 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FiImage, FiThumbsDown, FiThumbsUp, FiX } from 'react-icons/fi';
-import type { TasteTagDto, ThemePreference, TransportPreference } from '@tripick/types';
+import { FiImage, FiLoader, FiThumbsDown, FiThumbsUp, FiX } from 'react-icons/fi';
+import {
+  MAX_PREFERENCE_PHOTOS,
+  MAX_PREFERENCE_UPLOAD,
+  type PreferenceAnalysisJobDto,
+  type TasteTagDto,
+  type ThemePreference,
+  type TransportPreference,
+} from '@tripick/types';
 import {
   ACTIVITY_INTENSITY_OPTIONS,
   CROWD_OPTIONS,
@@ -16,7 +23,11 @@ import {
   analyzePreferenceImages,
   DEFAULT_PREFERENCE_FORM,
   deletePreferencePhoto,
+  forgetAnalysisJob,
   getMyPreferences,
+  getPreferenceAnalysisJob,
+  readAnalysisJob,
+  rememberAnalysisJob,
   savePreferences,
   type PreferenceFormState,
 } from '@/entities/preferences/api/preferences-api';
@@ -39,10 +50,16 @@ type Notice = {
 
 type ThemeStance = 'like' | 'dislike';
 
-/** 백엔드 업로드 제약과 동일하게 맞춘다 (FilesInterceptor 10장 · 10MB · jpeg/png/webp). */
-const MAX_PHOTOS = 10;
+/** 백엔드 업로드 제약과 동일하게 맞춘다 (한 번에 3장 · 총 10장 · 10MB · jpeg/png/webp). */
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+/** 분석 잡 상태를 다시 물어보는 간격. 사진 1장에 30초 넘게 걸려 촘촘히 볼 이유가 없다. */
+const JOB_POLL_INTERVAL_MS = 3000;
+
+/** 잡이 만료·삭제돼 더 볼 게 없는 상태(404)인지. 그 외 오류는 일시적인 것으로 본다. */
+function isJobGone(error: unknown): boolean {
+  return Boolean(error) && (error as { status?: number }).status === 404;
+}
 
 export function PreferenceSetupForm() {
   const queryClient = useQueryClient();
@@ -58,6 +75,8 @@ export function PreferenceSetupForm() {
   const [savedPhotoUrls, setSavedPhotoUrls] = useState<string[]>([]);
   // 추가/삭제 후 아직 분석에 반영되지 않은 사진이 있는지
   const [photosDirty, setPhotosDirty] = useState(false);
+  // 진행 중인 분석 잡. 페이지를 떠났다 돌아와도 localStorage 에서 복원한다.
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   // 마지막으로 저장된(or 하이드레이트된) 폼 스냅샷 — 변경 여부 판단용
@@ -99,6 +118,80 @@ export function PreferenceSetupForm() {
     return () => clearTimeout(timer);
   }, [toast]);
 
+  // 새로고침·페이지 이동으로 돌아왔을 때 진행 중이던 분석을 다시 따라간다.
+  useEffect(() => {
+    const stored = readAnalysisJob();
+    if (stored) setActiveJobId(stored);
+  }, []);
+
+  const analysisJobQuery = useQuery({
+    queryKey: queryKeys.preferences.analysisJob(activeJobId ?? ''),
+    queryFn: async () => {
+      const session = getStoredSession();
+      if (!session || !activeJobId) return null;
+      return getPreferenceAnalysisJob(session.tokens.accessToken, activeJobId);
+    },
+    enabled: Boolean(activeJobId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      // 끝났거나 잡이 만료돼 사라졌으면 그만 물어본다.
+      return status && status !== 'queued' && status !== 'running' ? false : JOB_POLL_INTERVAL_MS;
+    },
+    // 잡이 사라진(404) 게 아니면 일시적 오류로 보고 몇 번 더 물어본다.
+    retry: (failureCount, error) => !isJobGone(error) && failureCount < 3,
+  });
+
+  const analysisJob = analysisJobQuery.data;
+  // 폴링이 일시적으로 실패해도 배너를 유지한다 — 잡은 서버에서 계속 돌고 있다.
+  const analyzing =
+    Boolean(activeJobId) &&
+    (!analysisJob || analysisJob.status === 'queued' || analysisJob.status === 'running');
+
+  // 분석이 끝나면 결과를 화면에 반영하고 잡 추적을 끝낸다.
+  useEffect(() => {
+    if (!activeJobId || !analysisJob) return;
+    if (analysisJob.status === 'queued' || analysisJob.status === 'running') return;
+
+    setActiveJobId(null);
+    forgetAnalysisJob();
+    queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
+
+    if (analysisJob.status === 'failed') {
+      setNotice({
+        title: '사진 분석 실패',
+        description: analysisJob.error ?? '사진 분석에 실패했습니다.',
+        tone: 'red',
+      });
+      return;
+    }
+    if (analysisJob.status !== 'completed') return;
+
+    setSavedPhotoUrls(analysisJob.photoUrls);
+    const tags = analysisJob.tasteTags;
+    if (tags) setAnalyzedTags(tags);
+    const count = tags ? tags.food.length + tags.mood.length + tags.environment.length : 0;
+    setNotice(null);
+    setToast({
+      title: '사진 분석 완료',
+      message:
+        count > 0
+          ? '사진에서 취향을 분석했어요.'
+          : '뚜렷한 취향을 찾지 못했어요. 다른 사진을 올려보세요.',
+    });
+  }, [activeJobId, analysisJob, queryClient]);
+
+  /**
+   * 잡이 만료돼 사라진(404) 경우에만 추적을 끝낸다.
+   * 일시적인 네트워크·서버 오류로 추적을 버리면 서버에선 분석이 도는데 화면은
+   * 진행률을 잃고, localStorage 까지 지워져 새로고침으로도 복구되지 않는다.
+   */
+  useEffect(() => {
+    if (!isJobGone(analysisJobQuery.error)) return;
+    setActiveJobId(null);
+    forgetAnalysisJob();
+    queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
+  }, [analysisJobQuery.error, queryClient]);
+
   // 선택한 사진의 미리보기 URL 생성/해제
   useEffect(() => {
     const urls = photos.map((file) => URL.createObjectURL(file));
@@ -115,6 +208,9 @@ export function PreferenceSetupForm() {
       });
     }
   }, [preferenceQuery.error]);
+
+  // 저장된 사진을 뺀 잔여 슬롯. 0 이면 기존 사진을 지워야 더 올릴 수 있다.
+  const photoAllowance = Math.max(0, MAX_PREFERENCE_PHOTOS - savedPhotoUrls.length);
 
   const ready =
     form.likedThemes.length > 0 &&
@@ -161,25 +257,18 @@ export function PreferenceSetupForm() {
       const session = getStoredSession() ?? (await startDemoSession());
       return analyzePreferenceImages(session.tokens.accessToken, files);
     },
-    onSuccess: (result) => {
+    onSuccess: (job) => {
       setHasSession(true);
-      setAnalyzedTags(result.tasteTags);
-      setSavedPhotoUrls(result.photoUrls);
+      // 사진은 이미 서버에 보관됐고, 태그 분석만 잡에서 이어진다.
+      setSavedPhotoUrls(job.photoUrls);
       setPhotos([]);
       setPhotosDirty(false);
-      // 서버가 취향 태그·임베딩을 upsert 했으므로 캐시를 갱신
-      queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
-      const count =
-        result.tasteTags.food.length +
-        result.tasteTags.mood.length +
-        result.tasteTags.environment.length;
+      rememberAnalysisJob(job.jobId);
+      setActiveJobId(job.jobId);
       setNotice(null);
       setToast({
-        title: '사진 분석 완료',
-        message:
-          count > 0
-            ? '사진에서 취향을 분석했어요.'
-            : '뚜렷한 취향을 찾지 못했어요. 다른 사진을 올려보세요.',
+        title: '분석을 시작했어요',
+        message: '완료되면 알림으로 알려드릴게요. 다른 페이지로 이동해도 괜찮아요.',
       });
     },
     onError: (error) => {
@@ -198,6 +287,8 @@ export function PreferenceSetupForm() {
     },
     onSuccess: (result) => {
       setSavedPhotoUrls(result.photoUrls);
+      // 남은 사진으로 태그가 다시 집계되므로 화면 태그도 갱신한다.
+      if (result.tasteTags) setAnalyzedTags(result.tasteTags);
       queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
     },
     onError: (error) => {
@@ -347,8 +438,10 @@ export function PreferenceSetupForm() {
 
         <SetupBlock title="사진으로 취향 분석">
           <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--text-tertiary)]">
-            좋아하는 장소·음식 사진을 올리면 취향을 자동으로 분석해요. (최대 10장)
+            좋아하는 장소·음식 사진을 올리면 취향을 자동으로 분석해요. (한 번에{' '}
+            {MAX_PREFERENCE_UPLOAD}장, 총 {MAX_PREFERENCE_PHOTOS}장)
           </p>
+          {analyzing ? <AnalysisProgress job={analysisJob} /> : null}
           <input
             ref={fileInputRef}
             type="file"
@@ -422,7 +515,7 @@ export function PreferenceSetupForm() {
                   </button>
                 </div>
               ))}
-              {photos.length < 10 ? (
+              {photos.length < Math.min(MAX_PREFERENCE_UPLOAD, photoAllowance) ? (
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -442,12 +535,14 @@ export function PreferenceSetupForm() {
             <button
               type="button"
               onClick={() => analyzePhotosMutation.mutate(photos)}
-              disabled={analyzePhotosMutation.isPending}
+              disabled={analyzePhotosMutation.isPending || analyzing}
               className="mt-3 h-11 w-full rounded-[14px] bg-[color:var(--blue-50)] text-[14px] font-bold text-[color:var(--blue-700)] transition active:scale-[0.99] disabled:text-[color:var(--text-tertiary)] lg:max-w-[280px]"
             >
               {analyzePhotosMutation.isPending
-                ? '분석 중…'
-                : `사진 ${photos.length}장으로 취향 분석하기`}
+                ? '올리는 중…'
+                : analyzing
+                  ? '분석이 끝나면 이어서 올릴 수 있어요'
+                  : `사진 ${photos.length}장으로 취향 분석하기`}
             </button>
           ) : null}
 
@@ -548,8 +643,24 @@ export function PreferenceSetupForm() {
       });
     }
     if (valid.length === 0) return;
-    // 서버 업로드 한도(10장)에 맞춰 자른다.
-    setPhotos((current) => [...current, ...valid].slice(0, MAX_PHOTOS));
+
+    // 한 번에 3장, 저장된 사진까지 합쳐 총 10장을 넘길 수 없다.
+    const remainingTotal = Math.max(0, MAX_PREFERENCE_PHOTOS - savedPhotoUrls.length);
+    const allowance = Math.min(MAX_PREFERENCE_UPLOAD, remainingTotal);
+    setPhotos((current) => {
+      const merged = [...current, ...valid].slice(0, allowance);
+      if (merged.length < current.length + valid.length) {
+        setNotice({
+          title: '사진 수 제한',
+          description:
+            remainingTotal === 0
+              ? `취향 사진은 최대 ${MAX_PREFERENCE_PHOTOS}장까지예요. 기존 사진을 지우고 올려주세요.`
+              : `한 번에 ${MAX_PREFERENCE_UPLOAD}장까지, 총 ${MAX_PREFERENCE_PHOTOS}장까지 올릴 수 있어요.`,
+          tone: 'red',
+        });
+      }
+      return merged;
+    });
     setPhotosDirty(true);
   }
 
@@ -610,6 +721,46 @@ function ChoiceCard({
       <span className="text-[14px] font-bold leading-5">{label}</span>
       {hint ? <span className="text-[11px] font-medium leading-4 opacity-70">{hint}</span> : null}
     </button>
+  );
+}
+
+/**
+ * 분석 진행 표시. 사진 1장에 30초 넘게 걸려 "몇 장 중 몇 장" 을 같이 보여준다.
+ * 큐 대기 중에는 아직 분석한 장이 없으므로 진행률 대신 대기 문구를 쓴다.
+ */
+function AnalysisProgress({ job }: { job: PreferenceAnalysisJobDto | null | undefined }) {
+  const total = job?.total ?? 0;
+  const analyzed = job?.analyzed ?? 0;
+  // 아직 첫 조회 응답이 없거나(또는 폴링이 잠깐 실패) 대기 중이면 진행률 대신 대기 문구를 쓴다.
+  const queued = !job || job.status === 'queued';
+  const percent = total > 0 ? Math.round((analyzed / total) * 100) : 0;
+
+  return (
+    <div className="mb-3 rounded-[14px] border border-[color:var(--blue-100)] bg-[color:var(--blue-50)] p-3">
+      <div className="flex items-center gap-2">
+        <FiLoader className="size-4 animate-spin text-[color:var(--blue-700)]" aria-hidden />
+        <span className="text-[13px] font-bold text-[color:var(--blue-700)]">
+          {queued ? '분석 대기 중이에요' : `취향 분석 중… ${analyzed}/${total}장`}
+        </span>
+      </div>
+      <div
+        className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/70"
+        role="progressbar"
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="취향 분석 진행률"
+      >
+        <div
+          className="h-full rounded-full bg-[color:var(--blue-600)] transition-[width] duration-500"
+          style={{ width: `${queued ? 0 : percent}%` }}
+        />
+      </div>
+      <p className="mt-2 text-[12px] font-medium leading-4 text-[color:var(--blue-700)]/80">
+        사진 한 장에 30초 정도 걸려요. 완료되면 알림으로 알려드릴게요 — 이 페이지를 떠나도
+        분석은 계속됩니다.
+      </p>
+    </div>
   );
 }
 

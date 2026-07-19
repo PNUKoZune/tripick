@@ -38,11 +38,25 @@ export class PreferencesService {
     return this.repo.findOneBy({ userId });
   }
 
-  /** 취향 사진 URL 목록만 교체. photoUrls 는 임베딩에 영향 없어 재임베딩 불필요. */
-  async setPhotoUrls(userId: string, urls: string[]): Promise<PreferenceEntity | null> {
-    const pref = await this.repo.findOneBy({ userId });
-    if (!pref) return null;
+  /**
+   * 취향 사진 URL 목록만 교체한다.
+   * 태그가 그대로면 임베딩 텍스트도 그대로라 재임베딩(원격 호출)을 건너뛴다 —
+   * 업로드 직후처럼 아직 분석 결과가 없는 시점에 upsert 를 쓰면 임베딩만 헛돈다.
+   */
+  async setPhotoUrls(userId: string, urls: string[]): Promise<PreferenceEntity> {
+    const pref =
+      (await this.repo.findOneBy({ userId })) ??
+      this.repo.create({
+        userId,
+        tasteTags: { ...EMPTY_TASTE_TAGS },
+        profile: { ...DEFAULT_PROFILE },
+        photoTags: {},
+      });
     pref.photoUrls = urls;
+    // 남지 않은 사진의 분석 결과는 버린다 — 재집계 대상에서 빠져야 한다.
+    pref.photoTags = Object.fromEntries(
+      Object.entries(pref.photoTags ?? {}).filter(([url]) => urls.includes(url)),
+    );
     return this.repo.save(pref);
   }
 
@@ -98,8 +112,9 @@ export class PreferencesService {
       throw new BadRequestException('기상 시간과 취침 시간은 달라야 합니다.');
     }
 
-    // photoUrls 는 지정된 경우에만 통째로 교체, 아니면 기존 유지
+    // photoUrls / photoTags 는 지정된 경우에만 통째로 교체, 아니면 기존 유지
     const nextPhotoUrls = dto?.photoUrls ?? pref?.photoUrls ?? [];
+    const nextPhotoTags = dto?.photoTags ?? pref?.photoTags ?? {};
 
     if (!pref) {
       pref = this.repo.create({
@@ -107,11 +122,13 @@ export class PreferencesService {
         tasteTags: nextTags,
         profile: nextProfile,
         photoUrls: nextPhotoUrls,
+        photoTags: nextPhotoTags,
       });
     } else {
       pref.tasteTags = nextTags;
       pref.profile = nextProfile;
       pref.photoUrls = nextPhotoUrls;
+      pref.photoTags = nextPhotoTags;
     }
 
     // 취향 태그 + 프로필을 임베딩해 preference_embeddings 에 유저당 1행으로 저장 → 검색 개인화 루프

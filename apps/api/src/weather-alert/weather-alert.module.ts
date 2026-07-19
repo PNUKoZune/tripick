@@ -2,6 +2,7 @@ import { BullModule, InjectQueue } from '@nestjs/bullmq';
 import { Logger, Module, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
+import { withTimeout } from '../common/with-timeout';
 import { ItineraryItemEntity } from '../itinerary/itinerary-item.entity';
 import { TripEntity } from '../trips/trip.entity';
 import { InboxModule } from '../inbox/inbox.module';
@@ -78,7 +79,7 @@ export class WeatherAlertModule implements OnModuleInit, OnModuleDestroy {
     if (this.destroyed) return;
 
     try {
-      await this.withTimeout(
+      await withTimeout(
         this.queue.add(
           WEATHER_ALERT_SCAN_JOB,
           {},
@@ -112,22 +113,5 @@ export class WeatherAlertModule implements OnModuleInit, OnModuleDestroy {
     this.retryTimer = setTimeout(() => void this.registerSchedule(attempt), delay);
     // 재시도 타이머가 프로세스 종료를 붙잡지 않게 한다.
     this.retryTimer.unref();
-  }
-
-  /** Redis 무응답 시 오프라인 큐에 걸려 영영 안 끝나므로 상한을 둔다. */
-  private withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`등록 응답 없음 (${ms}ms 초과)`)), ms);
-      promise.then(
-        (value) => {
-          clearTimeout(timer);
-          resolve(value);
-        },
-        (err) => {
-          clearTimeout(timer);
-          reject(err);
-        },
-      );
-    });
   }
 }

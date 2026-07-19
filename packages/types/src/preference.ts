@@ -61,6 +61,8 @@ export interface PreferenceDto {
   profile?: PreferenceProfileDto;
   /** 사용자가 올린 취향 원본 사진 URL (Object Storage) */
   photoUrls?: string[];
+  /** 사진별 분석 결과 (key = 사진 URL). 사진 추가·삭제 시 재집계에 쓰인다. */
+  photoTags?: Record<string, TasteTagDto>;
   /** pgvector 임베딩 ID 참조 */
   embeddingId?: string;
   createdAt: string;
@@ -88,4 +90,32 @@ export interface UpdatePreferenceDto {
   profile?: Partial<PreferenceProfileDto>;
   /** 지정 시 취향 사진 URL 을 통째로 교체 */
   photoUrls?: string[];
+  /** 지정 시 사진별 분석 결과를 통째로 교체 (key = 사진 URL) */
+  photoTags?: Record<string, TasteTagDto>;
+}
+
+/** 한 번에 업로드할 수 있는 취향 사진 수 */
+export const MAX_PREFERENCE_UPLOAD = 3;
+/** 사용자당 보관하는 취향 사진 총 개수 */
+export const MAX_PREFERENCE_PHOTOS = 10;
+
+export type PreferenceAnalysisStatus = 'queued' | 'running' | 'completed' | 'failed' | 'unknown';
+
+/** 취향 사진 분석 잡 상태. 업로드 응답과 상태 조회가 같은 형태를 쓴다. */
+export interface PreferenceAnalysisJobDto {
+  jobId: string;
+  status: PreferenceAnalysisStatus;
+  /** 분석 완료한 사진 수 */
+  analyzed: number;
+  /** 이번 잡이 분석해야 할 사진 수 */
+  total: number;
+  /** 완료 시에만 채워지는 최종 취향 태그 */
+  tasteTags?: TasteTagDto;
+  /**
+   * 보관 중인 전체 사진 URL. **완료 시에만 채워진다** —
+   * 진행 중에는 조회할 이유가 없어 빈 배열이다(폴링마다 DB 를 보지 않기 위해).
+   */
+  photoUrls: string[];
+  /** 실패 사유 (status=failed) */
+  error?: string;
 }
