@@ -117,8 +117,9 @@ export class PreferenceAnalyzerController {
     );
 
     // 사진은 먼저 붙여 둔다 — 분석 전이라도 사용자가 올린 사진은 화면에 보여야 한다.
+    // 태그는 아직 안 바뀌었으므로 재임베딩이 없는 setPhotoUrls 로 저장한다.
     const nextUrls = [...currentUrls, ...photoUrls];
-    await this.preferencesService.upsert(user.id, { tasteTags: {}, photoUrls: nextUrls });
+    await this.preferencesService.setPhotoUrls(user.id, nextUrls);
 
     // 이전 잡이 재시도까지 실패해 아직 분석되지 않은 사진이 있으면 이번 잡에 같이 태운다.
     // 그러지 않으면 그 사진은 삭제 전까지 영영 무신호로 남는다.

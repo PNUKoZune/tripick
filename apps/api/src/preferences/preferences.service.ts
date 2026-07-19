@@ -38,10 +38,20 @@ export class PreferencesService {
     return this.repo.findOneBy({ userId });
   }
 
-  /** 취향 사진 URL 목록만 교체. photoUrls 는 임베딩에 영향 없어 재임베딩 불필요. */
-  async setPhotoUrls(userId: string, urls: string[]): Promise<PreferenceEntity | null> {
-    const pref = await this.repo.findOneBy({ userId });
-    if (!pref) return null;
+  /**
+   * 취향 사진 URL 목록만 교체한다.
+   * 태그가 그대로면 임베딩 텍스트도 그대로라 재임베딩(원격 호출)을 건너뛴다 —
+   * 업로드 직후처럼 아직 분석 결과가 없는 시점에 upsert 를 쓰면 임베딩만 헛돈다.
+   */
+  async setPhotoUrls(userId: string, urls: string[]): Promise<PreferenceEntity> {
+    const pref =
+      (await this.repo.findOneBy({ userId })) ??
+      this.repo.create({
+        userId,
+        tasteTags: { ...EMPTY_TASTE_TAGS },
+        profile: { ...DEFAULT_PROFILE },
+        photoTags: {},
+      });
     pref.photoUrls = urls;
     // 남지 않은 사진의 분석 결과는 버린다 — 재집계 대상에서 빠져야 한다.
     pref.photoTags = Object.fromEntries(

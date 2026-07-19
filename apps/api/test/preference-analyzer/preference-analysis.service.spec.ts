@@ -307,6 +307,26 @@ describe('PreferenceAnalysisService.getStatus', () => {
     expect(status).toMatchObject({ status: 'running', analyzed: 1, total: 2 });
   });
 
+  it('does not read preferences while the job is still running', async () => {
+    const findByUser = jest.fn();
+    const { service } = makeService({
+      findByUser,
+      queue: {
+        getJob: jest.fn().mockResolvedValue({
+          id: 'job-1',
+          data: { userId: 'u1', photoUrls: ['a'] },
+          progress: 0,
+          getState: jest.fn().mockResolvedValue('active'),
+        }),
+      },
+    });
+
+    await service.getStatus('job-1', 'u1');
+
+    // 3초마다 폴링하므로 진행 중 DB 조회는 잡당 수십 번의 헛일이 된다.
+    expect(findByUser).not.toHaveBeenCalled();
+  });
+
   it('returns the final taste tags once completed', async () => {
     const finalTags = tags({ food: ['cafe'], confidence: 0.8 });
     const { service } = makeService({

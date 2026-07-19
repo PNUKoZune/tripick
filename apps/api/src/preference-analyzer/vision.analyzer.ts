@@ -64,11 +64,7 @@ export class VisionAnalyzer {
 
   constructor(private readonly config: ConfigService) {}
 
-  /** 태그만 필요한 호출자용 얇은 래퍼. 실패 여부가 필요하면 analyzePhoto 를 쓴다. */
-  async analyzeImage(imageUrl: string): Promise<TasteTagDto> {
-    return (await this.analyzePhoto(imageUrl)).tags;
-  }
-
+  /** 사진 한 장을 분석한다. 여러 장은 호출자(분석 잡)가 순차로 돌린다. */
   async analyzePhoto(imageUrl: string): Promise<VisionResult> {
     // vision 전용 서버를 따로 띄운 경우에만 분리, 기본은 플래너와 같은 LLM 서버(mmproj 로드됨)
     const baseUrl = this.config.get<string>(
@@ -122,12 +118,6 @@ export class VisionAnalyzer {
     }
   }
 
-  async analyzeMultiple(imageUrls: string[]): Promise<TasteTagDto> {
-    if (imageUrls.length === 0) return { ...EMPTY_TAGS };
-    const results = await this.mapWithConcurrency(imageUrls, (url) => this.analyzeImage(url));
-    return this.aggregate(results);
-  }
-
   /**
    * 사진별 분석 결과를 하나의 취향 태그로 합친다.
    * 사진을 추가·삭제할 때 이미 분석해 둔 결과로 다시 부를 수 있도록 분석과 분리해 둔다.
@@ -162,7 +152,8 @@ export class VisionAnalyzer {
       `environment: ${ENVIRONMENT_TAGS.join(' | ')}`,
       '',
       'confidence 는 이 사진만으로 취향을 판단한 확신도(0.0~1.0).',
-      '카테고리당 최대 2개까지만. 애매하면 넣지 말 것.',
+      // 상수와 어긋나면 상수를 올려도 모델이 안 따라온다 — 한 곳에서만 정한다.
+      `카테고리당 최대 ${MAX_TAGS_PER_CATEGORY}개까지만. 애매하면 넣지 말 것.`,
       '',
       'JSON 형식:',
       '{"food":[],"mood":[],"environment":[],"confidence":0.0}',
@@ -172,7 +163,7 @@ export class VisionAnalyzer {
   /**
    * 모델 응답에서 취향 태그를 뽑아낸다.
    * llama.cpp 는 response_format 을 줘도 코드펜스나 짧은 서두를 붙일 때가 있어
-   * 첫 JSON 객체만 잘라 쓰고, 정해진 값에 없는 태그는 버린다.
+   * 바깥쪽 중괄호 구간만 잘라 쓰고, 정해진 값에 없는 태그는 버린다.
    */
   private parseTasteTags(content: string): TasteTagDto {
     const json = this.extractJsonObject(content);
@@ -203,6 +194,10 @@ export class VisionAnalyzer {
     };
   }
 
+  /**
+   * 첫 '{' 부터 마지막 '}' 까지를 잘라낸다.
+   * 서두·코드펜스는 이걸로 걷히고, 그래도 깨진 JSON 이면 호출부의 파싱 실패로 걸러진다.
+   */
   private extractJsonObject(content: string): string | null {
     const start = content.indexOf('{');
     const end = content.lastIndexOf('}');
@@ -241,26 +236,6 @@ export class VisionAnalyzer {
       .sort((a, b) => b[1] - a[1])
       .slice(0, MAX_TAGS_PER_CATEGORY)
       .map(([tag]) => tag);
-  }
-
-  /** 로컬 LLM 서버는 보통 단일 인스턴스라 동시 요청을 몰면 오히려 느려진다. */
-  private async mapWithConcurrency<T, R>(
-    items: T[],
-    fn: (item: T) => Promise<R>,
-  ): Promise<R[]> {
-    const limit = Math.max(1, this.readNumber('LLM_VISION_CONCURRENCY', 1));
-    const results = new Array<R>(items.length);
-    let cursor = 0;
-
-    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (cursor < items.length) {
-        const index = cursor++;
-        results[index] = await fn(items[index] as T);
-      }
-    });
-
-    await Promise.all(workers);
-    return results;
   }
 
   private clampConfidence(value: number): number {

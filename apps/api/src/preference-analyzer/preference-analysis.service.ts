@@ -78,8 +78,9 @@ export class PreferenceAnalysisService {
     if (job.data.userId !== userId) return null;
 
     const state = await job.getState();
-    const preference = await this.preferencesService.findByUser(userId);
     const progress = typeof job.progress === 'number' ? job.progress : 0;
+    // 진행 중에는 DB 를 보지 않는다 — 3초마다 폴링하므로 잡당 수십 번의 불필요한 조회가 된다.
+    const preference = state === 'completed' ? await this.preferencesService.findByUser(userId) : null;
 
     return {
       jobId: String(job.id),
@@ -87,7 +88,7 @@ export class PreferenceAnalysisService {
       analyzed: progress,
       total: job.data.photoUrls.length,
       photoUrls: preference?.photoUrls ?? [],
-      ...(state === 'completed' && preference ? { tasteTags: preference.tasteTags } : {}),
+      ...(preference ? { tasteTags: preference.tasteTags } : {}),
       ...(state === 'failed' ? { error: job.failedReason ?? '분석에 실패했습니다.' } : {}),
     };
   }
