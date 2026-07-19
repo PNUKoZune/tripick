@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FiCheck,
@@ -333,8 +333,9 @@ export function PreferenceSetupForm() {
     },
   });
 
-  const photoTagsByUrl = new Map(
-    (photoTagsQuery.data ?? []).map((photo) => [photo.url, photo.tags]),
+  const photoTagsByUrl = useMemo(
+    () => new Map((photoTagsQuery.data ?? []).map((photo) => [photo.url, photo.tags])),
+    [photoTagsQuery.data],
   );
 
   function handleSubmit() {
