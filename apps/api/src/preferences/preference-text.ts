@@ -1,6 +1,9 @@
 import type {
   ActivityIntensity,
   CrowdPreference,
+  EnvironmentPreference,
+  FoodPreference,
+  MoodPreference,
   PreferenceProfileDto,
   TasteTagDto,
   ThemePreference,
@@ -15,6 +18,11 @@ import type {
  * 실제 임베딩 모델이 없을 때(해시 폴백)도 겹치도록 선호 테마를 **영문 태그로도** 병기하고
  * (THEME_TAGS), 의미 보강용 한국어 키워드를 함께 넣는다.
  * 불호 테마(dislikedThemes)는 양의 신호가 아니므로 텍스트에 포함하지 않는다.
+ *
+ * 토큰은 **가중치만큼 반복**해서 내보낸다. 원격 모델(평균 풀링)과 해시 폴백
+ * (토큰마다 벡터에 누적) 양쪽 모두 반복 횟수가 그대로 비중이 되기 때문이다.
+ * 단순 중복 제거를 쓰면 사진 분석이 뽑은 태그가 프로필 테마 확장 토큰에 묻히고,
+ * 두 소스가 같은 태그를 지목했다는 정보(합의)도 사라진다.
  */
 
 // FE THEME_TO_TASTE 와 동일한 place 태그 어휘. 해시 폴백 정합성 확보용.
@@ -68,6 +76,47 @@ const THEME_KEYWORDS: Record<ThemePreference, string[]> = {
   unique_space: ['이색 공간', '독립서점', '복합문화공간'],
 };
 
+/**
+ * 사진 분석 태그의 한국어 보강 키워드.
+ * 프로필 테마는 THEME_KEYWORDS 로 한국어 토큰을 얻는데 취향 태그는 영문 enum 뿐이라,
+ * 같은 신호라도 한국어 위주인 장소 텍스트와 겹칠 여지가 적었다.
+ */
+const TASTE_KEYWORDS: Record<
+  FoodPreference | MoodPreference | EnvironmentPreference,
+  string[]
+> = {
+  // food
+  korean: ['한식', '한정식', '백반'],
+  japanese: ['일식', '스시', '라멘'],
+  western: ['양식', '파스타', '스테이크'],
+  chinese: ['중식', '중화요리'],
+  vegan: ['비건', '채식', '샐러드'],
+  cafe: ['카페', '커피', '디저트'],
+  bunsik: ['분식', '떡볶이', '김밥'],
+  meat: ['고기', '구이', '갈비'],
+  seafood: ['해산물', '회', '해물'],
+  bakery: ['베이커리', '빵집', '제과'],
+  // mood
+  healing: ['힐링', '휴식', '한적한'],
+  adventure: ['액티비티', '체험', '모험'],
+  romantic: ['로맨틱', '분위기 좋은', '데이트'],
+  family: ['가족', '아이와 함께', '나들이'],
+  cultural: ['문화', '역사', '전시'],
+  nostalgic: ['레트로', '노포', '옛 정취'],
+  trendy: ['핫플레이스', '요즘 뜨는', '감성'],
+  luxury: ['프리미엄', '고급', '호캉스'],
+  // environment
+  nature: ['자연', '숲', '풍경'],
+  city: ['도심', '도시', '번화가'],
+  beach: ['바다', '해변', '해수욕장'],
+  mountain: ['산', '등산', '계곡'],
+  village: ['마을', '골목', '로컬'],
+  lake: ['호수', '강변', '수변'],
+  island: ['섬', '해상', '유람선'],
+  hotspring: ['온천', '스파', '찜질'],
+  nightview: ['야경', '전망', '노을'],
+};
+
 // 중립(기본) 값은 취향 신호가 아니므로 빈 배열 — 노이즈/제네릭 편향 방지.
 const PACE_KEYWORDS: Record<TravelPace, string[]> = {
   packed: ['알찬 일정', '많은 장소'],
@@ -87,27 +136,71 @@ const CROWD_KEYWORDS: Record<CrowdPreference, string[]> = {
   quiet: ['한적한', '조용한', '숨은 명소'],
 };
 
+/** 프로필에서 온 토큰의 기본 비중. */
+const PROFILE_WEIGHT = 1;
+/**
+ * 한 토큰이 반복될 수 있는 최대 횟수.
+ * 사진·프로필이 모두 지목한 고신뢰 태그(3+1=4)까지만 허용하고, 그 이상은 잘라
+ * 태그 하나가 벡터를 독점하지 않게 한다.
+ */
+const MAX_REPEAT = 4;
+
+/**
+ * 사진 분석 태그의 비중. confidence 가 높을수록 크게 잡는다.
+ * 0.0 → 1, 0.5 → 2, 1.0 → 3. 프로필(1)보다 최소 같거나 크다 —
+ * 사진은 사용자가 직접 고른 테마보다 표본은 적어도 구체적인 신호라서.
+ */
+function tasteWeight(confidence: number): number {
+  const safe = Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0;
+  return 1 + Math.round(safe * 2);
+}
+
 export function buildPreferenceText(
   tasteTags?: Partial<TasteTagDto>,
   profile?: Partial<PreferenceProfileDto>,
 ): string {
-  const tokens: string[] = [];
+  // 토큰별 비중 누적. 같은 토큰을 여러 소스가 지목하면 그만큼 더해진다.
+  const weights = new Map<string, number>();
+  const add = (token: string, weight: number) => {
+    if (!token) return;
+    weights.set(token, (weights.get(token) ?? 0) + weight);
+  };
 
-  tokens.push(...(tasteTags?.food ?? []));
-  tokens.push(...(tasteTags?.mood ?? []));
-  tokens.push(...(tasteTags?.environment ?? []));
+  const photoWeight = tasteWeight(tasteTags?.confidence ?? 0);
+  const tasteTagList = [
+    ...(tasteTags?.food ?? []),
+    ...(tasteTags?.mood ?? []),
+    ...(tasteTags?.environment ?? []),
+  ];
+  for (const tag of tasteTagList) {
+    add(tag, photoWeight);
+    // 한국어 보강 키워드는 태그 본체보다 한 단계 낮게 — 의미 보강이지 정본이 아니다.
+    for (const keyword of TASTE_KEYWORDS[tag] ?? []) add(keyword, Math.max(1, photoWeight - 1));
+  }
 
   for (const theme of profile?.likedThemes ?? []) {
-    tokens.push(...(THEME_TAGS[theme] ?? []));
-    tokens.push(...(THEME_KEYWORDS[theme] ?? []));
+    for (const tag of THEME_TAGS[theme] ?? []) add(tag, PROFILE_WEIGHT);
+    for (const keyword of THEME_KEYWORDS[theme] ?? []) add(keyword, PROFILE_WEIGHT);
   }
-  if (profile?.pace) tokens.push(...(PACE_KEYWORDS[profile.pace] ?? []));
+  if (profile?.pace) {
+    for (const keyword of PACE_KEYWORDS[profile.pace] ?? []) add(keyword, PROFILE_WEIGHT);
+  }
   if (profile?.activityIntensity) {
-    tokens.push(...(INTENSITY_KEYWORDS[profile.activityIntensity] ?? []));
+    for (const keyword of INTENSITY_KEYWORDS[profile.activityIntensity] ?? []) {
+      add(keyword, PROFILE_WEIGHT);
+    }
   }
-  if (profile?.crowdPreference) tokens.push(...(CROWD_KEYWORDS[profile.crowdPreference] ?? []));
+  if (profile?.crowdPreference) {
+    for (const keyword of CROWD_KEYWORDS[profile.crowdPreference] ?? []) {
+      add(keyword, PROFILE_WEIGHT);
+    }
+  }
 
-  const unique = [...new Set(tokens.filter(Boolean))];
+  // 비중이 큰 토큰부터, 비중만큼 반복해 늘어놓는다.
+  const tokens = [...weights.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .flatMap(([token, weight]) => Array<string>(Math.min(weight, MAX_REPEAT)).fill(token));
+
   // 취향 신호가 전혀 없으면 빈 문자열 반환 → 호출부에서 제네릭 벡터 저장을 건너뛴다.
-  return unique.join(', ');
+  return tokens.join(', ');
 }

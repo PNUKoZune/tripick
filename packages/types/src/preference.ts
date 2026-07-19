@@ -1,6 +1,47 @@
-export type FoodPreference = 'korean' | 'japanese' | 'western' | 'chinese' | 'vegan' | 'cafe';
-export type MoodPreference = 'healing' | 'adventure' | 'romantic' | 'family' | 'cultural';
-export type EnvironmentPreference = 'nature' | 'city' | 'beach' | 'mountain' | 'village';
+/**
+ * 취향 태그 어휘. 사진 분석(VisionAnalyzer)·장소 태깅(inferPlaceTags)·임베딩 직렬화가
+ * 모두 이 배열을 정본으로 쓴다. 여기에 값을 추가하면 장소 쪽 키워드(TAG_HINTS)도
+ * 같이 늘려야 매칭될 장소가 생긴다.
+ */
+export const FOOD_PREFERENCES = [
+  'korean',
+  'japanese',
+  'western',
+  'chinese',
+  'vegan',
+  'cafe',
+  'bunsik',
+  'meat',
+  'seafood',
+  'bakery',
+] as const;
+
+export const MOOD_PREFERENCES = [
+  'healing',
+  'adventure',
+  'romantic',
+  'family',
+  'cultural',
+  'nostalgic',
+  'trendy',
+  'luxury',
+] as const;
+
+export const ENVIRONMENT_PREFERENCES = [
+  'nature',
+  'city',
+  'beach',
+  'mountain',
+  'village',
+  'lake',
+  'island',
+  'hotspring',
+  'nightview',
+] as const;
+
+export type FoodPreference = (typeof FOOD_PREFERENCES)[number];
+export type MoodPreference = (typeof MOOD_PREFERENCES)[number];
+export type EnvironmentPreference = (typeof ENVIRONMENT_PREFERENCES)[number];
 export type TransportPreference = 'transit' | 'walk' | 'car' | 'rental_car';
 
 /**

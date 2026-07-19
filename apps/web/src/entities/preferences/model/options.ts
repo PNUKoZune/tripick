@@ -245,18 +245,29 @@ export const TASTE_TAG_LABELS: Record<string, string> = {
   chinese: '중식',
   vegan: '비건',
   cafe: '카페',
+  bunsik: '분식',
+  meat: '고기·구이',
+  seafood: '해산물',
+  bakery: '베이커리',
   // mood
   healing: '힐링',
   adventure: '액티비티',
   romantic: '로맨틱',
   family: '가족',
   cultural: '문화·역사',
+  nostalgic: '레트로',
+  trendy: '트렌디',
+  luxury: '프리미엄',
   // environment
   nature: '자연',
   city: '도시',
   beach: '바다',
   mountain: '산',
   village: '로컬 골목',
+  lake: '호수·강',
+  island: '섬',
+  hotspring: '온천·스파',
+  nightview: '야경·전망',
 };
 
 export const MEMBER_FOOD_OPTIONS = [
