@@ -1,4 +1,9 @@
-import type { PreferenceDto, PreferenceProfileDto, TasteTagDto } from '@tripick/types';
+import type {
+  PreferenceAnalysisJobDto,
+  PreferenceDto,
+  PreferenceProfileDto,
+  TasteTagDto,
+} from '@tripick/types';
 import { api } from '@/shared/api/client';
 
 export type PreferenceFormState = PreferenceProfileDto;
@@ -14,14 +19,32 @@ export const DEFAULT_PREFERENCE_FORM: PreferenceFormState = {
   crowdPreference: 'balanced',
 };
 
-/** 취향 사진 분석 결과 (vision analyzer → 취향 태그 추출) */
-export type PreferenceImageAnalysis = {
-  tasteTags: TasteTagDto;
-  /** Object Storage 에 보관된 원본 사진 URL */
-  photoUrls: string[];
-  embeddingId: string;
-  preferenceId: string;
-};
+/** 진행 중인 분석 잡 ID 를 새로고침·페이지 이동 뒤에도 복원하기 위한 키 */
+const ANALYSIS_JOB_KEY = 'tripick:preference-analysis-job';
+
+export function rememberAnalysisJob(jobId: string) {
+  try {
+    window.localStorage.setItem(ANALYSIS_JOB_KEY, jobId);
+  } catch {
+    // 프라이빗 모드 등에서 실패해도 분석 자체는 서버에서 계속된다.
+  }
+}
+
+export function readAnalysisJob(): string | null {
+  try {
+    return window.localStorage.getItem(ANALYSIS_JOB_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function forgetAnalysisJob() {
+  try {
+    window.localStorage.removeItem(ANALYSIS_JOB_KEY);
+  } catch {
+    // 무시
+  }
+}
 
 export function getMyPreferences(token: string) {
   return api.get<PreferenceDto | null>('/preferences', token);
@@ -35,18 +58,26 @@ export function savePreferences(token: string, profile: PreferenceFormState) {
   return api.put<PreferenceDto>('/preferences', { profile }, token);
 }
 
-/** 사용자가 올린 사진을 업로드해 취향 태그를 분석·저장한다. */
+/**
+ * 사진을 업로드하고 분석 잡을 등록한다.
+ * 분석은 수십 초 걸려 응답을 기다리지 않고, 잡 ID 로 상태를 따로 조회한다.
+ */
 export function analyzePreferenceImages(token: string, files: File[]) {
   const formData = new FormData();
   for (const file of files) {
     formData.append('images', file);
   }
-  return api.upload<PreferenceImageAnalysis>('/preference-analyzer/upload', formData, token);
+  return api.upload<PreferenceAnalysisJobDto>('/preference-analyzer/upload', formData, token);
 }
 
-/** 저장된 취향 사진 한 장을 삭제한다 (스토리지 원본 + URL 제거). */
+/** 분석 잡 진행 상태 조회. */
+export function getPreferenceAnalysisJob(token: string, jobId: string) {
+  return api.get<PreferenceAnalysisJobDto>(`/preference-analyzer/jobs/${jobId}`, token);
+}
+
+/** 저장된 취향 사진 한 장을 삭제한다 (스토리지 원본 + URL 제거 + 태그 재집계). */
 export function deletePreferencePhoto(token: string, url: string) {
-  return api.delete<{ photoUrls: string[] }>(
+  return api.delete<{ photoUrls: string[]; tasteTags?: TasteTagDto }>(
     `/preference-analyzer/photos?url=${encodeURIComponent(url)}`,
     token,
   );

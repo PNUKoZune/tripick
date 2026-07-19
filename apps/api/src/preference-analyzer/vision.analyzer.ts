@@ -107,9 +107,15 @@ export class VisionAnalyzer {
 
   async analyzeMultiple(imageUrls: string[]): Promise<TasteTagDto> {
     if (imageUrls.length === 0) return { ...EMPTY_TAGS };
-
     const results = await this.mapWithConcurrency(imageUrls, (url) => this.analyzeImage(url));
+    return this.aggregate(results);
+  }
 
+  /**
+   * 사진별 분석 결과를 하나의 취향 태그로 합친다.
+   * 사진을 추가·삭제할 때 이미 분석해 둔 결과로 다시 부를 수 있도록 분석과 분리해 둔다.
+   */
+  aggregate(results: TasteTagDto[]): TasteTagDto {
     // 태그가 하나도 안 나온 결과(실패·판별 불가)는 빈도·신뢰도 집계에서 제외한다.
     const contributing = results.filter(
       (r) => r.food.length + r.mood.length + r.environment.length > 0,

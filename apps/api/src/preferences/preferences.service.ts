@@ -43,6 +43,10 @@ export class PreferencesService {
     const pref = await this.repo.findOneBy({ userId });
     if (!pref) return null;
     pref.photoUrls = urls;
+    // 남지 않은 사진의 분석 결과는 버린다 — 재집계 대상에서 빠져야 한다.
+    pref.photoTags = Object.fromEntries(
+      Object.entries(pref.photoTags ?? {}).filter(([url]) => urls.includes(url)),
+    );
     return this.repo.save(pref);
   }
 
@@ -98,8 +102,9 @@ export class PreferencesService {
       throw new BadRequestException('기상 시간과 취침 시간은 달라야 합니다.');
     }
 
-    // photoUrls 는 지정된 경우에만 통째로 교체, 아니면 기존 유지
+    // photoUrls / photoTags 는 지정된 경우에만 통째로 교체, 아니면 기존 유지
     const nextPhotoUrls = dto?.photoUrls ?? pref?.photoUrls ?? [];
+    const nextPhotoTags = dto?.photoTags ?? pref?.photoTags ?? {};
 
     if (!pref) {
       pref = this.repo.create({
@@ -107,11 +112,13 @@ export class PreferencesService {
         tasteTags: nextTags,
         profile: nextProfile,
         photoUrls: nextPhotoUrls,
+        photoTags: nextPhotoTags,
       });
     } else {
       pref.tasteTags = nextTags;
       pref.profile = nextProfile;
       pref.photoUrls = nextPhotoUrls;
+      pref.photoTags = nextPhotoTags;
     }
 
     // 취향 태그 + 프로필을 임베딩해 preference_embeddings 에 유저당 1행으로 저장 → 검색 개인화 루프

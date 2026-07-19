@@ -1,5 +1,6 @@
 import {
   DeleteObjectCommand,
+  GetObjectCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -71,6 +72,27 @@ export class StorageService implements OnModuleInit {
       }),
     );
     return this.publicUrl(params.key);
+  }
+
+  /**
+   * 객체 본문을 그대로 읽는다.
+   * 비동기 잡이 Redis 에 이미지 바이트를 싣지 않고 키만 넘긴 뒤 다시 읽어오는 용도.
+   */
+  async getObject(key: string): Promise<{ body: Buffer; contentType: string }> {
+    if (!this.client || !this.bucket) {
+      throw new Error('Storage is not configured');
+    }
+    const res = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+    if (!res.Body) {
+      throw new Error(`Object has no body: ${key}`);
+    }
+    const bytes = await res.Body.transformToByteArray();
+    return {
+      body: Buffer.from(bytes),
+      contentType: res.ContentType ?? 'application/octet-stream',
+    };
   }
 
   async deleteObject(key: string): Promise<void> {
