@@ -1,5 +1,6 @@
 /// <reference types="jest" />
 
+import { ServiceUnavailableException } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import type { TasteTagDto } from '@tripick/types';
 import { PreferenceAnalysisService } from '../../src/preference-analyzer/preference-analysis.service';
@@ -10,8 +11,18 @@ function tags(partial: Partial<TasteTagDto> = {}): TasteTagDto {
   return { food: [], mood: [], environment: [], confidence: 0, ...partial };
 }
 
+/** analyzePhoto 목 — 성공 결과를 만든다. */
+function ok(partial: Partial<TasteTagDto> = {}) {
+  return { tags: tags(partial), ok: true };
+}
+
+/** analyzePhoto 목 — vision 호출 자체가 실패한 경우. */
+function failed() {
+  return { tags: tags(), ok: false };
+}
+
 function makeService(overrides: {
-  analyzeImage?: jest.Mock;
+  analyzePhoto?: jest.Mock;
   findByUser?: jest.Mock;
   upsert?: jest.Mock;
   getObject?: jest.Mock;
@@ -20,7 +31,7 @@ function makeService(overrides: {
 } = {}) {
   // aggregate 는 실제 구현을 쓴다 — 재집계 결과가 이 서비스의 핵심 산출물이라서.
   const visionAnalyzer = new VisionAnalyzer({ get: <T>(_k: string, d?: T) => d } as any);
-  visionAnalyzer.analyzeImage = overrides.analyzeImage ?? jest.fn().mockResolvedValue(tags());
+  visionAnalyzer.analyzePhoto = overrides.analyzePhoto ?? jest.fn().mockResolvedValue(ok());
 
   const preferencesService = {
     findByUser: overrides.findByUser ?? jest.fn().mockResolvedValue(null),
@@ -45,19 +56,24 @@ function makeService(overrides: {
   return { service, preferencesService, storage, notifications, queue, visionAnalyzer };
 }
 
-function makeJob(data: AnalyzePhotosJobData): Job<AnalyzePhotosJobData, any> {
+function makeJob(
+  data: AnalyzePhotosJobData,
+  attemptsMade = 0,
+): Job<AnalyzePhotosJobData, any> {
   return {
     id: 'job-1',
     data,
+    attemptsMade,
+    opts: { attempts: 3 },
     updateProgress: jest.fn().mockResolvedValue(undefined),
   } as unknown as Job<AnalyzePhotosJobData, any>;
 }
 
 describe('PreferenceAnalysisService.runJob', () => {
   it('analyzes only the newly uploaded photos', async () => {
-    const analyzeImage = jest.fn().mockResolvedValue(tags({ food: ['cafe'], confidence: 0.8 }));
+    const analyzePhoto = jest.fn().mockResolvedValue(ok({ food: ['cafe'], confidence: 0.8 }));
     const { service, storage } = makeService({
-      analyzeImage,
+      analyzePhoto,
       findByUser: jest.fn().mockResolvedValue({
         photoUrls: ['http://s/old.png', 'http://s/new.png'],
         photoTags: { 'http://s/old.png': tags({ food: ['korean'], confidence: 0.6 }) },
@@ -73,13 +89,13 @@ describe('PreferenceAnalysisService.runJob', () => {
     );
 
     // 기존 사진은 다시 분석하지 않는다 — 장당 30초가 넘기 때문.
-    expect(analyzeImage).toHaveBeenCalledTimes(1);
+    expect(analyzePhoto).toHaveBeenCalledTimes(1);
     expect(storage.getObject).toHaveBeenCalledWith('public/preferences/u1/new.png');
   });
 
   it('re-aggregates taste tags across old and new photo results', async () => {
     const { service, preferencesService } = makeService({
-      analyzeImage: jest.fn().mockResolvedValue(tags({ food: ['korean'], confidence: 0.9 })),
+      analyzePhoto: jest.fn().mockResolvedValue(ok({ food: ['korean'], confidence: 0.9 })),
       findByUser: jest.fn().mockResolvedValue({
         photoUrls: ['http://s/a.png', 'http://s/b.png', 'http://s/c.png'],
         photoTags: {
@@ -102,7 +118,7 @@ describe('PreferenceAnalysisService.runJob', () => {
 
   it('drops results for photos deleted while the job was running', async () => {
     const { service, preferencesService } = makeService({
-      analyzeImage: jest.fn().mockResolvedValue(tags({ food: ['cafe'], confidence: 0.8 })),
+      analyzePhoto: jest.fn().mockResolvedValue(ok({ food: ['cafe'], confidence: 0.8 })),
       // 분석 도중 사용자가 새 사진을 지워 photoUrls 에서 빠진 상황
       findByUser: jest.fn().mockResolvedValue({
         photoUrls: ['http://s/kept.png'],
@@ -121,7 +137,7 @@ describe('PreferenceAnalysisService.runJob', () => {
 
   it('reports progress per analyzed photo', async () => {
     const { service } = makeService({
-      analyzeImage: jest.fn().mockResolvedValue(tags({ food: ['cafe'], confidence: 0.5 })),
+      analyzePhoto: jest.fn().mockResolvedValue(ok({ food: ['cafe'], confidence: 0.5 })),
     });
     const job = makeJob({
       userId: 'u1',
@@ -131,14 +147,96 @@ describe('PreferenceAnalysisService.runJob', () => {
 
     await service.runJob(job);
 
-    expect(job.updateProgress).toHaveBeenNthCalledWith(1, 1);
-    expect(job.updateProgress).toHaveBeenNthCalledWith(2, 2);
+    // 첫 호출은 시작 시점의 기저(이미 분석된 장수 = 0), 이후 장마다 1씩
+    expect(job.updateProgress).toHaveBeenNthCalledWith(1, 0);
+    expect(job.updateProgress).toHaveBeenNthCalledWith(2, 1);
+    expect(job.updateProgress).toHaveBeenNthCalledWith(3, 2);
+  });
+
+  it('does not record a failed analysis as an empty result', async () => {
+    const upsert = jest.fn().mockResolvedValue({});
+    const { service } = makeService({
+      // 1장은 성공, 1장은 vision 호출 실패
+      analyzePhoto: jest
+        .fn()
+        .mockResolvedValueOnce(ok({ food: ['cafe'], confidence: 0.8 }))
+        .mockResolvedValueOnce(failed()),
+      findByUser: jest
+        .fn()
+        .mockResolvedValue({ photoUrls: ['http://s/1.png', 'http://s/2.png'], photoTags: {} }),
+      upsert,
+    });
+
+    await expect(
+      service.runJob(
+        makeJob({
+          userId: 'u1',
+          photoUrls: ['http://s/1.png', 'http://s/2.png'],
+          storageKeys: ['k/1.png', 'k/2.png'],
+        }),
+      ),
+    ).rejects.toThrow(/분석 실패/);
+
+    // 성공분은 저장하되 실패한 사진은 photoTags 에 넣지 않는다 —
+    // 빈 결과로 남으면 다음 잡이 건너뛰어 영영 무신호가 된다.
+    const [, dto] = upsert.mock.calls[0];
+    expect(Object.keys(dto.photoTags)).toEqual(['http://s/1.png']);
+  });
+
+  it('skips photos already analyzed by a previous attempt', async () => {
+    const analyzePhoto = jest.fn().mockResolvedValue(ok({ food: ['cafe'], confidence: 0.8 }));
+    const { service } = makeService({
+      analyzePhoto,
+      // 1번은 이전 시도에서 이미 분석됨
+      findByUser: jest.fn().mockResolvedValue({
+        photoUrls: ['http://s/1.png', 'http://s/2.png'],
+        photoTags: { 'http://s/1.png': tags({ food: ['korean'], confidence: 0.7 }) },
+      }),
+    });
+
+    await service.runJob(
+      makeJob(
+        {
+          userId: 'u1',
+          photoUrls: ['http://s/1.png', 'http://s/2.png'],
+          storageKeys: ['k/1.png', 'k/2.png'],
+        },
+        1,
+      ),
+    );
+
+    // 재시도가 처음부터 다시 분석하지 않는다
+    expect(analyzePhoto).toHaveBeenCalledTimes(1);
+  });
+
+  it('notifies only on the final failed attempt', async () => {
+    const sendToUser = jest.fn().mockResolvedValue(undefined);
+    const build = (attemptsMade: number) =>
+      makeService({
+        analyzePhoto: jest.fn().mockResolvedValue(failed()),
+        findByUser: jest.fn().mockResolvedValue({ photoUrls: ['http://s/1.png'], photoTags: {} }),
+        sendToUser,
+      }).service.runJob(
+        makeJob(
+          { userId: 'u1', photoUrls: ['http://s/1.png'], storageKeys: ['k/1.png'] },
+          attemptsMade,
+        ),
+      );
+
+    // 중간 재시도에서는 조용히 다시 던지기만 한다
+    await expect(build(0)).rejects.toThrow();
+    expect(sendToUser).not.toHaveBeenCalled();
+
+    await expect(build(2)).rejects.toThrow();
+    expect(sendToUser).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '취향 분석 실패' }),
+    );
   });
 
   it('notifies the user when analysis finishes', async () => {
     const sendToUser = jest.fn().mockResolvedValue(undefined);
     const { service } = makeService({
-      analyzeImage: jest.fn().mockResolvedValue(tags({ food: ['cafe'], confidence: 0.8 })),
+      analyzePhoto: jest.fn().mockResolvedValue(ok({ food: ['cafe'], confidence: 0.8 })),
       findByUser: jest.fn().mockResolvedValue({ photoUrls: ['http://s/1.png'], photoTags: {} }),
       sendToUser,
     });
@@ -151,6 +249,43 @@ describe('PreferenceAnalysisService.runJob', () => {
       expect.objectContaining({ userId: 'u1', type: 'general', title: '취향 분석 완료' }),
     );
   });
+});
+
+describe('PreferenceAnalysisService.enqueue', () => {
+  it('returns a queued job descriptor', async () => {
+    const { service } = makeService({
+      queue: { add: jest.fn().mockResolvedValue({ id: 7 }) },
+    });
+
+    const result = await service.enqueue(
+      { userId: 'u1', photoUrls: ['a', 'b'], storageKeys: ['k/a', 'k/b'] },
+      ['old', 'a', 'b'],
+    );
+
+    expect(result).toMatchObject({ jobId: '7', status: 'queued', analyzed: 0, total: 2 });
+  });
+
+  it('leaves retry policy to the global defaultJobOptions', async () => {
+    const add = jest.fn().mockResolvedValue({ id: 1 });
+    const { service } = makeService({ queue: { add } });
+
+    await service.enqueue({ userId: 'u1', photoUrls: ['a'], storageKeys: ['k/a'] }, ['a']);
+
+    const [, , opts] = add.mock.calls[0];
+    expect(opts).not.toHaveProperty('attempts');
+    expect(opts).not.toHaveProperty('backoff');
+  });
+
+  it('fails fast instead of hanging when Redis never answers', async () => {
+    // Redis 가 죽으면 queue.add 는 던지지도 끝나지도 않는다 (ioredis 오프라인 큐 버퍼링).
+    const { service } = makeService({
+      queue: { add: jest.fn().mockReturnValue(new Promise(() => {})) },
+    });
+
+    await expect(
+      service.enqueue({ userId: 'u1', photoUrls: ['a'], storageKeys: ['k/a'] }, ['a']),
+    ).rejects.toThrow(ServiceUnavailableException);
+  }, 15000);
 });
 
 describe('PreferenceAnalysisService.getStatus', () => {

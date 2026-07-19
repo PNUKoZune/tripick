@@ -37,6 +37,17 @@ const MAX_TAGS_PER_CATEGORY = 3;
 const EMPTY_TAGS: TasteTagDto = { food: [], mood: [], environment: [], confidence: 0 };
 
 /**
+ * 분석 결과 + 성공 여부.
+ *
+ * "분석은 됐는데 뚜렷한 취향이 없음"과 "호출이 실패함"은 둘 다 빈 태그로 보이지만
+ * 후자는 재시도해야 한다. 호출자가 구분할 수 있도록 ok 를 함께 돌려준다.
+ */
+export interface VisionResult {
+  tags: TasteTagDto;
+  ok: boolean;
+}
+
+/**
  * Vision Preference Analyzer
  *
  * 사용자가 직접 올린 사진 → 여행 취향 태그(Taste Tag) 추출.
@@ -53,7 +64,12 @@ export class VisionAnalyzer {
 
   constructor(private readonly config: ConfigService) {}
 
+  /** 태그만 필요한 호출자용 얇은 래퍼. 실패 여부가 필요하면 analyzePhoto 를 쓴다. */
   async analyzeImage(imageUrl: string): Promise<TasteTagDto> {
+    return (await this.analyzePhoto(imageUrl)).tags;
+  }
+
+  async analyzePhoto(imageUrl: string): Promise<VisionResult> {
     // vision 전용 서버를 따로 띄운 경우에만 분리, 기본은 플래너와 같은 LLM 서버(mmproj 로드됨)
     const baseUrl = this.config.get<string>(
       'LLM_VISION_BASE_URL',
@@ -96,12 +112,13 @@ export class VisionAnalyzer {
       );
 
       const content = res.data.choices[0]?.message.content ?? '';
-      return this.parseTasteTags(content);
+      // 응답은 받았으니 성공 — 태그가 비어도 "이 사진엔 뚜렷한 취향이 없다"는 유효한 결론이다.
+      return { tags: this.parseTasteTags(content), ok: true };
     } catch (err) {
       this.logger.error(
         `Vision 분석 실패: ${err instanceof Error ? err.message : String(err)}`,
       );
-      return { ...EMPTY_TAGS };
+      return { tags: { ...EMPTY_TAGS }, ok: false };
     }
   }
 

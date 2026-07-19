@@ -56,6 +56,11 @@ const ACCEPTED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 /** 분석 잡 상태를 다시 물어보는 간격. 사진 1장에 30초 넘게 걸려 촘촘히 볼 이유가 없다. */
 const JOB_POLL_INTERVAL_MS = 3000;
 
+/** 잡이 만료·삭제돼 더 볼 게 없는 상태(404)인지. 그 외 오류는 일시적인 것으로 본다. */
+function isJobGone(error: unknown): boolean {
+  return Boolean(error) && (error as { status?: number }).status === 404;
+}
+
 export function PreferenceSetupForm() {
   const queryClient = useQueryClient();
   const hydrated = useRef(false);
@@ -132,12 +137,15 @@ export function PreferenceSetupForm() {
       // 끝났거나 잡이 만료돼 사라졌으면 그만 물어본다.
       return status && status !== 'queued' && status !== 'running' ? false : JOB_POLL_INTERVAL_MS;
     },
-    // 잡이 만료돼 404 면 재시도할 이유가 없다.
-    retry: false,
+    // 잡이 사라진(404) 게 아니면 일시적 오류로 보고 몇 번 더 물어본다.
+    retry: (failureCount, error) => !isJobGone(error) && failureCount < 3,
   });
 
   const analysisJob = analysisJobQuery.data;
-  const analyzing = analysisJob?.status === 'queued' || analysisJob?.status === 'running';
+  // 폴링이 일시적으로 실패해도 배너를 유지한다 — 잡은 서버에서 계속 돌고 있다.
+  const analyzing =
+    Boolean(activeJobId) &&
+    (!analysisJob || analysisJob.status === 'queued' || analysisJob.status === 'running');
 
   // 분석이 끝나면 결과를 화면에 반영하고 잡 추적을 끝낸다.
   useEffect(() => {
@@ -172,9 +180,13 @@ export function PreferenceSetupForm() {
     });
   }, [activeJobId, analysisJob, queryClient]);
 
-  // 잡이 만료돼 조회에 실패하면 조용히 추적만 멈춘다 (분석 결과는 취향 조회로 들어온다).
+  /**
+   * 잡이 만료돼 사라진(404) 경우에만 추적을 끝낸다.
+   * 일시적인 네트워크·서버 오류로 추적을 버리면 서버에선 분석이 도는데 화면은
+   * 진행률을 잃고, localStorage 까지 지워져 새로고침으로도 복구되지 않는다.
+   */
   useEffect(() => {
-    if (!analysisJobQuery.error) return;
+    if (!isJobGone(analysisJobQuery.error)) return;
     setActiveJobId(null);
     forgetAnalysisJob();
     queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
@@ -716,10 +728,11 @@ function ChoiceCard({
  * 분석 진행 표시. 사진 1장에 30초 넘게 걸려 "몇 장 중 몇 장" 을 같이 보여준다.
  * 큐 대기 중에는 아직 분석한 장이 없으므로 진행률 대신 대기 문구를 쓴다.
  */
-function AnalysisProgress({ job }: { job?: PreferenceAnalysisJobDto | null }) {
+function AnalysisProgress({ job }: { job: PreferenceAnalysisJobDto | null | undefined }) {
   const total = job?.total ?? 0;
   const analyzed = job?.analyzed ?? 0;
-  const queued = job?.status === 'queued';
+  // 아직 첫 조회 응답이 없거나(또는 폴링이 잠깐 실패) 대기 중이면 진행률 대신 대기 문구를 쓴다.
+  const queued = !job || job.status === 'queued';
   const percent = total > 0 ? Math.round((analyzed / total) * 100) : 0;
 
   return (

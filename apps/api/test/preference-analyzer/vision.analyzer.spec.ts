@@ -132,6 +132,31 @@ describe('VisionAnalyzer.analyzeImage', () => {
   });
 });
 
+describe('VisionAnalyzer.analyzePhoto', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('marks a real answer as ok even when no tag was found', async () => {
+    mockedAxios.post.mockResolvedValue(
+      llmReply('{"food":[],"mood":[],"environment":[],"confidence":0.4}'),
+    );
+
+    const result = await new VisionAnalyzer(config()).analyzePhoto('data:image/png;base64,AAAA');
+
+    // "분석했으나 취향 없음" 은 유효한 결론이라 재시도 대상이 아니다
+    expect(result.ok).toBe(true);
+    expect(result.tags.food).toEqual([]);
+  });
+
+  it('marks a failed call as not ok so the caller can retry', async () => {
+    mockedAxios.post.mockRejectedValue(new Error('timeout of 90000ms exceeded'));
+
+    const result = await new VisionAnalyzer(config()).analyzePhoto('data:image/png;base64,AAAA');
+
+    expect(result.ok).toBe(false);
+    expect(result.tags).toEqual({ food: [], mood: [], environment: [], confidence: 0 });
+  });
+});
+
 describe('VisionAnalyzer.analyzeMultiple', () => {
   beforeEach(() => jest.clearAllMocks());
 

@@ -120,10 +120,35 @@ export class PreferenceAnalyzerController {
     const nextUrls = [...currentUrls, ...photoUrls];
     await this.preferencesService.upsert(user.id, { tasteTags: {}, photoUrls: nextUrls });
 
+    // 이전 잡이 재시도까지 실패해 아직 분석되지 않은 사진이 있으면 이번 잡에 같이 태운다.
+    // 그러지 않으면 그 사진은 삭제 전까지 영영 무신호로 남는다.
+    const stranded = this.pendingPhotos(currentUrls, existing?.photoTags ?? {});
+
     return this.analysisService.enqueue(
-      { userId: user.id, photoUrls, storageKeys },
+      {
+        userId: user.id,
+        photoUrls: [...stranded.urls, ...photoUrls],
+        storageKeys: [...stranded.keys, ...storageKeys],
+      },
       nextUrls,
     );
+  }
+
+  /** 분석 결과가 없는 기존 사진과 그 스토리지 키. 키를 못 구하는 외부 URL 은 건너뛴다. */
+  private pendingPhotos(
+    urls: string[],
+    photoTags: Record<string, unknown>,
+  ): { urls: string[]; keys: string[] } {
+    const pendingUrls: string[] = [];
+    const pendingKeys: string[] = [];
+    for (const url of urls) {
+      if (photoTags[url]) continue;
+      const key = this.storage.keyFromPublicUrl(url);
+      if (!key) continue;
+      pendingUrls.push(url);
+      pendingKeys.push(key);
+    }
+    return { urls: pendingUrls, keys: pendingKeys };
   }
 
   @Get('jobs/:jobId')

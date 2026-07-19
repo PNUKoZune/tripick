@@ -66,6 +66,25 @@ describe('PreferenceAnalyzerController.uploadImages', () => {
     );
   });
 
+  it('re-queues photos a previous job failed to analyze', async () => {
+    const { controller, analysisService } = makeController({
+      findByUser: jest.fn().mockResolvedValue({
+        photoUrls: ['http://s/done.png', 'http://s/stranded.png'],
+        // stranded 는 이전 잡이 재시도까지 실패해 결과가 없다
+        photoTags: { 'http://s/done.png': tags({ food: ['cafe'], confidence: 0.8 }) },
+      }),
+    });
+
+    await controller.uploadImages(user, [file()] as any);
+
+    const [jobData] = analysisService.enqueue.mock.calls[0];
+    expect(jobData.photoUrls).toHaveLength(2);
+    expect(jobData.photoUrls[0]).toBe('http://s/stranded.png');
+    expect(jobData.storageKeys[0]).toBe('stranded.png');
+    // 이미 분석된 사진은 다시 태우지 않는다
+    expect(jobData.photoUrls).not.toContain('http://s/done.png');
+  });
+
   it('appends to the photos already stored', async () => {
     const { controller, preferencesService } = makeController({
       findByUser: jest.fn().mockResolvedValue({ photoUrls: ['http://s/old.png'] }),
