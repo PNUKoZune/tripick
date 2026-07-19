@@ -1,8 +1,10 @@
 import type {
   PreferenceAnalysisJobDto,
   PreferenceDto,
+  PreferencePhotoTagsDto,
   PreferenceProfileDto,
   TasteTagDto,
+  TasteTagValue,
 } from '@tripick/types';
 import { api } from '@/shared/api/client';
 
@@ -77,8 +79,29 @@ export function getPreferenceAnalysisJob(token: string, jobId: string) {
 
 /** 저장된 취향 사진 한 장을 삭제한다 (스토리지 원본 + URL 제거 + 태그 재집계). */
 export function deletePreferencePhoto(token: string, url: string) {
-  return api.delete<{ photoUrls: string[]; tasteTags?: TasteTagDto }>(
-    `/preference-analyzer/photos?url=${encodeURIComponent(url)}`,
+  return api.delete<{
+    photoUrls: string[];
+    tasteTags?: TasteTagDto;
+    photos: PreferencePhotoTagsDto[];
+  }>(`/preference-analyzer/photos?url=${encodeURIComponent(url)}`, token);
+}
+
+/** 사진별로 어떤 태그가 나왔고 켜져 있는지 조회한다. */
+export function getPreferencePhotoTags(token: string) {
+  return api.get<PreferencePhotoTagsDto[]>('/preference-analyzer/photos/tags', token);
+}
+
+/**
+ * 특정 사진에서 나온 특정 태그를 켜거나 끈다.
+ * 분석 결과 자체는 남아 있어 다시 켜면 복원된다.
+ */
+export function togglePreferencePhotoTag(
+  token: string,
+  input: { url: string; tag: TasteTagValue; enabled: boolean },
+) {
+  return api.patch<{ tasteTags: TasteTagDto; photos: PreferencePhotoTagsDto[] }>(
+    '/preference-analyzer/photos/tags',
+    input,
     token,
   );
 }

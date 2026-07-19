@@ -2,6 +2,7 @@ export const queryKeys = {
   preferences: {
     me: ['preferences', 'me'] as const,
     analysisJob: (jobId: string) => ['preferences', 'analysis-job', jobId] as const,
+    photoTags: ['preferences', 'photo-tags'] as const,
   },
   trips: {
     members: (tripId: string) => ['trips', tripId, 'members'] as const,
