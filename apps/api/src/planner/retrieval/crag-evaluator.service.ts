@@ -1,9 +1,20 @@
 import { Injectable } from '@nestjs/common';
-import type { Coordinates } from '@tripick/types';
+import { FOOD_PREFERENCES, type Coordinates } from '@tripick/types';
 import { inferPlaceTags, normalizeDestinationRegion, tasteTagsToKeywords } from './place-seeds';
 import type { CandidatePlace, CragScore, RawPlaceCandidate, RetrievalContext } from './types';
 
-const INDOOR_TAGS = new Set(['cafe', 'cultural', 'city', 'korean', 'family']);
+// 비·웨이팅 재계획에서 실내 후보를 우대할 때 쓰는 태그.
+// 식음(FOOD 전체)은 실내라 어휘에서 직접 파생 — 새 음식 태그를 추가해도 자동 포함된다.
+// mood·environment 는 실내로 볼 수 있는 값만 골라 넣는다 (전시·가족·핫플·프리미엄·도심·온천).
+const INDOOR_TAGS = new Set<string>([
+  ...FOOD_PREFERENCES,
+  'cultural',
+  'family',
+  'trendy',
+  'luxury',
+  'city',
+  'hotspring',
+]);
 
 @Injectable()
 export class CragEvaluatorService {

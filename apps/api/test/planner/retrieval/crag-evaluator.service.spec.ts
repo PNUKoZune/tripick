@@ -81,6 +81,37 @@ describe('CragEvaluatorService', () => {
     expect(ranked[0]!.confidence).toBeGreaterThan(ranked[1]!.confidence);
   });
 
+  it('treats newly added dining/onsen tags as indoor on weather reroute', () => {
+    // 확장된 어휘(seafood·hotspring 등)도 실내 후보로 대접받아야 비 오는 날 우선된다.
+    const weatherContext: RetrievalContext = {
+      userId: 'user-1',
+      destination: '부산',
+      trigger: 'weather',
+      tasteTags: { food: ['korean'], mood: ['healing'], environment: ['nature'], confidence: 0.5 },
+    };
+    const indoor: RawPlaceCandidate = {
+      id: 'indoor',
+      name: '실내 후보',
+      category: 'restaurant',
+      address: '부산 수영구 어딘가로 1',
+      coordinates: { lat: 35.15, lng: 129.11 },
+      source: 'seed',
+      tags: ['seafood'],
+      destinationRegion: 'busan',
+    };
+    const outdoor: RawPlaceCandidate = {
+      ...indoor,
+      id: 'outdoor',
+      name: '실외 후보',
+      tags: ['beach'],
+    };
+
+    const ranked = service.rank([outdoor, indoor], weatherContext);
+
+    expect(ranked[0]!.id).toBe('indoor');
+    expect(ranked[0]!.confidence).toBeGreaterThan(ranked[1]!.confidence);
+  });
+
   it('keeps selected candidates diverse before filling the rest', () => {
     const ranked = service.rank(
       [

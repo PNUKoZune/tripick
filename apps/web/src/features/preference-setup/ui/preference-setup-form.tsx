@@ -496,18 +496,26 @@ export function PreferenceSetupForm() {
                 저장된 사진 {savedPhotoUrls.length}장 · 태그를 눌러 켜고 끌 수 있어요
               </div>
               <ul className="space-y-2">
-                {savedPhotoUrls.map((url) => (
-                  <SavedPhotoRow
-                    key={url}
-                    url={url}
-                    tags={photoTagsByUrl.get(url) ?? []}
-                    busy={togglePhotoTagMutation.isPending || deletePhotoMutation.isPending}
-                    onToggle={(tag, enabled) =>
-                      togglePhotoTagMutation.mutate({ url, tag, enabled })
-                    }
-                    onDelete={() => deletePhotoMutation.mutate(url)}
-                  />
-                ))}
+                {savedPhotoUrls.map((url) => {
+                  const photoTags = photoTagsByUrl.get(url) ?? [];
+                  return (
+                    <SavedPhotoRow
+                      key={url}
+                      url={url}
+                      tags={photoTags}
+                      // 태그가 아직 없는 사진은, 분석 잡이 돌거나 목록을 불러오는 중이면
+                      // "취향 없음" 이 아니라 "분석 중" 으로 보여야 한다.
+                      pending={
+                        photoTags.length === 0 && (analyzing || photoTagsQuery.isLoading)
+                      }
+                      busy={togglePhotoTagMutation.isPending || deletePhotoMutation.isPending}
+                      onToggle={(tag, enabled) =>
+                        togglePhotoTagMutation.mutate({ url, tag, enabled })
+                      }
+                      onDelete={() => deletePhotoMutation.mutate(url)}
+                    />
+                  );
+                })}
               </ul>
             </div>
           ) : null}
@@ -765,12 +773,14 @@ function ChoiceCard({
 function SavedPhotoRow({
   url,
   tags,
+  pending,
   busy,
   onToggle,
   onDelete,
 }: {
   url: string;
   tags: Array<{ tag: TasteTagValue; enabled: boolean }>;
+  pending: boolean;
   busy: boolean;
   onToggle: (tag: TasteTagValue, enabled: boolean) => void;
   onDelete: () => void;
@@ -806,6 +816,11 @@ function SavedPhotoRow({
               </button>
             ))}
           </div>
+        ) : pending ? (
+          <p className="flex items-center gap-1.5 text-[13px] font-medium text-[color:var(--text-tertiary)]">
+            <FiLoader className="size-3.5 animate-spin" aria-hidden />
+            취향을 분석하고 있어요…
+          </p>
         ) : (
           <p className="text-[13px] font-medium text-[color:var(--text-tertiary)]">
             이 사진에서는 뚜렷한 취향을 찾지 못했어요.
