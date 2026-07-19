@@ -138,6 +138,9 @@ export class WeatherAlertService implements OnModuleInit, OnModuleDestroy {
 
     // 같은 격자에 떨어지는 날끼리는 예보를 1회만 조회한다.
     const forecastByGrid = new Map<string, Map<string, ParsedForecast>>();
+    // 수신자는 여행 단위로 같으므로 비 오는 날을 처음 만났을 때 1회만 조회한다
+    // (비 예보가 없는 여행은 아예 조회하지 않는다).
+    let recipients: string[] | null = null;
     let alerted = 0;
 
     for (const candidate of candidates) {
@@ -154,12 +157,16 @@ export class WeatherAlertService implements OnModuleInit, OnModuleDestroy {
       const rainy = this.evaluateDay(candidate, forecasts);
       if (!rainy) continue;
 
+      recipients ??= (await this.tripMembersService.getNotificationTargets(trip.id)).userIds;
+      // 받을 사람이 없으면 남은 일자도 마찬가지다 — 키를 선점하지 않고 이 여행을 끝낸다.
+      if (recipients.length === 0) break;
+
       // 발송 전에 중복 억제 키를 선점한다 — 발송 후에 기록하면 중간 실패 시
       // BullMQ 재시도가 같은 알림을 다시 보낸다.
       if (!(await this.claimAlert(trip.id, rainy.iso, now))) continue;
 
       try {
-        await this.notify(trip, rainy);
+        await this.notify(trip, rainy, recipients);
         alerted += 1;
       } catch (err) {
         // 선점한 키는 일부러 되돌리지 않는다 — 일부 멤버가 이미 받았을 수 있어
@@ -235,11 +242,10 @@ export class WeatherAlertService implements OnModuleInit, OnModuleDestroy {
   /**
    * 여행 수신자(owner + accepted 멤버) 전원에게 "변경할까요?" 알림을 보낸다.
    * InboxService.create 가 수신 토글 확인 + FCM 발송까지 담당한다.
+   *
+   * 수신자는 호출부가 여행당 1회 조회해 넘긴다 — 일자마다 다시 조회할 이유가 없다.
    */
-  private async notify(trip: TripEntity, rainy: RainyDay): Promise<void> {
-    const { userIds } = await this.tripMembersService.getNotificationTargets(trip.id);
-    if (userIds.length === 0) return;
-
+  private async notify(trip: TripEntity, rainy: RainyDay, userIds: string[]): Promise<void> {
     const label = trip.title || '여행';
     const places = rainy.exposedPlaces.join(', ');
     const body =

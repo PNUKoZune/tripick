@@ -291,6 +291,51 @@ describe('WeatherAlertService', () => {
     expect(inboxService.create).toHaveBeenCalledTimes(1);
   });
 
+  it('수신자를 여행당 1회만 조회한다 — 일자마다 재조회하지 않는다', async () => {
+    const { service, tripMembersService, inboxService } = build({
+      trips: [trip({ startDate: '2026-07-19', endDate: '2026-07-21' })],
+      items: [
+        item(1, 'attraction', '1일차'),
+        item(2, 'attraction', '2일차'),
+        item(3, 'attraction', '3일차'),
+      ],
+      forecasts: new Map([
+        ...forecastMap('20260719', 4),
+        ...forecastMap('20260720', 4),
+        ...forecastMap('20260721', 4),
+      ]),
+    });
+
+    await service.scanUpcomingTrips(NOW);
+
+    expect(inboxService.create).toHaveBeenCalledTimes(3);
+    expect(tripMembersService.getNotificationTargets).toHaveBeenCalledTimes(1);
+  });
+
+  it('비 예보가 없으면 수신자를 조회하지 않는다', async () => {
+    const { service, tripMembersService } = build({
+      items: [item(1, 'attraction', '불국사')],
+      forecasts: forecastMap('20260719', 1),
+    });
+
+    await service.scanUpcomingTrips(NOW);
+
+    expect(tripMembersService.getNotificationTargets).not.toHaveBeenCalled();
+  });
+
+  it('수신자가 없으면 억제 키를 선점하지 않는다', async () => {
+    const { service, inboxService } = build({
+      items: [item(1, 'attraction', '불국사')],
+      forecasts: forecastMap('20260719', 4),
+      userIds: [],
+    });
+
+    expect(await service.scanUpcomingTrips(NOW)).toBe(0);
+    expect(inboxService.create).not.toHaveBeenCalled();
+    // 키를 선점하지 않았으므로 멤버가 생긴 뒤 스캔하면 정상 발송된다
+    expect(mockRedisSet).not.toHaveBeenCalled();
+  });
+
   it('Redis 장애 시에도 알림은 보낸다 — 누락보다 중복을 택한다', async () => {
     const { service, inboxService } = build({
       items: [item(1, 'attraction', '불국사')],
