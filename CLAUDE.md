@@ -6,7 +6,7 @@
 
 ## 1. 서비스 개요
 
-사용자의 이미지 취향 분석과 실시간 맥락(웨이팅·경로 이탈·날씨)을 반영하여 국내 여행 일정을 자동 생성·재계획하는 AI 에이전트 서비스. React Native 앱(Next.js WebView) + NestJS 백엔드 + 프라이빗 LLM 추론 인프라로 구성.
+사용자의 이미지 취향 분석과 실시간 맥락(웨이팅·경로 이탈)을 반영하여 국내 여행 일정을 자동 생성·재계획하고, 날씨 변화 시 일정 조정을 추천하는 AI 에이전트 서비스. React Native 앱(Next.js WebView) + NestJS 백엔드 + 프라이빗 LLM 추론 인프라로 구성.
 
 ---
 
@@ -39,12 +39,12 @@
 
 ### AI AGENT LAYER (Core)
 
-- **Planner Agent Orchestrator**
-  - Tool Router: 외부 tool 호출 라우팅
-  - Local LLM Call: LLM 추론 실행
-  - Prompt Templates: 시나리오별 템플릿 관리
-  - JSON Plan Generator: 일정 JSON 생성
-  - Constraint Validation Loop: 제약 조건 반복 검증
+- **Planner Agent Orchestrator** (`PlannerService`)
+  - Tool Orchestration: `PlannerService`가 retrieval·weather·route helper 를 코드로 직접 조율(결정적 순서). LLM 이 툴 선택에 개입하는 agentic 라우팅 아님 — 별도 `ToolRouter` 컴포넌트 없음
+  - Local LLM Call: LLM 추론 실행 (`PlannerAgentService`)
+  - Prompt Building: 단일 파라미터화 프롬프트에 `trigger`(waiting·deviation·weather·manual)·notes 를 데이터로 주입해 시나리오 분기. 시나리오별 개별 템플릿 파일은 없음
+  - JSON Plan Generator: 일정 JSON 생성·검증(candidateId 검증, 중복 슬롯 제거)
+  - Constraint Validation Loop: AI draft 검증 실패 시 후보 rotate 기반 결정적 재생성 최대 3회 (LLM 재호출 아님)
   - _"Coordinates tools, LLM and constraints to produce a valid itinerary."_
 
 - **Local LLM Serving ★** (프라이빗 추론 인프라)
@@ -55,7 +55,7 @@
   - session/cache: Redis 연동
 
 - **Vision Preference Analyzer**
-  - Instagram Photo Analysis
+  - Gallery Photo Analysis (사용자 갤러리에서 직접 선택·업로드)
   - Taste Tag Extraction
   - Food / Mood / Nature-City Preference 분류
   - photo metadata → pgvector 임베딩 저장
@@ -72,14 +72,14 @@
 - **pgvector**: taste embeddings, place embeddings (RAG + CRAG 검색)
 - **Redis**: session cache, pub/sub, API cache
 - **BullMQ**: replanning jobs, async AI tasks
-- **Object Storage**: Instagram photos, extracted metadata
+- **Object Storage**: 사용자 업로드 사진(갤러리), extracted metadata
 
 ### EXTERNAL TOOL LAYER
 
 - **카카오맵 / Local API**: place search, map rendering
 - **카카오 모빌리티 / ODsay**: route ETA (car), public transit
 - **Korea Meteorological Admin.**: weather forecast (기상청 단기예보, nx·ny 격자 변환)
-- **Instagram Graph API**: user media import (MVP는 직접 업로드 우선, Graph API는 추후)
+- **사용자 갤러리 직접 업로드**: 취향 사진 수집 (Instagram Graph API는 API 한계로 미채택, 갤러리 직접 선택으로 대체)
 - **Firebase FCM**: push notification
 
 ### MONITORING LAYER
@@ -105,7 +105,7 @@
 ### 취향 분석 파이프라인
 
 ```
-이미지 업로드 (직접 or Instagram)
+이미지 업로드 (사용자 갤러리에서 직접 선택)
 → Vision Preference Analyzer (GPT-4o Vision / Triton)
 → Taste Tag Extraction (Food·Mood·Nature-City)
 → pgvector 임베딩 저장
@@ -217,8 +217,8 @@ src/
 | 관광정보    | 한국관광공사 방문자 추이 예측 | 혼잡도 예측, 시간대 배치 최적화       | 향후 30일 예측          |
 | 날씨        | 기상청 단기예보               | 날씨·강수 예보 (최대 5일)             | nx·ny 격자 변환 필수    |
 | 인증        | 카카오 OAuth 2.0              | 로그인, JWT 발급                      |                         |
-| 이미지      | Instagram Graph API           | 취향 사진 수집                        | MVP는 직접 업로드 우선  |
-| 푸시        | Firebase FCM + APNs           | 재계획·날씨 변화 푸시 알림            | notifee 라이브러리 조합 |
+| 이미지      | 사용자 갤러리 직접 업로드     | 취향 사진 수집                        | Instagram Graph API는 API 한계로 미채택 |
+| 푸시        | Firebase FCM + APNs           | 재계획·날씨 추천 푸시 알림            | notifee 라이브러리 조합 |
 
 **길찾기 API 주의사항**
 
@@ -241,6 +241,7 @@ src/
 - WebSocket 업그레이드 헤더(`Upgrade`, `Connection`)는 Nginx에서 별도 처리 필요
 - Geolocation(`navigator.geolocation`)은 HTTPS 환경에서만 동작, 로컬은 `localhost` 예외
 - Android WebView에서 geolocation 이중 권한 처리 필요 (`onPermissionRequest` prop)
-- Instagram Graph API는 앱 검수 리스크로 MVP에서는 직접 이미지 업로드 우선 적용
+- 취향 사진은 사용자 갤러리에서 직접 선택·업로드로 수집 (Instagram Graph API는 API 한계·앱 검수 리스크로 미채택)
+- 날씨 변화는 자동 재계획을 트리거하지 않고 일정 조정을 "추천"(inbox 알림)만 한다. 실제 재계획은 사용자가 확인 후 수동 요청 (`trigger: 'weather'`)
 - 모든 외부 API는 추상화된 이름(Object Storage, 지도 API 등)으로 인터페이스 설계, 특정 서비스 교체 시 환경변수만 변경
 - BullMQ Worker: `attempts: 3`, `backoff: 2000` 재시도 설정 기본 적용
