@@ -96,11 +96,6 @@ export function TripProgressTimeline({
                     지금
                   </span>
                 ) : null}
-                {item.hasWaiting ? (
-                  <span className="rounded-full bg-[#FFF4E5] px-2 py-0.5 text-[10px] font-bold text-[#FF8A00]">
-                    웨이팅{item.waitingMinutes ? ` ${item.waitingMinutes}분` : ''}
-                  </span>
-                ) : null}
               </div>
               <div className="mt-1 text-[15px] font-bold leading-5 text-[#191F28]">{item.name}</div>
               <div className="mt-0.5 text-[12px] font-medium text-[#8B95A1]">

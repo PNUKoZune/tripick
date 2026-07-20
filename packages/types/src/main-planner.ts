@@ -57,8 +57,6 @@ export interface PlannerItineraryItemDto {
   memo?: string;
   /** 카카오 장소 ID — 있으면 카카오맵 장소 페이지 링크에 사용 */
   kakaoPlaceId?: string;
-  waitingMinutes?: number;
-  hasWaiting: boolean;
 }
 
 /** 일정 항목 신규 추가 요청 */
@@ -121,7 +119,6 @@ export interface PlannerTripMetaDto {
   };
   stats: {
     totalItems: number;
-    waitingCount: number;
     estimatedTravelKm: number;
   };
   weather: PlannerWeatherDto[];
@@ -211,7 +208,6 @@ export interface PlannerAlternativeDto {
 export interface PlannerAlternativeResponseDto {
   itemId: string;
   itemName: string;
-  waitingMinutes: number;
   /** 실데이터(카카오/pgvector) 기반 후보가 하나라도 포함됐는지 */
   realtime: boolean;
   alternatives: PlannerAlternativeDto[];

@@ -259,13 +259,11 @@ export class KakaoLocalService {
   private buildKeywords(context: RetrievalContext): string[] {
     const tasteKeywords = tasteTagsToKeywords(context.tasteTags).slice(0, 4);
     const triggerKeywords =
-      context.trigger === 'waiting'
-        ? ['근처 카페', '대기 적은 맛집', '실내 관광']
-        : context.trigger === 'weather'
-          ? ['실내 관광', '박물관', '카페']
-          : context.trigger === 'deviation'
-            ? ['근처 관광지', '근처 카페']
-            : ['관광지', '맛집', '카페'];
+      context.trigger === 'weather'
+        ? ['실내 관광', '박물관', '카페']
+        : context.trigger === 'deviation'
+          ? ['근처 관광지', '근처 카페']
+          : ['관광지', '맛집', '카페'];
 
     const keywords = [
       ...tasteKeywords.map((tag) => `${context.destination} ${tag}`),

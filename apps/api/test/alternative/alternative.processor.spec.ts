@@ -9,7 +9,7 @@ function job(over: Partial<Job<ReplanRequestDto>> = {}): Job<ReplanRequestDto> {
   return {
     id: 'job-1',
     name: REPLAN_JOB,
-    data: { tripId: 'trip-1', trigger: 'waiting', waitingMinutes: 30 },
+    data: { tripId: 'trip-1', trigger: 'deviation' },
     opts: { attempts: 3 },
     attemptsMade: 0,
     ...over,
@@ -49,7 +49,7 @@ describe('AlternativeProcessor', () => {
     await processor.process(job());
 
     expect(planner.replan).toHaveBeenCalledWith(
-      expect.objectContaining({ tripId: 'trip-1', trigger: 'waiting' }),
+      expect.objectContaining({ tripId: 'trip-1', trigger: 'deviation' }),
     );
     expect(gateway.pushReplanResult).toHaveBeenCalledTimes(1);
     const result = gateway.pushReplanResult.mock.calls[0][0];

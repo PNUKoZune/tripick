@@ -9,7 +9,7 @@ describe('CragEvaluatorService', () => {
   const busanContext: RetrievalContext = {
     userId: 'user-1',
     destination: '부산',
-    trigger: 'waiting',
+    trigger: 'manual',
     tasteTags: {
       food: ['cafe'],
       mood: ['romantic'],
@@ -49,36 +49,6 @@ describe('CragEvaluatorService', () => {
     expect(ranked[0]!.id).toBe('right-region');
     expect(ranked[0]!.crag.matchedTags).toEqual(['cafe', 'beach', 'romantic']);
     expect(ranked[1]!.crag.penalties).toContain('destination-mismatch');
-  });
-
-  it('prefers indoor or waiting-friendly places for waiting events', () => {
-    const candidates: RawPlaceCandidate[] = [
-      {
-        id: 'restaurant',
-        name: '기장 해산물 식당',
-        category: 'restaurant',
-        address: '부산 기장군 기장해안로 266',
-        coordinates: { lat: 35.1906, lng: 129.2231 },
-        source: 'seed',
-        tags: ['korean', 'family', 'beach'],
-        destinationRegion: 'busan',
-      },
-      {
-        id: 'cafe',
-        name: '광안리 브런치 카페',
-        category: 'cafe',
-        address: '부산 수영구 광안해변로 219',
-        coordinates: { lat: 35.1532, lng: 129.1185 },
-        source: 'seed',
-        tags: ['cafe', 'beach', 'romantic'],
-        destinationRegion: 'busan',
-      },
-    ];
-
-    const ranked = service.rank(candidates, busanContext);
-
-    expect(ranked[0]!.id).toBe('cafe');
-    expect(ranked[0]!.confidence).toBeGreaterThan(ranked[1]!.confidence);
   });
 
   it('treats newly added dining/onsen tags as indoor on weather reroute', () => {

@@ -2,25 +2,22 @@
 
 type Props = {
   onClick?: () => void;
-  /** 웨이팅 등 긴급 톤(빨강). 기본은 파랑 */
-  urgent?: boolean;
   className?: string;
   /** 지정 시 아이콘 옆에 라벨을 함께 노출하는 pill 형태로 렌더 (툴팁 생략) */
   label?: string;
 };
 
-const colorClass = (urgent: boolean) =>
-  urgent ? 'bg-[#F04452] hover:bg-[#E0303E]' : 'bg-[#3182F6] hover:bg-[#1B64DA]';
+const BUTTON_COLOR = 'bg-[#3182F6] hover:bg-[#1B64DA]';
 
 /** 일정 변경(대안 전환) 버튼. label 이 없으면 아이콘 원형 + hover 툴팁, 있으면 pill. */
-export function ChangeScheduleButton({ onClick, urgent = false, className = '', label }: Props) {
+export function ChangeScheduleButton({ onClick, className = '', label }: Props) {
   if (label) {
     return (
       <button
         type="button"
         onClick={onClick}
         aria-label={label}
-        className={`flex h-8 items-center gap-1 rounded-full px-2.5 text-[12px] font-bold text-white transition active:translate-y-px ${colorClass(urgent)} ${className}`}
+        className={`flex h-8 items-center gap-1 rounded-full px-2.5 text-[12px] font-bold text-white transition active:translate-y-px ${BUTTON_COLOR} ${className}`}
       >
         <SwapIcon />
         {label}
@@ -33,7 +30,7 @@ export function ChangeScheduleButton({ onClick, urgent = false, className = '', 
         type="button"
         onClick={onClick}
         aria-label="일정 변경"
-        className={`flex size-8 items-center justify-center rounded-full text-white transition active:translate-y-px ${colorClass(urgent)}`}
+        className={`flex size-8 items-center justify-center rounded-full text-white transition active:translate-y-px ${BUTTON_COLOR}`}
       >
         <SwapIcon />
       </button>

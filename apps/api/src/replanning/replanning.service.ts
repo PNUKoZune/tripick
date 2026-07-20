@@ -13,7 +13,7 @@ export class ReplanningService {
   ) {}
 
   async enqueue(userId: string, dto: ReplanRequestDto): Promise<ReplanJobDto> {
-    // owner 뿐 아니라 accepted 멤버도 웨이팅/이탈 신고로 재계획을 트리거할 수 있다.
+    // owner 뿐 아니라 accepted 멤버도 이탈 신고·수동 요청으로 재계획을 트리거할 수 있다.
     const canAccess = await this.tripMembersService.canAccessTrip(dto.tripId, userId);
     if (!canAccess) {
       throw new ForbiddenException();

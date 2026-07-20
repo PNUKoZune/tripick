@@ -7,7 +7,7 @@ import type {
   PlannerTripDto,
 } from '@tripick/types';
 
-import { ChangeScheduleButton, Chip } from '@/shared/ui';
+import { ChangeScheduleButton } from '@/shared/ui';
 import { PlannerMap } from '@/widgets/planner-map';
 
 type Props = {
@@ -96,12 +96,7 @@ export function TripMapPanel({ trip, items, onSelectItem }: Props) {
                     </div>
                   </div>
                 </button>
-                {item.hasWaiting ? <Chip tone="error">웨이팅</Chip> : null}
-                <ChangeScheduleButton
-                  onClick={() => onSelectItem(item)}
-                  urgent={item.hasWaiting}
-                  className="shrink-0"
-                />
+                <ChangeScheduleButton onClick={() => onSelectItem(item)} className="shrink-0" />
               </div>
             </li>
           );

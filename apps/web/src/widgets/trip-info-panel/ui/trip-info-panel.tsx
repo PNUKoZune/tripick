@@ -46,13 +46,8 @@ export function TripInfoPanel({ trip }: Props) {
 
       <SurfaceCard padding="sm">
         <SectionLabel title="일정 통계" description="이번 여행을 한눈에 볼 수 있는 숫자입니다." />
-        <div className="mt-2 grid grid-cols-3 gap-2">
+        <div className="mt-2 grid grid-cols-2 gap-2">
           <StatTile label="총 일정" value={`${meta.stats.totalItems}개`} />
-          <StatTile
-            label="웨이팅"
-            value={`${meta.stats.waitingCount}건`}
-            tone={meta.stats.waitingCount > 0 ? 'warning' : 'neutral'}
-          />
           <StatTile label="예상 이동" value={`${meta.stats.estimatedTravelKm}km`} />
         </div>
       </SurfaceCard>

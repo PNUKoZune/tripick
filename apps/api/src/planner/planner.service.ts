@@ -36,7 +36,6 @@ const BUDGET_HINT: Record<ReplanBudget, string> = {
 
 interface GenerateOptions {
   trigger?: ReplanRequestDto['trigger'];
-  waitingMinutes?: number;
   deviatedItemId?: string;
   currentLocation?: ReplanRequestDto['currentLocation'];
   /** 사용자 자유 텍스트 요청. 검색·프롬프트 notes 에 합쳐진다 */
@@ -95,7 +94,6 @@ export class PlannerService {
 
     return this.buildAndStoreItinerary(trip, {
       trigger: request.trigger,
-      ...(request.waitingMinutes !== undefined ? { waitingMinutes: request.waitingMinutes } : {}),
       ...(request.deviatedItemId !== undefined ? { deviatedItemId: request.deviatedItemId } : {}),
       ...(request.currentLocation !== undefined ? { currentLocation: request.currentLocation } : {}),
       ...(request.note !== undefined ? { note: request.note } : {}),
@@ -159,7 +157,6 @@ export class PlannerService {
       weatherHint,
       ...(tasteTags !== undefined ? { tasteTags } : {}),
       ...(options.trigger !== undefined ? { trigger: options.trigger } : {}),
-      ...(options.waitingMinutes !== undefined ? { waitingMinutes: options.waitingMinutes } : {}),
     });
 
     const draftContext: DraftBuildContext = {
@@ -226,7 +223,6 @@ export class PlannerService {
     context: DraftBuildContext,
   ): Promise<ItineraryItemDto[]> {
     const { trip, dayCount, itemsPerDay, wakeTime, tasteTags, options, weatherHint } = context;
-    const waitingPadding = options.waitingMinutes ? Math.min(options.waitingMinutes, 90) : 0;
     const created: CreateItineraryItemDto[] = [];
 
     for (let day = 1; day <= dayCount; day += 1) {
@@ -251,9 +247,6 @@ export class PlannerService {
           : 0;
 
         currentAt = new Date(currentAt.getTime() + travelTimeMin * 60000);
-        if (order === 1 && waitingPadding > 0) {
-          currentAt = new Date(currentAt.getTime() + waitingPadding * 60000);
-        }
         currentAt = this.alignToOpeningHours(currentAt, seed.openingHours);
 
         const item: CreateItineraryItemDto = {
@@ -456,9 +449,6 @@ export class PlannerService {
       ? `AI planner 생성: ${agentMemo}`
       : `AI planner fallback: ${agentMemo}`;
 
-    if (options.trigger === 'waiting') {
-      return `${base}; ${agentEvidence}; ${cragEvidence}; 웨이팅 ${options.waitingMinutes ?? 0}분 반영해 실내/대기 친화 장소로 교체`;
-    }
     if (options.trigger === 'manual') {
       return `${base}; ${agentEvidence}; ${cragEvidence}; 수동 재계획 요청 반영`;
     }

@@ -6,7 +6,7 @@
 
 ## 1. 서비스 개요
 
-사용자의 이미지 취향 분석과 실시간 맥락(웨이팅·경로 이탈)을 반영하여 국내 여행 일정을 자동 생성·재계획하고, 날씨 변화 시 일정 조정을 추천하는 AI 에이전트 서비스. React Native 앱(Next.js WebView) + NestJS 백엔드 + 프라이빗 LLM 추론 인프라로 구성.
+사용자의 이미지 취향 분석과 실시간 맥락(경로 이탈)을 반영하여 국내 여행 일정을 자동 생성·재계획하고, 날씨·혼잡 변화 시 일정 조정을 추천하는 AI 에이전트 서비스. React Native 앱(Next.js WebView) + NestJS 백엔드 + 프라이빗 LLM 추론 인프라로 구성.
 
 ---
 
@@ -15,7 +15,7 @@
 ### CLIENT LAYER
 
 - **React Native Mobile App**
-  - Location Tracking, Trip Progress, Waiting Report
+  - Location Tracking, Trip Progress
   - Push Notification, WebView Container
   - REST API → NestJS API Gateway
 - **Next.js WebView / Web App** (Deployed on Vercel)
@@ -42,7 +42,7 @@
 - **Planner Agent Orchestrator** (`PlannerService`)
   - Tool Orchestration: `PlannerService`가 retrieval·weather·route helper 를 코드로 직접 조율(결정적 순서). LLM 이 툴 선택에 개입하는 agentic 라우팅 아님 — 별도 `ToolRouter` 컴포넌트 없음
   - Local LLM Call: LLM 추론 실행 (`PlannerAgentService`)
-  - Prompt Building: 단일 파라미터화 프롬프트에 `trigger`(waiting·deviation·weather·manual)·notes 를 데이터로 주입해 시나리오 분기. 시나리오별 개별 템플릿 파일은 없음
+  - Prompt Building: 단일 파라미터화 프롬프트에 `trigger`(deviation·weather·manual)·notes 를 데이터로 주입해 시나리오 분기. 시나리오별 개별 템플릿 파일은 없음
   - JSON Plan Generator: 일정 JSON 생성·검증(candidateId 검증, 중복 슬롯 제거)
   - Constraint Validation Loop: AI draft 검증 실패 시 후보 rotate 기반 결정적 재생성 최대 3회 (LLM 재호출 아님)
   - _"Coordinates tools, LLM and constraints to produce a valid itinerary."_
@@ -94,7 +94,7 @@
 ### 실시간 재계획 플로우 (Realtime Replanning Flow)
 
 ```
-① Waiting reported / route deviation
+① Route deviation reported
 → ② BullMQ replanning job 등록
 → ③ Tool Router queries maps / weather / routes
 → ④ Local LLM generates alt. itinerary
@@ -148,7 +148,7 @@ src/
 │       └── constraint.engine.ts   # 영업시간·이동시간·경로 검증 루프
 │
 ├── alternative/    # AlternativeModule (독립 도메인)
-│   ├── alternative.controller.ts  # 웨이팅·이탈 이벤트 수신
+│   ├── alternative.controller.ts  # 경로 이탈 이벤트 수신
 │   ├── alternative.processor.ts   # BullMQ Worker
 │   └── alternative.gateway.ts     # WebSocket push
 │
@@ -159,7 +159,7 @@ src/
 
 **모듈 분리 기준**
 
-- **독립 Module**: 트리거가 Planner와 다른 것 (PreferenceModule=온보딩, AlternativeModule=웨이팅·이탈 이벤트, NotificationModule=공통 유틸)
+- **독립 Module**: 트리거가 Planner와 다른 것 (PreferenceModule=온보딩, AlternativeModule=경로 이탈 이벤트, NotificationModule=공통 유틸)
 - **PlannerModule 내부 Helper**: Planner가 일정 생성·수정할 때만 호출되는 것 (Weather·Route·Preference·ScheduleConstraint)
 
 ---

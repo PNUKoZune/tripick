@@ -114,15 +114,14 @@ describe('Travel AI planner E2E', () => {
     const socket = await connectSocket(accessToken, trip.id);
     const pushed = waitForReplan(socket);
 
-    const job = await post<ReplanJobDto>('/alternative/waiting', {
+    const job = await post<ReplanJobDto>('/alternative/deviation', {
       tripId: trip.id,
-      trigger: 'waiting',
-      waitingMinutes: 35,
+      trigger: 'deviation',
       currentLocation: itinerary[0]?.coordinates,
     });
 
     expect(job.status).toBe('pending');
-    expect(job.trigger).toBe('waiting');
+    expect(job.trigger).toBe('deviation');
 
     const result = await pushed;
     socket.close();
@@ -132,11 +131,11 @@ describe('Travel AI planner E2E', () => {
     expect(result.updatedItems?.length).toBeGreaterThanOrEqual(3);
     // 재계획 반영 여부는 항목 이름으로 본다. 재계획 사유도 memo 에 쓰지 않는다 —
     // 쓰면 사용자가 직접 남긴 메모를 덮어쓴다.
-    expect(result.updatedItems?.some((item) => item.name.includes('waiting 대응'))).toBe(true);
+    expect(result.updatedItems?.some((item) => item.name.includes('deviation 대응'))).toBe(true);
     expect(result.updatedItems?.every((item) => !item.memo)).toBe(true);
 
     const replanned = await get<ItineraryItemDto[]>(`/trips/${trip.id}/itinerary`);
-    expect(replanned.some((item) => item.name.includes('waiting 대응'))).toBe(true);
+    expect(replanned.some((item) => item.name.includes('deviation 대응'))).toBe(true);
     expect(replanned.every((item) => isWithinKstBounds(item.scheduledAt, item.durationMin, '09:00', '22:00'))).toBe(true);
   }, 120000);
 

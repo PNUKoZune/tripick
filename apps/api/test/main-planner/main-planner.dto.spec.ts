@@ -26,7 +26,7 @@ describe('Main planner DTO validation', () => {
           role: 'companion',
         },
       ],
-      notes: '웨이팅 적고 걷기 적은 코스',
+      notes: '사람 적고 걷기 적은 코스',
     });
 
     await expect(validate(dto)).resolves.toHaveLength(0);
