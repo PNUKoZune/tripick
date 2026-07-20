@@ -82,6 +82,10 @@ export default function App() {
   // foreground service 로 잡은 위치를 이 정보로 서버에 직접 POST 한다.
   const locationConfigRef = useRef<{ apiBaseUrl: string; accessToken: string } | null>(null);
   const lastServerReportRef = useRef(0);
+  // 마지막으로 받은 위치 + 하트비트 타이머. 위치는 이동 기반으로만 갱신돼 정지 시 콜백이 끊기므로,
+  // 하트비트가 마지막 위치를 주기 재보고해 서버 캐시를 신선하게 유지한다(정지 no-show 판정 가능).
+  const lastLocationRef = useRef<{ lat: number; lng: number; accuracy?: number } | null>(null);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // 앱이 종료 상태에서 푸시 탭으로 켜졌을 때, WebView 로드가 끝나기 전 도착한 탭을 보관했다가 flush.
   const pendingTapRef = useRef<Record<string, string> | null>(null);
   const [canGoBack, setCanGoBack] = useState(false);
@@ -260,6 +264,7 @@ export default function App() {
    * 웹이 LOCATION_AUTH 로 인증정보를 넘기기 전이면 no-op. 스로틀로 과보고를 막고 실패는 무시한다.
    */
   const reportLocationToServer = useCallback((lat: number, lng: number, accuracy?: number) => {
+    lastLocationRef.current = { lat, lng, accuracy };
     const config = locationConfigRef.current;
     if (!config) return;
 
@@ -285,6 +290,14 @@ export default function App() {
    *   (distanceFilter 10m 로 배터리·네트워크 절약)
    */
   const startTracking = useCallback(() => {
+    // 하트비트: 위치 콜백이 끊겨도(정지) 마지막 위치를 주기 재보고해 서버 캐시를 신선하게 유지.
+    if (!heartbeatRef.current) {
+      heartbeatRef.current = setInterval(() => {
+        const l = lastLocationRef.current;
+        if (l) reportLocationToServer(l.lat, l.lng, l.accuracy);
+      }, LOCATION_REPORT_THROTTLE_MS);
+    }
+
     // Android: foreground service 네이티브 모듈 우선
     if (LocationTracking) {
       if (nativeSubsRef.current.length > 0) return; // 이미 추적 중
@@ -329,6 +342,10 @@ export default function App() {
   }, [reportLocationToServer]);
 
   const stopTracking = useCallback(() => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
     if (LocationTracking) {
       LocationTracking.stop();
       nativeSubsRef.current.forEach((sub) => sub.remove());

@@ -37,10 +37,11 @@ export const LOCATION_STALE_MS = 10 * 60_000;
 export const LOCATION_TTL_SEC = 15 * 60;
 
 /**
- * 미도착 알림 중복 억제 TTL(초). (여행, 사용자, 일차)당 1회만 보내, 하루 여러 항목을 놓쳐도
- * 알림이 도배되지 않게 한다. 남은 일정 시간을 덮을 만큼(6시간)이면 충분하고 자동 만료된다.
+ * 미도착 알림 중복 억제 키의 최소 TTL(초). 실제 억제는 "그 항목의 KST 일자가 끝날 때까지"로
+ * 계산한다 — 하루 일정이 6시간을 넘겨도 (여행, 사용자, 일차)당 1회 보장이 깨지지 않게.
+ * (고정 6시간이면 오전에 알린 뒤 오후 항목에서 키가 만료돼 같은 날 재알림되던 문제를 막는다.)
  */
-export const ARRIVAL_DEDUPE_TTL_SEC = 6 * 60 * 60;
+export const ARRIVAL_DEDUPE_MIN_TTL_SEC = 60;
 
 /**
  * 반복 잡 등록 응답 대기 상한(ms). Redis 무응답 시 queue.add 는 던지지 않고

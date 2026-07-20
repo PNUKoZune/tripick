@@ -35,7 +35,9 @@ interface Params {
  * - **브라우저 단독**: 웹이 직접 `POST /live/location`(스로틀 60초). 실패해도 조용히 무시한다.
  */
 export function useReportLiveLocation({ position, enabled = true }: Params) {
-  const lastSentAtRef = useRef(0);
+  // 최신 위치를 ref 로 들고 있다가 하트비트가 읽는다 — 위치가 갱신되지 않아도(정지) 재보고하려고.
+  const positionRef = useRef(position);
+  positionRef.current = position;
 
   // RN: 네이티브에 인증정보를 넘겨 보고 주체를 위임한다. token 이 바뀌면 다시 넘긴다.
   useEffect(() => {
@@ -50,18 +52,25 @@ export function useReportLiveLocation({ position, enabled = true }: Params) {
   }, [enabled]);
 
   // 브라우저 단독: 웹이 직접 보고. RN 이면 네이티브가 담당하므로 웹은 보내지 않는다(중복 방지).
+  // 하트비트로 최신 위치를 주기적으로 보낸다 — 위치 갱신은 이동 기반이라 사용자가 멈춰 있으면
+  // 끊기는데, 그러면 서버 캐시가 stale 돼 "안 움직이는 no-show" 를 못 잡는다. 마지막 위치를
+  // 계속 재보고해 캐시를 신선하게 유지한다.
   useEffect(() => {
-    if (!enabled || !position) return;
+    if (!enabled) return;
     if (getReactNativeWebView()) return;
 
-    const now = Date.now();
-    if (now - lastSentAtRef.current < REPORT_THROTTLE_MS) return;
-    lastSentAtRef.current = now;
+    const report = () => {
+      const p = positionRef.current;
+      if (!p) return;
+      void reportLiveLocation({
+        lat: p.lat,
+        lng: p.lng,
+        ...(p.accuracy !== undefined ? { accuracy: p.accuracy } : {}),
+      }).catch(() => undefined);
+    };
 
-    void reportLiveLocation({
-      lat: position.lat,
-      lng: position.lng,
-      ...(position.accuracy !== undefined ? { accuracy: position.accuracy } : {}),
-    }).catch(() => undefined);
-  }, [position, enabled]);
+    report(); // 위치가 이미 있으면 즉시 1회
+    const id = setInterval(report, REPORT_THROTTLE_MS);
+    return () => clearInterval(id);
+  }, [enabled]);
 }

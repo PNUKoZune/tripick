@@ -1,13 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, In, Repository } from 'typeorm';
-import { haversineMeters } from '@tripick/utils';
+import { addDaysToIsoDate, haversineMeters, toKstIsoDate } from '@tripick/utils';
 import { ItineraryItemEntity } from '../itinerary/itinerary-item.entity';
 import { TripEntity } from '../trips/trip.entity';
 import { InboxService } from '../inbox/inbox.service';
 import { TripMembersService } from '../trip-members/trip-members.service';
 import { LiveLocationService } from './live-location.service';
 import {
+  ARRIVAL_DEDUPE_MIN_TTL_SEC,
   ARRIVAL_GRACE_MIN,
   ARRIVAL_LATE_LIMIT_MIN,
   ARRIVAL_RADIUS_M,
@@ -128,7 +129,9 @@ export class ArrivalAlertService {
     if (distance <= ARRIVAL_RADIUS_M) return false;
 
     // 발송 직전에 선점 — 발송 후 기록하면 중간 실패 시 재시도가 중복 발송한다.
-    if (!(await this.liveLocation.claimAlert(trip.id, userId, item.day))) return false;
+    // 억제 기간은 그 항목의 KST 일자 끝까지라, 하루 일정이 길어도 (여행,사용자,일차)당 1회만.
+    const ttlSec = this.dedupeTtlSec(item, now);
+    if (!(await this.liveLocation.claimAlert(trip.id, userId, item.day, ttlSec))) return false;
 
     try {
       await this.notify(trip, item, userId);
@@ -162,5 +165,16 @@ export class ArrivalAlertService {
         place: item.name,
       },
     });
+  }
+
+  /**
+   * 중복 억제 키 TTL(초) — 그 항목의 KST 일자가 끝날 때(다음날 00:00 KST)까지 남은 시간.
+   * 하루 일정이 6시간을 넘겨도 오후 항목에서 키가 만료돼 재알림되지 않게 한다.
+   */
+  private dedupeTtlSec(item: ItineraryItemEntity, now: Date): number {
+    const nextDayIso = addDaysToIsoDate(toKstIsoDate(item.scheduledAt), 1);
+    const endOfDayKst = Date.parse(`${nextDayIso}T00:00:00+09:00`);
+    const remainSec = Math.ceil((endOfDayKst - now.getTime()) / 1000);
+    return Math.max(remainSec, ARRIVAL_DEDUPE_MIN_TTL_SEC);
   }
 }

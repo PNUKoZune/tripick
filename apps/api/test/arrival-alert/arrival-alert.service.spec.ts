@@ -193,4 +193,22 @@ describe('ArrivalAlertService', () => {
     expect(ARRIVAL_RADIUS_M).toBe(500);
     expect(inboxService.create).toHaveBeenCalledTimes(1);
   });
+
+  it('중복 억제 TTL 을 그 항목의 KST 일자 끝까지로 잡는다 — 하루 일정이 6h 넘어도 1회', async () => {
+    // KST 09:15 시작 항목. 고정 6시간이면 15:15 에 풀려 오후 항목이 재알림되던 문제를 막는다.
+    const scheduledAt = new Date('2026-07-20T00:15:00Z'); // = KST 2026-07-20 09:15
+    const now = new Date('2026-07-20T00:30:00Z'); // = KST 09:30
+    const { service, liveLocation } = build({
+      items: [item({ scheduledAt })],
+      locations: { u1: loc(FAR) },
+    });
+
+    await service.scanDueItems(now);
+
+    const ttlSec = liveLocation.claimAlert.mock.calls[0][3] as number;
+    const expected = Math.ceil((Date.parse('2026-07-21T00:00:00+09:00') - now.getTime()) / 1000);
+    expect(ttlSec).toBe(expected);
+    // 6시간(21600) 을 넘겨 하루 남은 일정을 전부 덮는다
+    expect(ttlSec).toBeGreaterThan(6 * 60 * 60);
+  });
 });

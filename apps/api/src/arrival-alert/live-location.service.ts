@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
-import { ARRIVAL_DEDUPE_TTL_SEC, LOCATION_TTL_SEC } from './arrival-alert.constants';
+import { LOCATION_TTL_SEC } from './arrival-alert.constants';
 
 /** 서버에 보관되는 사용자 최신 위치 1건. */
 export interface LiveLocation {
@@ -83,15 +83,16 @@ export class LiveLocationService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 미도착 알림 발송 권한을 SET NX 로 원자적으로 선점한다. 이미 선점됐으면 false.
+   * ttlSec 은 호출자가 "그 일자가 끝날 때까지"로 계산해 넘긴다.
    * Redis 장애 시 true — 누락보다 중복을 택한다(잡음은 dedup 실패보다 낫다는 판단).
    */
-  async claimAlert(tripId: string, userId: string, day: number): Promise<boolean> {
+  async claimAlert(tripId: string, userId: string, day: number, ttlSec: number): Promise<boolean> {
     try {
       const res = await this.redis.set(
         this.dedupeKey(tripId, userId, day),
         '1',
         'EX',
-        ARRIVAL_DEDUPE_TTL_SEC,
+        ttlSec,
         'NX',
       );
       return res === 'OK';
