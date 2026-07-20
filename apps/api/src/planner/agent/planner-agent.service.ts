@@ -16,7 +16,6 @@ export interface PlannerAgentOptions {
   candidates: CandidatePlace[];
   tasteTags?: TasteTagDto;
   trigger?: ReplanTrigger;
-  waitingMinutes?: number;
   notes?: string | null;
   weatherHint: string;
 }
@@ -174,7 +173,6 @@ export class PlannerAgentService {
         dayCount: options.dayCount,
         itemsPerDay: options.itemsPerDay,
         trigger: options.trigger ?? 'initial',
-        waitingMinutes: options.waitingMinutes ?? null,
         notes: options.notes ?? null,
         taste,
         weatherHint: options.weatherHint,

@@ -289,7 +289,6 @@ export class MainPlannerService {
     return {
       itemId,
       itemName: item.name,
-      waitingMinutes: item.type === 'restaurant' ? 15 : 0,
       realtime: realCount > 0,
       alternatives,
       mapCenter: {
@@ -364,7 +363,7 @@ export class MainPlannerService {
     // 새 장소의 카카오 ID 로 교체(없으면 이전 ID 를 남기지 않도록 비운다)
     (item as { kakaoPlaceId?: string | null }).kakaoPlaceId = place.kakaoPlaceId ?? null;
     if (place.category) {
-      // P1-2: 카테고리도 함께 반영해 라벨·이모지·웨이팅 표시가 어긋나지 않게 한다
+      // P1-2: 카테고리도 함께 반영해 라벨·이모지 표시가 어긋나지 않게 한다
       item.type = place.category;
     }
 
@@ -765,7 +764,6 @@ export class MainPlannerService {
         tasteTags: tasteTags ?? { food: [], mood: [], environment: [] },
         stats: {
           totalItems: items.length,
-          waitingCount: items.filter((item) => item.type === 'restaurant').length,
           estimatedTravelKm: Math.round((totalTravelMin / 12) * 10) / 10,
         },
         weather: await this.buildWeather(center, days),
@@ -920,8 +918,6 @@ export class MainPlannerService {
       durationMin: item.durationMin,
       ...(item.memo ? { memo: item.memo } : {}),
       ...(item.kakaoPlaceId ? { kakaoPlaceId: item.kakaoPlaceId } : {}),
-      hasWaiting: item.type === 'restaurant',
-      ...(item.type === 'restaurant' ? { waitingMinutes: 15 } : {}),
     };
   }
 
@@ -977,7 +973,6 @@ export class MainPlannerService {
     const preference = await this.preferencesService.findByUser(trip.userId);
     const tasteTags = preference?.tasteTags;
     const preferenceVector = await this.preferencesService.getPreferenceVector(trip.userId);
-    const waiting = item.type === 'restaurant';
     // 여행 고정 노트 + 이번 요청 조건(note)을 합쳐 검색을 개인화
     const combinedNotes =
       [trip.notes, note].map((v) => v?.trim()).filter(Boolean).join(' · ') || null;
@@ -992,7 +987,6 @@ export class MainPlannerService {
         currentLocation: item.coordinates,
         ...(tasteTags !== undefined ? { tasteTags } : {}),
         ...(preferenceVector ? { preferenceVector } : {}),
-        ...(waiting ? { trigger: 'waiting' as const } : {}),
       });
     } catch {
       return [];
@@ -1093,7 +1087,7 @@ export class MainPlannerService {
   private buildAlternatives(item: ItineraryItemEntity): PlannerAlternativeDto[] {
     const baseNames =
       item.type === 'restaurant'
-        ? ['로컬 한식당', '웨이팅 적은 맛집', '근처 시그니처 식당']
+        ? ['로컬 한식당', '숨은 맛집', '근처 시그니처 식당']
         : item.type === 'cafe'
           ? ['조용한 로컬 카페', '뷰 좋은 카페', '디저트 카페']
           : ['근처 산책 스팟', '실내 문화 공간', '사진 찍기 좋은 장소'];

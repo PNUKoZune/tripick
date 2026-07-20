@@ -124,7 +124,7 @@ function PlannerContent({ tripId }: { tripId?: string }) {
     const base = trip.items.filter((item) => item.day === day);
     if (!swapResult) return base;
     return base.map((item) =>
-      item.id === swapResult.id ? { ...item, name: swapResult.name, hasWaiting: false } : item,
+      item.id === swapResult.id ? { ...item, name: swapResult.name } : item,
     );
   }, [trip, day, swapResult]);
 

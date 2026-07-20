@@ -1,4 +1,4 @@
-export type ReplanTrigger = 'waiting' | 'deviation' | 'weather' | 'manual';
+export type ReplanTrigger = 'deviation' | 'weather' | 'manual';
 export type ReplanStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 /** 일정 강도(하루 일정 밀도) */
@@ -35,8 +35,6 @@ export interface ReplanRequestDto {
     lat: number;
     lng: number;
   };
-  /** 웨이팅 예상 시간 (분) */
-  waitingMinutes?: number;
   /** 이탈한 일정 항목 ID */
   deviatedItemId?: string;
   /** 사용자 자유 텍스트 요청 (예: "조용한 감성 카페 위주로"). 재계획 시 검색·프롬프트에 반영 */

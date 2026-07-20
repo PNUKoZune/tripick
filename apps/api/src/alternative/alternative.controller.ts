@@ -13,15 +13,6 @@ import { AlternativeReplanRequestBodyDto } from '../replanning/dto/replan-reques
 export class AlternativeController {
   constructor(private readonly replanningService: ReplanningService) {}
 
-  @Post('waiting')
-  @ApiOperation({ summary: '웨이팅 신고 → 재계획 트리거' })
-  reportWaiting(@CurrentUser() user: UserEntity, @Body() dto: AlternativeReplanRequestBodyDto) {
-    return this.replanningService.enqueue(user.id, {
-      ...dto,
-      trigger: 'waiting',
-    });
-  }
-
   @Post('deviation')
   @ApiOperation({ summary: '경로 이탈 신고 → 재계획 트리거' })
   reportDeviation(@CurrentUser() user: UserEntity, @Body() dto: AlternativeReplanRequestBodyDto) {

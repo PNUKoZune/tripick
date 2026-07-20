@@ -26,6 +26,7 @@ const KIND_META: Record<InboxItemKind, { emoji: string; label: string; tone: str
   trip_invite: { emoji: '🎟️', label: '여행 초대', tone: '#7C3AED' },
   replan_ready: { emoji: '✨', label: '재계획 알림', tone: '#00A86B' },
   weather_alert: { emoji: '☔', label: '날씨 알림', tone: '#FF8A00' },
+  crowd_alert: { emoji: '👥', label: '혼잡 알림', tone: '#E0529C' },
   trip_reminder: { emoji: '🧳', label: '여행 알림', tone: '#1B64DA' },
   general: { emoji: '📬', label: '알림', tone: '#6B7684' },
 };
@@ -33,6 +34,7 @@ const KIND_META: Record<InboxItemKind, { emoji: string; label: string; tone: str
 const CATEGORY_KINDS: Set<InboxItemKind> = new Set([
   'replan_ready',
   'weather_alert',
+  'crowd_alert',
   'trip_reminder',
   'general',
 ]);

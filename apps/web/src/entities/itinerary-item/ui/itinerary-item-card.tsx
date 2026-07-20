@@ -1,6 +1,6 @@
 'use client';
 
-import { FiAlertTriangle, FiChevronRight } from 'react-icons/fi';
+import { FiChevronRight } from 'react-icons/fi';
 import { LuExternalLink, LuGripVertical, LuPencil, LuTrash2 } from 'react-icons/lu';
 import type { PlannerItineraryItemDto } from '@tripick/types';
 
@@ -107,12 +107,6 @@ export function ItineraryItemCard({
           </div>
           <div className="mt-1 flex items-center gap-2 text-[13px] leading-[18px] text-[#6B7684]">
             <span>{item.durationLabel}</span>
-            {item.hasWaiting ? (
-              <span className="flex items-center gap-1 text-[#F04452]">
-                <FiAlertTriangle aria-hidden className="size-3.5" />
-                <span>웨이팅 {item.waitingMinutes ? `${item.waitingMinutes}분` : '있음'}</span>
-              </span>
-            ) : null}
           </div>
           {item.memo ? (
             <div className="mt-1.5 line-clamp-2 rounded-[8px] bg-[#F7F8FA] px-2 py-1 text-[12px] leading-[17px] text-[#6B7684]">
@@ -122,7 +116,7 @@ export function ItineraryItemCard({
         </div>
         {onSwitch ? (
           <div className="absolute right-3 top-3">
-            <ChangeScheduleButton onClick={onSwitch} urgent={item.hasWaiting} label="변경" />
+            <ChangeScheduleButton onClick={onSwitch} label="변경" />
           </div>
         ) : null}
         <div className="mt-2 flex items-center justify-between gap-1 border-t border-[#F2F4F6] pt-2">

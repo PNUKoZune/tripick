@@ -119,13 +119,10 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
               </div>
               <div className="flex-1">
                 <div className="text-[18px] font-bold leading-[26px] text-[#191F28]">
-                  {readyData.waitingMinutes > 0 ? '웨이팅이 길어요' : '비슷한 다른 장소'}
+                  비슷한 다른 장소
                 </div>
                 <div className="mt-1 text-[14px] leading-[20px] text-[#6B7684]">
-                  {readyData.itemName}
-                  {readyData.waitingMinutes > 0
-                    ? ` 현재 예상 대기: 약 ${readyData.waitingMinutes}분`
-                    : ' 주변에서 골라볼 수 있어요'}
+                  {readyData.itemName} 주변에서 골라볼 수 있어요
                 </div>
               </div>
             </div>

@@ -27,8 +27,8 @@ const ROWS: ReadonlyArray<{
   },
   {
     key: 'replan_ready',
-    label: '재계획 / 날씨 변동',
-    description: '대안 일정 반영이 끝나거나 날씨가 크게 바뀌면 알려줘요.',
+    label: '재계획 / 날씨·혼잡 변동',
+    description: '대안 일정 반영이 끝나거나 날씨·혼잡이 크게 바뀌면 알려줘요.',
   },
   {
     key: 'trip_reminder',

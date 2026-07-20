@@ -6,7 +6,7 @@
 
 ## 1. 서비스 개요
 
-사용자의 이미지 취향 분석과 실시간 맥락(웨이팅·경로 이탈)을 반영하여 국내 여행 일정을 자동 생성·재계획하고, 날씨 변화 시 일정 조정을 추천하는 AI 에이전트 서비스. React Native 앱(Next.js WebView) + NestJS 백엔드 + 프라이빗 LLM 추론 인프라로 구성.
+사용자의 이미지 취향 분석과 실시간 맥락(경로 이탈)을 반영하여 국내 여행 일정을 자동 생성·재계획하고, 날씨·혼잡 변화 시 일정 조정을 추천하는 AI 에이전트 서비스. React Native 앱(Next.js WebView) + NestJS 백엔드 + 프라이빗 LLM 추론 인프라로 구성.
 
 ---
 
@@ -15,7 +15,7 @@
 ### CLIENT LAYER
 
 - **React Native Mobile App**
-  - Location Tracking, Trip Progress, Waiting Report
+  - Location Tracking, Trip Progress
   - Push Notification, WebView Container
   - REST API → NestJS API Gateway
 - **Next.js WebView / Web App** (Deployed on Vercel)
@@ -42,7 +42,7 @@
 - **Planner Agent Orchestrator** (`PlannerService`)
   - Tool Orchestration: `PlannerService`가 retrieval·weather·route helper 를 코드로 직접 조율(결정적 순서). LLM 이 툴 선택에 개입하는 agentic 라우팅 아님 — 별도 `ToolRouter` 컴포넌트 없음
   - Local LLM Call: LLM 추론 실행 (`PlannerAgentService`)
-  - Prompt Building: 단일 파라미터화 프롬프트에 `trigger`(waiting·deviation·weather·manual)·notes 를 데이터로 주입해 시나리오 분기. 시나리오별 개별 템플릿 파일은 없음
+  - Prompt Building: 단일 파라미터화 프롬프트에 `trigger`(deviation·weather·manual)·notes 를 데이터로 주입해 시나리오 분기. 시나리오별 개별 템플릿 파일은 없음
   - JSON Plan Generator: 일정 JSON 생성·검증(candidateId 검증, 중복 슬롯 제거)
   - Constraint Validation Loop: AI draft 검증 실패 시 후보 rotate 기반 결정적 재생성 최대 3회 (LLM 재호출 아님)
   - _"Coordinates tools, LLM and constraints to produce a valid itinerary."_
@@ -94,7 +94,7 @@
 ### 실시간 재계획 플로우 (Realtime Replanning Flow)
 
 ```
-① Waiting reported / route deviation
+① Route deviation reported
 → ② BullMQ replanning job 등록
 → ③ Tool Router queries maps / weather / routes
 → ④ Local LLM generates alt. itinerary
@@ -148,7 +148,7 @@ src/
 │       └── constraint.engine.ts   # 영업시간·이동시간·경로 검증 루프
 │
 ├── alternative/    # AlternativeModule (독립 도메인)
-│   ├── alternative.controller.ts  # 웨이팅·이탈 이벤트 수신
+│   ├── alternative.controller.ts  # 경로 이탈 이벤트 수신
 │   ├── alternative.processor.ts   # BullMQ Worker
 │   └── alternative.gateway.ts     # WebSocket push
 │
@@ -159,7 +159,7 @@ src/
 
 **모듈 분리 기준**
 
-- **독립 Module**: 트리거가 Planner와 다른 것 (PreferenceModule=온보딩, AlternativeModule=웨이팅·이탈 이벤트, NotificationModule=공통 유틸)
+- **독립 Module**: 트리거가 Planner와 다른 것 (PreferenceModule=온보딩, AlternativeModule=경로 이탈 이벤트, NotificationModule=공통 유틸)
 - **PlannerModule 내부 Helper**: Planner가 일정 생성·수정할 때만 호출되는 것 (Weather·Route·Preference·ScheduleConstraint)
 
 ---
@@ -214,7 +214,7 @@ src/
 | 도보        | (외부 API 없음)               | 직선거리 기반 로컬 추정               | `RouteHelper` 내부 계산 |
 | 관광정보    | 한국관광공사 국문 관광정보    | 관광지 기본정보, 영업시간, 좌표       | 수집→임베딩해 pgvector 적재 + 영업시간 보강(Constraint Engine) |
 | 관광정보    | ~~한국관광공사 연관 관광지~~  | (미채택)                              | "이 여행지 다음에 저 여행지 많이 감" 식의 일반 통계라 사용자 취향 기반 추천 성격과 맞지 않음. 대안 후보는 pgvector(KTO 관광정보+카카오 로컬 적재 풀)의 취향 유사도 검색으로 대체 |
-| 관광정보    | 한국관광공사 방문자 추이 예측 | 혼잡도 예측, 시간대 배치 최적화       | 향후 30일 예측          |
+| 관광정보    | 한국관광공사 관광지 집중률(방문자 추이 예측) | 혼잡 예상 시 일정 변경 "추천" 알림 | `TatsCnctrRateService`. areaCd/signguCd=법정동 코드(ldongCode2 로 조달), tAtsNm(관광지)만 데이터. **플래닝 점수에는 미반영** — 취향을 흐릴 수 있어 날씨 알림과 동일하게 inbox 추천(`crowd_alert`)만, 자동 재계획 안 함 |
 | 날씨        | 기상청 단기예보               | 날씨·강수 예보 (최대 5일)             | nx·ny 격자 변환 필수    |
 | 인증        | 카카오 OAuth 2.0              | 로그인, JWT 발급                      |                         |
 | 이미지      | 사용자 갤러리 직접 업로드     | 취향 사진 수집                        | Instagram Graph API는 API 한계로 미채택 |
@@ -243,5 +243,6 @@ src/
 - Android WebView에서 geolocation 이중 권한 처리 필요 (`onPermissionRequest` prop)
 - 취향 사진은 사용자 갤러리에서 직접 선택·업로드로 수집 (Instagram Graph API는 API 한계·앱 검수 리스크로 미채택)
 - 날씨 변화는 자동 재계획을 트리거하지 않고 일정 조정을 "추천"(inbox 알림)만 한다. 실제 재계획은 사용자가 확인 후 수동 요청 (`trigger: 'weather'`)
+- 관광지 혼잡(집중률)도 날씨와 동일하게 자동 재계획 없이 "추천"만 한다. `CrowdAlertModule`(하루 1회 스캔)이 여행 일정 관광지의 예측 집중률이 그 장소 평균 대비 높은 날을 찾아 `crowd_alert` inbox 알림을 보낸다. 클릭 시 planner 로 이동해 사용자가 직접 재계획. **집중률은 일정 생성/재계획 점수에는 넣지 않는다**(취향 신호를 흐릴 수 있음)
 - 모든 외부 API는 추상화된 이름(Object Storage, 지도 API 등)으로 인터페이스 설계, 특정 서비스 교체 시 환경변수만 변경
 - BullMQ Worker: `attempts: 3`, `backoff: 2000` 재시도 설정 기본 적용
