@@ -32,9 +32,6 @@ export function DestinationSuggestions() {
             href={`/trips/new?destination=${encodeURIComponent(d.name)}`}
             className="group flex min-w-[132px] flex-col gap-2 rounded-[16px] border border-[#E5E8EB] bg-white p-4 transition hover:border-[#C7DCFF] hover:shadow-[0_8px_20px_rgba(49,130,246,0.10)]"
           >
-            <span className="text-[28px]" aria-hidden>
-              {d.emoji}
-            </span>
             <span className="text-[14px] font-bold text-[#191F28]">{d.name}</span>
             <span className="text-[12px] text-[#8B95A1]">{d.region}</span>
           </Link>

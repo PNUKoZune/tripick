@@ -34,7 +34,7 @@ function preferSigungu(cur: RegionRecommendation, next: RegionRecommendation): b
   return next.score > cur.score;
 }
 
-/** areaCode2 응답 아이템 (시도 / 시군구 공통) */
+/** ldongCode2 응답 아이템 (법정동 시도 / 시군구 공통). code=lDongRegnCd/lDongSignguCd */
 interface AreaCodeItem {
   code: string | number;
   name: string;
@@ -46,36 +46,6 @@ interface AreaCodeResponse {
       items?: '' | { item?: AreaCodeItem | AreaCodeItem[] };
     };
   };
-}
-
-/** 시도 이름 → 대표 이모지. 매칭 없으면 📍. */
-const SIDO_EMOJI: Array<[string, string]> = [
-  ['서울', '🏙️'],
-  ['부산', '🌊'],
-  ['제주', '🌴'],
-  ['인천', '🛫'],
-  ['강원', '⛰️'],
-  ['경기', '🏰'],
-  ['경상북도', '🏛️'],
-  ['경상남도', '⛵'],
-  ['전북', '🥢'],
-  ['전라북도', '🥢'],
-  ['전라남도', '🌃'],
-  ['충청', '🏞️'],
-  ['충북', '🏞️'],
-  ['충남', '🏞️'],
-  ['대전', '🔬'],
-  ['대구', '🍎'],
-  ['광주', '🎨'],
-  ['울산', '🏭'],
-  ['세종', '🏢'],
-];
-
-function pickEmoji(sidoName: string): string {
-  for (const [token, emoji] of SIDO_EMOJI) {
-    if (sidoName.includes(token)) return emoji;
-  }
-  return '📍';
 }
 
 /**
@@ -101,14 +71,14 @@ function toItemArray(items: AreaCodeResponse['response']): AreaCodeItem[] {
 }
 
 /**
- * 한국관광공사 국문관광정보 서비스(GW)의 areaCode2를 이용해
+ * 한국관광공사 국문관광정보 서비스(GW)의 ldongCode2(법정동 코드)를 이용해
  * 시도 + 시군구 여행 지역 목록을 구성한다.
  * 지역 목록은 거의 변하지 않으므로 최초 1회 조회 후 메모리에 캐싱한다.
  */
 @Injectable()
 export class DestinationsService {
   private readonly logger = new Logger(DestinationsService.name);
-  private readonly BASE_URL = 'https://apis.data.go.kr/B551011/KorService2/areaCode2';
+  private readonly BASE_URL = 'https://apis.data.go.kr/B551011/KorService2/ldongCode2';
   private cache: Promise<DestinationSuggestionDto[]> | null = null;
 
   private static readonly REC_TOP_K = 12;
@@ -176,8 +146,6 @@ export class DestinationsService {
         id: `rec-${r.region}-${sigungu ?? ''}`,
         name,
         region: sido,
-        // 이모지는 원본 시도명으로 매칭해야 정확하다('경상북도'→🏛️).
-        emoji: pickEmoji(r.region),
       });
     }
     // 추천이 목표 개수보다 적으면 인기 여행지로 채운다 (중복 제외).
@@ -235,13 +203,11 @@ export class DestinationsService {
     const list: DestinationSuggestionDto[] = [];
 
     for (const sido of sidos) {
-      const emoji = pickEmoji(sido.name);
       // 시도 자체도 후보로 포함
       list.push({
         id: `sido-${sido.code}`,
         name: sido.name,
         region: sido.name,
-        emoji,
       });
 
       const sigungus = await this.fetchAreas(apiKey, String(sido.code));
@@ -250,7 +216,6 @@ export class DestinationsService {
           id: `${sido.code}-${sigungu.code}`,
           name: sigungu.name,
           region: sido.name,
-          emoji,
         });
       }
     }
@@ -259,8 +224,8 @@ export class DestinationsService {
     return list;
   }
 
-  /** areaCode 미지정 → 시도 목록, 지정 → 해당 시도의 시군구 목록 */
-  private async fetchAreas(apiKey: string, areaCode?: string): Promise<AreaCodeItem[]> {
+  /** lDongRegnCd 미지정 → 시도 목록, 지정 → 해당 시도의 시군구 목록 */
+  private async fetchAreas(apiKey: string, lDongRegnCd?: string): Promise<AreaCodeItem[]> {
     const res = await axios.get<AreaCodeResponse>(this.BASE_URL, {
       params: {
         serviceKey: apiKey,
@@ -269,7 +234,7 @@ export class DestinationsService {
         MobileOS: 'ETC',
         MobileApp: 'TriPick',
         _type: 'json',
-        ...(areaCode ? { areaCode } : {}),
+        ...(lDongRegnCd ? { lDongRegnCd } : {}),
       },
     });
     return toItemArray(res.data.response);
