@@ -18,6 +18,7 @@ import { DataSource } from 'typeorm';
 import { ItineraryItemEntity } from '../itinerary/itinerary-item.entity';
 import { TripEntity } from '../trips/trip.entity';
 import { UserEntity } from '../users/user.entity';
+import { toKstIsoDate } from '@tripick/utils';
 import type { ItineraryItemType } from '@tripick/types';
 
 // 의존성 없이 apps/api/.env 의 값을 process.env 로 주입 (이미 설정된 값은 유지)
@@ -59,11 +60,9 @@ const PLACES: SeedPlace[] = [
   { hour: 19, minute: 30, type: 'restaurant', name: '북촌 골목 한정식', address: '서울 종로구 계동길 37', lat: 37.5826, lng: 126.9831, durationMin: 80 },
 ];
 
+/** 오늘(KST) 을 YYYY-MM-DD 로. 서버 TZ 와 무관하게 데모 여행이 "오늘(KST)"에 떨어지게 한다. */
 function ymd(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+  return toKstIsoDate(date);
 }
 
 async function main() {
@@ -119,12 +118,9 @@ async function main() {
           name: place.name,
           address: place.address,
           coordinates: { lat: place.lat, lng: place.lng },
+          // 오늘(KST) HH:mm 의 절대 시각. 로컬 TZ Date 생성자를 쓰면 UTC 서버에서 시각이 밀린다.
           scheduledAt: new Date(
-            today.getFullYear(),
-            today.getMonth(),
-            today.getDate(),
-            place.hour,
-            place.minute,
+            `${ymd(today)}T${String(place.hour).padStart(2, '0')}:${String(place.minute).padStart(2, '0')}:00+09:00`,
           ),
           durationMin: place.durationMin,
         }),

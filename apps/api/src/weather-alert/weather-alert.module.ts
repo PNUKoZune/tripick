@@ -84,7 +84,9 @@ export class WeatherAlertModule implements OnModuleInit, OnModuleDestroy {
           WEATHER_ALERT_SCAN_JOB,
           {},
           {
-            repeat: { pattern: WEATHER_ALERT_CRON },
+            // cron 을 KST 로 고정한다 — tz 미지정 시 서버 로컬(UTC 컨테이너면 발표시각과 9시간
+            // 어긋나 발표 직후 실행 의도가 깨짐). 발표 시각(02·05·08…)은 KST 기준이다.
+            repeat: { pattern: WEATHER_ALERT_CRON, tz: 'Asia/Seoul' },
             jobId: WEATHER_ALERT_SCAN_JOB,
             removeOnComplete: true,
             removeOnFail: 20,

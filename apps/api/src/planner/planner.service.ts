@@ -11,6 +11,7 @@ import { PlannerAgentService } from './agent/planner-agent.service';
 import type { PlannedCandidate } from './agent/planner-agent.service';
 import { PlaceRetrievalService } from './retrieval/place-retrieval.service';
 import { TripEntity } from '../trips/trip.entity';
+import { addDaysToIsoDate } from '@tripick/utils';
 import type {
   CreateItineraryItemDto,
   ItineraryItemDto,
@@ -475,11 +476,9 @@ export class PlannerService {
   }
 
   private offsetDate(dateText: string, offset: number): string {
-    const date = new Date(`${dateText}T00:00:00+09:00`);
-    date.setDate(date.getDate() + offset);
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${date.getFullYear()}-${month}-${day}`;
+    // UTC 정수 연산으로 일수만 더한다. new Date(+09:00) 인스턴스를 로컬 getter 로 다시
+    // 읽으면 UTC 컨테이너에서 하루가 밀린다(offset 0 조차 전날이 됨).
+    return addDaysToIsoDate(dateText, offset);
   }
 
   private makeDateTime(dateText: string, timeText: string): Date {
