@@ -110,7 +110,14 @@ export class TatsCnctrRateService {
     let rows = exact;
     if (rows.length === 0) {
       const names = new Set(items.map((it) => normalizePlace(it.tAtsNm)));
-      if (names.size !== 1) return null;
+      if (names.size !== 1) {
+        // 이름이 정확히 안 맞고 여러 관광지가 섞임 → 오알림 방지로 포기. 커버리지 누락
+        // 진단을 위해 남긴다(우리 title 과 KTO tAtsNm 표기가 다를 때 발생).
+        this.logger.debug(
+          `집중률 이름 불일치로 스킵: tAtsNm=${tAtsNm} (LIKE 후보 ${names.size}종)`,
+        );
+        return null;
+      }
       rows = items;
     }
 
@@ -151,12 +158,20 @@ export class TatsCnctrRateService {
 
   private loadSidoIndex(): Promise<Map<string, string>> {
     if (!this.sidoIndex) {
-      this.sidoIndex = this.fetchLdong().then((items) => {
-        const map = new Map<string, string>();
-        // 시도명은 정식 전체명("강원특별자치도")으로 오므로 stem 으로 색인해 주소와 맞춘다.
-        for (const it of items) map.set(regionStem(it.name), String(it.code));
-        return map;
-      });
+      this.sidoIndex = this.fetchLdong()
+        .then((items) => {
+          const map = new Map<string, string>();
+          // 시도명은 정식 전체명("강원특별자치도")으로 오므로 stem 으로 색인해 주소와 맞춘다.
+          for (const it of items) map.set(regionStem(it.name), String(it.code));
+          // 빈 색인(전송 오류·키 누락 등)은 캐시하지 않는다 — 다음 스캔이 재시도하게 둔다.
+          if (map.size === 0) this.sidoIndex = null;
+          return map;
+        })
+        .catch((err) => {
+          // 실패한 Promise 를 캐시하면 재시작 전까지 영구 실패하므로 되돌린다.
+          this.sidoIndex = null;
+          throw err;
+        });
     }
     return this.sidoIndex;
   }
@@ -164,16 +179,22 @@ export class TatsCnctrRateService {
   private loadSigunguIndex(areaCd: string): Promise<Map<string, string>> {
     let idx = this.sigunguIndexByArea.get(areaCd);
     if (!idx) {
-      idx = this.fetchLdong(areaCd).then((items) => {
-        const map = new Map<string, string>();
-        // ldongCode2 시군구 code 는 3자리 지역 부분(예: 원주 '130')만 준다. 집중률 API 의
-        // signguCd 는 법정동 5자리 전체(areaCd+3자리, 예: '51130')이므로 시도 코드를 붙인다.
-        for (const it of items) {
-          const signguCd = `${areaCd}${String(it.code).padStart(3, '0')}`;
-          map.set(normalizePlace(it.name), signguCd);
-        }
-        return map;
-      });
+      idx = this.fetchLdong(areaCd)
+        .then((items) => {
+          const map = new Map<string, string>();
+          // ldongCode2 시군구 code 는 3자리 지역 부분(예: 원주 '130')만 준다. 집중률 API 의
+          // signguCd 는 법정동 5자리 전체(areaCd+3자리, 예: '51130')이므로 시도 코드를 붙인다.
+          for (const it of items) {
+            const signguCd = `${areaCd}${String(it.code).padStart(3, '0')}`;
+            map.set(normalizePlace(it.name), signguCd);
+          }
+          if (map.size === 0) this.sigunguIndexByArea.delete(areaCd);
+          return map;
+        })
+        .catch((err) => {
+          this.sigunguIndexByArea.delete(areaCd);
+          throw err;
+        });
       this.sigunguIndexByArea.set(areaCd, idx);
     }
     return idx;
@@ -187,12 +208,15 @@ export class TatsCnctrRateService {
   ): Promise<TatsCnctrItem[]> {
     const apiKey = this.apiKey();
     if (!apiKey) return [];
+    // tAtsNm 은 서버 LIKE 라 동명 관광지가 함께 잡힐 수 있다. 한 관광지 ~30일치 기준,
+    // LIKE 형제가 몇 개 섞여도 대상의 전체 일자가 1페이지에 담기도록 넉넉히 잡는다.
+    const numOfRows = 300;
     const res = await axios.get<TatsCnctrResponse | string>(
       `${this.TATS_BASE}/tatsCnctrRatedList`,
       {
         params: {
           serviceKey: apiKey,
-          numOfRows: 100,
+          numOfRows,
           pageNo: 1,
           MobileOS: 'ETC',
           MobileApp: 'TriPick',
@@ -206,8 +230,16 @@ export class TatsCnctrRateService {
     );
     if (detectKtoQuota(res.data)) throw new KtoQuotaExceededError('tatsCnctrRatedList');
     if (typeof res.data === 'string') return [];
-    const items = res.data.response?.body?.items;
-    return toArray(items && typeof items !== 'string' ? items.item : undefined);
+    const body = res.data.response?.body;
+    const items = body?.items;
+    const rows = toArray(items && typeof items !== 'string' ? items.item : undefined);
+    // 절단되면 대상 관광지의 뒷날짜가 빠져 mean 이 왜곡될 수 있어 알린다(page 1 만 읽으므로).
+    if ((body?.totalCount ?? 0) > numOfRows) {
+      this.logger.warn(
+        `tatsCnctrRatedList 결과 절단: tAtsNm=${tAtsNm}, total=${body?.totalCount} > numOfRows=${numOfRows}`,
+      );
+    }
+    return rows;
   }
 
   /** ldongCode2 호출 (지역코드 해석용). lDongRegnCd 미지정 → 시도, 지정 → 그 시도의 시군구. */

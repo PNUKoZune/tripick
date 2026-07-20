@@ -29,6 +29,13 @@ export const SCHEDULE_RETRY_MAX_MS = 5 * 60_000;
 /** 여행 일자 순회 상한 — endDate 가 깨진 데이터여도 루프가 발산하지 않게 하는 안전장치. */
 export const MAX_TRIP_DAYS = 366;
 
+/**
+ * 1회 혼잡 스캔이 쓸 수 있는 KTO 집중률 호출 상한(관광지당 1콜).
+ * KTO 일일 한도(1000)를 적재 파이프라인과 나눠 쓰므로, 스캔이 한도를 독점하지 않게 선제 캡한다.
+ * 반응형 쿼터 감지(초과 응답 시 중단)의 백업이자, 그보다 먼저 걸리는 예산이다. 초기값이며 튜닝 대상.
+ */
+export const CROWD_SCAN_CALL_BUDGET = 300;
+
 /** 중복 억제 키의 최소 TTL(초). 실제 억제는 "대상 날짜가 KST 로 끝날 때까지"로 계산한다. */
 export const MIN_DEDUPE_TTL_SEC = 60;
 

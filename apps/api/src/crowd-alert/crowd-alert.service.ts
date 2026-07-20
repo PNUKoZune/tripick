@@ -11,12 +11,13 @@ import {
   ConcentrationSeries,
   TatsCnctrRateService,
 } from '../planner/retrieval/tats-cnctr-rate.service';
-import { KtoQuotaExceededError } from '../planner/retrieval/tour-api.service';
+import { KtoCallBudget, KtoQuotaExceededError } from '../planner/retrieval/tour-api.service';
 import { getKstParts } from '@tripick/utils';
 import {
   CONCENTRATION_HORIZON_DAYS,
   CROWD_MIN_RATE,
   CROWD_RELATIVE_MULTIPLIER,
+  CROWD_SCAN_CALL_BUDGET,
   CROWD_SENSITIVE_TYPES,
   MAX_TRIP_DAYS,
   MIN_DEDUPE_TTL_SEC,
@@ -94,10 +95,16 @@ export class CrowdAlertService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.logger.log(`혼잡 스캔 시작 — 대상 여행 ${trips.length}건`);
+    // KTO 일일 한도(적재와 공유)를 스캔이 독점하지 않도록 이번 실행의 호출 예산을 선제 캡한다.
+    const budget = new KtoCallBudget(CROWD_SCAN_CALL_BUDGET);
     let alerted = 0;
     for (const trip of trips) {
+      if (budget.isExhausted) {
+        this.logger.warn('혼잡 스캔 호출 예산 소진 — 남은 여행은 다음 주기에 스캔');
+        break;
+      }
       try {
-        alerted += await this.scanTrip(trip, now);
+        alerted += await this.scanTrip(trip, now, budget);
       } catch (err) {
         if (err instanceof KtoQuotaExceededError) {
           // 일일 호출량 초과면 남은 여행도 마찬가지다 — 스캔을 접고 다음 주기에 재시도한다.
@@ -129,28 +136,36 @@ export class CrowdAlertService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** 여행 1건 스캔 → 혼잡 예상 일자마다 알림 발송. 발송 건수 반환. */
-  private async scanTrip(trip: TripEntity, now: Date): Promise<number> {
+  private async scanTrip(trip: TripEntity, now: Date, budget: KtoCallBudget): Promise<number> {
     const items = await this.itemsRepo.find({ where: { tripId: trip.id } });
-    const attractions = items.filter((item) => CROWD_SENSITIVE_TYPES.includes(item.type));
-    if (attractions.length === 0) return 0;
 
-    // 관광지별 집중률 시계열을 1회씩만 조회해 캐시한다(같은 장소가 여러 날 나올 수 있음).
-    // null = 지역코드 해석 실패 또는 집중률 데이터 없음 → 이후 그 장소는 건너뛴다.
-    const seriesByPlace = new Map<string, ConcentrationSeries | null>();
-    for (const item of attractions) {
-      if (seriesByPlace.has(item.name)) continue;
-      seriesByPlace.set(item.name, await this.loadSeries(item));
-    }
-
+    // 미래 후보일(오늘 이후 + 관광지 일정이 있는 날)만 추린다. 과거일 관광지까지 조회하면
+    // 알릴 수도 없는 날에 KTO 호출을 낭비하므로 series 조회 전에 먼저 좁힌다.
     const todayIso = this.kstToday(now);
     const candidates = this.tripDays(trip)
       .filter(({ iso }) => iso >= todayIso)
       .map(({ day, iso }) => ({
         day,
         iso,
-        items: attractions.filter((item) => item.day === day),
+        items: items.filter(
+          (item) => item.day === day && CROWD_SENSITIVE_TYPES.includes(item.type),
+        ),
       }))
       .filter(({ items: dayItems }) => dayItems.length > 0);
+    if (candidates.length === 0) return 0;
+
+    // 후보일에 실제 등장하는 관광지만 1회씩 조회해 캐시한다(같은 장소가 여러 날 나올 수 있음).
+    // null = 지역코드 해석 실패·데이터 없음·예산 소진 → 이후 그 장소는 건너뛴다.
+    const needed = new Map<string, ItineraryItemEntity>();
+    for (const candidate of candidates) {
+      for (const item of candidate.items) {
+        if (!needed.has(item.name)) needed.set(item.name, item);
+      }
+    }
+    const seriesByPlace = new Map<string, ConcentrationSeries | null>();
+    for (const [name, item] of needed) {
+      seriesByPlace.set(name, await this.loadSeries(item, budget));
+    }
 
     let recipients: string[] | null = null;
     let alerted = 0;
@@ -175,10 +190,15 @@ export class CrowdAlertService implements OnModuleInit, OnModuleDestroy {
     return alerted;
   }
 
-  /** 일정 항목의 주소·이름으로 그 관광지의 집중률 시계열을 조회한다. */
-  private async loadSeries(item: ItineraryItemEntity): Promise<ConcentrationSeries | null> {
+  /** 일정 항목의 주소·이름으로 그 관광지의 집중률 시계열을 조회한다. 예산 소진 시 null. */
+  private async loadSeries(
+    item: ItineraryItemEntity,
+    budget: KtoCallBudget,
+  ): Promise<ConcentrationSeries | null> {
     const region = await this.tatsCnctrRate.resolveRegionCode(item.address);
     if (!region) return null;
+    // 집중률 조회는 관광지당 1콜 — 예산에서 먼저 차감하고, 소진이면 더 조회하지 않는다.
+    if (!budget.consume()) return null;
     return this.tatsCnctrRate.fetchConcentration(region.areaCd, region.signguCd, item.name);
   }
 

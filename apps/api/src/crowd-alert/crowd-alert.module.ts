@@ -76,7 +76,8 @@ export class CrowdAlertModule implements OnModuleInit, OnModuleDestroy {
           CROWD_ALERT_SCAN_JOB,
           {},
           {
-            repeat: { pattern: CROWD_ALERT_CRON },
+            // cron 을 KST 로 고정한다 — tz 미지정 시 서버 로컬(UTC 컨테이너면 KST 와 9시간 어긋남).
+            repeat: { pattern: CROWD_ALERT_CRON, tz: 'Asia/Seoul' },
             jobId: CROWD_ALERT_SCAN_JOB,
             removeOnComplete: true,
             removeOnFail: 20,
