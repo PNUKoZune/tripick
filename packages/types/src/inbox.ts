@@ -9,6 +9,7 @@
 export type NotificationCategory =
   | 'replan_ready'
   | 'weather_alert'
+  | 'crowd_alert'
   | 'trip_reminder'
   | 'trip_invite'
   | 'general';

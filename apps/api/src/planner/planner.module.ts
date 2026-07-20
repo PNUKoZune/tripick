@@ -12,6 +12,7 @@ import { KakaoLocalService } from './retrieval/kakao-local.service';
 import { PlaceEmbeddingRepository } from './retrieval/place-embedding.repository';
 import { PlaceRetrievalService } from './retrieval/place-retrieval.service';
 import { TourApiService } from './retrieval/tour-api.service';
+import { TatsCnctrRateService } from './retrieval/tats-cnctr-rate.service';
 import { PlaceIngestionService } from './retrieval/place-ingestion.service';
 import { EmbeddingModule } from '../embedding/embedding.module';
 import { ItineraryModule } from '../itinerary/itinerary.module';
@@ -38,6 +39,7 @@ import { TripEntity } from '../trips/trip.entity';
     CragEvaluatorService,
     PlaceRetrievalService,
     TourApiService,
+    TatsCnctrRateService,
     PlaceIngestionService,
   ],
   exports: [
@@ -46,6 +48,7 @@ import { TripEntity } from '../trips/trip.entity';
     PlaceEmbeddingRepository,
     KakaoLocalService,
     TourApiService,
+    TatsCnctrRateService,
     RouteHelper,
     WeatherHelper,
   ],

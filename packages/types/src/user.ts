@@ -8,6 +8,7 @@ export type NotificationPreferencesDto = Record<NotificationPreferenceKey, boole
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferencesDto = {
   replan_ready: true,
   weather_alert: true,
+  crowd_alert: true,
   trip_reminder: true,
   trip_invite: true,
   general: true,

@@ -36,6 +36,7 @@ function routeForNotification(data?: Record<string, string>): string | null {
       return '/inbox';
     case 'replan_ready':
     case 'weather_alert':
+    case 'crowd_alert':
     case 'trip_reminder':
     case 'general':
       return tripId ? `/planner?tripId=${tripId}` : '/inbox';
