@@ -327,7 +327,6 @@ export interface DestinationSuggestionDto {
   name: string;
   /** 상위 행정 구역 (예: "부산광역시") */
   region: string;
-  emoji: string;
 }
 
 export interface CreateTripRequestDto {

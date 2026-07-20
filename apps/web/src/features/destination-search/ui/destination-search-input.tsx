@@ -77,9 +77,6 @@ export function DestinationSearchInput({
               }}
               className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-[#F7F8FA]"
             >
-              <span className="text-[20px]" aria-hidden>
-                {s.emoji}
-              </span>
               <span className="flex-1">
                 <span className="block text-[14px] font-semibold text-[#191F28]">{s.name}</span>
                 <span className="block text-[12px] text-[#8B95A1]">{s.region}</span>

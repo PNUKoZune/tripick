@@ -48,36 +48,6 @@ interface AreaCodeResponse {
   };
 }
 
-/** 시도 이름 → 대표 이모지. 매칭 없으면 📍. */
-const SIDO_EMOJI: Array<[string, string]> = [
-  ['서울', '🏙️'],
-  ['부산', '🌊'],
-  ['제주', '🌴'],
-  ['인천', '🛫'],
-  ['강원', '⛰️'],
-  ['경기', '🏰'],
-  ['경상북도', '🏛️'],
-  ['경상남도', '⛵'],
-  ['전북', '🥢'],
-  ['전라북도', '🥢'],
-  ['전라남도', '🌃'],
-  ['충청', '🏞️'],
-  ['충북', '🏞️'],
-  ['충남', '🏞️'],
-  ['대전', '🔬'],
-  ['대구', '🍎'],
-  ['광주', '🎨'],
-  ['울산', '🏭'],
-  ['세종', '🏢'],
-];
-
-function pickEmoji(sidoName: string): string {
-  for (const [token, emoji] of SIDO_EMOJI) {
-    if (sidoName.includes(token)) return emoji;
-  }
-  return '📍';
-}
-
 /**
  * 입력 전(빈 검색) 기본 노출용 인기 여행지 우선순위.
  * 각 토큰과 name이 매칭되는 첫 후보를 순서대로 골라 상단에 배치한다.
@@ -176,8 +146,6 @@ export class DestinationsService {
         id: `rec-${r.region}-${sigungu ?? ''}`,
         name,
         region: sido,
-        // 이모지는 원본 시도명으로 매칭해야 정확하다('경상북도'→🏛️).
-        emoji: pickEmoji(r.region),
       });
     }
     // 추천이 목표 개수보다 적으면 인기 여행지로 채운다 (중복 제외).
@@ -235,13 +203,11 @@ export class DestinationsService {
     const list: DestinationSuggestionDto[] = [];
 
     for (const sido of sidos) {
-      const emoji = pickEmoji(sido.name);
       // 시도 자체도 후보로 포함
       list.push({
         id: `sido-${sido.code}`,
         name: sido.name,
         region: sido.name,
-        emoji,
       });
 
       const sigungus = await this.fetchAreas(apiKey, String(sido.code));
@@ -250,7 +216,6 @@ export class DestinationsService {
           id: `${sido.code}-${sigungu.code}`,
           name: sigungu.name,
           region: sido.name,
-          emoji,
         });
       }
     }
