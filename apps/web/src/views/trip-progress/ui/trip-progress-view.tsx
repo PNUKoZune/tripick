@@ -10,13 +10,11 @@ import type {
   TripSummaryDto,
 } from '@tripick/types';
 
+import { haversineMeters } from '@tripick/utils';
+
 import { SessionGuard } from '@/entities/session';
 import { fetchPlannerTrip, fetchPlannerTrips, splitTripSchedule } from '@/entities/trip-plan';
-import {
-  DeviationBanner,
-  useDeviationDetection,
-  type NextPlace,
-} from '@/features/detect-route-deviation';
+import { useReportLiveLocation } from '@/features/report-live-location';
 import { ReplanToast, useReplanSubscription } from '@/features/subscribe-replan-result';
 import { NextStopBar, useTripProgress } from '@/features/track-trip-progress';
 import { queryKeys } from '@/shared/api/query-keys';
@@ -66,18 +64,17 @@ function TripProgressContent() {
   const isReplanning =
     replan.latest?.status === 'pending' || replan.latest?.status === 'processing';
 
-  const nextPlace = useMemo<NextPlace | null>(() => {
+  const nextPlace = useMemo<{ lat: number; lng: number } | null>(() => {
     if (!nextItem || !trip) return null;
     const marker = trip.mapMarkers.find((m) => m.itemId === nextItem.id);
-    return marker ? { itemId: nextItem.id, lat: marker.lat, lng: marker.lng } : null;
+    return marker ? { lat: marker.lat, lng: marker.lng } : null;
   }, [nextItem, trip]);
 
-  const deviation = useDeviationDetection({
-    tripId: active?.id ?? '',
-    position,
-    nextPlace,
-    enabled: Boolean(active),
-  });
+  // 다음 예정 장소까지의 거리(표시용). 미도착 판정은 서버가 담당한다.
+  const distanceToNext = position && nextPlace ? haversineMeters(position, nextPlace) : null;
+
+  // 여행 진행 중 현재 위치를 서버에 보고 → 서버가 일정 시작 시각에 미도착 여부를 판정한다.
+  useReportLiveLocation({ position, enabled: Boolean(active) });
 
   const dayMarkers = useMemo(() => {
     if (!trip) return [];
@@ -134,7 +131,7 @@ function TripProgressContent() {
             <LocationPermissionBanner permission={permission} />
             <NextStopBar
               item={nextItem}
-              distanceM={deviation.distanceM}
+              distanceM={distanceToNext}
               transportLabel={trip?.meta.transportLabel}
             />
             <TripProgressTimeline
@@ -181,7 +178,7 @@ function TripProgressContent() {
               <LocationPermissionBanner permission={permission} />
               <NextStopBar
                 item={nextItem}
-                distanceM={deviation.distanceM}
+                distanceM={distanceToNext}
                 transportLabel={trip?.meta.transportLabel}
               />
               <TripProgressTimeline
@@ -194,14 +191,6 @@ function TripProgressContent() {
           </aside>
         </div>
       </div>
-
-      <DeviationBanner
-        open={deviation.deviated}
-        distanceM={deviation.distanceM}
-        onConfirm={deviation.confirm}
-        onDismiss={deviation.dismiss}
-        reporting={deviation.isReporting}
-      />
 
       <AlternativeSheet
         tripId={active.id}

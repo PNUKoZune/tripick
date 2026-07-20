@@ -180,7 +180,9 @@ export class InboxService {
       return [{ type: 'open-trip', label: '여행 보기', tripId }];
     }
     if (
-      (notification.category === 'weather_alert' || notification.category === 'crowd_alert') &&
+      (notification.category === 'weather_alert' ||
+        notification.category === 'crowd_alert' ||
+        notification.category === 'arrival_alert') &&
       tripId
     ) {
       return [{ type: 'open-trip', label: '일정 변경', tripId }];
