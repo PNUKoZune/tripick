@@ -28,6 +28,30 @@ describe('PlannerService hard constraints', () => {
     expect(harness.tripsRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: 'confirmed' }));
   });
 
+  it('preserves a user memo on the matching place when replanning', async () => {
+    const harness = createHarness();
+    harness.constraintEngine.validate.mockImplementation(async (items: ItineraryItemDto[]) => ({
+      valid: true,
+      issues: [],
+      items,
+    }));
+    // 재계획 전 저장돼 있던 같은 장소에 사용자가 남긴 메모.
+    harness.itineraryService.findByTrip.mockResolvedValue([
+      {
+        name: '광안리 카페',
+        coordinates: { lat: 35.1532, lng: 129.1185 },
+        memo: '12시 예약, 주차 앞쪽',
+      },
+    ]);
+
+    await harness.service.replan({ tripId: TRIP.id, trigger: 'manual' });
+
+    const stored = harness.itineraryService.replaceTripItems.mock.calls[0]?.[1] ?? [];
+    expect(stored).toHaveLength(1);
+    // 같은 장소가 다시 배치됐으므로 사용자 메모가 새 항목으로 이어져야 한다.
+    expect(stored[0]?.memo).toBe('12시 예약, 주차 앞쪽');
+  });
+
   it('does not replace stored itinerary items when AI and fallback drafts violate hard constraints', async () => {
     const harness = createHarness();
     harness.constraintEngine.validate.mockResolvedValue({
@@ -63,6 +87,7 @@ function createHarness() {
     save: jest.fn().mockResolvedValue({ ...TRIP, status: 'confirmed' }),
   };
   const itineraryService = {
+    findByTrip: jest.fn().mockResolvedValue([]),
     replaceTripItems: jest.fn(async (_tripId: string, items: ItineraryItemDto[]) =>
       items.map((item, index) => ({
         ...item,
