@@ -178,22 +178,30 @@ export class PlannerService {
 
     // memo 는 사용자가 직접 남기는 메모 공간이므로 생성 단계의 AI 추론(취향·confidence·
     // 날씨 힌트)을 저장하지 않는다. 새 일정의 memo 는 비어 있는 채로 시작한다.
-    const toStore: CreateItineraryItemDto[] = finalItems.map((item) => ({
-      tripId: item.tripId,
-      day: item.day,
-      order: item.order,
-      type: item.type,
-      name: item.name,
-      address: item.address,
-      coordinates: item.coordinates,
-      scheduledAt: item.scheduledAt,
-      durationMin: item.durationMin,
-      ...(item.travelTimeMin ? { travelTimeMin: item.travelTimeMin } : {}),
-      ...(item.openingHours ? { openingHours: item.openingHours } : {}),
-      ...(item.phoneNumber ? { phoneNumber: item.phoneNumber } : {}),
-      ...(item.kakaoPlaceId ? { kakaoPlaceId: item.kakaoPlaceId } : {}),
-      ...(item.imageUrl ? { imageUrl: item.imageUrl } : {}),
-    } as CreateItineraryItemDto));
+    // 단, 재계획으로 항목을 갈아끼울 때 같은 장소가 다시 배치되면 사용자가 남긴 기존 memo
+    // (예약 시간·준비물 등)를 이어받는다. replaceTripItems 가 기존 항목을 전부 삭제하므로
+    // 여기서 미리 보존하지 않으면 사용자 메모가 사라진다.
+    const memoByPlace = await this.collectExistingMemos(trip);
+    const toStore: CreateItineraryItemDto[] = finalItems.map((item) => {
+      const preservedMemo = memoByPlace.get(this.placeMemoKey(item));
+      return {
+        tripId: item.tripId,
+        day: item.day,
+        order: item.order,
+        type: item.type,
+        name: item.name,
+        address: item.address,
+        coordinates: item.coordinates,
+        scheduledAt: item.scheduledAt,
+        durationMin: item.durationMin,
+        ...(item.travelTimeMin ? { travelTimeMin: item.travelTimeMin } : {}),
+        ...(item.openingHours ? { openingHours: item.openingHours } : {}),
+        ...(item.phoneNumber ? { phoneNumber: item.phoneNumber } : {}),
+        ...(item.kakaoPlaceId ? { kakaoPlaceId: item.kakaoPlaceId } : {}),
+        ...(item.imageUrl ? { imageUrl: item.imageUrl } : {}),
+        ...(preservedMemo ? { memo: preservedMemo } : {}),
+      } as CreateItineraryItemDto;
+    });
 
     const saved = await this.itineraryService.replaceTripItems(trip.id, toStore);
     this.logger.log(
@@ -426,6 +434,34 @@ export class PlannerService {
       return `${name} (${trigger} 대응)`;
     }
     return name;
+  }
+
+  /**
+   * 재계획 전 저장돼 있던 항목들의 사용자 memo 를 장소 키로 색인한다.
+   * 초기 생성 시에는 기존 항목이 없어 빈 Map 이 반환된다.
+   */
+  private async collectExistingMemos(trip: TripEntity): Promise<Map<string, string>> {
+    const existing = await this.itineraryService.findByTrip(trip.id, trip.userId);
+    const byPlace = new Map<string, string>();
+    for (const item of existing) {
+      const memo = item.memo?.trim();
+      if (memo) byPlace.set(this.placeMemoKey(item), memo);
+    }
+    return byPlace;
+  }
+
+  /**
+   * 같은 장소를 재계획 전후로 잇기 위한 키. kakaoPlaceId 가 가장 안정적이고,
+   * 없으면 이름 + 좌표(소수 4자리) 로 대체한다. 좌표를 반올림해 미세한 오차로
+   * 매칭이 깨지지 않게 한다.
+   */
+  private placeMemoKey(item: {
+    kakaoPlaceId?: string;
+    name: string;
+    coordinates: PlaceDto['coordinates'];
+  }): string {
+    if (item.kakaoPlaceId) return `kakao:${item.kakaoPlaceId}`;
+    return `name:${item.name.trim()}@${item.coordinates.lat.toFixed(4)},${item.coordinates.lng.toFixed(4)}`;
   }
 
   private buildMemo(
