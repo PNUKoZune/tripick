@@ -6,7 +6,7 @@
 
 ## 1. 서비스 개요
 
-사용자의 이미지 취향 분석과 실시간 맥락(경로 이탈)을 반영하여 국내 여행 일정을 자동 생성·재계획하고, 날씨·혼잡 변화 시 일정 조정을 추천하는 AI 에이전트 서비스. React Native 앱(Next.js WebView) + NestJS 백엔드 + 프라이빗 LLM 추론 인프라로 구성.
+사용자의 이미지 취향 분석을 반영하여 국내 여행 일정을 자동 생성하고, 경로 이탈(미도착)·날씨·혼잡 등 실시간 맥락 변화 시 일정 조정을 추천(알림)하는 AI 에이전트 서비스. 실제 재계획은 사용자가 알림을 확인한 뒤 수동으로 요청한다. React Native 앱(Next.js WebView) + NestJS 백엔드 + 프라이빗 LLM 추론 인프라로 구성.
 
 ---
 
@@ -91,12 +91,25 @@
 
 ## 3. 핵심 데이터 흐름
 
-### 실시간 재계획 플로우 (Realtime Replanning Flow)
+### 미도착 감지 → 알림 플로우 (Arrival-Check Alert Flow)
+
+경로 이탈은 자동 재계획을 트리거하지 않고, 날씨·혼잡과 동일하게 "알림"만 보낸다.
 
 ```
-① Route deviation reported
+① 일정 항목 시작 시각 도달
+→ ② 현재 위치가 해당 좌표 근처(반경 임계)인지 판정
+→ ③ 근처에 없으면 미도착 알림(inbox + FCM push) 발송
+→ ④ 사용자가 알림 확인 → planner 로 이동해 직접 재계획 요청(선택)
+```
+
+### 재계획 플로우 (Replanning Flow, 사용자 확인 후)
+
+미도착·날씨·혼잡 알림 확인, 또는 대안 팝업에서 사용자가 재계획을 요청했을 때만 실행된다.
+
+```
+① 사용자 재계획 요청 (trigger: deviation / weather / manual)
 → ② BullMQ replanning job 등록
-→ ③ Tool Router queries maps / weather / routes
+→ ③ Tool Orchestration queries maps / weather / routes
 → ④ Local LLM generates alt. itinerary
 → ⑤ Constraint Engine validates
 → ⑥ WebSocket / FCM pushes plan
@@ -242,6 +255,7 @@ src/
 - Geolocation(`navigator.geolocation`)은 HTTPS 환경에서만 동작, 로컬은 `localhost` 예외
 - Android WebView에서 geolocation 이중 권한 처리 필요 (`onPermissionRequest` prop)
 - 취향 사진은 사용자 갤러리에서 직접 선택·업로드로 수집 (Instagram Graph API는 API 한계·앱 검수 리스크로 미채택)
+- 경로 이탈(미도착)도 자동 재계획을 트리거하지 않고 "알림"만 한다. 이동 중 연속 이탈 판정 대신, **각 일정 항목의 시작 시각에 현재 위치가 그 좌표 근처(반경 임계)인지 이산 체크**해 미도착이면 inbox + FCM 알림을 보낸다. 클릭 시 planner 로 이동해 사용자가 직접 재계획 (`trigger: 'deviation'`). 배너에서 confirm 을 눌러야 신고되던 semi-manual 흐름을 대체한다
 - 날씨 변화는 자동 재계획을 트리거하지 않고 일정 조정을 "추천"(inbox 알림)만 한다. 실제 재계획은 사용자가 확인 후 수동 요청 (`trigger: 'weather'`)
 - 관광지 혼잡(집중률)도 날씨와 동일하게 자동 재계획 없이 "추천"만 한다. `CrowdAlertModule`(하루 1회 스캔)이 여행 일정 관광지의 예측 집중률이 그 장소 평균 대비 높은 날을 찾아 `crowd_alert` inbox 알림을 보낸다. 클릭 시 planner 로 이동해 사용자가 직접 재계획. **집중률은 일정 생성/재계획 점수에는 넣지 않는다**(취향 신호를 흐릴 수 있음)
 - 모든 외부 API는 추상화된 이름(Object Storage, 지도 API 등)으로 인터페이스 설계, 특정 서비스 교체 시 환경변수만 변경
