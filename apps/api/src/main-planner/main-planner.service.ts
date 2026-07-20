@@ -19,6 +19,7 @@ import { PlaceRetrievalService } from '../planner/retrieval/place-retrieval.serv
 import { TourApiService } from '../planner/retrieval/tour-api.service';
 import type { CandidatePlace, RawPlaceCandidate } from '../planner/retrieval/types';
 import type { ParsedForecast } from '@tripick/utils';
+import { addDaysToIsoDate, toKstIsoDate } from '@tripick/utils';
 import type {
   AddTripMemberRequestDto,
   CreateTripDto,
@@ -1302,9 +1303,9 @@ export class MainPlannerService {
     const end = new Date(`${endDate}T00:00:00+09:00`);
     const diff = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000));
     return Array.from({ length: diff + 1 }, (_, index) => {
-      const date = new Date(start);
-      date.setDate(start.getDate() + index);
-      const iso = this.isoDate(date);
+      // 일자 산술은 ISO 문자열 UTC 연산으로만 한다 — Date 를 로컬 setDate/getDate 로
+      // 굴리면 UTC 컨테이너에서 각 일차 iso 가 하루씩 밀린다.
+      const iso = addDaysToIsoDate(startDate, index);
       return {
         day: index + 1,
         label: `${index + 1}일차`,
@@ -1321,7 +1322,7 @@ export class MainPlannerService {
   private tripProgress(trip: TripEntity, totalDays: number): PlannerTripProgressDto {
     const status = this.summaryStatus(trip);
     const start = new Date(`${trip.startDate}T00:00:00+09:00`);
-    const today = new Date(`${this.isoDate(new Date())}T00:00:00+09:00`);
+    const today = new Date(`${toKstIsoDate()}T00:00:00+09:00`);
     const dayDiff = Math.floor((today.getTime() - start.getTime()) / 86400000) + 1;
     const currentDay = Math.min(Math.max(dayDiff, 1), Math.max(totalDays, 1));
     return {
@@ -1336,7 +1337,7 @@ export class MainPlannerService {
     if (trip.status === 'draft' || trip.status === 'cancelled') return 'draft';
     if (trip.status === 'completed') return 'done';
 
-    const today = this.isoDate(new Date());
+    const today = toKstIsoDate();
     if (today < trip.startDate) return 'upcoming';
     if (today > trip.endDate) return 'done';
     return 'ongoing';
@@ -1360,9 +1361,12 @@ export class MainPlannerService {
   }
 
   private dateLabel(iso: string): string {
-    const date = new Date(`${iso}T00:00:00+09:00`);
-    const dow = ['일', '월', '화', '수', '목', '금', '토'][date.getDay()] ?? '';
-    return `${date.getMonth() + 1}/${date.getDate()} ${dow}`;
+    // iso(YYYY-MM-DD)를 UTC 자정으로 파싱해 UTC getter 로만 읽는다 — 로컬 getter 를 쓰면
+    // UTC 컨테이너에서 월/일·요일이 하루 밀린다.
+    const [y = 0, m = 1, d = 1] = iso.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d));
+    const dow = ['일', '월', '화', '수', '목', '금', '토'][date.getUTCDay()] ?? '';
+    return `${date.getUTCMonth() + 1}/${date.getUTCDate()} ${dow}`;
   }
 
   private timeLabel(date: Date): string {
@@ -1372,13 +1376,6 @@ export class MainPlannerService {
       minute: '2-digit',
       hour12: false,
     }).format(date);
-  }
-
-  private isoDate(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
   }
 
   private transportLabel(mode: TripEntity['transportMode']): string {

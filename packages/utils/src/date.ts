@@ -43,6 +43,27 @@ export function toKmaDate(date: Date = new Date()): string {
 }
 
 /**
+ * Date → Asia/Seoul 기준 "YYYY-MM-DD" 문자열.
+ * 서버 로컬 TZ 의 getFullYear/getMonth/getDate 를 쓰면 UTC 컨테이너에서 하루가 밀리므로
+ * 항상 KST 구성요소로 조립한다. ("오늘"(KST) 판정·일자 비교의 정본)
+ */
+export function toKstIsoDate(date: Date = new Date()): string {
+  const { year, month, day } = getKstParts(date);
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+
+/**
+ * "YYYY-MM-DD" 에 일수를 더한다 (UTC 정수 연산이라 서버 TZ·서머타임에 영향받지 않는다).
+ * @example addDaysToIsoDate("2026-07-20", 1) → "2026-07-21"
+ */
+export function addDaysToIsoDate(iso: string, days: number): string {
+  const [y = 0, m = 1, d = 1] = iso.split('-').map(Number);
+  const utc = new Date(Date.UTC(y, m - 1, d));
+  utc.setUTCDate(utc.getUTCDate() + days);
+  return `${utc.getUTCFullYear()}-${pad2(utc.getUTCMonth() + 1)}-${pad2(utc.getUTCDate())}`;
+}
+
+/**
  * "HH:mm" 시간 문자열 → 분 단위 정수
  * @example timeToMinutes("08:30") → 510
  */
