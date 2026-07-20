@@ -34,7 +34,7 @@ function preferSigungu(cur: RegionRecommendation, next: RegionRecommendation): b
   return next.score > cur.score;
 }
 
-/** areaCode2 응답 아이템 (시도 / 시군구 공통) */
+/** ldongCode2 응답 아이템 (법정동 시도 / 시군구 공통). code=lDongRegnCd/lDongSignguCd */
 interface AreaCodeItem {
   code: string | number;
   name: string;
@@ -101,14 +101,14 @@ function toItemArray(items: AreaCodeResponse['response']): AreaCodeItem[] {
 }
 
 /**
- * 한국관광공사 국문관광정보 서비스(GW)의 areaCode2를 이용해
+ * 한국관광공사 국문관광정보 서비스(GW)의 ldongCode2(법정동 코드)를 이용해
  * 시도 + 시군구 여행 지역 목록을 구성한다.
  * 지역 목록은 거의 변하지 않으므로 최초 1회 조회 후 메모리에 캐싱한다.
  */
 @Injectable()
 export class DestinationsService {
   private readonly logger = new Logger(DestinationsService.name);
-  private readonly BASE_URL = 'https://apis.data.go.kr/B551011/KorService2/areaCode2';
+  private readonly BASE_URL = 'https://apis.data.go.kr/B551011/KorService2/ldongCode2';
   private cache: Promise<DestinationSuggestionDto[]> | null = null;
 
   private static readonly REC_TOP_K = 12;
@@ -259,8 +259,8 @@ export class DestinationsService {
     return list;
   }
 
-  /** areaCode 미지정 → 시도 목록, 지정 → 해당 시도의 시군구 목록 */
-  private async fetchAreas(apiKey: string, areaCode?: string): Promise<AreaCodeItem[]> {
+  /** lDongRegnCd 미지정 → 시도 목록, 지정 → 해당 시도의 시군구 목록 */
+  private async fetchAreas(apiKey: string, lDongRegnCd?: string): Promise<AreaCodeItem[]> {
     const res = await axios.get<AreaCodeResponse>(this.BASE_URL, {
       params: {
         serviceKey: apiKey,
@@ -269,7 +269,7 @@ export class DestinationsService {
         MobileOS: 'ETC',
         MobileApp: 'TriPick',
         _type: 'json',
-        ...(areaCode ? { areaCode } : {}),
+        ...(lDongRegnCd ? { lDongRegnCd } : {}),
       },
     });
     return toItemArray(res.data.response);
