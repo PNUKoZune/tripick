@@ -50,13 +50,13 @@
 
 ## 알림 · 날씨 · 혼잡
 
-- [ ] 예보 악화 시 재알림(선점 키에 확률 저장) ([weather-alert](../alerts/weather-alert-scheduler-v1.md#L130))
-- [ ] 일차 딥링크(푸시 payload `day` 반영)
+- [x] 예보 악화 시 재알림(선점 키에 확률 저장) `[제외: 알림 피로]` — 재알림은 사용자에게 알림이 잦아 오히려 불편. (여행, 일자)당 1회 유지 ([weather-alert](../alerts/weather-alert-scheduler-v1.md#L130))
+- [x] 일차 딥링크(푸시 payload `day` 반영) `[코드확인]` — 세 알림(weather/crowd/arrival)의 open-trip action 에 `day` 주입 → `/planner?tripId=X&day=N` → PlannerView 초기 일차. 스테일 일차는 기존 effect 가 첫 일차로 폴백
 - [x] 날씨/재계획 알림 수신 토글 분리 `[코드확인]` — `prefersCategory` 의 weather/crowd/arrival→replan_ready collapse 제거, 각 카테고리가 자기 키를 따름. 설정 UI 는 "재계획 완료"(replan_ready)와 "날씨·혼잡·미도착 추천"(weather_alert 대표, crowd·arrival 동반) 2개 row 로 분리. 기존 replan_ready off 사용자는 이제 추천을 따로 끌 수 있음(추천은 기본 on 으로 복귀)
-- [ ] 임계값 캘리브레이션(유예 15분·반경 500m·신선도 10분, 상대 1.2·하한 10%) ([arrival](../alerts/arrival-check-alert-v1.md#L142)·[crowd](../alerts/crowd-alert-scheduler-v1.md#L143))
-- [ ] iOS 백그라운드 위치(significant-location-change)
-- [ ] KTO `tAtsNm` 이름 매칭 누락 처리
-- [ ] 강수확률/습도 UI 노출 ([weather-forecast](../alerts/weather-forecast-v1.md#L88))
+- [ ] 임계값 캘리브레이션(유예 15분·반경 500m·신선도 10분, 상대 1.2·하한 10%) `[보류: 라이브 데이터 부재]` — 오탐/미탐 지표가 쌓여야 튜닝 근거가 생김. 실데이터 없이는 착수 애매 ([arrival](../alerts/arrival-check-alert-v1.md#L142)·[crowd](../alerts/crowd-alert-scheduler-v1.md#L143))
+- [ ] iOS 백그라운드 위치(significant-location-change) `[보류: 실기기 + iOS 네이티브]` — significant-location-change 는 실기기 검증 + 네이티브 작업 필요
+- [x] KTO `tAtsNm` 이름 매칭 누락 지표화 `[코드확인]` — 조용히 사라지던 관광지 조회 스킵을 사유별(region_unresolved·budget_exhausted·no_data·name_mismatch·empty_rate) 집계 → 스캔 끝에 커버리지 요약 로그(스킵 있으면 warn). `fetchConcentration` 이 사유 반환(`ConcentrationLookup`), `CoverageMetrics` 누적. **이름 매칭 로직 개선(부분일치·별칭)은 지표 보고 판단** — 오알림 방지 스킵 동작은 유지 ([crowd](../alerts/crowd-alert-scheduler-v1.md#L143))
+- [x] 강수확률 UI 노출 `[코드확인]` — 날씨 카드에 일자별 최대 POP(물방울 아이콘 + %) 노출. 단기예보만 POP 가 있어 중기·폴백 일자는 숨김. 습도는 `[제외: 불필요]` ([weather-forecast](../alerts/weather-forecast-v1.md#L88))
 
 ## 취향 · 임베딩
 

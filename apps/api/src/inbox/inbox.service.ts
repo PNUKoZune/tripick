@@ -185,7 +185,16 @@ export class InboxService {
         notification.category === 'arrival_alert') &&
       tripId
     ) {
-      return [{ type: 'open-trip', label: '일정 변경', tripId }];
+      // 세 알림 모두 payload.day(문자열)에 해당 일차를 실어 보낸다 — 딥링크로 그 일차를 바로 연다.
+      const day = Number(notification.payload?.day);
+      return [
+        {
+          type: 'open-trip',
+          label: '일정 변경',
+          tripId,
+          ...(Number.isInteger(day) && day > 0 ? { day } : {}),
+        },
+      ];
     }
     if (notification.category === 'general' && tripId) {
       return [{ type: 'open-trip', label: '여행 보기', tripId }];

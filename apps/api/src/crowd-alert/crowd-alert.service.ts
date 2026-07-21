@@ -9,6 +9,7 @@ import { InboxService } from '../inbox/inbox.service';
 import { TripMembersService } from '../trip-members/trip-members.service';
 import {
   ConcentrationSeries,
+  ConcentrationSkipReason,
   TatsCnctrRateService,
 } from '../planner/retrieval/tats-cnctr-rate.service';
 import { KtoCallBudget, KtoQuotaExceededError } from '../planner/retrieval/tour-api.service';
@@ -22,6 +23,50 @@ import {
   MAX_TRIP_DAYS,
   MIN_DEDUPE_TTL_SEC,
 } from './crowd-alert.constants';
+
+/**
+ * 집중률 조회가 시계열을 못 얻은 사유. tats 서비스의 스킵 사유 + 스캔 단계에서만 아는 두 사유.
+ * - region_unresolved: 주소로 areaCd/signguCd 를 해석 못 함(시군구 파싱·색인 miss)
+ * - budget_exhausted: 이번 스캔의 KTO 호출 예산 소진
+ */
+type CoverageReason = ConcentrationSkipReason | 'region_unresolved' | 'budget_exhausted';
+
+/**
+ * 혼잡 스캔 1회의 관광지 조회 커버리지 집계. RouteHelper 폴백 지표화와 같은 철학 —
+ * 조용히 사라지던 스킵을 사유별로 세어, 스캔 끝에 한 줄로 남긴다(특히 name_mismatch 급증이 곧 신호).
+ */
+class CoverageMetrics {
+  private matched = 0;
+  private readonly counts = new Map<CoverageReason, number>();
+
+  hit(): void {
+    this.matched += 1;
+  }
+
+  record(reason: CoverageReason): void {
+    this.counts.set(reason, (this.counts.get(reason) ?? 0) + 1);
+  }
+
+  private get skipped(): number {
+    let sum = 0;
+    for (const n of this.counts.values()) sum += n;
+    return sum;
+  }
+
+  get hasSkips(): boolean {
+    return this.skipped > 0;
+  }
+
+  /** "관광지 40 / 매칭 28 / 스킵 12 (name_mismatch 4, region_unresolved 5, no_data 3)" */
+  summary(): string {
+    const breakdown =
+      [...this.counts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([reason, n]) => `${reason} ${n}`)
+        .join(', ') || '없음';
+    return `관광지 ${this.matched + this.skipped} / 매칭 ${this.matched} / 스킵 ${this.skipped} (${breakdown})`;
+  }
+}
 
 /** 혼잡이 예상되는 여행 일자 1건. */
 interface CrowdedDay {
@@ -97,6 +142,8 @@ export class CrowdAlertService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(`혼잡 스캔 시작 — 대상 여행 ${trips.length}건`);
     // KTO 일일 한도(적재와 공유)를 스캔이 독점하지 않도록 이번 실행의 호출 예산을 선제 캡한다.
     const budget = new KtoCallBudget(CROWD_SCAN_CALL_BUDGET);
+    // 관광지 조회 커버리지를 스캔 전체 단위로 집계한다(스캔 끝에 한 줄 요약).
+    const coverage = new CoverageMetrics();
     let alerted = 0;
     for (const trip of trips) {
       if (budget.isExhausted) {
@@ -104,7 +151,7 @@ export class CrowdAlertService implements OnModuleInit, OnModuleDestroy {
         break;
       }
       try {
-        alerted += await this.scanTrip(trip, now, budget);
+        alerted += await this.scanTrip(trip, now, budget, coverage);
       } catch (err) {
         if (err instanceof KtoQuotaExceededError) {
           // 일일 호출량 초과면 남은 여행도 마찬가지다 — 스캔을 접고 다음 주기에 재시도한다.
@@ -114,6 +161,10 @@ export class CrowdAlertService implements OnModuleInit, OnModuleDestroy {
         this.logger.error(`여행 ${trip.id} 혼잡 스캔 실패:`, err);
       }
     }
+    // 스킵이 있으면 warn(커버리지 구멍 신호), 아니면 log 로 요약을 남긴다.
+    const coverageLine = `혼잡 스캔 커버리지: ${coverage.summary()}`;
+    if (coverage.hasSkips) this.logger.warn(coverageLine);
+    else this.logger.log(coverageLine);
     this.logger.log(`혼잡 스캔 완료 — 알림 ${alerted}건 발송`);
     return alerted;
   }
@@ -136,7 +187,12 @@ export class CrowdAlertService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** 여행 1건 스캔 → 혼잡 예상 일자마다 알림 발송. 발송 건수 반환. */
-  private async scanTrip(trip: TripEntity, now: Date, budget: KtoCallBudget): Promise<number> {
+  private async scanTrip(
+    trip: TripEntity,
+    now: Date,
+    budget: KtoCallBudget,
+    coverage: CoverageMetrics,
+  ): Promise<number> {
     const items = await this.itemsRepo.find({ where: { tripId: trip.id } });
 
     // 미래 후보일(오늘 이후 + 관광지 일정이 있는 날)만 추린다. 과거일 관광지까지 조회하면
@@ -164,7 +220,7 @@ export class CrowdAlertService implements OnModuleInit, OnModuleDestroy {
     }
     const seriesByPlace = new Map<string, ConcentrationSeries | null>();
     for (const [name, item] of needed) {
-      seriesByPlace.set(name, await this.loadSeries(item, budget));
+      seriesByPlace.set(name, await this.loadSeries(item, budget, coverage));
     }
 
     let recipients: string[] | null = null;
@@ -190,16 +246,36 @@ export class CrowdAlertService implements OnModuleInit, OnModuleDestroy {
     return alerted;
   }
 
-  /** 일정 항목의 주소·이름으로 그 관광지의 집중률 시계열을 조회한다. 예산 소진 시 null. */
+  /**
+   * 일정 항목의 주소·이름으로 그 관광지의 집중률 시계열을 조회한다. 못 얻으면 null 을 주고
+   * 사유를 coverage 에 기록한다(지역 해석 실패·예산 소진·이름 불일치 등).
+   */
   private async loadSeries(
     item: ItineraryItemEntity,
     budget: KtoCallBudget,
+    coverage: CoverageMetrics,
   ): Promise<ConcentrationSeries | null> {
     const region = await this.tatsCnctrRate.resolveRegionCode(item.address);
-    if (!region) return null;
+    if (!region) {
+      coverage.record('region_unresolved');
+      return null;
+    }
     // 집중률 조회는 관광지당 1콜 — 예산에서 먼저 차감하고, 소진이면 더 조회하지 않는다.
-    if (!budget.consume()) return null;
-    return this.tatsCnctrRate.fetchConcentration(region.areaCd, region.signguCd, item.name);
+    if (!budget.consume()) {
+      coverage.record('budget_exhausted');
+      return null;
+    }
+    const lookup = await this.tatsCnctrRate.fetchConcentration(
+      region.areaCd,
+      region.signguCd,
+      item.name,
+    );
+    if (!lookup.ok) {
+      coverage.record(lookup.reason);
+      return null;
+    }
+    coverage.hit();
+    return lookup.series;
   }
 
   /**

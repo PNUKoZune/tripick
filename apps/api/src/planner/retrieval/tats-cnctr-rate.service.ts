@@ -50,6 +50,19 @@ export interface ConcentrationSeries {
   mean: number;
 }
 
+/**
+ * 집중률 조회가 시계열을 못 얻은 사유. 커버리지 지표로 집계한다.
+ * - no_data: KTO 에 그 이름 데이터가 없음(totalCount 0)
+ * - name_mismatch: 정확 일치가 없고 LIKE 후보가 여럿 — 오알림 방지로 포기(우리 title↔KTO tAtsNm 표기 차이)
+ * - empty_rate: 응답은 왔으나 cnctrRate 파싱이 전부 실패
+ */
+export type ConcentrationSkipReason = 'no_data' | 'name_mismatch' | 'empty_rate';
+
+/** fetchConcentration 결과 — 성공이면 시계열, 실패면 사유. */
+export type ConcentrationLookup =
+  | { ok: true; series: ConcentrationSeries }
+  | { ok: false; reason: ConcentrationSkipReason };
+
 function toArray<T>(item: T | T[] | undefined): T[] {
   if (!item) return [];
   return Array.isArray(item) ? item : [item];
@@ -99,9 +112,9 @@ export class TatsCnctrRateService {
     areaCd: string,
     signguCd: string,
     tAtsNm: string,
-  ): Promise<ConcentrationSeries | null> {
+  ): Promise<ConcentrationLookup> {
     const items = await this.callTats(areaCd, signguCd, tAtsNm);
-    if (items.length === 0) return null;
+    if (items.length === 0) return { ok: false, reason: 'no_data' };
 
     const target = normalizePlace(tAtsNm);
     const exact = items.filter((it) => normalizePlace(it.tAtsNm) === target);
@@ -116,7 +129,7 @@ export class TatsCnctrRateService {
         this.logger.debug(
           `집중률 이름 불일치로 스킵: tAtsNm=${tAtsNm} (LIKE 후보 ${names.size}종)`,
         );
-        return null;
+        return { ok: false, reason: 'name_mismatch' };
       }
       rows = items;
     }
@@ -126,11 +139,11 @@ export class TatsCnctrRateService {
       const rate = Number(r.cnctrRate);
       if (Number.isFinite(rate)) ratesByYmd.set(String(r.baseYmd), rate);
     }
-    if (ratesByYmd.size === 0) return null;
+    if (ratesByYmd.size === 0) return { ok: false, reason: 'empty_rate' };
 
     const values = [...ratesByYmd.values()];
     const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
-    return { tAtsNm: rows[0]!.tAtsNm, ratesByYmd, mean };
+    return { ok: true, series: { tAtsNm: rows[0]!.tAtsNm, ratesByYmd, mean } };
   }
 
   /**
