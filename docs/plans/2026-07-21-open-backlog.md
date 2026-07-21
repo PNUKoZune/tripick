@@ -13,6 +13,7 @@
 - `- [ ]` 할 일(열림) · `- [x]` 완료
 - `[대기: <조건>]` — 선행·외부 조건(라이브 배포·실기기·도메인 확정 등) 충족 전엔 착수 불가. 우리 판단이 아니라 조건 문제
 - `[보류: <이유>]` — 지금은 **의도적으로** 미진행. 우선순위·리스크·비용 판단으로 패스한 것. 체크박스는 열어두되 왜 지금 안 하는지를 남긴다
+- `[제외: <이유>]` — 프로젝트 성격이나 기획적으로 맞지 않는 항목, 체크박스를 닫고 그 이유를 남긴다.
 - `[코드확인: …]` — 미처리 여부를 코드로 대조한 항목
 
 > 새 항목도 같은 규칙으로 태그. 태그 없는 `- [ ]` 는 "그냥 아직 안 함(하면 됨)".
@@ -25,7 +26,7 @@
 - [ ] **iOS 푸시(APNs) 실기기 검증** `[대기: 실기기 + APNs Auth Key]` — Auth Key 업로드 + Xcode capability ([inbox](../notification/inbox-and-trip-invite-v1.md#L450)·[photo-taste](../preference/preference-photo-taste-analysis-v1.md#L152)·[trip-progress](../trips/trip-progress-live-v1.md#L147)·[mobile](../setup/mobile-webview-setup.md#L226))
 - [ ] **Web Push (Service Worker + VAPID)** `[코드확인: sw 없음]` — 브라우저 단독 사용자 푸시 수신 ([inbox](../notification/inbox-and-trip-invite-v1.md#L450)·[photo-taste](../preference/preference-photo-taste-analysis-v1.md#L152))
 - [ ] **DB 마이그레이션 인프라** `[코드확인: 없음]` `[대기: 라이브 스키마 반영 결정]` — `synchronize` 의존, 라이브 스키마 반영 미결 ([preferences-enh](../preference/preferences-enhancements-v1.md#L111)·[weighting](../preference/preference-embedding-weighting-v1.md#L94))
-- [ ] **지도 폴리라인 동선 시각화** `[코드확인: 없음]` — 내 위치 이동 버튼 포함 ([main-planner](../planner/main-planner-v1.md#L263)·[planner-enh](../planner/planner-page-enhancements-v1.md#L124))
+- [x] **지도 폴리라인 동선 시각화** `[코드확인: 없음]` `[제외: 폴리라인 동선은 오히려 UI 상으로 불편할 수 있음]` — 내 위치 이동 버튼 포함 ([main-planner](../planner/main-planner-v1.md#L263)·[planner-enh](../planner/planner-page-enhancements-v1.md#L124))
 
 ## 플래너 · 실시간
 
