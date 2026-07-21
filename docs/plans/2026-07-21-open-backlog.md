@@ -37,7 +37,7 @@
 - [ ] 대안 swap 시 영업시간 위반 경고
 - [ ] 현재 장소 비교 카드(P3-9)
 - [ ] pending/resolve 후보 마커 좌표 정규화 일관화
-- [ ] 필수 포함 장소 LLM 경로 보장 주입(현재 best-effort) ([planner-enh](../planner/planner-page-enhancements-v1.md#L124))
+- [x] 필수 포함 장소 LLM 경로 보장 주입(구 best-effort) `[코드확인]` — `enforceMustInclude` 로 LLM/폴백 계획에서 누락된 필수 장소를 음수 order 로 강제 주입해 일차별 slice 에서 살아남게 보장 ([planner-enh](../planner/planner-page-enhancements-v1.md#L124))
 - [ ] 검색 드롭다운 키보드 내비 · 태블릿 사이드바 접힘 localStorage
 
 ## 라우팅

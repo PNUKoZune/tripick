@@ -130,10 +130,8 @@ export class PlannerService {
       ...(options.currentLocation !== undefined ? { currentLocation: options.currentLocation } : {}),
     });
     // 반드시 포함할 장소는 최상위 후보로 시드해 배치 우선순위를 높인다
-    const candidates = [
-      ...this.buildMustIncludeCandidates(options.mustIncludePlaces),
-      ...retrieval.places,
-    ];
+    const mustCandidates = this.buildMustIncludeCandidates(options.mustIncludePlaces);
+    const candidates = [...mustCandidates, ...retrieval.places];
 
     if (candidates.length === 0) {
       throw new BadRequestException('No place candidates found for itinerary generation');
@@ -170,7 +168,9 @@ export class PlannerService {
       options,
       weatherHint,
     };
-    const aiDraft = await this.buildDraft(agentPlan, draftContext);
+    // LLM 이 필수 포함 장소를 누락했으면 강제로 주입한다(시드+프롬프트는 best-effort 라 보장 안 됨).
+    const guaranteedPlan = this.enforceMustInclude(agentPlan, mustCandidates, dayCount);
+    const aiDraft = await this.buildDraft(guaranteedPlan, draftContext);
     const aiValidation = await this.validateDraft(aiDraft, draftContext);
     const finalItems = aiValidation.valid
       ? aiValidation.items
@@ -325,13 +325,19 @@ export class PlannerService {
       `AI planner itinerary for trip ${context.trip.id} violated hard constraints: ${failedAiValidation.issues.join('; ')}`,
     );
 
+    const mustCandidates = this.buildMustIncludeCandidates(context.options.mustIncludePlaces);
     let lastValidation = failedAiValidation;
     const attempts = Math.min(3, candidates.length);
     for (let attempt = 0; attempt < attempts; attempt += 1) {
-      const fallbackPlan = this.buildDeterministicPlan(
-        this.rotate(candidates, attempt),
+      // 후보 rotate 로 필수 장소가 상위 slice 밖으로 밀릴 수 있어 결정적 폴백에서도 강제 주입한다.
+      const fallbackPlan = this.enforceMustInclude(
+        this.buildDeterministicPlan(
+          this.rotate(candidates, attempt),
+          context.dayCount,
+          context.itemsPerDay,
+        ),
+        mustCandidates,
         context.dayCount,
-        context.itemsPerDay,
       );
       const fallbackDraft = await this.buildDraft(fallbackPlan, context);
       const fallbackValidation = await this.validateDraft(fallbackDraft, context);
@@ -426,6 +432,45 @@ export class PlannerService {
           penalties: [],
         },
       }));
+  }
+
+  /**
+   * 필수 포함 장소가 계획에 없으면 강제로 주입한다. 이미 있으면(이름 일치 또는 좌표 근접)
+   * 그대로 둔다. 누락분은 각 일차에 라운드로빈으로 배치하되 `order` 를 음수로 줘,
+   * `buildDraft` 의 일차별 `order` 정렬·`slice(0, itemsPerDay)` 에서 최상단으로 살아남게 한다
+   * (초과분은 순위 낮은 비필수 항목이 밀려남).
+   */
+  private enforceMustInclude(
+    plan: PlannedCandidate[],
+    mustCandidates: CandidatePlace[],
+    dayCount: number,
+  ): PlannedCandidate[] {
+    if (mustCandidates.length === 0) return plan;
+
+    const norm = (value: string) => value.trim().toLowerCase();
+    const isSame = (a: CandidatePlace, b: CandidatePlace) =>
+      norm(a.name) === norm(b.name) ||
+      (Math.abs(a.coordinates.lat - b.coordinates.lat) < 1e-4 &&
+        Math.abs(a.coordinates.lng - b.coordinates.lng) < 1e-4);
+
+    const missing = mustCandidates.filter(
+      (must) => !plan.some((planned) => isSame(planned.candidate, must)),
+    );
+    if (missing.length === 0) return plan;
+
+    const result = [...plan];
+    missing.forEach((must, index) => {
+      result.push({
+        candidate: must,
+        day: (index % dayCount) + 1,
+        // 음수 order → 해당 일차 정렬 최상단. buildDraft 가 최종 order 를 다시 매기므로 값 자체는 표시 안 됨.
+        order: -1000 + index,
+        durationMin: this.defaultDuration(must.category),
+        memo: '사용자가 반드시 포함을 요청한 장소',
+        aiGenerated: false,
+      });
+    });
+    return result;
   }
 
   private buildPlaceName(name: string, trigger: GenerateOptions['trigger'], day: number, order: number): string {
