@@ -201,6 +201,6 @@ ODSAY_SERVICE_URL=http://localhost:4000
 - **`departAt` 미지원** — 모든 질의가 암묵적으로 "지금" 기준이다. 대중교통은 시간표 의존이라 심야 일정의 ETA 가 실제와 어긋날 수 있다. Live 폴링 소비자가 생기면 캐시가 얼어붙으므로, 그때 `departAt` 을 캐시 키에 넣어야 한다.
 - **도보는 직선거리 추정** — 강·산·고가로 우회를 모른다. 1.3배 우회 계수는 평균치라 지형에 따라 어긋난다.
 - **in-flight 병합은 프로세스 내에서만** — 스케일아웃하면 인스턴스 간 중복 호출은 캐시 TTL 로만 줄어든다. 필요해지면 Redis 락.
-- **ODsay 쿼터** — 무료 플랜 한도를 넘기면 폴백으로 조용히 떨어진다. 폴백 발생을 지표로 노출할지 검토 필요.
+- **ODsay 쿼터** — 무료 플랜 한도를 넘기면 폴백으로 조용히 떨어진다. → **지표화 완료.** 모든 로컬 추정 폴백을 `RouteHelper.fallback` 단일 통로로 모아 이동수단·사유별로 계수(`getFallbackMetrics()`)하고, 쿼터·인증·네트워크·미스컨피그 같은 이상 신호만 warn(정상적 "경로 없음"류는 debug)으로 남긴다. ODsay 는 쿼터 초과 전용 코드가 없어 `500`(서버 내부 오류) 계열로 오므로 인증 실패(`[ApiKeyAuthFailed]`)만 갈라내고 나머지는 `quota_or_server` 버킷에 담는다 — 이 버킷 급증이 곧 한도 초과 신호이고 raw 메시지도 로그에 남아 실제 쿼터 문구가 확인되면 전용 버킷으로 분리하면 된다. 계수는 in-process 라 재시작 시 리셋되며, Sentry/Prometheus export 배선은 후속(현재 apps/api 에 메트릭 싱크 없음).
 - **라이브 배포 시 `ODSAY_SERVICE_URL`** 을 실제 등록 도메인으로 바꿔야 한다. localhost 로 두면 인증이 깨지는데 폴백이 삼켜서 에러 없이 추정치가 나간다 — 이번과 똑같은 방식으로 조용히 실패한다.
 - **`packages/types/dist` 가 stale 하면 유령 tsc 에러가 난다.** dist 는 gitignore 라 브랜치를 갈아타도 안 바뀐다. 폐기한 OTP 브랜치에서 빌드된 dist 때문에 소스에 없는 필드가 required 로 잡혀 한 번 오진했다. 소스에 없는 필드를 tsc 가 요구하면 `npx turbo run build --filter=@tripick/types` 부터.

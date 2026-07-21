@@ -331,4 +331,97 @@ describe('RouteHelper', () => {
       expect(await helper.getDrivingEta(SEOUL, BUSAN)).toEqual({ durationSec: 1989, distanceM: 10240 });
     });
   });
+
+  describe('fallback metrics', () => {
+    // 폴백은 실패를 조용히 삼키므로(문서 3절), 왜 떨어졌는지를 사유별로 계수해 지표로 남긴다.
+    it('starts with no fallbacks recorded', () => {
+      expect(new RouteHelper(config()).getFallbackMetrics()).toEqual({});
+    });
+
+    it('buckets ODsay quota exhaustion under quota_or_server (code 500, no auth marker)', async () => {
+      // 무료 플랜 한도 초과는 별도 코드가 없어 500 으로 온다 — 이 버킷 급증이 곧 쿼터 신호.
+      mockedAxios.get.mockResolvedValue({
+        data: { error: [{ code: '500', message: '일 허용 호출 횟수를 초과하였습니다.' }] },
+      });
+      const helper = new RouteHelper(config(ODSAY_ENV));
+
+      const eta = await helper.getTransitEta(SEOUL, BUSAN);
+      expect(eta.durationSec).toBeGreaterThanOrEqual(600); // 폴백은 여전히 값을 준다
+      expect(helper.getFallbackMetrics()).toEqual({ 'transit:quota_or_server': 1 });
+    });
+
+    it('separates ODsay auth failure from quota via the ApiKeyAuthFailed marker', async () => {
+      mockedAxios.get.mockResolvedValue({
+        data: { error: [{ code: '500', message: '[ApiKeyAuthFailed] ApiKey authentication failed.' }] },
+      });
+      const helper = new RouteHelper(config(ODSAY_ENV));
+
+      await helper.getTransitEta(SEOUL, BUSAN);
+      expect(helper.getFallbackMetrics()).toEqual({ 'transit:auth_failed': 1 });
+    });
+
+    it('treats "700m 이내"(-98) and "검색결과 없음"(-99) as expected, not anomalies', async () => {
+      const helper = new RouteHelper(config(ODSAY_ENV));
+
+      mockedAxios.get.mockResolvedValue({ data: { error: [{ code: '-98', message: '700m 이내' }] } });
+      await helper.getTransitEta(SEOUL, BUSAN);
+      mockedAxios.get.mockResolvedValue({ data: { error: [{ code: '-99', message: '검색결과 없음' }] } });
+      await helper.getTransitEta(BUSAN, SEOUL);
+
+      expect(helper.getFallbackMetrics()).toEqual({
+        'transit:too_close': 1,
+        'transit:no_route': 1,
+      });
+    });
+
+    it('records missing config as its own reason per mode', async () => {
+      const helper = new RouteHelper(config()); // 키 없음
+      await helper.getDrivingEta(SEOUL, BUSAN);
+      await helper.getTransitEta(SEOUL, BUSAN);
+
+      expect(helper.getFallbackMetrics()).toEqual({
+        'car:no_key': 1,
+        'transit:no_key': 1,
+      });
+    });
+
+    it('flags ODSAY_SERVICE_URL absence distinctly from a missing key', async () => {
+      const helper = new RouteHelper(config({ ODSAY_API_KEY: 'k' })); // URL 만 없음
+      await helper.getTransitEta(SEOUL, BUSAN);
+
+      expect(helper.getFallbackMetrics()).toEqual({ 'transit:no_service_url': 1 });
+    });
+
+    it('records network throws and accumulates repeat occurrences', async () => {
+      mockedAxios.get.mockRejectedValue(new Error('ETIMEDOUT'));
+      const helper = new RouteHelper(config({ KAKAO_REST_API_KEY: 'k' }));
+
+      await helper.getDrivingEta(SEOUL, BUSAN);
+      await helper.getDrivingEta(BUSAN, SEOUL); // 다른 좌표쌍 — 캐시/병합에 안 걸린다
+
+      expect(helper.getFallbackMetrics()).toEqual({ 'car:network': 2 });
+    });
+
+    it('records a non-zero Kakao result_code as api_error', async () => {
+      mockedAxios.get.mockResolvedValue({
+        data: { routes: [{ result_code: 103, result_msg: '도로를 찾을 수 없습니다' }] },
+      });
+      const helper = new RouteHelper(config({ KAKAO_REST_API_KEY: 'k' }));
+
+      await helper.getDrivingEta(SEOUL, BUSAN);
+      expect(helper.getFallbackMetrics()).toEqual({ 'car:api_error': 1 });
+    });
+
+    it('does not count a successful lookup or a local walk estimate as a fallback', async () => {
+      mockedAxios.get.mockResolvedValue({
+        data: { routes: [{ result_code: 0, summary: { duration: 10, distance: 20 } }] },
+      });
+      const helper = new RouteHelper(config({ KAKAO_REST_API_KEY: 'k' }));
+
+      await helper.getDrivingEta(SEOUL, BUSAN); // 성공
+      await helper.getWalkingEta(SEOUL, BUSAN); // 정식 추정 모델 — 폴백 아님
+
+      expect(helper.getFallbackMetrics()).toEqual({});
+    });
+  });
 });
