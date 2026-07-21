@@ -20,6 +20,7 @@
     "@tripick/types": "workspace:*",
     "@tripick/utils": "workspace:*",
     "date-fns": "^4.2.1",
+    "firebase": "^12.16.0",
     "html-to-image": "^1.11.13",
     "jspdf": "^4.2.1",
     "next": "^16.2.4",

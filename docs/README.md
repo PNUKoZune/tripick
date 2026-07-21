@@ -60,6 +60,7 @@
 ## 알림 인프라 · 인박스 (Notification)
 
 - [notification/fcm-production-push-v1.md](notification/fcm-production-push-v1.md) — FCM 푸시 production 품질
+- [notification/web-push-service-worker-v1.md](notification/web-push-service-worker-v1.md) — 웹 푸시 (Service Worker + VAPID)
 - [notification/inbox-and-trip-invite-v1.md](notification/inbox-and-trip-invite-v1.md) — 인박스 · 여행 초대
 - [notification/friend-request-push-and-deeplink-v1.md](notification/friend-request-push-and-deeplink-v1.md) — 친구 요청 푸시 + 푸시 탭 딥링크 라우팅
 
