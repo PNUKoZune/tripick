@@ -241,18 +241,17 @@ export class UsersService implements OnModuleInit {
     return user.notificationPreferences;
   }
 
-  /** 단일 카테고리 수신 여부 — 미설정이면 default 적용. weather_alert는 replan_ready 토글로 함께 제어. */
+  /**
+   * 단일 카테고리 수신 여부 — 미설정이면 default 적용. 각 카테고리는 자기 토글을 따른다.
+   * 날씨·혼잡·미도착 추천은 UI 에서 한 스위치로 묶어 세 키를 함께 켜고 끄지만(맥락 변동 추천),
+   * 재계획 완료(replan_ready)와는 분리돼 서로 영향을 주지 않는다.
+   */
   prefersCategory(user: UserEntity, key: keyof NotificationPreferencesDto): boolean {
     const merged: NotificationPreferencesDto = {
       ...DEFAULT_NOTIFICATION_PREFERENCES,
       ...(user.notificationPreferences ?? {}),
     };
-    // 날씨·혼잡·미도착 추천 알림은 재계획 알림과 한 토글로 묶는다(별도 설정 노출 없이 replan_ready 를 따름).
-    const effectiveKey =
-      key === 'weather_alert' || key === 'crowd_alert' || key === 'arrival_alert'
-        ? 'replan_ready'
-        : key;
-    return merged[effectiveKey] !== false;
+    return merged[key] !== false;
   }
 
   /** 프로필 이미지 업로드 — 기존에 우리가 발급한 URL 이 있으면 같이 삭제. */
