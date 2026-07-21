@@ -103,7 +103,7 @@
    103|**Objective:** `develop` 브랜치에서 팀원이 동일하게 실행 가능한 개발 환경을 만든다.
    104|
    105|**Files:**
-   106|- Modify: `README.md` 또는 새 `docs/setup.md`
+   106|- Modify: `README.md` 또는 새 `docs/setup/setup.md`
    107|- Modify: `package.json`
    108|- Modify: `docker-compose.yml`
    109|- Modify: `apps/api/.env.example`
