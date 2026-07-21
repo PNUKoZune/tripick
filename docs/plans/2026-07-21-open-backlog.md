@@ -102,12 +102,12 @@
 
 ## 인박스 · 푸시 인프라
 
-- [ ] inbox WebSocket invalidate(`inbox:<userId>`) `[코드확인: 없음]` ([inbox](../notification/inbox-and-trip-invite-v1.md#L450))
+- [x] inbox WebSocket invalidate(`inbox:<userId>`) `[코드확인]` — 게이트웨이가 인증 소켓을 `inbox:<userId>` room 에 자동 합류(멤버십 검증 불필요, 본인 채널), `InboxService.create` 가 `pushInboxInvalidate` 로 신호 → FE `useInboxInvalidateSubscription` 이 `inbox.list` invalidate. 브라우저 단독 FCM 공백 보완 ([inbox](../notification/inbox-and-trip-invite-v1.md#L450))
 - [ ] `trip_reminder`(D-1/D-day) 스케줄러 — `weather_alert`는 완료, `trip_reminder`는 type만 존재
 - [ ] invitee trip 뷰 owner 전용 UI 숨김(추가/제외/swap)
 - [ ] owner가 pending 멤버 취소 시 invitee 알림(현재 무음)
 - [ ] `friendUserId` 없는 핸들 친구 가입 유도 푸시
-- [ ] 알림 카테고리별 sub-filter
+- [x] 알림 카테고리별 sub-filter `[코드확인]` — 기존 상태 필터(전체/읽지않음/응답필요)와 직교하는 카테고리 chip 열 추가. 현재 목록에 실제 존재하는 카테고리만 chip 노출(빈 카테고리 숨김), 선택 카테고리가 사라지면 전체로 폴백
 - [ ] 알림 30일 자동 archive 정책
 
 ## 모바일 셸

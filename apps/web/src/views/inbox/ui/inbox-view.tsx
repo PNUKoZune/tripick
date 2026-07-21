@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { InboxItemDto, InboxItemKind, NotificationCategory } from '@tripick/types';
 
@@ -10,10 +10,13 @@ import { acceptFriend, removeFriend } from '@/entities/friend';
 import { fetchInbox, markAllInboxRead, markInboxRead } from '@/entities/inbox';
 import { SessionGuard } from '@/entities/session';
 import { acceptTripInvite, rejectTripInvite } from '@/entities/trip-plan';
+import { useInboxInvalidateSubscription } from '@/features/subscribe-inbox-invalidate';
 import { queryKeys } from '@/shared/api/query-keys';
 import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
 
 type Filter = 'all' | 'unread' | 'action';
+/** 카테고리 sub-filter 값. 'all' 이면 카테고리 제한 없음. */
+type KindFilter = InboxItemKind | 'all';
 
 const FILTERS: Array<{ value: Filter; label: string }> = [
   { value: 'all', label: '전체' },
@@ -53,6 +56,10 @@ function InboxContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<Filter>('all');
+  const [kindFilter, setKindFilter] = useState<KindFilter>('all');
+
+  // WebSocket 신호로 새 알림 도착 시 목록을 실시간 갱신한다(브라우저 단독 FCM 공백 보완).
+  useInboxInvalidateSubscription();
 
   const { data, error } = useQuery({
     queryKey: queryKeys.inbox.list,
@@ -100,11 +107,28 @@ function InboxContent() {
     onSuccess: () => invalidateAll(),
   });
 
+  // 지금 받은 알림에 실제로 존재하는 카테고리만 chip 으로 노출한다(빈 카테고리 숨김).
+  const availableKinds = useMemo(() => {
+    const seen = new Set<InboxItemKind>();
+    for (const item of items) seen.add(item.kind);
+    return (Object.keys(KIND_META) as InboxItemKind[]).filter((kind) => seen.has(kind));
+  }, [items]);
+
+  // 현재 목록에 없는 카테고리가 선택돼 있으면(읽음 처리 등으로 사라짐) 전체로 되돌린다.
+  useEffect(() => {
+    if (kindFilter !== 'all' && !availableKinds.includes(kindFilter)) {
+      setKindFilter('all');
+    }
+  }, [availableKinds, kindFilter]);
+
   const filteredItems = useMemo(() => {
-    if (filter === 'unread') return items.filter((item) => !item.readAt);
-    if (filter === 'action') return items.filter((item) => item.actions.length > 0);
-    return items;
-  }, [items, filter]);
+    return items.filter((item) => {
+      if (kindFilter !== 'all' && item.kind !== kindFilter) return false;
+      if (filter === 'unread') return !item.readAt;
+      if (filter === 'action') return item.actions.length > 0;
+      return true;
+    });
+  }, [items, filter, kindFilter]);
 
   const grouped = useMemo(() => groupByDate(filteredItems), [filteredItems]);
 
@@ -180,6 +204,24 @@ function InboxContent() {
         </div>
       </div>
 
+      {availableKinds.length > 1 ? (
+        <div className="flex flex-wrap gap-1.5">
+          <CategoryChip
+            label="전체"
+            active={kindFilter === 'all'}
+            onClick={() => setKindFilter('all')}
+          />
+          {availableKinds.map((kind) => (
+            <CategoryChip
+              key={kind}
+              label={`${KIND_META[kind].emoji} ${KIND_META[kind].label}`}
+              active={kindFilter === kind}
+              onClick={() => setKindFilter(kind)}
+            />
+          ))}
+        </div>
+      ) : null}
+
       {loadError ? (
         <div className="rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-4 text-[14px] text-[#F04452]">
           {loadError}
@@ -251,6 +293,30 @@ function InboxContent() {
       />
       <PageContainer>{content}</PageContainer>
     </AppFrame>
+  );
+}
+
+function CategoryChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`h-8 rounded-full border px-2.5 text-[12px] font-semibold transition ${
+        active
+          ? 'border-[#3182F6] bg-[#EAF2FF] text-[#1B64DA]'
+          : 'border-[#E5E8EB] bg-white text-[#6B7684] hover:bg-[#FAFBFC]'
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 

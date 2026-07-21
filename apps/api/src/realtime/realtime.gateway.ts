@@ -63,6 +63,9 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     try {
       const payload = await this.jwtService.verifyAsync<JwtPayload>(token);
       (client as AuthedSocket).data.user = payload;
+      // 인증된 소켓은 자기 사용자 인박스 room 에 자동 합류한다 — 트립 room 과 달리
+      // 멤버십 검증이 필요 없고(본인 채널), 새 알림 시 pushInboxInvalidate 로 이 room 에 쏜다.
+      await client.join(`inbox:${payload.sub}`);
       this.logger.log(`WS connected: ${client.id} (user ${payload.sub})`);
     } catch {
       this.logger.warn(`WS rejected (invalid token): ${client.id}`);
@@ -100,6 +103,15 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     this.server
       .to(`trip-session:${result.tripId}`)
       .emit('replan_result', result);
+  }
+
+  /**
+   * 인박스에 새 알림이 생겼을 때 사용자의 모든 소켓에 신호를 보낸다.
+   * 브라우저 단독(RN 밖) 사용자는 FCM 브릿지를 못 받으므로, 이 신호로 클라이언트가
+   * 인박스 목록을 다시 불러오게 한다(payload 없이 invalidate 트리거만).
+   */
+  pushInboxInvalidate(userId: string) {
+    this.server.to(`inbox:${userId}`).emit('inbox_invalidate');
   }
 
   /**
