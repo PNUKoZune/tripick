@@ -3,7 +3,7 @@
 문서 목적: 프로젝트 전반 검토에서 나온 버그 2건과 낡은 e2e 1건을 고친 작업을 고정한다. 두 버그는 **야행성 사용자가 여행을 아예 만들 수 없는** 하나의 증상으로 이어져 있었고, 그 뿌리는 "취침은 기상보다 늦다"는 가정과 **검증이 켜져 있다는 착각**이었다.
 
 기준 브랜치: `fix/sleep-time-and-dto-validation`
-관련 문서: [`docs/main-planner-v1.md`](../main-planner-v1.md), [`docs/routing-external-api-v1.md`](../routing-external-api-v1.md)
+관련 문서: [`docs/planner/main-planner-v1.md`](../planner/main-planner-v1.md), [`docs/planner/routing-external-api-v1.md`](../planner/routing-external-api-v1.md)
 
 커밋: `267407b`(자정 넘는 취침) → `4dc3893`(ValidationPipe 복구) → `3df3f06`(낡은 e2e)
 
