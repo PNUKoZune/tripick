@@ -33,6 +33,7 @@ import { ShareTripSheet } from '@/features/share-trip';
 import { ReplanToast } from '@/features/subscribe-replan-result';
 import { queryKeys } from '@/shared/api/query-keys';
 import { useMediaQuery } from '@/shared/lib';
+import { readJson, writeJson } from '@/shared/lib/storage';
 import { Button, Chip, Toast } from '@/shared/ui';
 import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
 import { AlternativeSheet } from '@/widgets/alternative-sheet';
@@ -41,6 +42,9 @@ import { PlannerMap } from '@/widgets/planner-map';
 import { TripCoordinationPanel } from '@/widgets/trip-coordination-panel';
 import { TripInfoPanel } from '@/widgets/trip-info-panel';
 import { TripMapPanel } from '@/widgets/trip-map-panel';
+
+/** 태블릿 좌측 패널 접힘 상태 저장 키 */
+const SIDEBAR_COLLAPSED_KEY = 'tripick:planner:sidebar-collapsed';
 
 export function PlannerView({ tripId }: { tripId?: string }) {
   return (
@@ -64,8 +68,16 @@ function PlannerContent({ tripId }: { tripId?: string }) {
   const [shareOpen, setShareOpen] = useState(false);
   // 데스크탑 좌측 패널 탭 (2xl 미만: 우측 정보/조율 컬럼이 없어 좌측에서 전환)
   const [sidePanel, setSidePanel] = useState<'schedule' | 'info' | 'coordination'>('schedule');
-  // 태블릿(2xl 미만)에서 좌측 패널을 접어 지도 영역을 넓힐 수 있게 한다
+  // 태블릿(2xl 미만)에서 좌측 패널을 접어 지도 영역을 넓힐 수 있게 한다.
+  // 접힘 상태는 localStorage 에 유지(SSR 하이드레이션 불일치를 피해 마운트 후 복원).
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  useEffect(() => {
+    const stored = readJson<boolean>(SIDEBAR_COLLAPSED_KEY);
+    if (stored !== null) setSidebarCollapsed(stored);
+  }, []);
+  useEffect(() => {
+    writeJson(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed);
+  }, [sidebarCollapsed]);
   const isWideDesktop = useMediaQuery('(min-width: 1536px)');
   const activeSidePanel = isWideDesktop ? 'schedule' : sidePanel;
   const sidebarVisible = isWideDesktop || !sidebarCollapsed;
