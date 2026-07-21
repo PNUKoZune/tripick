@@ -186,6 +186,12 @@ export interface PlannerAlternativeDto {
   name: string;
   walkLabel: string;
   waitLabel: string;
+  /** 취향 근거(CRAG reason). 왜 이 후보가 추천됐는지 카드에 한 줄로 노출 */
+  reason?: string;
+  /** 알려진 영업시간(HH:MM-HH:MM). 없으면 미제공 */
+  openingHours?: string;
+  /** 영업시간을 알고, 이 일정 항목의 방문 시각이 그 밖일 때만 true (swap 전 경고용) */
+  closedAtScheduled?: boolean;
   /** 실제 평점이 있을 때만 (카카오는 미제공이라 대부분 없음) */
   rating?: number;
   mapHref: string;
