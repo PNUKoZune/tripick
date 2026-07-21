@@ -55,7 +55,7 @@
 - [ ] 날씨/재계획 알림 수신 토글 분리(현재 `replan_ready` 공유) `[보류: 기존 토글 설계 유지]`
 - [ ] 임계값 캘리브레이션(유예 15분·반경 500m·신선도 10분, 상대 1.2·하한 10%) ([arrival](../alerts/arrival-check-alert-v1.md#L142)·[crowd](../alerts/crowd-alert-scheduler-v1.md#L143))
 - [ ] iOS 백그라운드 위치(significant-location-change)
-- [ ] KTO `tAtsNm` 이름 매칭 누락 처리
+- [x] KTO `tAtsNm` 이름 매칭 누락 지표화 `[코드확인]` — 조용히 사라지던 관광지 조회 스킵을 사유별(region_unresolved·budget_exhausted·no_data·name_mismatch·empty_rate) 집계 → 스캔 끝에 커버리지 요약 로그(스킵 있으면 warn). `fetchConcentration` 이 사유 반환(`ConcentrationLookup`), `CoverageMetrics` 누적. **이름 매칭 로직 개선(부분일치·별칭)은 지표 보고 판단** — 오알림 방지 스킵 동작은 유지 ([crowd](../alerts/crowd-alert-scheduler-v1.md#L143))
 - [ ] 강수확률/습도 UI 노출 ([weather-forecast](../alerts/weather-forecast-v1.md#L88))
 
 ## 취향 · 임베딩
