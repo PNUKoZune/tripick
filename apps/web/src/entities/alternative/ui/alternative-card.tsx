@@ -1,5 +1,6 @@
 'use client';
 
+import { LuClock, LuSparkles } from 'react-icons/lu';
 import type { PlannerAlternativeDto } from '@tripick/types';
 
 import { Button, Chip } from '@/shared/ui';
@@ -63,6 +64,21 @@ export function AlternativeCard({ alternative, selected, onSelect }: Props) {
               <div className="mt-1 text-[13px] leading-[18px] text-[#6B7684]">
                 {alternative.walkLabel} · {alternative.waitLabel}
               </div>
+              {alternative.reason ? (
+                <div className="mt-1 flex items-start gap-1 text-[12px] leading-[16px] text-[#1B64DA]">
+                  <LuSparkles className="mt-0.5 size-3 shrink-0" aria-hidden />
+                  <span className="line-clamp-2">{alternative.reason}</span>
+                </div>
+              ) : null}
+              {alternative.closedAtScheduled ? (
+                <div className="mt-1 flex items-center gap-1 text-[12px] leading-[16px] text-[#B45309]">
+                  <LuClock className="size-3 shrink-0" aria-hidden />
+                  <span>
+                    방문 시간대 영업 종료
+                    {alternative.openingHours ? ` · ${alternative.openingHours}` : ''}
+                  </span>
+                </div>
+              ) : null}
               {alternative.address ? (
                 <div className="mt-0.5 truncate text-[12px] leading-[16px] text-[#8B95A1]">
                   {alternative.address}

@@ -19,7 +19,7 @@ import { PlaceRetrievalService } from '../planner/retrieval/place-retrieval.serv
 import { TourApiService } from '../planner/retrieval/tour-api.service';
 import type { CandidatePlace, RawPlaceCandidate } from '../planner/retrieval/types';
 import type { ParsedForecast } from '@tripick/utils';
-import { addDaysToIsoDate, toKstIsoDate } from '@tripick/utils';
+import { addDaysToIsoDate, getKstMinutes, toKstIsoDate } from '@tripick/utils';
 import type {
   AddTripMemberRequestDto,
   CreateTripDto,
@@ -1013,6 +1013,29 @@ export class MainPlannerService {
     return pool.slice(0, 5).map((place, index) => this.toRetrievedAlternative(item, place, index));
   }
 
+  /**
+   * 대안 후보의 영업시간을 일정 항목의 방문 시각과 대조해 카드용 신호를 만든다.
+   * 영업시간을 모르거나 `HH:MM-HH:MM` 형식이 아니면 아무 필드도 내지 않는다(경고 없음).
+   * ConstraintEngine.checkOpeningHours 와 같은 규칙(방문 구간이 영업 구간 안).
+   */
+  private openingSignal(
+    item: ItineraryItemEntity,
+    openingHours?: string,
+  ): { openingHours?: string; closedAtScheduled?: boolean } {
+    const hours = openingHours?.trim();
+    if (!hours) return {};
+    const match = hours.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
+    if (!match) return {};
+
+    const [, sh, sm, eh, em] = match;
+    const open = Number(sh) * 60 + Number(sm);
+    const close = Number(eh) * 60 + Number(em);
+    const visitStart = getKstMinutes(new Date(item.scheduledAt));
+    const visitEnd = visitStart + item.durationMin;
+    const closedAtScheduled = !(visitStart >= open && visitEnd <= close);
+    return { openingHours: hours, closedAtScheduled };
+  }
+
   /** CRAG CandidatePlace → 화면용 대안 DTO (취향 근거 reason 표시) */
   private toRetrievedAlternative(
     item: ItineraryItemEntity,
@@ -1020,9 +1043,7 @@ export class MainPlannerService {
     index: number,
   ): PlannerAlternativeDto {
     const category = this.toPlannerItemType(place.category);
-    const secondary = place.reason?.trim()
-      ? place.reason.trim().slice(0, 28)
-      : this.categoryLabel(category);
+    const reason = place.reason?.trim() || undefined;
     const badge =
       index === 0
         ? { badge: '취향 1순위', badgeTone: 'recommend' as const }
@@ -1036,7 +1057,10 @@ export class MainPlannerService {
       categoryTone: index === 0 ? 'primary' : index === 1 ? 'success' : 'neutral',
       name: place.name,
       walkLabel: this.distanceLabel(item.coordinates, place.coordinates),
-      waitLabel: secondary,
+      // 대기/부가 라벨은 카테고리로 되돌리고, 취향 근거는 전용 reason 필드로 분리
+      waitLabel: this.categoryLabel(category),
+      ...(reason ? { reason } : {}),
+      ...this.openingSignal(item, place.openingHours),
       // 카카오/pgvector 후보엔 신뢰할 평점이 없어 별점을 넣지 않는다
       ...(place.rating !== undefined ? { rating: place.rating } : {}),
       mapHref: place.kakaoPlaceId
@@ -1070,6 +1094,7 @@ export class MainPlannerService {
       name: place.name,
       walkLabel: this.distanceLabel(item.coordinates, place.coordinates),
       waitLabel: secondary,
+      ...this.openingSignal(item, place.openingHours),
       mapHref: place.kakaoPlaceId
         ? `https://place.map.kakao.com/${place.kakaoPlaceId}`
         : `https://map.kakao.com/?q=${encodeURIComponent(place.name)}`,

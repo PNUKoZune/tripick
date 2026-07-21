@@ -34,8 +34,8 @@
 - [ ] replan 워커가 실제 `pushReplanResult` 호출하는지 점검
 - [ ] 게이트웨이 인가: room 재입장/멤버십 변경 시 재검증 정책
 - [ ] 트립 레벨 재계획 진입점(헤더 "AI로 일정 다시 짜기") ([alternative](../planner/alternative-place-picker-v1.md#L142))
-- [ ] 대안 swap 시 영업시간 위반 경고
-- [ ] 현재 장소 비교 카드(P3-9)
+- [x] 대안 swap 시 영업시간 위반 경고 `[코드확인]` — 후보 영업시간을 일정 항목 방문 시각과 대조해 `closedAtScheduled` 신호를 카드에 노출(swap 전 경고). `PlannerAlternativeDto.openingHours`/`closedAtScheduled` 추가
+- [x] 현재 장소 비교 카드(P3-9) → 대안 카드 취향 근거(reason) 정식 노출로 대체 `[코드확인]` — 좌우 비교 카드는 BottomSheet 세로 레이아웃에 부적합. `place.reason` 을 `waitLabel` 에 욱여넣던 것을 `PlannerAlternativeDto.reason` 전용 필드로 분리해 카드에 한 줄 노출
 - [ ] pending/resolve 후보 마커 좌표 정규화 일관화
 - [ ] 필수 포함 장소 LLM 경로 보장 주입(현재 best-effort) ([planner-enh](../planner/planner-page-enhancements-v1.md#L124))
 - [ ] 검색 드롭다운 키보드 내비 · 태블릿 사이드바 접힘 localStorage
