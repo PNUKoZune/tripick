@@ -37,7 +37,7 @@
 - [x] 대안 swap 시 영업시간 위반 경고 `[코드확인]` — 후보 영업시간을 일정 항목 방문 시각과 대조해 `closedAtScheduled` 신호를 카드에 노출(swap 전 경고). `PlannerAlternativeDto.openingHours`/`closedAtScheduled` 추가
 - [x] 현재 장소 비교 카드(P3-9) → 대안 카드 취향 근거(reason) 정식 노출로 대체 `[코드확인]` — 좌우 비교 카드는 BottomSheet 세로 레이아웃에 부적합. `place.reason` 을 `waitLabel` 에 욱여넣던 것을 `PlannerAlternativeDto.reason` 전용 필드로 분리해 카드에 한 줄 노출
 - [x] pending/resolve 후보 마커 좌표 정규화 일관화 `[코드확인]` — 추천/resolve 응답 마커를 병합 후 `normalizeMarkerPositions` 로 폴백 x·y 재정규화(SDK 미로딩 미리보기 정합)
-- [ ] 필수 포함 장소 LLM 경로 보장 주입(현재 best-effort) ([planner-enh](../planner/planner-page-enhancements-v1.md#L124))
+- [x] 필수 포함 장소 LLM 경로 보장 주입(구 best-effort) `[코드확인]` — `enforceMustInclude` 로 LLM/폴백 계획에서 누락된 필수 장소를 음수 order 로 강제 주입해 일차별 slice 에서 살아남게 보장 ([planner-enh](../planner/planner-page-enhancements-v1.md#L124))
 - [x] 검색 드롭다운 키보드 내비 · 태블릿 사이드바 접힘 localStorage `[코드확인]` — combobox/listbox + 방향키·Enter·Esc, 사이드바 접힘 상태 localStorage 유지
 
 ## 라우팅
