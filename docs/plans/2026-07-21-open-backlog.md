@@ -42,9 +42,9 @@
 
 ## 라우팅
 
-- [ ] `departAt` 지원 `[코드확인: 없음]` — 심야 대중교통 ETA 오차 ([routing](../planner/routing-external-api-v1.md#L199))
-- [ ] in-flight 병합 Redis 락(스케일아웃 시 인스턴스 간 중복)
-- [ ] ODsay 쿼터 폴백 지표화
+- [ ] `departAt` 지원 `[코드확인: 없음]` `[보류: Live 폴링 소비자 부재 + ODsay 기본 API 미지원]` — 심야 대중교통 ETA 오차. searchPubTransPathT 는 출발 시각 파라미터 자체가 없어 캐시키 확장만으론 못 잡고 다른 엔드포인트 전환이 필요 ([routing](../planner/routing-external-api-v1.md#L199))
+- [ ] in-flight 병합 Redis 락 `[보류: 단일 인스턴스]` — 스케일아웃 시 인스턴스 간 중복. 그전엔 캐시 TTL 로 bound 되어 순이득 미미
+- [x] ODsay 쿼터 폴백 지표화 `[코드확인]` — `RouteHelper.fallback` 단일 통로에서 이동수단·사유별 계수(`getFallbackMetrics`) + 이상 신호만 warn. 쿼터 초과는 전용 코드가 없어 500 계열 `quota_or_server` 버킷으로 잡히며 급증이 곧 신호 ([routing](../planner/routing-external-api-v1.md#L204))
 - [ ] `ODSAY_SERVICE_URL` 실제 등록 도메인으로 교체 `[대기: 라이브 배포]`
 - (도보 직선거리 추정은 내재적 한계 — 아래 §내재적 한계 참고)
 

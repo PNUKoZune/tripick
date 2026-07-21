@@ -48,6 +48,65 @@ const MIN_DURATION_SEC: Record<RouteMode, number> = {
   walk: 60,
 };
 
+/**
+ * 외부 API 대신 로컬 추정치로 떨어진 사유. 폴백은 실패를 조용히 삼키므로(문서 3절),
+ * 왜 떨어졌는지를 이동수단·사유별로 계수해 지표로 남긴다. 특히 ODsay 무료 플랜 쿼터
+ * 초과는 코드 500 계열(`quota_or_server`)로 오는데, 폴백이 삼키면 한도 초과를 모른 채
+ * 추정치가 계속 나가므로 이 버킷의 급증이 곧 쿼터 초과 신호다.
+ */
+type RouteFallbackReason =
+  | 'no_key' // API 키 미설정 (배포 미스컨피그)
+  | 'no_service_url' // ODSAY_SERVICE_URL 미설정 — Referer 없이는 무조건 인증 실패
+  | 'auth_failed' // ODsay 500 + [ApiKeyAuthFailed]
+  | 'quota_or_server' // ODsay 500 기타 — 무료 플랜 쿼터 초과가 여기로 온다
+  | 'bad_request' // ODsay -8/-9 (필수 입력값 형식/누락)
+  | 'no_station' // ODsay 3/4/5 (출·도착 정류장 없음)
+  | 'out_of_area' // ODsay 6 (서비스 지역 아님)
+  | 'too_close' // ODsay -98 (출·도착 700m 이내)
+  | 'no_route' // ODsay -99 / 카카오 경로 없음 / 빈 응답
+  | 'api_error' // 카카오 result_code != 0 (104 제외)
+  | 'network'; // axios throw / 타임아웃
+
+/**
+ * "정상적인 라우팅 결과"인 폴백. 우리 잘못이나 장애가 아니라 그 구간에 경로가 없거나
+ * 너무 가까운 경우라 warn 으로 시끄럽게 알리지 않는다. 나머지(쿼터·인증·네트워크·미스컨피그)만
+ * 주의가 필요한 이상 신호로 본다. 계수는 두 부류 모두 남긴다.
+ */
+const EXPECTED_FALLBACK: ReadonlySet<RouteFallbackReason> = new Set<RouteFallbackReason>([
+  'too_close',
+  'no_route',
+  'no_station',
+  'out_of_area',
+]);
+
+/**
+ * ODsay error[] 코드를 폴백 사유로 매핑한다. 코드는 문자열로 온다.
+ * 500 은 인증 실패·쿼터 초과·순수 서버 오류가 모두 섞여 오는 버킷이라, 메시지의
+ * `[ApiKeyAuthFailed]` 마커로 인증만 갈라내고 나머지는 `quota_or_server` 로 둔다
+ * (쿼터 초과가 여기로 오며, raw 메시지는 fallback 로그에 그대로 남는다).
+ */
+function classifyOdsayError(code: string, message: string): RouteFallbackReason {
+  switch (code) {
+    case '500':
+      return /ApiKeyAuthFailed/i.test(message) ? 'auth_failed' : 'quota_or_server';
+    case '-8':
+    case '-9':
+      return 'bad_request';
+    case '3':
+    case '4':
+    case '5':
+      return 'no_station';
+    case '6':
+      return 'out_of_area';
+    case '-98':
+      return 'too_close';
+    case '-99':
+      return 'no_route';
+    default:
+      return 'quota_or_server';
+  }
+}
+
 @Injectable()
 export class RouteHelper implements OnModuleDestroy {
   private readonly logger = new Logger(RouteHelper.name);
@@ -55,6 +114,8 @@ export class RouteHelper implements OnModuleDestroy {
   private readonly warnedKeys = new Set<string>();
   /** 진행 중인 동일 좌표쌍 조회. 캐시가 채워지기 전 동시 요청이 API 를 중복으로 치는 걸 막는다. */
   private readonly inFlight = new Map<string, Promise<EtaResult>>();
+  /** 폴백 발생 횟수(`{mode}:{reason}` → count). 지표 노출용 시드 — getFallbackMetrics 로 스냅샷. */
+  private readonly fallbackCounts = new Map<string, number>();
   private readonly redis: Redis;
 
   constructor(private readonly config: ConfigService) {
@@ -156,8 +217,7 @@ export class RouteHelper implements OnModuleDestroy {
   async getDrivingEta(from: Coordinates, to: Coordinates): Promise<EtaResult> {
     const apiKey = this.config.get<string>('KAKAO_REST_API_KEY', '');
     if (!apiKey) {
-      this.warnOnce('KAKAO_REST_API_KEY', 'KAKAO_REST_API_KEY 미설정 — 자동차 ETA 를 로컬 추정치로 대체합니다.');
-      return this.buildLocalEstimate(from, to, 'car');
+      return this.fallback(from, to, 'car', 'no_key', 'KAKAO_REST_API_KEY 미설정');
     }
 
     const cacheKey = this.buildCacheKey(from, to, 'car');
@@ -192,8 +252,7 @@ export class RouteHelper implements OnModuleDestroy {
 
       const route = res.data.routes?.[0];
       if (!route) {
-        this.logger.error('카카오 모빌리티 경로 없음 — 로컬 추정치로 대체합니다.');
-        return this.buildLocalEstimate(from, to, 'car');
+        return this.fallback(from, to, 'car', 'no_route', '카카오 모빌리티 경로 없음');
       }
 
       // 길찾기 실패는 HTTP 200 + result_code 로 온다. 던지지 않으므로 직접 본다.
@@ -203,10 +262,13 @@ export class RouteHelper implements OnModuleDestroy {
         return zero;
       }
       if (route.result_code !== 0 || !route.summary) {
-        this.logger.error(
-          `카카오 모빌리티 길찾기 실패 (${route.result_code}: ${route.result_msg}) — 로컬 추정치로 대체합니다.`,
+        return this.fallback(
+          from,
+          to,
+          'car',
+          'api_error',
+          `result_code=${route.result_code} msg=${route.result_msg}`,
         );
-        return this.buildLocalEstimate(from, to, 'car');
       }
 
       // summary.duration=초, summary.distance=미터. 변환 없이 그대로 쓴다.
@@ -214,26 +276,20 @@ export class RouteHelper implements OnModuleDestroy {
       await this.writeCache(cacheKey, eta, CACHE_TTL_SEC.car);
       return eta;
     } catch (err) {
-      this.logger.error('카카오 모빌리티 ETA 조회 실패:', err);
-      return this.buildLocalEstimate(from, to, 'car');
+      return this.fallback(from, to, 'car', 'network', this.errorDetail(err));
     }
   }
 
   async getTransitEta(from: Coordinates, to: Coordinates): Promise<EtaResult> {
     const apiKey = this.config.get<string>('ODSAY_API_KEY', '');
     if (!apiKey) {
-      this.warnOnce('ODSAY_API_KEY', 'ODSAY_API_KEY 미설정 — 대중교통 ETA 를 로컬 추정치로 대체합니다.');
-      return this.buildLocalEstimate(from, to, 'transit');
+      return this.fallback(from, to, 'transit', 'no_key', 'ODSAY_API_KEY 미설정');
     }
 
     // ODsay 는 발급 시 등록한 서비스 URL 을 Referer 로 검증한다. 헤더가 없으면 무조건 ApiKeyAuthFailed.
     const serviceUrl = this.config.get<string>('ODSAY_SERVICE_URL', '');
     if (!serviceUrl) {
-      this.warnOnce(
-        'ODSAY_SERVICE_URL',
-        'ODSAY_SERVICE_URL 미설정 — ODsay 인증이 실패하므로 로컬 추정치로 대체합니다.',
-      );
-      return this.buildLocalEstimate(from, to, 'transit');
+      return this.fallback(from, to, 'transit', 'no_service_url', 'ODSAY_SERVICE_URL 미설정');
     }
 
     const cacheKey = this.buildCacheKey(from, to, 'transit');
@@ -266,19 +322,16 @@ export class RouteHelper implements OnModuleDestroy {
         timeout: REQUEST_TIMEOUT_MS,
       });
 
-      // ODsay 는 인증 실패·경로 없음도 HTTP 200 + error 배열로 준다.
+      // ODsay 는 인증 실패·쿼터 초과·경로 없음도 HTTP 200 + error 배열로 준다. 던지지 않으므로 직접 본다.
       const error = res.data.error?.[0];
       if (error) {
-        this.logger.error(
-          `ODsay 길찾기 실패 (${error.code}: ${error.message}) — 로컬 추정치로 대체합니다.`,
-        );
-        return this.buildLocalEstimate(from, to, 'transit');
+        const reason = classifyOdsayError(error.code, error.message);
+        return this.fallback(from, to, 'transit', reason, `code=${error.code} msg=${error.message}`);
       }
 
       const info = res.data.result?.path?.[0]?.info;
       if (!info) {
-        this.logger.error('ODsay 경로 없음 — 로컬 추정치로 대체합니다.');
-        return this.buildLocalEstimate(from, to, 'transit');
+        return this.fallback(from, to, 'transit', 'no_route', 'ODsay 경로 없음');
       }
 
       // totalTime=분, totalDistance=미터. 시간만 초로 바꾼다.
@@ -286,9 +339,45 @@ export class RouteHelper implements OnModuleDestroy {
       await this.writeCache(cacheKey, eta, CACHE_TTL_SEC.transit);
       return eta;
     } catch (err) {
-      this.logger.error('ODsay ETA 조회 실패:', err);
-      return this.buildLocalEstimate(from, to, 'transit');
+      return this.fallback(from, to, 'transit', 'network', this.errorDetail(err));
     }
+  }
+
+  /**
+   * 로컬 추정치로 떨어지는 단일 통로. 이동수단·사유별로 계수해 지표로 남기고, 이상 신호만
+   * warn 으로 알린다(정상적인 "경로 없음"류는 debug). 로그는 warnOnce 로 사유별 1회만 —
+   * 일정당 좌표쌍마다 반복되면 도배되므로. 계수는 매번 증가해 지표 정확도를 지킨다.
+   * walk 는 폴백이 아니라 정식 추정 모델이므로 이 통로를 타지 않는다(getWalkingEta 참고).
+   */
+  private fallback(
+    from: Coordinates,
+    to: Coordinates,
+    mode: RouteMode,
+    reason: RouteFallbackReason,
+    detail?: string,
+  ): EtaResult {
+    const metricKey = `${mode}:${reason}`;
+    this.fallbackCounts.set(metricKey, (this.fallbackCounts.get(metricKey) ?? 0) + 1);
+
+    const line = `[route.fallback] mode=${mode} reason=${reason}${detail ? ` ${detail}` : ''} — 로컬 추정치로 대체`;
+    if (EXPECTED_FALLBACK.has(reason)) {
+      this.logger.debug(line);
+    } else {
+      this.warnOnce(`fallback:${metricKey}`, line);
+    }
+    return this.buildLocalEstimate(from, to, mode);
+  }
+
+  /**
+   * 폴백 발생 횟수 스냅샷(`{mode}:{reason}` → count). 모니터링/지표 노출의 시드다.
+   * `transit:quota_or_server` 급증이 곧 ODsay 무료 플랜 쿼터 초과 신호.
+   */
+  getFallbackMetrics(): Record<string, number> {
+    return Object.fromEntries(this.fallbackCounts);
+  }
+
+  private errorDetail(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
   }
 
   private buildLocalEstimate(from: Coordinates, to: Coordinates, mode: RouteMode): EtaResult {
