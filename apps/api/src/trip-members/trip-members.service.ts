@@ -1,12 +1,15 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PreferencesService } from '../preferences/preferences.service';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { TripEntity } from '../trips/trip.entity';
 import { UserEntity } from '../users/user.entity';
 import { TripMemberEntity } from './trip-member.entity';
@@ -65,6 +68,10 @@ export class TripMembersService {
     @InjectRepository(TripEntity)
     private readonly tripsRepo: Repository<TripEntity>,
     private readonly preferencesService: PreferencesService,
+    // RealtimeModule ↔ TripMembersModule 은 상호 참조(게이트웨이는 join 인가에
+    // 멤버 서비스가 필요하고, 멤버 서비스는 제거 시 소켓 eviction 이 필요) → forwardRef.
+    @Inject(forwardRef(() => RealtimeGateway))
+    private readonly realtimeGateway: RealtimeGateway,
   ) {}
 
   /**
@@ -268,6 +275,12 @@ export class TripMembersService {
       throw new BadRequestException('owner member cannot be removed');
     }
     await this.membersRepo.remove(member);
+
+    // 실시간 세션에 남아 있는 소켓을 즉시 정리해 회수된 멤버가 재계획 결과 등을
+    // 계속 수신하지 못하게 한다(pending 초대는 userId 가 없으므로 스킵).
+    if (member.userId) {
+      await this.realtimeGateway.evictFromTrip(tripId, member.userId);
+    }
   }
 
   async getCoordination(tripId: string, user: UserEntity): Promise<PreferenceCoordinationDto> {

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { TripMembersModule } from '../trip-members/trip-members.module';
@@ -6,7 +6,7 @@ import { RealtimeGateway } from './realtime.gateway';
 
 @Module({
   imports: [
-    TripMembersModule,
+    forwardRef(() => TripMembersModule),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
