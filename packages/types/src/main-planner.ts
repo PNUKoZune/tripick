@@ -101,6 +101,8 @@ export interface PlannerWeatherDto {
   label: string;
   emoji: string;
   tempLabel: string;
+  /** 그 날의 최대 강수확률(%). 단기예보에만 POP 가 있어 중기(+3~+10일)·폴백 일자는 undefined. */
+  precipitationProbability?: number;
   /** 기상청 단기예보 실데이터가 채워졌는지 여부. false 면 예보 범위(~3일) 밖이라 "확인 전" 폴백. */
   forecasted: boolean;
 }

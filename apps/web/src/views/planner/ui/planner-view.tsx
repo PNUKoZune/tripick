@@ -46,18 +46,18 @@ import { TripMapPanel } from '@/widgets/trip-map-panel';
 /** 태블릿 좌측 패널 접힘 상태 저장 키 */
 const SIDEBAR_COLLAPSED_KEY = 'tripick:planner:sidebar-collapsed';
 
-export function PlannerView({ tripId }: { tripId?: string }) {
+export function PlannerView({ tripId, initialDay }: { tripId?: string; initialDay?: number }) {
   return (
     <SessionGuard>
-      <PlannerContent {...(tripId ? { tripId } : {})} />
+      <PlannerContent {...(tripId ? { tripId } : {})} {...(initialDay ? { initialDay } : {})} />
     </SessionGuard>
   );
 }
 
-function PlannerContent({ tripId }: { tripId?: string }) {
+function PlannerContent({ tripId, initialDay }: { tripId?: string; initialDay?: number }) {
   const router = useRouter();
   const [tab, setTab] = useState<PlannerTab>('schedule');
-  const [day, setDay] = useState(1);
+  const [day, setDay] = useState(initialDay ?? 1);
   const [openItem, setOpenItem] = useState<PlannerItineraryItemDto | null>(null);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [swapResult, setSwapResult] = useState<{ id: string; name: string } | null>(null);
