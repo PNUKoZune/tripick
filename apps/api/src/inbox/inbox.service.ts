@@ -162,6 +162,22 @@ export class InboxService {
     });
   }
 
+  /**
+   * owner 가 일정 변경 제안을 승인/거절/취소로 처리했을 때 owner 쪽 뒷정리.
+   * 살아 있던 schedule_change_request 카드(확인/거절 버튼)를 제거한다.
+   * 결과 알림(요청자에게)은 도메인 서비스가 별도로 발송하므로 여기선 카드 제거만 한다.
+   */
+  async cancelScheduleChangeRequest(ownerUserId: string, proposalId: string): Promise<void> {
+    await this.notificationsRepo
+      .createQueryBuilder()
+      .delete()
+      .from(NotificationEntity)
+      .where('userId = :userId', { userId: ownerUserId })
+      .andWhere('category = :category', { category: 'schedule_change_request' })
+      .andWhere("payload ->> 'proposalId' = :proposalId", { proposalId })
+      .execute();
+  }
+
   /** FCM data payload 는 모든 값이 string 이어야 함 — 타입 보정. */
   private stringifyPayload(payload: Record<string, unknown>): Record<string, string> {
     const out: Record<string, string> = {};
@@ -210,11 +226,36 @@ export class InboxService {
         { type: 'reject-trip-invite', label: '거절', tripId, tripMemberId },
       ];
     }
+    const proposalId = notification.payload?.proposalId;
+    if (notification.category === 'schedule_change_request' && tripId && proposalId) {
+      // owner: '확인' 은 planner 로 이동해 diff 를 본 뒤 승인, '거절' 은 즉시 반려
+      const day = Number(notification.payload?.day);
+      return [
+        {
+          type: 'review-schedule-change',
+          label: '확인',
+          tripId,
+          proposalId,
+          ...(Number.isInteger(day) && day > 0 ? { day } : {}),
+        },
+        { type: 'reject-schedule-change', label: '거절', tripId, proposalId },
+      ];
+    }
     if (
-      (notification.category === 'replan_ready' || notification.category === 'trip_reminder') &&
+      (notification.category === 'replan_ready' ||
+        notification.category === 'trip_reminder' ||
+        notification.category === 'schedule_change_result') &&
       tripId
     ) {
-      return [{ type: 'open-trip', label: '여행 보기', tripId }];
+      const day = Number(notification.payload?.day);
+      return [
+        {
+          type: 'open-trip',
+          label: '여행 보기',
+          tripId,
+          ...(Number.isInteger(day) && day > 0 ? { day } : {}),
+        },
+      ];
     }
     if (
       (notification.category === 'weather_alert' ||

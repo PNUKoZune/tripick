@@ -5,6 +5,7 @@ import type {
   PlannerItineraryItemDto,
   PlannerMapCenterDto,
   PlannerSwapPlaceDto,
+  PlannerSwapResponseDto,
 } from '@tripick/types';
 
 import { AlternativeCard } from '@/entities/alternative';
@@ -20,10 +21,25 @@ type Props = {
   item: PlannerItineraryItemDto | null;
   onClose: () => void;
   onApplied: (newName: string, itemId: string) => void;
+  /** owner 면 즉시 반영, 아니면 owner 승인 대기 제안으로 보낸다 */
+  isOwner?: boolean;
+  /** 비-owner 제안 성공 시 요약 전달(토스트용) */
+  onProposed?: (summary: string) => void;
 };
 
-export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Props) {
-  const controller = useAlternativeController(tripId, open ? item?.id ?? null : null);
+export function AlternativeSheet({
+  tripId,
+  open,
+  item,
+  onClose,
+  onApplied,
+  isOwner = true,
+  onProposed,
+}: Props) {
+  const controller = useAlternativeController(tripId, open ? item?.id ?? null : null, {
+    isOwner,
+    ...(onProposed ? { onProposed } : {}),
+  });
   const [keepOriginal, setKeepOriginal] = useState(false);
   const [requestText, setRequestText] = useState('');
   const [placeName, setPlaceName] = useState('');
@@ -53,7 +69,10 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
 
   async function handleUndo() {
     if (!swapResult || !item) return;
-    const result = await controller.swapToPlace(swapResult.previousPlace);
+    // 되돌리기는 swapResult 가 있는 owner 모드에서만 노출되므로 즉시 반영 결과다.
+    const result = (await controller.swapToPlace(swapResult.previousPlace)) as
+      | PlannerSwapResponseDto
+      | null;
     if (result) {
       onApplied(result.newItemName, item.id);
       onClose();
@@ -137,6 +156,12 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
               </Chip>
               {readyData.realtime ? <Chip tone="success">실데이터</Chip> : null}
             </div>
+
+            {controller.isProposalMode ? (
+              <p className="mt-3 rounded-[12px] border border-[#C7DCFF] bg-[#F5F9FF] px-3 py-2 text-[12px] leading-[18px] text-[#1B64DA]">
+                대안 변경은 여행 관리자 승인 후 반영돼요. 변경 요청 시 관리자에게 알림이 전송됩니다.
+              </p>
+            ) : null}
 
             {swapResult ? (
               <div
@@ -273,17 +298,25 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
                     onClick={async () => {
                       if (!item) return;
                       const result = await controller.confirmPending();
-                      if (result) {
-                        onApplied(result.newItemName, item.id);
-                        setSwapResult({
-                          newName: result.newItemName,
-                          previousPlace: result.previousPlace,
-                          warnings: result.warnings ?? [],
-                        });
+                      if (!result) return;
+                      if (controller.isProposalMode) {
+                        onClose();
+                        return;
                       }
+                      const swap = result as PlannerSwapResponseDto;
+                      onApplied(swap.newItemName, item.id);
+                      setSwapResult({
+                        newName: swap.newItemName,
+                        previousPlace: swap.previousPlace,
+                        warnings: swap.warnings ?? [],
+                      });
                     }}
                   >
-                    {controller.submitting ? '변경 중…' : '이 장소로 변경'}
+                    {controller.submitting
+                      ? '처리 중…'
+                      : controller.isProposalMode
+                        ? '이 장소로 변경 요청'
+                        : '이 장소로 변경'}
                   </Button>
                 </div>
               </div>
@@ -353,17 +386,25 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
                 onClick={async () => {
                   if (!item) return;
                   const result = await controller.apply();
-                  if (result) {
-                    onApplied(result.newItemName, item.id);
-                    setSwapResult({
-                      newName: result.newItemName,
-                      previousPlace: result.previousPlace,
-                      warnings: result.warnings ?? [],
-                    });
+                  if (!result) return;
+                  if (controller.isProposalMode) {
+                    onClose();
+                    return;
                   }
+                  const swap = result as PlannerSwapResponseDto;
+                  onApplied(swap.newItemName, item.id);
+                  setSwapResult({
+                    newName: swap.newItemName,
+                    previousPlace: swap.previousPlace,
+                    warnings: swap.warnings ?? [],
+                  });
                 }}
               >
-                {controller.submitting ? '변경 중…' : '이 장소로 변경'}
+                {controller.submitting
+                  ? '처리 중…'
+                  : controller.isProposalMode
+                    ? '이 장소로 변경 요청'
+                    : '이 장소로 변경'}
               </Button>
             </div>
           </>

@@ -19,6 +19,10 @@ type Props = {
   onSelectItem: (item: PlannerItineraryItemDto) => void;
   /** AI 대안 시트를 여는 콜백 */
   onSwitchItem?: (item: PlannerItineraryItemDto) => void;
+  /** owner 면 즉시 반영, 아니면 owner 승인 대기 제안으로 보낸다 */
+  isOwner?: boolean;
+  /** 비-owner 제안 성공 시 요약 전달(토스트용) */
+  onProposed?: (summary: string) => void;
 };
 
 type EditorState =
@@ -33,8 +37,13 @@ export function EditableTimeline({
   selectedItemId = null,
   onSelectItem,
   onSwitchItem,
+  isOwner = true,
+  onProposed,
 }: Props) {
-  const { addItem, updateItem, deleteItem, reorderItems } = useItineraryItems(tripId);
+  const { addItem, updateItem, deleteItem, reorderItems, isProposalMode } = useItineraryItems(
+    tripId,
+    { isOwner, ...(onProposed ? { onProposed } : {}) },
+  );
   const [order, setOrder] = useState<string[]>(() => items.map((i) => i.id));
   const [editor, setEditor] = useState<EditorState>(null);
   const [confirmDelete, setConfirmDelete] = useState<PlannerItineraryItemDto | null>(null);
@@ -91,6 +100,11 @@ export function EditableTimeline({
 
   return (
     <div className="pb-4">
+      {isProposalMode ? (
+        <p className="mb-3 rounded-[12px] border border-[#C7DCFF] bg-[#F5F9FF] px-3 py-2 text-[12px] leading-[18px] text-[#1B64DA]">
+          일정 변경은 여행 관리자 승인 후 반영돼요. 변경 요청을 보내면 관리자에게 알림이 전송됩니다.
+        </p>
+      ) : null}
       {orderedItems.length === 0 ? (
         <div className="rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] p-5 text-center text-[14px] text-[#6B7684]">
           이 날짜에 등록된 일정이 없어요. 아래에서 추가해 보세요.
@@ -110,7 +124,13 @@ export function EditableTimeline({
             setOrder(next);
             reorderItems.mutate(
               { day, orderedItemIds: next },
-              { onError: () => setOrder(items.map((i) => i.id)) },
+              {
+                // 제안 모드에선 아직 반영 전이므로 낙관적 재배치를 원상복구한다(승인돼야 적용)
+                onSuccess: () => {
+                  if (isProposalMode) setOrder(items.map((i) => i.id));
+                },
+                onError: () => setOrder(items.map((i) => i.id)),
+              },
             );
           }}
         >
@@ -139,7 +159,7 @@ export function EditableTimeline({
         className="mt-3 flex h-11 w-full items-center justify-center gap-1.5 rounded-[12px] border border-dashed border-[#C7DCFF] bg-[#F5F9FF] text-[14px] font-semibold text-[#3182F6] hover:bg-[#EAF2FF]"
       >
         <LuPlus className="size-4" />
-        일정 추가
+        {isProposalMode ? '일정 추가 요청' : '일정 추가'}
       </button>
 
       <ItemEditorSheet
@@ -148,6 +168,7 @@ export function EditableTimeline({
         item={editor?.mode === 'edit' ? editor.item : null}
         pending={editorPending}
         error={editorError}
+        {...(isProposalMode ? { submitLabel: '변경 요청' } : {})}
         onClose={() => setEditor(null)}
         onSubmit={handleSubmit}
       />
@@ -156,6 +177,7 @@ export function EditableTimeline({
         <DeleteConfirm
           name={confirmDelete.name}
           pending={deleteItem.isPending}
+          proposalMode={isProposalMode}
           onCancel={() => setConfirmDelete(null)}
           onConfirm={() =>
             deleteItem.mutate(confirmDelete.id, { onSuccess: () => setConfirmDelete(null) })
@@ -206,11 +228,13 @@ function SortableRow({
 function DeleteConfirm({
   name,
   pending,
+  proposalMode = false,
   onCancel,
   onConfirm,
 }: {
   name: string;
   pending: boolean;
+  proposalMode?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -222,9 +246,13 @@ function DeleteConfirm({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-5"
     >
       <div className="w-full max-w-[360px] rounded-[20px] bg-white p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
-        <h2 className="text-[17px] font-bold text-[#191F28]">이 일정을 삭제할까요?</h2>
+        <h2 className="text-[17px] font-bold text-[#191F28]">
+          {proposalMode ? '이 일정 삭제를 요청할까요?' : '이 일정을 삭제할까요?'}
+        </h2>
         <p className="mt-2 text-[13px] leading-[20px] text-[#4E5968]">
-          &ldquo;{name}&rdquo; 항목이 일정에서 제거됩니다.
+          {proposalMode
+            ? `“${name}” 삭제 요청을 여행 관리자에게 보냅니다.`
+            : `“${name}” 항목이 일정에서 제거됩니다.`}
         </p>
         <div className="mt-5 flex items-center gap-2">
           <button
@@ -241,7 +269,7 @@ function DeleteConfirm({
             disabled={pending}
             className="h-11 flex-1 rounded-[12px] bg-[#F04452] text-[14px] font-bold text-white hover:bg-[#D93645] disabled:opacity-50"
           >
-            {pending ? '삭제 중…' : '삭제'}
+            {pending ? '처리 중…' : proposalMode ? '삭제 요청' : '삭제'}
           </button>
         </div>
       </div>

@@ -13,6 +13,8 @@ export type NotificationCategory =
   | 'arrival_alert'
   | 'trip_reminder'
   | 'trip_invite'
+  | 'schedule_change_request' // owner: 참여자가 낸 일정 변경 제안(승인/거절)
+  | 'schedule_change_result' // 참여자: 내 제안에 대한 owner 승인/거절 결과
   | 'general';
 
 export type InboxItemKind = NotificationCategory | 'friend_request';
@@ -25,12 +27,16 @@ export interface InboxItemActionDto {
     | 'accept-friend' // friend.id 로 PATCH /friends/:id/accept
     | 'reject-friend' // friend.id 로 DELETE /friends/:id
     | 'accept-trip-invite' // tripId + tripMemberId 로 invite 수락
-    | 'reject-trip-invite'; // tripId + tripMemberId 로 invite 거절
+    | 'reject-trip-invite' // tripId + tripMemberId 로 invite 거절
+    | 'review-schedule-change' // owner: proposalId 로 planner 이동해 diff 확인 후 승인/거절
+    | 'reject-schedule-change'; // owner: proposalId 로 제안 즉시 거절
   label: string;
   /** 액션 동작에 필요한 식별자 */
   tripId?: string;
   tripMemberId?: string;
   friendId?: string;
+  /** 일정 변경 제안 id (schedule_change_request 액션) */
+  proposalId?: string;
   /** open-trip 딥링크 시 열 일차(1-based). 없으면 여행 첫 일차로 연다 */
   day?: number;
 }

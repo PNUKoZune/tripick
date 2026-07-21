@@ -198,6 +198,7 @@ function TripProgressContent() {
         item={alternativeItem}
         onClose={() => setAlternativeItem(null)}
         onApplied={() => setAlternativeItem(null)}
+        isOwner={trip?.isOwner ?? false}
       />
 
       <ReplanToast tripId={active.id} subscription={replan} />

@@ -23,6 +23,7 @@ import { ArrivalAlertModule } from './arrival-alert/arrival-alert.module';
 import { NotificationSchedulerModule } from './notification-scheduler/notification-scheduler.module';
 import { PreferenceAnalyzerModule } from './preference-analyzer/preference-analyzer.module';
 import { MainPlannerModule } from './main-planner/main-planner.module';
+import { ScheduleChangeModule } from './schedule-change/schedule-change.module';
 import { TripMembersModule } from './trip-members/trip-members.module';
 import { FriendsModule } from './friends/friends.module';
 import { InboxModule } from './inbox/inbox.module';
@@ -89,6 +90,7 @@ import { InboxModule } from './inbox/inbox.module';
     NotificationSchedulerModule,
     PreferenceAnalyzerModule,
     MainPlannerModule,
+    ScheduleChangeModule,
     TripMembersModule,
     FriendsModule,
     InboxModule,

@@ -14,6 +14,10 @@ export const queryKeys = {
   inbox: {
     list: ['inbox', 'list'] as const,
   },
+  scheduleChanges: {
+    list: (tripId: string) => ['schedule-changes', tripId] as const,
+    detail: (id: string) => ['schedule-changes', 'detail', id] as const,
+  },
   user: {
     me: ['user', 'me'] as const,
   },

@@ -967,6 +967,18 @@ export class MainPlannerService {
   }
 
   /**
+   * 일정 변경 제안(ScheduleChange)의 요약·미리보기용으로 항목 이름/일차만 안전하게 조회한다.
+   * 대상 항목이 이미 사라졌으면(다른 변경으로 삭제) null 을 반환해 요약 문구가 깨지지 않게 한다.
+   */
+  async findItemLabel(
+    tripId: string,
+    itemId: string,
+  ): Promise<{ name: string; day: number } | null> {
+    const item = await this.itemsRepo.findOneBy({ id: itemId, tripId });
+    return item ? { name: item.name, day: item.day } : null;
+  }
+
+  /**
    * 기본 추천: CRAG/임베딩 파이프라인(PlaceRetrievalService)으로 취향을 반영한 대안을 만든다.
    * - 저장된 취향 벡터(preference_embeddings) 로 pgvector 검색을 개인화
    * - CRAG 평가로 confidence 채점 후 상위 다양성 선별

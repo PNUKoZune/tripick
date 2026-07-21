@@ -10,6 +10,7 @@ import { acceptFriend, removeFriend } from '@/entities/friend';
 import { fetchInbox, markAllInboxRead, markInboxRead } from '@/entities/inbox';
 import { SessionGuard } from '@/entities/session';
 import { acceptTripInvite, rejectTripInvite } from '@/entities/trip-plan';
+import { rejectScheduleChange } from '@/entities/schedule-change';
 import { useInboxInvalidateSubscription } from '@/features/subscribe-inbox-invalidate';
 import { queryKeys } from '@/shared/api/query-keys';
 import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
@@ -32,6 +33,8 @@ const KIND_META: Record<InboxItemKind, { emoji: string; label: string; tone: str
   crowd_alert: { emoji: '👥', label: '혼잡 알림', tone: '#E0529C' },
   arrival_alert: { emoji: '📍', label: '미도착 알림', tone: '#F04452' },
   trip_reminder: { emoji: '🧳', label: '여행 알림', tone: '#1B64DA' },
+  schedule_change_request: { emoji: '📝', label: '변경 요청', tone: '#B45309' },
+  schedule_change_result: { emoji: '✅', label: '변경 결과', tone: '#00A86B' },
   general: { emoji: '📬', label: '알림', tone: '#6B7684' },
 };
 
@@ -41,6 +44,7 @@ const CATEGORY_KINDS: Set<InboxItemKind> = new Set([
   'crowd_alert',
   'arrival_alert',
   'trip_reminder',
+  'schedule_change_result',
   'general',
 ]);
 
@@ -106,6 +110,10 @@ function InboxContent() {
       rejectTripInvite(tripId, tripMemberId),
     onSuccess: () => invalidateAll(),
   });
+  const rejectScheduleChangeMutation = useMutation({
+    mutationFn: (proposalId: string) => rejectScheduleChange(proposalId),
+    onSuccess: () => invalidate(),
+  });
 
   // 지금 받은 알림에 실제로 존재하는 카테고리만 chip 으로 노출한다(빈 카테고리 숨김).
   const availableKinds = useMemo(() => {
@@ -155,6 +163,16 @@ function InboxContent() {
         tripId: action.tripId,
         tripMemberId: action.tripMemberId,
       });
+    } else if (action.type === 'review-schedule-change' && action.tripId && action.proposalId) {
+      // owner: planner 로 이동해 diff 를 확인하고 그 화면에서 승인/거절한다.
+      if (!item.readAt) readMutation.mutate(item.id);
+      const dayQuery = action.day ? `&day=${action.day}` : '';
+      router.push(
+        `/planner?tripId=${action.tripId}${dayQuery}&proposalId=${action.proposalId}`,
+      );
+    } else if (action.type === 'reject-schedule-change' && action.proposalId) {
+      if (!item.readAt) readMutation.mutate(item.id);
+      rejectScheduleChangeMutation.mutate(action.proposalId);
     } else if (action.type === 'open-trip' && action.tripId) {
       if (!item.readAt && CATEGORY_KINDS.has(item.kind)) {
         readMutation.mutate(item.id);
@@ -256,7 +274,9 @@ function InboxContent() {
                   ((acceptMutation.isPending || rejectMutation.isPending) &&
                     item.kind === 'friend_request') ||
                   ((acceptInviteMutation.isPending || rejectInviteMutation.isPending) &&
-                    item.kind === 'trip_invite')
+                    item.kind === 'trip_invite') ||
+                  (rejectScheduleChangeMutation.isPending &&
+                    item.kind === 'schedule_change_request')
                 }
                 onAction={(actionType) => handleAction(item, actionType)}
                 onClick={() => handleRowClick(item)}
@@ -367,6 +387,7 @@ function InboxRow({
               const primary =
                 action.type === 'accept-friend' ||
                 action.type === 'accept-trip-invite' ||
+                action.type === 'review-schedule-change' ||
                 action.type === 'open-trip';
               return (
                 <button
