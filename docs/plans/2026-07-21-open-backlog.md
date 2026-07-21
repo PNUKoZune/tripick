@@ -103,12 +103,12 @@
 ## 인박스 · 푸시 인프라
 
 - [ ] inbox WebSocket invalidate(`inbox:<userId>`) `[코드확인: 없음]` ([inbox](../notification/inbox-and-trip-invite-v1.md#L450))
-- [ ] `trip_reminder`(D-1/D-day) 스케줄러 — `weather_alert`는 완료, `trip_reminder`는 type만 존재
+- [x] `trip_reminder`(D-1/D-day) 스케줄러 `[코드확인]` — `NotificationSchedulerModule`(BullMQ repeatable, weather-alert 등록 패턴 복제)이 출발 전날/당일 아침(09:00 KST) 확정 여행 멤버에 `trip_reminder` inbox+FCM 발송. Redis SET NX 로 (여행·종류)당 1회. inbox 액션 매핑이 이미 `trip_reminder→open-trip` 이라 inbox 무변경
 - [ ] invitee trip 뷰 owner 전용 UI 숨김(추가/제외/swap)
 - [ ] owner가 pending 멤버 취소 시 invitee 알림(현재 무음)
 - [ ] `friendUserId` 없는 핸들 친구 가입 유도 푸시
 - [ ] 알림 카테고리별 sub-filter
-- [ ] 알림 30일 자동 archive 정책
+- [x] 알림 30일 자동 archive 정책 `[코드확인]` — `NotificationArchiveService`(04:00 KST 스캔)가 읽은 지 30일 지난 알림 hard delete. 미읽음은 나이 무관 보존(못 본 알림 유실 방지), 친구 요청은 friends 가상 row 라 무영향. `synchronize` 의존이라 soft flag 컬럼 대신 삭제 선택
 
 ## 모바일 셸
 
