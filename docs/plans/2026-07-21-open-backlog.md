@@ -104,7 +104,7 @@
 
 - [x] inbox WebSocket invalidate(`inbox:<userId>`) `[코드확인]` — 게이트웨이가 인증 소켓을 `inbox:<userId>` room 에 자동 합류(멤버십 검증 불필요, 본인 채널), `InboxService.create` 가 `pushInboxInvalidate` 로 신호 → FE `useInboxInvalidateSubscription` 이 `inbox.list` invalidate. 브라우저 단독 FCM 공백 보완 ([inbox](../notification/inbox-and-trip-invite-v1.md#L450))
 - [x] `trip_reminder`(D-1/D-day) 스케줄러 `[코드확인]` — `NotificationSchedulerModule`(BullMQ repeatable, weather-alert 등록 패턴 복제)이 출발 전날/당일 아침(09:00 KST) 확정 여행 멤버에 `trip_reminder` inbox+FCM 발송. Redis SET NX 로 (여행·종류)당 1회. inbox 액션 매핑이 이미 `trip_reminder→open-trip` 이라 inbox 무변경
-- [ ] invitee trip 뷰 owner 전용 UI 숨김(추가/제외/swap)
+- [x] invitee 일정 변경 owner 승인 흐름 `[코드확인]` — 원안("owner 전용 UI 숨김") 대신 **변경 UI 는 owner·참여자 모두 노출 + 비-owner 변경은 owner 승인(알림 동반) 후 반영** 으로 방향 전환. 일정 변경 6종(추가·삭제·수정·순서·swap·AI 재계획)을 범용 제안(`ScheduleChangeProposal`, kind+payload)으로 저장 → owner 가 diff 확인·승인 시 owner 권한으로 replay. 알림은 `trip_invite` 수락/거절 패턴 복제(`schedule_change_request`/`result`) ([invitee-change-approval](../planner/invitee-change-approval-v1.md))
 - [x] owner가 pending 멤버 취소 시 invitee 알림(현재 무음) `[코드확인]` — `TripMembersService.remove`(두 삭제 경로 공통)가 pending invitee 취소 시 `InboxService.cancelTripInvite` 호출 → 남은 trip_invite 카드 삭제(jsonb tripMemberId 매칭) + general "초대 취소" 알림. 접근 불가라 open-trip 액션 없음
 - [x] `friendUserId` 없는 핸들 친구 가입 유도 푸시 `[제외: 미가입자 푸시 채널 부재]` — 핸들만 등록된(friendUserId 없는) 친구는 아직 서비스 미가입이라 FCM 토큰이 없어 보낼 대상 자체가 없음. SMS·카카오 알림톡 등 외부 채널이 필요해 현재 푸시 인프라 범위 밖. 현재는 즉시 accepted 합류 유지
 - [x] 알림 카테고리별 sub-filter `[코드확인]` — 기존 상태 필터(전체/읽지않음/응답필요)와 직교하는 카테고리 chip 열 추가. 현재 목록에 실제 존재하는 카테고리만 chip 노출(빈 카테고리 숨김), 선택 카테고리가 사라지면 전체로 폴백
