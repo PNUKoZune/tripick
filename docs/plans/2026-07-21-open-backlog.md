@@ -30,10 +30,10 @@
 
 ## 플래너 · 실시간
 
-- [ ] `report-deviation` 송신부(위치추적·진행 화면) `[코드확인: 없음]` — 현재 수신부만 ([realtime](../planner/realtime-websocket-v1.md#L80))
-- [ ] replan 워커가 실제 `pushReplanResult` 호출하는지 점검
-- [ ] 게이트웨이 인가: room 재입장/멤버십 변경 시 재검증 정책
-- [ ] 트립 레벨 재계획 진입점(헤더 "AI로 일정 다시 짜기") ([alternative](../planner/alternative-place-picker-v1.md#L142))
+- [x] `report-deviation` WS 채널 제거 `[코드확인]` — 송신부 없음 + 수신부는 `ArrivalAlertModule`(서버 스캔)로 대체돼 사문화. 인증만 하고 멤버십은 안 보던 핸들러라 제거가 곧 인가 갭 해소 ([realtime](../planner/realtime-websocket-v1.md#L80))
+- [x] replan 워커가 실제 `pushReplanResult` 호출 `[코드확인]` — [alternative.processor.ts](../../apps/api/src/alternative/alternative.processor.ts) 성공·실패 양쪽 호출 + inbox/FCM 폴백
+- [x] 게이트웨이 인가: room 재입장/멤버십 변경 시 재검증 `[코드확인]` — 재입장은 `join-trip` 마다 `canAccessTrip` 재검증(기존), 멤버 제거 시 `evictFromTrip` 으로 소켓 즉시 퇴장(신규)
+- [x] 트립 레벨 재계획 진입점 `[코드확인]` — 데스크탑 헤더 "AI 재계획" 버튼 + 모바일 FAB → ReplanModal(manual) ([alternative](../planner/alternative-place-picker-v1.md#L142))
 - [ ] 대안 swap 시 영업시간 위반 경고
 - [ ] 현재 장소 비교 카드(P3-9)
 - [ ] pending/resolve 후보 마커 좌표 정규화 일관화
