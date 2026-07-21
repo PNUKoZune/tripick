@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 
+import { getReactNativeWebView } from '@/shared/rn-bridge/rn-webview';
+
 export interface GeoPosition {
   lat: number;
   lng: number;
@@ -20,15 +22,6 @@ type PermissionState = 'unknown' | 'granted' | 'denied' | 'unavailable';
 type RnLocationMessage =
   | { type: 'LOCATION_UPDATE'; lat: number; lng: number; accuracy?: number; timestamp?: number }
   | { type: 'LOCATION_ERROR'; code: number; message: string };
-
-interface RnWebView {
-  postMessage(message: string): void;
-}
-
-function getReactNativeWebView(): RnWebView | null {
-  if (typeof window === 'undefined') return null;
-  return (window as unknown as { ReactNativeWebView?: RnWebView }).ReactNativeWebView ?? null;
-}
 
 /**
  * 현재 위치를 추적한다.

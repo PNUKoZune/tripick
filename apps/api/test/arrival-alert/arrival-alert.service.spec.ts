@@ -32,8 +32,13 @@ function trip(overrides: Record<string, unknown> = {}) {
   return { id: 'trip-1', title: '서울 여행', status: 'confirmed', ...overrides } as any;
 }
 
-function loc(base: { lat: number; lng: number }, ageMs = 0): LiveLocation {
-  return { lat: base.lat, lng: base.lng, ts: NOW.getTime() - ageMs };
+function loc(base: { lat: number; lng: number }, ageMs = 0, accuracy?: number): LiveLocation {
+  return {
+    lat: base.lat,
+    lng: base.lng,
+    ...(accuracy !== undefined ? { accuracy } : {}),
+    ts: NOW.getTime() - ageMs,
+  };
 }
 
 function build(opts: {
@@ -191,6 +196,22 @@ describe('ArrivalAlertService', () => {
 
     expect(await service.scanDueItems(NOW)).toBe(1);
     expect(ARRIVAL_RADIUS_M).toBe(500);
+    expect(inboxService.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('부정확한 fix(오차 반경 큼)는 반경 밖이라도 알리지 않는다', async () => {
+    // FAR 은 ~3.7km 밖이지만 정확도 4km 면 실제로 도착했을 수 있어 오탐을 피한다.
+    const { service, inboxService } = build({ locations: { u1: loc(FAR, 0, 4000) } });
+
+    expect(await service.scanDueItems(NOW)).toBe(0);
+    expect(inboxService.create).not.toHaveBeenCalled();
+  });
+
+  it('정확한 fix 는 반경 밖이면 알린다(정확도 마진 이내)', async () => {
+    // FAR ~3.7km, 정확도 30m → distance-margin 이 여전히 반경 밖 → 알림.
+    const { service, inboxService } = build({ locations: { u1: loc(FAR, 0, 30) } });
+
+    expect(await service.scanDueItems(NOW)).toBe(1);
     expect(inboxService.create).toHaveBeenCalledTimes(1);
   });
 

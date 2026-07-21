@@ -125,8 +125,12 @@ export class ArrivalAlertService {
     const loc = await this.liveLocation.getFresh(userId, LOCATION_STALE_MS, now);
     if (!loc) return false;
 
+    // 위치 정확도(오차 반경)를 감안한다 — 사용자의 실제 위치는 loc 에서 최대 accuracy 만큼
+    // 떨어져 있을 수 있으므로, "가장 가까웠을 수 있는 지점"(distance-accuracy)마저 반경 밖일 때만
+    // 확신하고 알린다(부정확한 fix 로 인한 오탐 방지). accuracy 미보고면 0 으로 본다.
     const distance = haversineMeters(loc, item.coordinates);
-    if (distance <= ARRIVAL_RADIUS_M) return false;
+    const margin = loc.accuracy ?? 0;
+    if (distance - margin <= ARRIVAL_RADIUS_M) return false;
 
     // 발송 직전에 선점 — 발송 후 기록하면 중간 실패 시 재시도가 중복 발송한다.
     // 억제 기간은 그 항목의 KST 일자 끝까지라, 하루 일정이 길어도 (여행,사용자,일차)당 1회만.
