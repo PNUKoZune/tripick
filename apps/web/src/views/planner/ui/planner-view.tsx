@@ -589,6 +589,7 @@ function PlannerContent({
         tripId={trip?.id ?? selectedTripId}
         tripTitle={trip?.title ?? '여행'}
         members={trip?.members ?? []}
+        isOwner={isOwner}
       />
 
       {trip ? (

@@ -15,13 +15,22 @@ type Props = {
   tripId: string;
   tripTitle: string;
   members: PlannerMemberDto[];
+  /** 멤버 추가·제외는 owner 전용. 비-owner 는 명단만 읽는다 */
+  isOwner?: boolean;
 };
 
 function tripMemberIdFromFriend(friendId: string) {
   return `tm-${friendId}`;
 }
 
-export function TripMembersSheet({ open, onClose, tripId, tripTitle, members }: Props) {
+export function TripMembersSheet({
+  open,
+  onClose,
+  tripId,
+  tripTitle,
+  members,
+  isOwner = true,
+}: Props) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
 
@@ -29,7 +38,8 @@ export function TripMembersSheet({ open, onClose, tripId, tripTitle, members }: 
     queryKey: queryKeys.friends.list,
     queryFn: fetchFriends,
     staleTime: 60 * 1000,
-    enabled: open,
+    // 비-owner 는 추가 UI 자체가 없으므로 후보 친구를 조회하지 않는다
+    enabled: open && isOwner,
   });
 
   const invalidateTrip = async () => {
@@ -78,7 +88,9 @@ export function TripMembersSheet({ open, onClose, tripId, tripTitle, members }: 
         <div className="text-[12px] font-semibold text-[#3182F6]">{tripTitle}</div>
         <h2 className="mt-0.5 text-[20px] font-bold text-[#191F28]">여행 멤버</h2>
         <p className="mt-1 text-[13px] text-[#6B7684]">
-          친구 목록에서 멤버를 추가하거나 제거할 수 있어요.
+          {isOwner
+            ? '친구 목록에서 멤버를 추가하거나 제거할 수 있어요.'
+            : '함께하는 멤버예요. 추가·제외는 여행 관리자만 할 수 있어요.'}
         </p>
       </div>
 
@@ -94,7 +106,7 @@ export function TripMembersSheet({ open, onClose, tripId, tripTitle, members }: 
             </p>
           ) : (
             members.map((member) => {
-              const isOwner = member.role === 'owner' || !member.friendId;
+              const isOwnerMember = member.role === 'owner' || !member.friendId;
               const isPending = member.status === 'pending';
               const label = member.nickname ?? member.initial;
               return (
@@ -112,7 +124,7 @@ export function TripMembersSheet({ open, onClose, tripId, tripTitle, members }: 
                   />
                   <div className="flex-1 text-[14px] font-bold text-[#191F28]">
                     <span className={isPending ? 'text-[#8B95A1]' : undefined}>{label}</span>
-                    {isOwner ? (
+                    {isOwnerMember ? (
                       <span className="ml-2 rounded-full bg-[#F2F4F6] px-2 py-0.5 text-[11px] font-semibold text-[#6B7684]">
                         본 여행 기본 멤버
                       </span>
@@ -122,7 +134,7 @@ export function TripMembersSheet({ open, onClose, tripId, tripTitle, members }: 
                       </span>
                     ) : null}
                   </div>
-                  {!isOwner ? (
+                  {isOwner && !isOwnerMember ? (
                     <button
                       type="button"
                       onClick={() => removeMutation.mutate(member.id)}
@@ -139,6 +151,7 @@ export function TripMembersSheet({ open, onClose, tripId, tripTitle, members }: 
         </div>
       </section>
 
+      {isOwner ? (
       <section className="mt-6 px-5 pb-6">
         <div className="flex items-center justify-between">
           <h3 className="text-[14px] font-bold text-[#191F28]">친구 목록에서 추가</h3>
@@ -193,6 +206,9 @@ export function TripMembersSheet({ open, onClose, tripId, tripTitle, members }: 
           )}
         </div>
       </section>
+      ) : (
+        <div className="px-5 pb-6" />
+      )}
     </BottomSheet>
   );
 }
