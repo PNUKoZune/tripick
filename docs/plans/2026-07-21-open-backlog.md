@@ -35,10 +35,10 @@
 - [ ] 게이트웨이 인가: room 재입장/멤버십 변경 시 재검증 정책
 - [ ] 트립 레벨 재계획 진입점(헤더 "AI로 일정 다시 짜기") ([alternative](../planner/alternative-place-picker-v1.md#L142))
 - [ ] 대안 swap 시 영업시간 위반 경고
-- [ ] 현재 장소 비교 카드(P3-9)
-- [ ] pending/resolve 후보 마커 좌표 정규화 일관화
+- [ ] 현재 장소 비교 카드(P3-9) → 대안 카드 취향 근거(reason) 정식 노출로 대체 — 좌우 비교 카드는 BottomSheet 세로 레이아웃에 부적합. 현재 `place.reason` 을 `waitLabel` 에 욱여넣어(28자 절단) 있어 전용 필드 분리 필요(FE+BE, `feat/alternative-card-enrichment`)
+- [x] pending/resolve 후보 마커 좌표 정규화 일관화 `[코드확인]` — 추천/resolve 응답 마커를 병합 후 `normalizeMarkerPositions` 로 폴백 x·y 재정규화(SDK 미로딩 미리보기 정합)
 - [ ] 필수 포함 장소 LLM 경로 보장 주입(현재 best-effort) ([planner-enh](../planner/planner-page-enhancements-v1.md#L124))
-- [ ] 검색 드롭다운 키보드 내비 · 태블릿 사이드바 접힘 localStorage
+- [x] 검색 드롭다운 키보드 내비 · 태블릿 사이드바 접힘 localStorage `[코드확인]` — combobox/listbox + 방향키·Enter·Esc, 사이드바 접힘 상태 localStorage 유지
 
 ## 라우팅
 
