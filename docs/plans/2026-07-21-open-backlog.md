@@ -52,7 +52,7 @@
 
 - [ ] 예보 악화 시 재알림(선점 키에 확률 저장) ([weather-alert](../alerts/weather-alert-scheduler-v1.md#L130))
 - [ ] 일차 딥링크(푸시 payload `day` 반영)
-- [ ] 날씨/재계획 알림 수신 토글 분리(현재 `replan_ready` 공유) `[보류: 기존 토글 설계 유지]`
+- [x] 날씨/재계획 알림 수신 토글 분리 `[코드확인]` — `prefersCategory` 의 weather/crowd/arrival→replan_ready collapse 제거, 각 카테고리가 자기 키를 따름. 설정 UI 는 "재계획 완료"(replan_ready)와 "날씨·혼잡·미도착 추천"(weather_alert 대표, crowd·arrival 동반) 2개 row 로 분리. 기존 replan_ready off 사용자는 이제 추천을 따로 끌 수 있음(추천은 기본 on 으로 복귀)
 - [ ] 임계값 캘리브레이션(유예 15분·반경 500m·신선도 10분, 상대 1.2·하한 10%) ([arrival](../alerts/arrival-check-alert-v1.md#L142)·[crowd](../alerts/crowd-alert-scheduler-v1.md#L143))
 - [ ] iOS 백그라운드 위치(significant-location-change)
 - [ ] KTO `tAtsNm` 이름 매칭 누락 처리

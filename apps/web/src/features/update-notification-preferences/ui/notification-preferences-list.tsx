@@ -10,8 +10,13 @@ import {
 import { queryKeys } from '@/shared/api/query-keys';
 import { Switch } from '@/shared/ui';
 
+/**
+ * key: 스위치 상태를 읽는 대표 키. alsoKeys 가 있으면 토글 시 함께 갱신한다.
+ * 날씨·혼잡·미도착 추천은 성격이 같아 한 스위치(weather_alert 대표)로 세 키를 함께 켜고 끈다.
+ */
 const ROWS: ReadonlyArray<{
   key: NotificationPreferenceKey;
+  alsoKeys?: ReadonlyArray<NotificationPreferenceKey>;
   label: string;
   description: string;
 }> = [
@@ -27,8 +32,14 @@ const ROWS: ReadonlyArray<{
   },
   {
     key: 'replan_ready',
-    label: '재계획 / 날씨·혼잡 변동',
-    description: '대안 일정 반영이 끝나거나 날씨·혼잡이 크게 바뀌면 알려줘요.',
+    label: '재계획 완료',
+    description: '요청한 대안 일정 반영이 끝나면 알려줘요.',
+  },
+  {
+    key: 'weather_alert',
+    alsoKeys: ['crowd_alert', 'arrival_alert'],
+    label: '날씨·혼잡·미도착 추천',
+    description: '날씨·혼잡·미도착 등 상황이 바뀌면 일정을 바꿀지 추천해요.',
   },
   {
     key: 'trip_reminder',
@@ -79,11 +90,13 @@ export function NotificationPreferencesList({ me, onError }: Props) {
             <Switch
               checked={enabled}
               disabled={mutation.isPending}
-              onChange={(next) =>
-                mutation.mutate({ [row.key]: next } as Partial<
-                  Record<NotificationPreferenceKey, boolean>
-                >)
-              }
+              onChange={(next) => {
+                const patch: Partial<Record<NotificationPreferenceKey, boolean>> = {
+                  [row.key]: next,
+                };
+                for (const also of row.alsoKeys ?? []) patch[also] = next;
+                mutation.mutate(patch);
+              }}
               aria-label={`${row.label} 알림 ${enabled ? '끄기' : '켜기'}`}
             />
           </div>
