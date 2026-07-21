@@ -3,6 +3,7 @@
 문서 목적: 카카오 OAuth 단독이던 인증에 **이메일 회원가입/로그인 + 이메일 인증 + 비밀번호 재설정**을 더하고, 그 위에 **세션 가드 · refresh 토큰 회전 · 사용자 고유 핸들 · 레이트리밋**을 얹은 작업을 고정한다. 카카오 로그인 v1 위에 얹는 변경이며 디자인 시스템 · FSD · 모듈 경계 규칙은 동일한 흐름으로 정리한다.
 
 기준 브랜치: `feat/email-login-and-session`
+작성일: 2026-06-23
 선행 문서:
 - [`docs/settings/settings-profile-v1.md`](../settings/settings-profile-v1.md)
 - [`docs/friends/friends-and-trip-members-v1.md`](../friends/friends-and-trip-members-v1.md)

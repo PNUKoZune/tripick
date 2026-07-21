@@ -3,6 +3,7 @@
 문서 목적: 경로·ETA 계산을 자체 호스팅 OTP2 대신 외부 API(카카오 모빌리티 + ODsay)로 완성한 작업을 고정한다. 그 과정에서 이 코드가 **한 번도 외부 API 값을 쓴 적이 없었다**는 사실이 드러나, 원인 버그와 견고성 이슈를 함께 고쳤다.
 
 기준 브랜치: `feat/routing-external-api`
+작성일: 2026-07-17
 관련 문서: [`docs/planner/main-planner-v1.md`](./main-planner-v1.md), [`CLAUDE.md`](../../CLAUDE.md) 6절 (길찾기 API 주의사항)
 
 커밋: `2ac4323`(실연동) → `f6ad136`(Redis 캐싱) → `9317e35`(도보·견고성) → `34c0cf5`(CLAUDE.md)

@@ -3,6 +3,7 @@
 문서 목적: [`docs/notification/fcm-production-push-v1.md`](./fcm-production-push-v1.md) 1절 "제외"에서 backlog로 넘겼던 `friend_request` 푸시와 `weather_alert` 발신처를 정리하고, 그 과정에서 발견한 "푸시 탭 라우팅 부재"를 함께 닫는다. 알림을 눌러도 이동이 되지 않던 갭을 RN→Web 딥링크 브릿지로 마감한다.
 
 기준 브랜치: `feat/friend-request-push`
+작성일: 2026-07-14
 관련 문서: [`docs/notification/fcm-production-push-v1.md`](./fcm-production-push-v1.md) (토큰 생명주기·`sendToUser`·재계획 통지), [`docs/notification/inbox-and-trip-invite-v1.md`](./inbox-and-trip-invite-v1.md) (인박스 카테고리·수신설정·가상 row), [`docs/friends/friends-and-trip-members-v1.md`](../friends/friends-and-trip-members-v1.md) (친구 요청 incoming row)
 
 ## 1. 범위

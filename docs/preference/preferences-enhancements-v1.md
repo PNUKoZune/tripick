@@ -3,6 +3,7 @@
 문서 목적: 취향 설정 페이지(`/preferences`)를 "몇 개의 프리셋 태그를 고르는 폼"에서 **테마 선호/불호 + 사진 기반 취향 분석**까지 다루는 화면으로 개편한 작업을 고정한다. 온보딩 유도 흐름 변경, 관심 테마 구조 개편(선호/불호), 인스타그램 연동 제거 → 사진 직접 업로드·분석·저장·삭제, 레이아웃·UX 개선(시각 피커·2열 배치·토스트·이탈 경고·기본값 되돌리기), 공용 `ConfirmDialog` 분리, 관련 버그 수정을 정리한다.
 
 기준 브랜치: `feat/preferences-enhancements`
+작성일: 2026-07-13
 관련 문서: [`docs/preference/place-embedding-and-preference-personalization-v1.md`](./place-embedding-and-preference-personalization-v1.md) (취향 벡터 개인화 검색), [`docs/planner/rag-crag-v1.md`](../planner/rag-crag-v1.md) (CRAG 검색), [`docs/settings/settings-profile-v1.md`](../settings/settings-profile-v1.md) (프로필 이미지 Object Storage 업로드 패턴), [`docs/trips/trip-create-v1.md`](../trips/trip-create-v1.md) (MUI 시계 피커 원본)
 
 ## 1. 범위

@@ -1,6 +1,7 @@
 # TriPick backend demo flow
 
 기준 브랜치: `develop`
+작성일: 2026-05-06
 검증 일시: 2026-05-06
 기준 API base URL: `http://localhost:4000/api/v1`
 

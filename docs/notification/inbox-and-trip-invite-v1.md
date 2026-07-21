@@ -3,6 +3,7 @@
 문서 목적: 친구 요청·재계획·여행 초대 등을 한 곳에 모으는 `/inbox` 페이지와, "친구를 trip 멤버로 자동 등록" 동작을 "초대 → 수락" 흐름으로 분리한 작업을 고정한다. main-planner v1 · trip-create v1 · friends/trip-members v1 위에 얹는 변경이며, 디자인 시스템 · FSD · mock/DB API · 화면 매핑 규칙은 동일한 흐름으로 정리한다.
 
 기준 브랜치: `feat/inbox-setting-page`
+작성일: 2026-06-19
 선행 문서:
 - [`docs/planner/main-planner-v1.md`](../planner/main-planner-v1.md)
 - [`docs/trips/trip-create-v1.md`](../trips/trip-create-v1.md)

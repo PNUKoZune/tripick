@@ -3,6 +3,7 @@
 문서 목적: 배관만 있고 실제로는 동작하지 않던 "사진 → 취향 태그" 경로를 로컬 멀티모달 LLM 에 실제로 연결하고, 장당 35초라는 비용에 맞춰 동기 요청에서 BullMQ 잡으로 옮긴 작업을 고정한다.
 
 기준 브랜치: `feat/vision-taste-tagging` (base: `develop`)
+작성일: 2026-07-19
 관련 문서: [`docs/preference/preferences-enhancements-v1.md`](./preferences-enhancements-v1.md) (사진 업로드·삭제 UI 와 인스타 연동 제거), [`docs/preference/place-embedding-and-preference-personalization-v1.md`](./place-embedding-and-preference-personalization-v1.md) (취향 벡터가 소비되는 곳), [`docs/notification/fcm-production-push-v1.md`](../notification/fcm-production-push-v1.md) (완료 알림이 타는 푸시 경로), [`CLAUDE.md`](../../CLAUDE.md) §5 Local LLM, §7 BullMQ 재시도 기본값
 
 ## 1. 범위

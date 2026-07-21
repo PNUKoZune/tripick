@@ -3,6 +3,7 @@
 문서 목적: 커버리지가 비어 있거나 얕던 백엔드 도메인에 유닛·e2e 테스트를 추가하고, 경량 e2e 인프라를 도입한 작업을 고정한다. 기존에 깨져 있던 테스트 1건 수정과 e2e 인증 가드 개선도 함께 정리한다.
 
 기준 브랜치: `test/api-coverage-expansion`
+작성일: 2026-07-13
 관련 문서: [`docs/overview/product-v1-scope.md`](../overview/product-v1-scope.md) (v1 범위), [`docs/planner/rag-crag-v1.md`](../planner/rag-crag-v1.md) (planner 파이프라인)
 
 ## 1. 배경

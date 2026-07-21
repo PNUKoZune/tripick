@@ -3,6 +3,7 @@
 문서 목적: 비 예보를 감지해 사용자에게 "일정을 바꿀까요?" 를 묻는 알림 스케줄러를 붙인 작업을 고정한다. 자동 재계획이 아니라 **알림 → 사용자가 직접 변경** 흐름이다.
 
 기준 브랜치: `feat/weather-alert-scheduler` (base: `develop`)
+작성일: 2026-07-19
 선행 문서: [`docs/alerts/weather-forecast-v1.md`](./weather-forecast-v1.md) (단기예보 연동·캐시), [`docs/alerts/mid-term-forecast-v1.md`](./mid-term-forecast-v1.md) (중기예보 확장), [`docs/notification/inbox-and-trip-invite-v1.md`](../notification/inbox-and-trip-invite-v1.md) (인박스·푸시)
 관련 컨텍스트: [`CLAUDE.md`](../../CLAUDE.md) §6 기상청 API 주의사항, §4 모듈 분리 기준
 

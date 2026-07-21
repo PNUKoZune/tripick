@@ -3,6 +3,7 @@
 문서 목적: top-level 로 떠 있던 `/members` · `/coordination` 을 trip 컨텍스트 하위로 옮기고, 사용자 단위의 친구 관계를 새로 도입한 작업을 고정한다. main-planner v1 · trip-create v1 위에 얹는 변경이며 디자인 시스템 · FSD · mock API · 화면 매핑 규칙은 동일한 흐름으로 정리한다.
 
 기준 브랜치: `feat/friends-and-trip-members`
+작성일: 2026-05-26
 선행 문서:
 - [`docs/planner/main-planner-v1.md`](../planner/main-planner-v1.md) (Screen 3·4·내 여행 목록)
 - [`docs/trips/trip-create-v1.md`](../trips/trip-create-v1.md) (`/trips/new` 신규 여행 생성)
@@ -151,7 +152,7 @@ interface FriendDto {
 interface AddFriendRequestDto { handle: string }
 ```
 
-fixture: [`apps/api/src/friends/friends.mock.ts`](../../apps/api/src/friends/friends.mock.ts)
+fixture: `apps/api/src/friends/friends.mock.ts` — 이후 `friends.service.ts`(DB)로 대체되어 제거됨
 - 기본 7명 (accepted 6 + incoming 1: `@yoon.sa`)
 - `addFriendMock(handle)` 은 status=`pending` 으로 push, `acceptFriendMock` 으로 `accepted` 전환
 - 색상은 handle 해시 기반 7색 팔레트에서 결정
@@ -204,7 +205,7 @@ interface PlannerCoordinationDto {
 }
 ```
 
-fixture: [`apps/api/src/main-planner/main-planner-coordination.mock.ts`](../../apps/api/src/main-planner/main-planner-coordination.mock.ts)
+fixture: `apps/api/src/main-planner/main-planner-coordination.mock.ts` — 이후 조율 데이터 실서비스화로 제거됨
 - 경주 trip 기본 3명(태/박/홍) 기준 식사 · 관광 · 환경 컨센서스 + AI 추천 1건
 - mock 한정: 트립 시트로 친구를 새로 추가해도 voters 에 자동 합류하지 않음 (정적 fixture, backlog)
 

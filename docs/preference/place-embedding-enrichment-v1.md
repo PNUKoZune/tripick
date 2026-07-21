@@ -1,5 +1,7 @@
 # TriPick 장소 임베딩 데이터 강화 v1
 
+문서 목적: 장소 임베딩(`place_embeddings`)의 소스 편중·타지역 누수 등 데이터 품질 문제를 개선한 작업을 고정한다.
+
 작업 브랜치: `feat/place-embedding-enrichment`
 작성일: 2026-07-09
 관련 문서: [`place-embedding-and-preference-personalization-v1.md`](./place-embedding-and-preference-personalization-v1.md) (기반 적재 파이프라인), [`rag-crag-v1.md`](../planner/rag-crag-v1.md)

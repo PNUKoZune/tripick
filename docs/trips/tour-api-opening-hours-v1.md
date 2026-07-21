@@ -3,6 +3,7 @@
 문서 목적: 장소 영업시간 데이터 부재를 한국관광공사 소개정보조회(`detailIntro2`)로 채우고, 적재·소비·수동 추가·호출량 보호까지 파이프라인 전 구간에 연결한 작업을 고정한다.
 
 기준 브랜치: `feat/tour-api-opening-hours` (base: `develop`)
+작성일: 2026-07-18
 선행 문서: [`docs/trips/destination-tour-api-v1.md`](./destination-tour-api-v1.md) §6 후속작업 #2, [`docs/planner/rag-crag-v1.md`](../planner/rag-crag-v1.md) (적재·CRAG 파이프라인)
 관련 컨텍스트: [`CLAUDE.md`](../../CLAUDE.md) §6 외부 API 연동, Constraint Engine
 

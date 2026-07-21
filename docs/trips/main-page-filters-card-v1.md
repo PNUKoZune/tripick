@@ -3,6 +3,7 @@
 문서 목적: 메인 페이지(`/`, 내 여행 목록)를 "여행 카드를 나열"하던 화면에서 **상태를 정직하게 반영하고, 지금 중요한 여행을 앞세우며, 취향으로 다음 여행지를 제안**하는 화면으로 끌어올린 작업을 고정한다. 상태 라벨·필터 개편, draft(초안) 개념 정리(fail-hard), 카드 리디자인, 목록 UX(로딩·빈 상태·삭제), 히어로 카드, 검색·정렬, 취향 기반 추천 여행지(시/군/구 세분화)를 정리한다.
 
 기준 브랜치: `feat/main-page-filters-card`
+작성일: 2026-07-12
 관련 문서: [`docs/planner/main-planner-v1.md`](../planner/main-planner-v1.md) (플래너 초기 화면·`TripSummaryDto`), [`docs/preference/place-embedding-and-preference-personalization-v1.md`](../preference/place-embedding-and-preference-personalization-v1.md) (취향·장소 임베딩), [`docs/planner/rag-crag-v1.md`](../planner/rag-crag-v1.md) (CRAG 검색), [`docs/trips/destination-tour-api-v1.md`](./destination-tour-api-v1.md) (관광공사 지역 목록), [`docs/trips/trip-progress-live-v1.md`](./trip-progress-live-v1.md) (진행 중 여행·`/trip/live`)
 
 ## 1. 범위

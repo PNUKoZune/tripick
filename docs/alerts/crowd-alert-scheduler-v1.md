@@ -3,6 +3,7 @@
 문서 목적: 한국관광공사 관광지 집중률(방문자 추이 예측) API를 붙여, 여행 일정의 관광지가 붐빌 것으로 예측되면 사용자에게 "일정을 바꿀까요?" 를 묻는 알림 스케줄러를 추가한 작업을 고정한다. **날씨 알림과 동일하게 자동 재계획이 아니라 알림 → 사용자가 직접 변경** 흐름이다. 같은 브랜치에서 반응형 **웨이팅 기능을 제거**했다(§8).
 
 기준 브랜치: `feat/kto-visitor-forecast` (base: `develop`)
+작성일: 2026-07-20
 선행 문서: [`docs/alerts/weather-alert-scheduler-v1.md`](./weather-alert-scheduler-v1.md) (동형 스케줄러·미러링 원본), [`docs/trips/destination-tour-api-v1.md`](../trips/destination-tour-api-v1.md) (KTO 지역코드), [`docs/notification/inbox-and-trip-invite-v1.md`](../notification/inbox-and-trip-invite-v1.md) (인박스·푸시)
 선행 작업: 여행지 피커를 `areaCode2`→`ldongCode2`(법정동 코드)로 이전(별도 PR). 이 API가 법정동 코드를 쓰므로 그 코드 계열을 재활용한다(§6.1)
 관련 컨텍스트: [`CLAUDE.md`](../../CLAUDE.md) §6 외부 API 표(관광지 집중률), §4 모듈 분리 기준, §7 "혼잡도 추천 알림"

@@ -3,6 +3,7 @@
 문서 목적: 스캐폴딩만 있던 FCM 푸시를 production 수준으로 마감한 작업을 고정한다. 단일 컬럼 토큰을 멀티 디바이스 테이블로 분리하고, 재계획 결과를 인박스·FCM으로 실제 발송하도록 배선하며, 토큰 생명주기(등록·만료 정리·로그아웃 해제·계정 삭제·로그인 전 유실)를 닫는다.
 
 기준 브랜치: `feat/fcm-production-push`
+작성일: 2026-07-14
 관련 문서: [`docs/overview/product-v1-scope.md`](../overview/product-v1-scope.md) (2.E 재계획 — "푸시 알림 production 품질"·"자동 이탈 감지/FCM은 이후 단계"로 제외했던 항목), [`docs/planner/realtime-websocket-v1.md`](../planner/realtime-websocket-v1.md) (재계획 결과를 WebSocket으로만 내보내던 수신부), [`docs/notification/inbox-and-trip-invite-v1.md`](./inbox-and-trip-invite-v1.md) (인박스·수신설정)
 
 ## 1. 범위

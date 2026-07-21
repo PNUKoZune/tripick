@@ -3,6 +3,7 @@
 문서 목적: 끊겨 있던 실시간 재계획(replan) WebSocket 흐름을 FE↔BE로 연결하고, 세션 채널에 인증·인가를 적용한 작업을 고정한다. 소켓 인프라, 구독 훅, 게이트웨이 보안 모델, 공용 Toast 분리를 함께 정리한다.
 
 기준 브랜치: `feat/realtime-websocket-client`
+작성일: 2026-06-25
 관련 문서: [`docs/planner/main-planner-v1.md`](./main-planner-v1.md) (Screen 3·4, 그동안 mock REST 만 사용), [`docs/auth/email-login-and-session-v1.md`](../auth/email-login-and-session-v1.md) (JWT/세션)
 
 ## 1. 범위

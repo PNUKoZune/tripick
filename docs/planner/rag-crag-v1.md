@@ -1,5 +1,7 @@
 # TriPick RAG / CRAG planner v1
 
+문서 목적: 착수보고서의 RAG/CRAG 목표를 실제 API planner 파이프라인에 연결한 작업을 고정한다.
+
 기준 브랜치: `feat/rag-crag-planner`
 작성일: 2026-06-30
 

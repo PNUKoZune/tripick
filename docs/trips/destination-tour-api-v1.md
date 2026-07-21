@@ -3,6 +3,7 @@
 문서 목적: 신규 여행 생성(`/trips/new`)의 "여행 지역" 입력을 하드코딩 fixture에서 한국관광공사 국문관광정보 API 연동으로 교체하고, 지도에서 지역을 선택하는 기능을 추가한 작업을 고정한다.
 
 기준 브랜치: `feat/destination-tour-api` (base: `develop`)
+작성일: 2026-07-06
 선행 문서: [`docs/trips/trip-create-v1.md`](./trip-create-v1.md) (`/trips/new` 폼 구조)
 관련 컨텍스트: [`CLAUDE.md`](../../CLAUDE.md) §6 외부 API 연동
 

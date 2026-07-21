@@ -3,6 +3,7 @@
 문서 목적: 사진 분석 태그가 임베딩에 **0 기여**하던 문제를 가중치로 되살리고, 취향 어휘를 넓히고, 사용자가 사진별로 특정 태그를 켜고 끌 수 있게 한 작업을 고정한다.
 
 기준 브랜치: `feat/preference-embedding-weighting` (base: `develop`, 분기점 `000bd25`)
+작성일: 2026-07-19
 선행 문서: 취향 사진 → 태그 실동작 연결·BullMQ 분리는 `feat/vision-taste-tagging` 의 별도 문서에서 다룬다. 본 문서는 **그 위에 얹은 임베딩·어휘·on/off 만** 기록한다.
 관련 컨텍스트: [`CLAUDE.md`](../../CLAUDE.md) §3 취향 분석 파이프라인·CRAG, [`docs/preference/place-embedding-and-preference-personalization-v1.md`](./place-embedding-and-preference-personalization-v1.md) (임베딩 개인화 루프), [`docs/preference/embedding-server-separation-v1.md`](./embedding-server-separation-v1.md) (원격 임베딩·해시 폴백)
 

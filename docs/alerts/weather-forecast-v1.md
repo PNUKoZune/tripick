@@ -3,6 +3,7 @@
 문서 목적: main-planner 정보 탭의 mock 날씨를 기상청 단기예보 실데이터로 교체하고, 반복 호출을 줄이는 Redis 캐시를 적용한 작업을 고정한다.
 
 기준 브랜치: `feat/weather-forecast-web-integration`
+작성일: 2026-07-01
 관련 문서: [`docs/planner/main-planner-v1.md`](../planner/main-planner-v1.md) (Screen 3 정보 탭, 그동안 mock 날씨), [`CLAUDE.md`](../../CLAUDE.md) 6절 (기상청 API 주의사항)
 
 ## 1. 범위

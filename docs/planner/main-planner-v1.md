@@ -3,6 +3,7 @@
 문서 목적: Figma `AI Travel Planner – Prototype` 의 Screen 3·4 를 v1 web에 어떻게 옮겼는지를 고정한다. 디자인 시스템, 반응형 전략, FSD 구조, mock API 명세, 화면별 매핑 규칙을 같이 정리한다.
 
 기준 브랜치: `feature/main-plan-page`
+작성일: 2026-05-12
 기준 Figma: `https://www.figma.com/design/M7C2pQ6bsb2ODlNrbkMEhM` · 노드 `Screen 3 (6:80)` · `Screen 4 (6:162)`
 기준 디자인 시스템: [`docs/design-system/toss-v1.md`](../design-system/toss-v1.md)
 
@@ -152,7 +153,7 @@ base URL: `http://localhost:4000/api/v1/main-planner`
 - alternative mock 등록 itemId: `item-cheomseongdae` / `item-hwang-cafe` / `item-gyori` / `item-bulguksa` (현재 day 의 4개 일정 모두)
 
 DTO 정의: [`packages/types/src/main-planner.ts`](../../packages/types/src/main-planner.ts)
-mock fixture: [`apps/api/src/main-planner/main-planner.mock.ts`](../../apps/api/src/main-planner/main-planner.mock.ts)
+mock fixture: `apps/api/src/main-planner/main-planner.mock.ts` — 이후 `main-planner.service.ts`로 대체되어 제거됨
 
 추가된 DTO:
 - `PlannerTripMetaDto` — 정보 탭 메타(기간, 이동 수단, 기상/취침, 취향 태그, 통계, 단기 날씨)

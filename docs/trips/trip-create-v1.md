@@ -3,6 +3,7 @@
 문서 목적: `/trips/new` 경로의 신규 여행 생성 플로우(웹 전용, mock 백엔드)가 기존 main-planner v1 구조 위에 어떻게 얹혔는지를 고정한다. 디자인 토큰·FSD 레이어·mock API 명세·필드 정의를 모아둔다.
 
 기준 브랜치: `feat/add-trip`
+작성일: 2026-05-21
 선행 문서: [`docs/planner/main-planner-v1.md`](../planner/main-planner-v1.md) (Screen 3·4·내 여행 목록)
 기준 디자인 시스템: [`docs/design-system/toss-v1.md`](../design-system/toss-v1.md)
 
@@ -112,7 +113,7 @@ base URL: `http://localhost:4000/api/v1/main-planner`
 
 - `q` 가 비어 있으면 상위 8개 기본 노출.
 - `name` / `region` 부분일치 (대소문자 무시), 최대 10개 반환.
-- fixture: [`apps/api/src/main-planner/destinations.mock.ts`](../../apps/api/src/main-planner/destinations.mock.ts) (22개 국내 지역, 이모지 포함).
+- fixture: `apps/api/src/main-planner/destinations.mock.ts` (22개 국내 지역, 이모지 포함). — 이후 실데이터 서비스(`destinations.service.ts`, 관광공사 API)로 대체되어 제거됨.
 
 ### 5-2. `POST /trips`
 

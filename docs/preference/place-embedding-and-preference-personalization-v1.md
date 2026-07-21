@@ -1,5 +1,7 @@
 # TriPick 장소·취향 임베딩 파이프라인 & 개인화 v1
 
+문서 목적: RAG/CRAG planner 위에서 장소 임베딩 적재 파이프라인·취향 임베딩 개인화 루프(블렌딩+리랭킹)를 완성한 작업을 고정한다.
+
 기준 브랜치: `feat/place-embedding-and-preference-personalization`
 작성일: 2026-07-06
 관련 문서: [`docs/planner/rag-crag-v1.md`](../planner/rag-crag-v1.md) (CRAG retrieval orchestration 기반)

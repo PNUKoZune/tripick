@@ -3,6 +3,7 @@
 문서 목적: 여행 일정 페이지(`/planner`)를 "생성된 일정을 열람"하는 화면에서 **직접 편집·재계획·공유**까지 가능한 워크스페이스로 끌어올린 작업을 고정한다. 여행 삭제, 반응형(태블릿) 개편, 지도 검색·길찾기 실동작, 일정 항목 수동 편집(드래그 순서변경 포함), AI 전체 재계획, 카카오 장소 페이지 링크·place ID 저장, 일정 공유(링크 + 이미지·PDF)를 정리한다.
 
 기준 브랜치: `feat/planner-page-enhancements`
+작성일: 2026-07-11
 관련 문서: [`docs/planner/main-planner-v1.md`](./main-planner-v1.md) (플래너 초기 화면), [`docs/planner/alternative-place-picker-v1.md`](./alternative-place-picker-v1.md) (대안 팝업·swap·재계획 plumbing), [`docs/planner/rag-crag-v1.md`](./rag-crag-v1.md) (CRAG 검색), [`docs/trips/trip-progress-live-v1.md`](../trips/trip-progress-live-v1.md) (Live·재계획 수신)
 
 ## 1. 범위

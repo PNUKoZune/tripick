@@ -3,6 +3,7 @@
 문서 목적: 여행 시작일이 되면 진입하는 실시간 "여행 중" 화면을 끝에서 끝까지 연결한 작업을 고정한다. 위치 추적(웹·RN·네이티브 foreground service), 서버 파생 진행상태, 경로 이탈 자동 감지, 웨이팅/이탈 신고, 재계획 결과 수신·표시까지를 정리한다.
 
 기준 브랜치: `feat/trip-progress`
+작성일: 2026-06-30
 관련 문서: [`docs/planner/realtime-websocket-v1.md`](../planner/realtime-websocket-v1.md) (replan 수신 인프라·게이트웨이 보안), [`docs/planner/main-planner-v1.md`](../planner/main-planner-v1.md) (Planner trip DTO), [`docs/setup/mobile-webview-setup.md`](../setup/mobile-webview-setup.md) (RN WebView 셸·FCM)
 
 ## 1. 범위

@@ -3,6 +3,7 @@
 문서 목적: 일정 카드에서 여는 "실시간 대안" 팝업을 mock 데모에서 실제 사용 가능한 기능으로 끌어올린 작업을 고정한다. 진입점(전환 아이콘), 취향 기반 실데이터 추천, 항목 스코프 조건 재검색, 장소 이름 검색·확인, 제약 재검증이 붙은 swap, 되돌리기, 라이브 화면 연동, 바텀시트 UX까지를 정리한다.
 
 기준 브랜치: `feat/alternative-place-picker`
+작성일: 2026-07-10
 관련 문서: [`docs/planner/main-planner-v1.md`](./main-planner-v1.md) (Screen 4 대안 팝업 초기 mock), [`docs/planner/rag-crag-v1.md`](./rag-crag-v1.md) (CRAG 검색 파이프라인), [`docs/trips/trip-progress-live-v1.md`](../trips/trip-progress-live-v1.md) (Live 화면·재계획 수신), [`docs/preference/place-embedding-and-preference-personalization-v1.md`](../preference/place-embedding-and-preference-personalization-v1.md) (취향 벡터 개인화)
 
 ## 1. 범위

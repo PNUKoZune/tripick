@@ -3,6 +3,7 @@
 문서 목적: 사용자 프로필·알림 카테고리 토글·로그아웃·회원 탈퇴를 한 곳에 모은 `/settings` 페이지 도입 작업을 고정한다. 인박스 v1 위에 얹는 변경이며, 디자인 시스템 · FSD · React Query · NestJS 모듈 경계는 동일한 흐름으로 정리한다.
 
 기준 브랜치: `feat/inbox-setting-page`
+작성일: 2026-06-19
 선행 문서:
 - [`docs/notification/inbox-and-trip-invite-v1.md`](../notification/inbox-and-trip-invite-v1.md)
 - [`docs/friends/friends-and-trip-members-v1.md`](../friends/friends-and-trip-members-v1.md)

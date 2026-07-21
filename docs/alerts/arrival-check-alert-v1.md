@@ -3,6 +3,7 @@
 문서 목적: 경로 이탈을 "자동 재계획"이 아니라 **날씨·혼잡과 동일한 알림**으로 다루는 미도착 감지 스케줄러를 추가한 작업을 고정한다. 이동 중 연속 이탈 판정 대신 **각 일정 항목의 시작 시각+유예에 사용자 최신 위치가 좌표 반경 밖이면** `arrival_alert` 를 보낸다. 판정은 서버가 하고, 위치는 클라이언트가 주기 보고한다. 기존 web 연속 이탈 감지(배너 confirm 신고, semi-manual)를 대체·제거했다(§8).
 
 기준 브랜치: `feat/arrival-check-alert` (base: `develop`)
+작성일: 2026-07-21
 선행 문서: [`docs/alerts/weather-alert-scheduler-v1.md`](./weather-alert-scheduler-v1.md)·[`docs/alerts/crowd-alert-scheduler-v1.md`](./crowd-alert-scheduler-v1.md) (동형 스케줄러·미러링 원본), [`docs/trips/trip-progress-live-v1.md`](../trips/trip-progress-live-v1.md) (라이브 위치·이탈 감지 원본), [`docs/notification/inbox-and-trip-invite-v1.md`](../notification/inbox-and-trip-invite-v1.md) (인박스·푸시), [`docs/setup/mobile-webview-setup.md`](../setup/mobile-webview-setup.md) (RN 브리지·위치 추적)
 관련 컨텍스트: [`CLAUDE.md`](../../CLAUDE.md) §3 미도착 감지→알림 플로우, §4 모듈 분리 기준, §7 "경로 이탈(미도착) 알림"
 

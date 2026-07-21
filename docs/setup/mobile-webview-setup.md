@@ -3,6 +3,7 @@
 문서 목적: `apps/mobile` 의 React Native 셸이 Next.js 웹앱을 WebView 로 렌더링하기 위해 필요한 권한, 매니페스트 키, pnpm 모노레포 설정, 브리지 메시지 규약을 한 곳에 정리한다.
 
 기준 브랜치: `chore/mobile-setup`
+작성일: 2026-05-12
 기준 RN: `0.85.x` + `react-native-webview ^13`, `@react-native-firebase/messaging ^24`, `react-native-geolocation-service ^5`
 
 ## 1. 책임 분리

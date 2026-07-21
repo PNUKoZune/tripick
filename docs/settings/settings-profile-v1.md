@@ -3,6 +3,7 @@
 문서 목적: 설정 페이지 안의 **프로필 도메인**(이미지 업로드/복구, 닉네임 인라인 편집, 프로필 hero 카드) 도입과, 그 과정에서 자연스럽게 떠오른 **5개 네비 페이지의 셸/헤더 추상화** 작업을 고정한다. 설정 v1 (`docs/settings/settings-v1.md`) 위에 얹는 변경이며 — 디자인 시스템 · FSD · S3 호환 스토리지 · 화면 매핑 규칙은 동일한 흐름으로 정리한다.
 
 기준 브랜치: `feat/setting-profile`
+작성일: 2026-06-23
 선행 문서:
 - [`docs/settings/settings-v1.md`](./settings-v1.md)
 - [`docs/notification/inbox-and-trip-invite-v1.md`](../notification/inbox-and-trip-invite-v1.md)
