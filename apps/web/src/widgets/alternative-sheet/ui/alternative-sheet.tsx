@@ -10,7 +10,7 @@ import type {
 import { AlternativeCard } from '@/entities/alternative';
 import { useAlternativeController } from '@/features/select-alternative';
 import { BottomSheet, Button, Chip } from '@/shared/ui';
-import { PlannerMap } from '@/widgets/planner-map';
+import { PlannerMap, normalizeMarkerPositions } from '@/widgets/planner-map';
 
 const FALLBACK_CENTER: PlannerMapCenterDto = { lat: 37.5665, lng: 126.978, level: 5 };
 
@@ -63,9 +63,13 @@ export function AlternativeSheet({ tripId, open, item, onClose, onApplied }: Pro
   const readyData = controller.state.status === 'ready' ? controller.state.data : null;
   const { pending, pendingSelectedId, selectedId } = controller;
 
-  // 지도: 확인 대기 후보 > 선택한 대안 순으로 초점을 맞춘다
+  // 지도: 확인 대기 후보 > 선택한 대안 순으로 초점을 맞춘다.
+  // base(추천)와 pending(장소 검색) 마커는 서버에서 각자 정규화돼 오므로, 병합 후
+  // 폴백 좌표를 최종 집합 기준으로 다시 정규화해 SDK 미로딩 미리보기 위치를 맞춘다.
   const baseMarkers = readyData?.mapMarkers ?? [];
-  const mapMarkers = pending ? [...baseMarkers, ...pending.markers] : baseMarkers;
+  const mapMarkers = pending
+    ? normalizeMarkerPositions([...baseMarkers, ...pending.markers])
+    : baseMarkers;
   const activeMarkerId = pending
     ? pendingSelectedId
       ? `marker-${pendingSelectedId}`
