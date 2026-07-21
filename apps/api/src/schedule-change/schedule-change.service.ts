@@ -12,7 +12,6 @@ import { MainPlannerService } from '../main-planner/main-planner.service';
 import { ReplanningService } from '../replanning/replanning.service';
 import { TripsService } from '../trips/trips.service';
 import { UserEntity } from '../users/user.entity';
-import { UsersService } from '../users/users.service';
 import { ScheduleChangeProposalEntity } from './schedule-change.entity';
 import type {
   CreateScheduleChangeDto,
@@ -31,7 +30,6 @@ export class ScheduleChangeService {
     private readonly tripsService: TripsService,
     private readonly mainPlannerService: MainPlannerService,
     private readonly replanningService: ReplanningService,
-    private readonly usersService: UsersService,
     private readonly inboxService: InboxService,
   ) {}
 
