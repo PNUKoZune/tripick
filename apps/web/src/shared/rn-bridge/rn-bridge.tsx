@@ -8,6 +8,7 @@ import { updateFcmToken } from '@/entities/user';
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { getReactNativeWebView } from '@/shared/rn-bridge/rn-webview';
 import { queryKeys } from '@/shared/api/query-keys';
+import { routeForNotification } from '@/shared/web-push/route';
 import {
   clearPendingFcmToken,
   getLastFcmToken,
@@ -21,31 +22,6 @@ type RnBridgeMessage =
   | { type: 'NOTIFICATION_TAP'; data?: Record<string, string> }
   | { type: 'LOCATION_UPDATE'; lat: number; lng: number; accuracy?: number; timestamp?: number }
   | { type: 'LOCATION_ERROR'; code: number; message: string };
-
-/**
- * 푸시 data payload → 이동할 경로. 백엔드는 data 에 category(=type) 와 tripId 를 싣는다.
- * - friend_request·trip_invite: 수락/거절 액션이 인박스 가상·영속 row 에 있으므로 /inbox
- * - 여행 관련(replan·weather·reminder·general): tripId 있으면 해당 여행, 없으면 인박스
- */
-function routeForNotification(data?: Record<string, string>): string | null {
-  if (!data) return null;
-  const category = data.category ?? data.type;
-  const tripId = data.tripId;
-  switch (category) {
-    case 'friend_request':
-    case 'trip_invite':
-      return '/inbox';
-    case 'replan_ready':
-    case 'weather_alert':
-    case 'crowd_alert':
-    case 'arrival_alert':
-    case 'trip_reminder':
-    case 'general':
-      return tripId ? `/planner?tripId=${tripId}` : '/inbox';
-    default:
-      return '/inbox';
-  }
-}
 
 /**
  * RN WebView → Web 브릿지 수신부.
