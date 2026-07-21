@@ -105,7 +105,7 @@
 - [ ] inbox WebSocket invalidate(`inbox:<userId>`) `[코드확인: 없음]` ([inbox](../notification/inbox-and-trip-invite-v1.md#L450))
 - [x] `trip_reminder`(D-1/D-day) 스케줄러 `[코드확인]` — `NotificationSchedulerModule`(BullMQ repeatable, weather-alert 등록 패턴 복제)이 출발 전날/당일 아침(09:00 KST) 확정 여행 멤버에 `trip_reminder` inbox+FCM 발송. Redis SET NX 로 (여행·종류)당 1회. inbox 액션 매핑이 이미 `trip_reminder→open-trip` 이라 inbox 무변경
 - [ ] invitee trip 뷰 owner 전용 UI 숨김(추가/제외/swap)
-- [ ] owner가 pending 멤버 취소 시 invitee 알림(현재 무음)
+- [x] owner가 pending 멤버 취소 시 invitee 알림(현재 무음) `[코드확인]` — `TripMembersService.remove`(두 삭제 경로 공통)가 pending invitee 취소 시 `InboxService.cancelTripInvite` 호출 → 남은 trip_invite 카드 삭제(jsonb tripMemberId 매칭) + general "초대 취소" 알림. 접근 불가라 open-trip 액션 없음
 - [x] `friendUserId` 없는 핸들 친구 가입 유도 푸시 `[제외: 미가입자 푸시 채널 부재]` — 핸들만 등록된(friendUserId 없는) 친구는 아직 서비스 미가입이라 FCM 토큰이 없어 보낼 대상 자체가 없음. SMS·카카오 알림톡 등 외부 채널이 필요해 현재 푸시 인프라 범위 밖. 현재는 즉시 accepted 합류 유지
 - [ ] 알림 카테고리별 sub-filter
 - [x] 알림 30일 자동 archive 정책 `[코드확인]` — `NotificationArchiveService`(04:00 KST 스캔)가 읽은 지 30일 지난 알림 hard delete. 미읽음은 나이 무관 보존(못 본 알림 유실 방지), 친구 요청은 friends 가상 row 라 무영향. `synchronize` 의존이라 soft flag 컬럼 대신 삭제 선택

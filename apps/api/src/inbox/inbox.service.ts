@@ -125,6 +125,36 @@ export class InboxService {
     });
   }
 
+  /**
+   * owner 가 pending 초대를 취소했을 때 invitee 쪽 뒷정리.
+   * 남아 있던 trip_invite 카드를 제거하고(수락/거절 버튼이 살아있으면 안 됨) 취소 사실을
+   * general 알림으로 알린다. 취소된 여행엔 더는 접근 불가라 open-trip 액션은 달지 않는다.
+   */
+  async cancelTripInvite(params: {
+    userId: string;
+    tripMemberId: string;
+    tripTitle: string;
+  }): Promise<void> {
+    // jsonb payload.tripMemberId 로 해당 초대 카드만 골라 삭제한다.
+    await this.notificationsRepo
+      .createQueryBuilder()
+      .delete()
+      .from(NotificationEntity)
+      .where('userId = :userId', { userId: params.userId })
+      .andWhere('category = :category', { category: 'trip_invite' })
+      .andWhere("payload ->> 'tripMemberId' = :tripMemberId", {
+        tripMemberId: params.tripMemberId,
+      })
+      .execute();
+
+    await this.create({
+      userId: params.userId,
+      category: 'general',
+      title: '여행 초대가 취소되었어요',
+      body: `"${params.tripTitle}" 여행 초대가 취소되었습니다.`,
+    });
+  }
+
   /** FCM data payload 는 모든 값이 string 이어야 함 — 타입 보정. */
   private stringifyPayload(payload: Record<string, unknown>): Record<string, string> {
     const out: Record<string, string> = {};
