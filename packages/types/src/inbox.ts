@@ -31,6 +31,8 @@ export interface InboxItemActionDto {
   tripId?: string;
   tripMemberId?: string;
   friendId?: string;
+  /** open-trip 딥링크 시 열 일차(1-based). 없으면 여행 첫 일차로 연다 */
+  day?: number;
 }
 
 export interface InboxItemDto {
