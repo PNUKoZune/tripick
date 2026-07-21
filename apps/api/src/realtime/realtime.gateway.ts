@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Inject, Logger, forwardRef } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   WebSocketGateway,
@@ -26,12 +26,15 @@ type JoinTripAck = (response: { event: 'joined' | 'join-denied'; tripId: string 
  * Socket.IO WebSocket Gateway
  *
  * 채널:
- * - trip-session:{tripId}  — 여행 세션
- * - deviation:{tripId}     — 경로 이탈 이벤트
- * - replan-result:{tripId} — 재계획 결과 push
+ * - trip-session:{tripId}  — 여행 세션 (재계획 결과 push 포함)
+ *
+ * 경로 이탈은 더 이상 클라이언트가 WS 로 신고하지 않는다. `ArrivalAlertModule`
+ * (서버 5분 주기 스캔)이 판정해 inbox + FCM 으로 알린다(CLAUDE.md §7).
  *
  * 인증: 핸드셰이크의 `auth.token` (또는 Authorization 헤더) JWT 를 검증한다.
  * 검증 실패 시 즉시 연결을 끊는다.
+ * 인가: `join-trip` 시 여행 접근 권한을 검증한다. 멤버십이 회수되면
+ * `evictFromTrip` 으로 해당 사용자의 소켓을 room 에서 즉시 내보낸다.
  */
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -45,6 +48,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   constructor(
     private readonly jwtService: JwtService,
+    @Inject(forwardRef(() => TripMembersService))
     private readonly tripMembersService: TripMembersService,
   ) {}
 
@@ -91,20 +95,28 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     return response;
   }
 
-  @SubscribeMessage('report-deviation')
-  handleDeviation(
-    @MessageBody() data: { tripId: string; lat: number; lng: number },
-  ) {
-    this.server
-      .to(`trip-session:${data.tripId}`)
-      .emit('deviation', { tripId: data.tripId, location: { lat: data.lat, lng: data.lng } });
-  }
-
   /** Planner / Alternative 모듈에서 재계획 완료 시 호출 */
   pushReplanResult(result: ReplanResultDto) {
     this.server
       .to(`trip-session:${result.tripId}`)
       .emit('replan_result', result);
+  }
+
+  /**
+   * 여행 멤버십이 회수된 사용자의 소켓을 해당 여행 room 에서 내보낸다.
+   * `join-trip` 은 재입장마다 접근 권한을 재검증하므로, 이미 접속해 room 에 남아
+   * 있는 소켓만 여기서 능동적으로 정리하면 인가가 유지된다.
+   * (멤버 제거 시 `TripMembersService.remove` 가 호출)
+   */
+  async evictFromTrip(tripId: string, userId: string): Promise<void> {
+    const room = `trip-session:${tripId}`;
+    const sockets = await this.server.in(room).fetchSockets();
+    for (const socket of sockets) {
+      if ((socket.data as AuthedSocketData).user?.sub === userId) {
+        socket.emit('trip-access-revoked', { tripId });
+        await socket.leave(room);
+      }
+    }
   }
 }
 
