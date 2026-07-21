@@ -50,13 +50,13 @@
 
 ## 알림 · 날씨 · 혼잡
 
-- [ ] 예보 악화 시 재알림(선점 키에 확률 저장) ([weather-alert](../alerts/weather-alert-scheduler-v1.md#L130))
-- [ ] 일차 딥링크(푸시 payload `day` 반영)
+- [x] 예보 악화 시 재알림(선점 키에 확률 저장) `[제외: 알림 피로]` — 재알림은 사용자에게 알림이 잦아 오히려 불편. (여행, 일자)당 1회 유지 ([weather-alert](../alerts/weather-alert-scheduler-v1.md#L130))
+- [x] 일차 딥링크(푸시 payload `day` 반영) `[코드확인]` — 세 알림(weather/crowd/arrival)의 open-trip action 에 `day` 주입 → `/planner?tripId=X&day=N` → PlannerView 초기 일차. 스테일 일차는 기존 effect 가 첫 일차로 폴백
 - [ ] 날씨/재계획 알림 수신 토글 분리(현재 `replan_ready` 공유) `[보류: 기존 토글 설계 유지]`
-- [ ] 임계값 캘리브레이션(유예 15분·반경 500m·신선도 10분, 상대 1.2·하한 10%) ([arrival](../alerts/arrival-check-alert-v1.md#L142)·[crowd](../alerts/crowd-alert-scheduler-v1.md#L143))
-- [ ] iOS 백그라운드 위치(significant-location-change)
+- [ ] 임계값 캘리브레이션(유예 15분·반경 500m·신선도 10분, 상대 1.2·하한 10%) `[보류: 라이브 데이터 부재]` — 오탐/미탐 지표가 쌓여야 튜닝 근거가 생김. 실데이터 없이는 착수 애매 ([arrival](../alerts/arrival-check-alert-v1.md#L142)·[crowd](../alerts/crowd-alert-scheduler-v1.md#L143))
+- [ ] iOS 백그라운드 위치(significant-location-change) `[보류: 실기기 + iOS 네이티브]` — significant-location-change 는 실기기 검증 + 네이티브 작업 필요
 - [ ] KTO `tAtsNm` 이름 매칭 누락 처리
-- [ ] 강수확률/습도 UI 노출 ([weather-forecast](../alerts/weather-forecast-v1.md#L88))
+- [x] 강수확률 UI 노출 `[코드확인]` — 날씨 카드에 일자별 최대 POP(물방울 아이콘 + %) 노출. 단기예보만 POP 가 있어 중기·폴백 일자는 숨김. 습도는 `[제외: 불필요]` ([weather-forecast](../alerts/weather-forecast-v1.md#L88))
 
 ## 취향 · 임베딩
 

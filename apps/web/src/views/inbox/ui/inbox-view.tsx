@@ -135,7 +135,9 @@ function InboxContent() {
       if (!item.readAt && CATEGORY_KINDS.has(item.kind)) {
         readMutation.mutate(item.id);
       }
-      router.push(`/planner?tripId=${action.tripId}`);
+      // 알림에 일차가 실려 있으면 그 일차로 딥링크한다(날씨·혼잡·미도착 알림).
+      const dayQuery = action.day ? `&day=${action.day}` : '';
+      router.push(`/planner?tripId=${action.tripId}${dayQuery}`);
     } else if (action.type === 'open-friends') {
       router.push('/friends');
     }

@@ -819,11 +819,18 @@ export class MainPlannerService {
         slots.find((s) => s.time === '1500' || s.time === '1200') ?? slots[0]!;
       const { emoji, condition } = this.describeWeather(noon);
 
+      // 그 날 최대 강수확률 — 단기예보에만 POP 가 있어 중기 일자는 값이 없을 수 있다.
+      const pops = slots
+        .map((s) => s.precipitationProbability)
+        .filter((p): p is number => typeof p === 'number');
+      const precipitationProbability = pops.length > 0 ? Math.max(...pops) : undefined;
+
       return {
         day: day.day,
         label: `${day.dateLabel} ${condition}`,
         emoji,
         tempLabel,
+        ...(precipitationProbability !== undefined ? { precipitationProbability } : {}),
         forecasted: true,
       };
     });
