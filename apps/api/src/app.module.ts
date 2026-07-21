@@ -20,6 +20,7 @@ import { AlternativeModule } from './alternative/alternative.module';
 import { WeatherAlertModule } from './weather-alert/weather-alert.module';
 import { CrowdAlertModule } from './crowd-alert/crowd-alert.module';
 import { ArrivalAlertModule } from './arrival-alert/arrival-alert.module';
+import { NotificationSchedulerModule } from './notification-scheduler/notification-scheduler.module';
 import { PreferenceAnalyzerModule } from './preference-analyzer/preference-analyzer.module';
 import { MainPlannerModule } from './main-planner/main-planner.module';
 import { TripMembersModule } from './trip-members/trip-members.module';
@@ -85,6 +86,7 @@ import { InboxModule } from './inbox/inbox.module';
     WeatherAlertModule,
     CrowdAlertModule,
     ArrivalAlertModule,
+    NotificationSchedulerModule,
     PreferenceAnalyzerModule,
     MainPlannerModule,
     TripMembersModule,
