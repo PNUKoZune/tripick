@@ -62,8 +62,13 @@ export class ScheduleChangeService {
       throw new BadRequestException('지원하지 않는 변경 유형이에요.');
     }
 
-    const { day, targetItemId } = this.locate(dto.payload);
-    const summary = await this.buildSummary(dto.tripId, dto.payload);
+    // 대상 항목이 있으면 한 번만 조회해 요약·딥링크 일차 계산에 함께 쓴다.
+    const targetItemId = this.targetItemIdOf(dto.payload);
+    const itemLabel = targetItemId
+      ? await this.mainPlannerService.findItemLabel(dto.tripId, targetItemId)
+      : null;
+    const day = this.dayOf(dto.payload, itemLabel);
+    const summary = this.buildSummary(dto.payload, itemLabel);
 
     const proposal = await this.repo.save(
       this.repo.create({
@@ -243,42 +248,53 @@ export class ScheduleChangeService {
     });
   }
 
-  /** payload 에서 딥링크·미리보기용 day / targetItemId 추출 */
-  private locate(payload: ScheduleChangePayload): { day?: number; targetItemId?: string } {
+  /** 제안 대상 일정 항목 id (없으면 undefined) */
+  private targetItemIdOf(payload: ScheduleChangePayload): string | undefined {
     switch (payload.kind) {
-      case 'add_item':
-        return { day: payload.body.day };
-      case 'reorder_items':
-        return { day: payload.body.day };
       case 'update_item':
       case 'delete_item':
-        return { targetItemId: payload.itemId };
+        return payload.itemId;
       case 'swap':
-        return { targetItemId: payload.body.itemId };
-      case 'replan':
-        return {};
+        return payload.body.itemId;
+      default:
+        return undefined;
     }
   }
 
-  /** 사람이 읽는 한 줄 요약. 대상 항목명은 현재 일정에서 조회(사라졌으면 일반 문구) */
-  private async buildSummary(tripId: string, payload: ScheduleChangePayload): Promise<string> {
+  /**
+   * 딥링크·미리보기용 일차. add/reorder 는 payload 에 일차가 있고,
+   * 항목 기반(update/delete/swap)은 대상 항목의 일차를 쓴다(없으면 undefined).
+   */
+  private dayOf(
+    payload: ScheduleChangePayload,
+    itemLabel: { name: string; day: number } | null,
+  ): number | undefined {
+    switch (payload.kind) {
+      case 'add_item':
+      case 'reorder_items':
+        return payload.body.day;
+      default:
+        return itemLabel?.day;
+    }
+  }
+
+  /** 사람이 읽는 한 줄 요약. 대상 항목명은 미리 조회한 itemLabel 사용(사라졌으면 일반 문구) */
+  private buildSummary(
+    payload: ScheduleChangePayload,
+    itemLabel: { name: string; day: number } | null,
+  ): string {
     switch (payload.kind) {
       case 'add_item':
         return `${payload.body.day}일차에 "${payload.body.name}" 추가`;
       case 'reorder_items':
         return `${payload.body.day}일차 일정 순서 변경`;
-      case 'update_item': {
-        const item = await this.mainPlannerService.findItemLabel(tripId, payload.itemId);
-        return item ? `"${item.name}" 정보 수정` : '일정 항목 수정';
-      }
-      case 'delete_item': {
-        const item = await this.mainPlannerService.findItemLabel(tripId, payload.itemId);
-        return item ? `"${item.name}" 삭제` : '일정 항목 삭제';
-      }
+      case 'update_item':
+        return itemLabel ? `"${itemLabel.name}" 정보 수정` : '일정 항목 수정';
+      case 'delete_item':
+        return itemLabel ? `"${itemLabel.name}" 삭제` : '일정 항목 삭제';
       case 'swap': {
-        const item = await this.mainPlannerService.findItemLabel(tripId, payload.body.itemId);
         const to = payload.body.place.name;
-        return item ? `"${item.name}" → "${to}" 대안 변경` : `"${to}"(으)로 대안 변경`;
+        return itemLabel ? `"${itemLabel.name}" → "${to}" 대안 변경` : `"${to}"(으)로 대안 변경`;
       }
       case 'replan': {
         const note = payload.body.note?.trim();

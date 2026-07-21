@@ -619,7 +619,8 @@ function PlannerContent({
         }
       />
 
-      {previewProposalId && trip ? (
+      {/* 승인/거절은 owner 전용 — 비-owner 가 ?proposalId 딥링크로 와도 열지 않는다 */}
+      {previewProposalId && trip && isOwner ? (
         <ScheduleChangePreviewModal
           proposalId={previewProposalId}
           tripItems={trip.items}

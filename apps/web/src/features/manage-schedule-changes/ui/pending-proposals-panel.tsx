@@ -63,15 +63,21 @@ export function PendingProposalsPanel({ tripId, isOwner, onOpenProposal }: Props
               <button
                 type="button"
                 onClick={() => cancel.mutate(proposal.id)}
-                disabled={cancel.isPending}
+                // 여러 제안이 있을 때 눌린 행만 비활성화한다(공유 mutation 오작동 방지)
+                disabled={cancel.isPending && cancel.variables === proposal.id}
                 className="h-8 shrink-0 rounded-[10px] border border-[#E5E8EB] bg-white px-3 text-[12px] font-semibold text-[#6B7684] hover:bg-[#FAFBFC] disabled:opacity-50"
               >
-                {cancel.isPending ? '취소 중…' : '요청 취소'}
+                {cancel.isPending && cancel.variables === proposal.id ? '취소 중…' : '요청 취소'}
               </button>
             )}
           </li>
         ))}
       </ul>
+      {!isOwner && cancel.isError ? (
+        <p className="mt-2 text-[12px] font-medium text-[#F04452]">
+          요청을 취소하지 못했어요. 이미 처리됐을 수 있어요.
+        </p>
+      ) : null}
     </section>
   );
 }
