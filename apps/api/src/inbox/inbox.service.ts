@@ -1,8 +1,9 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { FriendEntity } from '../friends/friend.entity';
 import { NotificationService } from '../notification/notification.service';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { UserEntity } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
 import { NotificationEntity } from './notification.entity';
@@ -22,6 +23,9 @@ export class InboxService {
     private readonly friendsRepo: Repository<FriendEntity>,
     private readonly usersService: UsersService,
     private readonly notificationService: NotificationService,
+    // InboxModule ↔ RealtimeModule(→ TripMembersModule) 순환 가능성 대비 forwardRef.
+    @Inject(forwardRef(() => RealtimeGateway))
+    private readonly realtimeGateway: RealtimeGateway,
   ) {}
 
   async list(user: UserEntity): Promise<InboxSummaryDto> {
@@ -100,6 +104,9 @@ export class InboxService {
         ...(dto.payload ?? {}),
       }),
     });
+
+    // WebSocket 신호 — 페이지가 열려 있는(특히 브라우저 단독) 클라이언트가 즉시 목록을 갱신한다.
+    this.realtimeGateway.pushInboxInvalidate(dto.userId);
 
     return saved;
   }
