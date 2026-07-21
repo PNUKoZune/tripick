@@ -30,6 +30,10 @@
 - owner: 승인 요청 알림 + planner diff 미리보기 + 승인/거절
 - 참여자: 대기중 내 제안 표시 + 취소, 승인/거절 결과 알림
 
+함께 정리(같은 화면 권한 일관화):
+
+- **멤버 추가/제외 UI 는 owner 전용으로 숨김**(§6) — 일정 변경과 달리 "제안→승인" 대상이 아니라 owner 전용이 자연스럽다. 원 백로그 항목의 "추가/제외" 부분에 해당.
+
 제외(non-goal):
 
 - owner 본인 변경 흐름은 불변(즉시 반영)
@@ -91,6 +95,7 @@
 - **features/manage-schedule-changes** — [pending-proposals-panel.tsx](../../apps/web/src/features/manage-schedule-changes/ui/pending-proposals-panel.tsx)(대기 목록: 참여자 취소 / owner 검토), [schedule-change-preview-modal.tsx](../../apps/web/src/features/manage-schedule-changes/ui/schedule-change-preview-modal.tsx)(owner diff before/after + 승인/거절), [use-schedule-change-actions.ts](../../apps/web/src/features/manage-schedule-changes/model/use-schedule-change-actions.ts).
 - **planner-view** — 편집 UI 를 owner·참여자 모두에게 노출하고 `isOwner`·`onProposed`(토스트) 전달, 대기 패널 마운트, owner 전용 diff 모달(`?proposalId=` 딥링크). 변경 시 "관리자 승인 후 반영" 배너 + 버튼 라벨을 "변경 요청" 으로 전환.
 - **inbox-view** — `schedule_change_request`(확인/거절), `schedule_change_result` 카드 렌더 + 액션. "확인" 은 `/planner?tripId&day&proposalId` 로 이동해 diff 확인 후 승인.
+- **멤버 관리 UI(owner 전용)** — [`manage-trip-members/ui/trip-members-sheet.tsx`](../../apps/web/src/features/manage-trip-members/ui/trip-members-sheet.tsx) 에 `isOwner` prop 추가. 비-owner 는 "친구 추가" 섹션·"제외/초대 취소" 버튼을 숨기고 명단 읽기 전용 + 안내 문구로 노출(후보 친구 조회도 생략). 백엔드 `addMember`/`removeMember` 는 이미 `assertTripOwner`(403)라 이중 방어. planner-view 가 `isOwner` 전달.
 
 ## 7. 사용자 플로우
 
