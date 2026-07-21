@@ -17,6 +17,17 @@ export function apiUrl(path: string) {
   return `${API_BASE}${path}`;
 }
 
+/**
+ * 절대 API base URL. `API_BASE` 가 상대값(`/api/v1`)이면 현재 origin 에 붙여 절대화한다.
+ * RN 네이티브가 웹뷰 밖(백그라운드)에서 직접 호출할 때 쓰라고 노출한다 — 상대 경로는
+ * 네이티브에서 해석할 수 없으므로 웹이 자기 origin 기준으로 풀어 넘겨야 한다.
+ */
+export function apiBaseUrl(): string {
+  if (/^https?:\/\//.test(API_BASE)) return API_BASE;
+  if (typeof window === 'undefined') return API_BASE;
+  return `${window.location.origin}${API_BASE}`;
+}
+
 async function fetcher<T>(path: string, init?: RequestInit, attempt = 0): Promise<T> {
   const headers = new Headers(init?.headers);
   const isFormDataBody =

@@ -6,6 +6,7 @@ export * from './preference';
 export * from './place';
 export * from './replanning';
 export * from './notification';
+export * from './live-location';
 export * from './main-planner';
 export * from './trip-member';
 export * from './friend';

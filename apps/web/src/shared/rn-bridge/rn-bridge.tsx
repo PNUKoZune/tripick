@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 
 import { updateFcmToken } from '@/entities/user';
 import { getStoredSession } from '@/entities/session/model/session-storage';
+import { getReactNativeWebView } from '@/shared/rn-bridge/rn-webview';
 import { queryKeys } from '@/shared/api/query-keys';
 import {
   clearPendingFcmToken,
@@ -37,6 +38,7 @@ function routeForNotification(data?: Record<string, string>): string | null {
     case 'replan_ready':
     case 'weather_alert':
     case 'crowd_alert':
+    case 'arrival_alert':
     case 'trip_reminder':
     case 'general':
       return tripId ? `/planner?tripId=${tripId}` : '/inbox';
@@ -104,9 +106,7 @@ export function useRnBridge() {
     window.addEventListener('message', handle);
     // 리스너를 붙인 직후 RN 에 알린다 — 종료 상태 푸시 탭으로 켜졌을 때 RN 이 보관한
     // NOTIFICATION_TAP 을 이 시점에 flush 해야 유실 없이 라우팅된다.
-    const rn = (window as unknown as { ReactNativeWebView?: { postMessage(m: string): void } })
-      .ReactNativeWebView;
-    rn?.postMessage(JSON.stringify({ type: 'WEB_READY' }));
+    getReactNativeWebView()?.postMessage(JSON.stringify({ type: 'WEB_READY' }));
 
     return () => window.removeEventListener('message', handle);
   }, [queryClient, router]);

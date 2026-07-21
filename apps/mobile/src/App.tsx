@@ -44,6 +44,7 @@ type BridgeMessage =
   | { type: 'REQUEST_LOCATION' }
   | { type: 'START_LOCATION_TRACKING' }
   | { type: 'STOP_LOCATION_TRACKING' }
+  | { type: 'LOCATION_AUTH'; apiBaseUrl: string; accessToken: string }
   | { type: 'OPEN_EXTERNAL'; url: string }
   | { type: 'WEB_READY' }
   | { type: 'NAV_STATE'; canGoBack: boolean };
@@ -62,6 +63,8 @@ type LocationTrackingNative = { start(): void; stop(): void };
 const LocationTracking = (NativeModules.LocationTracking ?? null) as LocationTrackingNative | null;
 const LOCATION_EVENT = 'TripickLocationUpdate';
 const LOCATION_ERROR_EVENT = 'TripickLocationError';
+// 서버 위치 보고 최소 간격(ms). 미도착 판정은 분 단위라 과보고를 막는다(웹 스로틀과 동일).
+const LOCATION_REPORT_THROTTLE_MS = 60_000;
 
 const androidOnlyProps =
   Platform.OS === 'android'
@@ -75,6 +78,14 @@ export default function App() {
   const webViewRef = useRef<InstanceType<typeof WebView>>(null);
   const watchIdRef = useRef<number | null>(null);
   const nativeSubsRef = useRef<EmitterSubscription[]>([]);
+  // 웹이 넘겨준 인증정보 + 마지막 서버 보고 시각. 앱이 백그라운드·종료돼 웹뷰가 사라져도
+  // foreground service 로 잡은 위치를 이 정보로 서버에 직접 POST 한다.
+  const locationConfigRef = useRef<{ apiBaseUrl: string; accessToken: string } | null>(null);
+  const lastServerReportRef = useRef(0);
+  // 마지막으로 받은 위치 + 하트비트 타이머. 위치는 이동 기반으로만 갱신돼 정지 시 콜백이 끊기므로,
+  // 하트비트가 마지막 위치를 주기 재보고해 서버 캐시를 신선하게 유지한다(정지 no-show 판정 가능).
+  const lastLocationRef = useRef<{ lat: number; lng: number; accuracy?: number } | null>(null);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // 앱이 종료 상태에서 푸시 탭으로 켜졌을 때, WebView 로드가 끝나기 전 도착한 탭을 보관했다가 flush.
   const pendingTapRef = useRef<Record<string, string> | null>(null);
   const [canGoBack, setCanGoBack] = useState(false);
@@ -248,6 +259,30 @@ export default function App() {
   }, []);
 
   /**
+   * 위치를 서버에 직접 보고한다(미도착 감지용). 웹뷰가 살아있든 아니든 네이티브가 담당하므로
+   * 앱 백그라운드·종료 상태(웹뷰 JS 정지)에서도 foreground service 가 이 경로로 보고를 이어간다.
+   * 웹이 LOCATION_AUTH 로 인증정보를 넘기기 전이면 no-op. 스로틀로 과보고를 막고 실패는 무시한다.
+   */
+  const reportLocationToServer = useCallback((lat: number, lng: number, accuracy?: number) => {
+    lastLocationRef.current = { lat, lng, accuracy };
+    const config = locationConfigRef.current;
+    if (!config) return;
+
+    const now = Date.now();
+    if (now - lastServerReportRef.current < LOCATION_REPORT_THROTTLE_MS) return;
+    lastServerReportRef.current = now;
+
+    fetch(`${config.apiBaseUrl}/live/location`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.accessToken}`,
+      },
+      body: JSON.stringify({ lat, lng, ...(accuracy !== undefined ? { accuracy } : {}) }),
+    }).catch(() => undefined);
+  }, []);
+
+  /**
    * 여행 진행(Live) 화면이 켜져 있는 동안 연속 위치 추적.
    * 웹의 useCurrentLocation 이 START/STOP_LOCATION_TRACKING 으로 켜고 끈다.
    * - Android: 네이티브 foreground service 모듈로 화면이 꺼져도 추적 유지
@@ -255,6 +290,14 @@ export default function App() {
    *   (distanceFilter 10m 로 배터리·네트워크 절약)
    */
   const startTracking = useCallback(() => {
+    // 하트비트: 위치 콜백이 끊겨도(정지) 마지막 위치를 주기 재보고해 서버 캐시를 신선하게 유지.
+    if (!heartbeatRef.current) {
+      heartbeatRef.current = setInterval(() => {
+        const l = lastLocationRef.current;
+        if (l) reportLocationToServer(l.lat, l.lng, l.accuracy);
+      }, LOCATION_REPORT_THROTTLE_MS);
+    }
+
     // Android: foreground service 네이티브 모듈 우선
     if (LocationTracking) {
       if (nativeSubsRef.current.length > 0) return; // 이미 추적 중
@@ -262,6 +305,7 @@ export default function App() {
       nativeSubsRef.current = [
         emitter.addListener(LOCATION_EVENT, (e: { lat: number; lng: number; accuracy?: number; timestamp?: number }) => {
           postToWeb({ type: 'LOCATION_UPDATE', ...e });
+          reportLocationToServer(e.lat, e.lng, e.accuracy);
         }),
         emitter.addListener(LOCATION_ERROR_EVENT, (e: { code: number; message: string }) => {
           postToWeb({ type: 'LOCATION_ERROR', code: e.code, message: e.message });
@@ -282,6 +326,7 @@ export default function App() {
           accuracy: pos.coords.accuracy,
           timestamp: pos.timestamp,
         });
+        reportLocationToServer(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
       },
       (err) => {
         postToWeb({ type: 'LOCATION_ERROR', code: err.code, message: err.message });
@@ -294,9 +339,13 @@ export default function App() {
         showsBackgroundLocationIndicator: true,
       },
     );
-  }, []);
+  }, [reportLocationToServer]);
 
   const stopTracking = useCallback(() => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
     if (LocationTracking) {
       LocationTracking.stop();
       nativeSubsRef.current.forEach((sub) => sub.remove());
@@ -347,6 +396,11 @@ export default function App() {
     }
     if (msg.type === 'STOP_LOCATION_TRACKING') {
       stopTracking();
+      return;
+    }
+    if (msg.type === 'LOCATION_AUTH' && msg.apiBaseUrl && msg.accessToken) {
+      // 웹뷰가 사라진 뒤에도 서버로 위치를 직접 POST 하도록 인증정보를 보관한다.
+      locationConfigRef.current = { apiBaseUrl: msg.apiBaseUrl, accessToken: msg.accessToken };
       return;
     }
     if (msg.type === 'OPEN_EXTERNAL' && msg.url) {

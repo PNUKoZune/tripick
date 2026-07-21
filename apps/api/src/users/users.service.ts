@@ -247,9 +247,11 @@ export class UsersService implements OnModuleInit {
       ...DEFAULT_NOTIFICATION_PREFERENCES,
       ...(user.notificationPreferences ?? {}),
     };
-    // 날씨·혼잡 추천 알림은 재계획 알림과 한 토글로 묶는다(별도 설정 노출 없이 replan_ready 를 따름).
+    // 날씨·혼잡·미도착 추천 알림은 재계획 알림과 한 토글로 묶는다(별도 설정 노출 없이 replan_ready 를 따름).
     const effectiveKey =
-      key === 'weather_alert' || key === 'crowd_alert' ? 'replan_ready' : key;
+      key === 'weather_alert' || key === 'crowd_alert' || key === 'arrival_alert'
+        ? 'replan_ready'
+        : key;
     return merged[effectiveKey] !== false;
   }
 

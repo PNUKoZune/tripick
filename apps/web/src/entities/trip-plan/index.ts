@@ -21,7 +21,7 @@ export {
   acceptTripInvite,
   rejectTripInvite,
   fetchPlannerCoordination,
-  reportTripDeviation,
+  reportLiveLocation,
   requestTripReplan,
 } from './api';
 export { splitTripSchedule, isTripPeriodActive } from './lib/select-active-trip';

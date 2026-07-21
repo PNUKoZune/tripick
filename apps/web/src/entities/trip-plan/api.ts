@@ -18,6 +18,7 @@ import type {
   SharedItineraryDto,
   TripShareResponseDto,
   TripSummaryDto,
+  UpdateLiveLocationDto,
 } from '@tripick/types';
 
 import { api } from '@/shared/lib';
@@ -141,9 +142,9 @@ export function fetchPlannerCoordination(tripId: string) {
   return api.get<PlannerCoordinationDto>(`/main-planner/trips/${tripId}/coordination`);
 }
 
-/** 경로 이탈 신고 → 재계획 트리거 (BullMQ 잡 등록) */
-export function reportTripDeviation(body: ReplanRequestDto) {
-  return api.post<ReplanJobDto>('/alternative/deviation', body);
+/** 여행 진행 중 현재 위치 보고 (미도착 감지용 서버 캐시). 실패해도 조용히 무시된다. */
+export function reportLiveLocation(body: UpdateLiveLocationDto) {
+  return api.post<void>('/live/location', body);
 }
 
 /** 대안 팝업 자유 텍스트 요청 → 재계획 트리거 (manual, BullMQ 잡 등록) */
