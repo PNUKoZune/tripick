@@ -106,7 +106,7 @@
 - [ ] `trip_reminder`(D-1/D-day) 스케줄러 — `weather_alert`는 완료, `trip_reminder`는 type만 존재
 - [ ] invitee trip 뷰 owner 전용 UI 숨김(추가/제외/swap)
 - [ ] owner가 pending 멤버 취소 시 invitee 알림(현재 무음)
-- [ ] `friendUserId` 없는 핸들 친구 가입 유도 푸시
+- [x] `friendUserId` 없는 핸들 친구 가입 유도 푸시 `[제외: 미가입자 푸시 채널 부재]` — 핸들만 등록된(friendUserId 없는) 친구는 아직 서비스 미가입이라 FCM 토큰이 없어 보낼 대상 자체가 없음. SMS·카카오 알림톡 등 외부 채널이 필요해 현재 푸시 인프라 범위 밖. 현재는 즉시 accepted 합류 유지
 - [ ] 알림 카테고리별 sub-filter
 - [ ] 알림 30일 자동 archive 정책
 
