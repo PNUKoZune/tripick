@@ -56,7 +56,7 @@
 - [ ] 임계값 캘리브레이션(유예 15분·반경 500m·신선도 10분, 상대 1.2·하한 10%) ([arrival](../alerts/arrival-check-alert-v1.md#L142)·[crowd](../alerts/crowd-alert-scheduler-v1.md#L143))
 - [ ] iOS 백그라운드 위치(significant-location-change)
 - [ ] KTO `tAtsNm` 이름 매칭 누락 처리
-- [ ] 강수확률/습도 UI 노출 ([weather-forecast](../alerts/weather-forecast-v1.md#L88))
+- [x] 강수확률 UI 노출 `[코드확인]` — 날씨 카드에 일자별 최대 POP(물방울 아이콘 + %) 노출. 단기예보만 POP 가 있어 중기·폴백 일자는 숨김. 습도는 `[제외: 불필요]` ([weather-forecast](../alerts/weather-forecast-v1.md#L88))
 
 ## 취향 · 임베딩
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { FiInfo } from 'react-icons/fi';
+import { FiDroplet, FiInfo } from 'react-icons/fi';
 
 import type { PlannerTripDto, PlannerTripMetaDto } from '@tripick/types';
 
@@ -69,7 +69,15 @@ export function TripInfoPanel({ trip }: Props) {
                   <WeatherHint />
                 ) : null}
               </div>
-              <span className="text-[13px] font-semibold text-[#6B7684]">{w.tempLabel}</span>
+              <div className="flex items-center gap-2">
+                {typeof w.precipitationProbability === 'number' ? (
+                  <span className="flex items-center gap-1 text-[13px] font-semibold text-[#3182F6]">
+                    <FiDroplet aria-hidden className="h-[13px] w-[13px]" />
+                    {w.precipitationProbability}%
+                  </span>
+                ) : null}
+                <span className="text-[13px] font-semibold text-[#6B7684]">{w.tempLabel}</span>
+              </div>
             </li>
           ))}
         </ul>
