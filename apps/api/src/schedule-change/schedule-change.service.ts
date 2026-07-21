@@ -15,10 +15,20 @@ import { UserEntity } from '../users/user.entity';
 import { ScheduleChangeProposalEntity } from './schedule-change.entity';
 import type {
   CreateScheduleChangeDto,
+  ScheduleChangeKind,
   ScheduleChangeListDto,
   ScheduleChangePayload,
   ScheduleChangeProposalDto,
 } from '@tripick/types';
+
+const KNOWN_KINDS: readonly ScheduleChangeKind[] = [
+  'add_item',
+  'update_item',
+  'delete_item',
+  'reorder_items',
+  'swap',
+  'replan',
+];
 
 @Injectable()
 export class ScheduleChangeService {
@@ -45,6 +55,11 @@ export class ScheduleChangeService {
     const trip = await this.tripsService.findOneForViewer(dto.tripId, requester.id);
     if (trip.userId === requester.id) {
       throw new BadRequestException('owner 는 변경을 바로 반영할 수 있어요.');
+    }
+    // DTO discriminator 가 못 거른 미지의 kind 를 여기서 400 으로 막는다
+    // (없으면 locate 가 undefined 를 반환해 구조분해에서 500 크래시).
+    if (!KNOWN_KINDS.includes(dto.payload?.kind)) {
+      throw new BadRequestException('지원하지 않는 변경 유형이에요.');
     }
 
     const { day, targetItemId } = this.locate(dto.payload);
@@ -105,21 +120,34 @@ export class ScheduleChangeService {
     return this.toDto(proposal, proposal.requester);
   }
 
+  /**
+   * pending → next 로 원자적 선점. 동시 승인/거절/취소가 겹쳐도 단 하나만 성공한다
+   * (check-then-act 레이스로 인한 중복 반영·중복 알림 방지). 이미 처리됐으면 BadRequest.
+   */
+  private async claim(id: string, next: 'approved' | 'rejected' | 'cancelled'): Promise<void> {
+    const result = await this.repo.update(
+      { id, status: 'pending' },
+      { status: next, resolvedAt: new Date() },
+    );
+    if (!result.affected) {
+      throw new BadRequestException('이미 처리된 요청이에요.');
+    }
+  }
+
   /** owner 승인 — payload 를 owner 권한으로 재실행하고 요청자에게 결과 알림 */
   async approve(owner: UserEntity, id: string): Promise<ScheduleChangeProposalDto> {
     const proposal = await this.load(id);
     // owner 전용 — trip.userId !== owner.id 면 findOne 이 Forbidden
     await this.tripsService.findOne(proposal.tripId, owner.id);
-    if (proposal.status !== 'pending') {
-      throw new BadRequestException('이미 처리된 요청이에요.');
-    }
+    // 원자적 선점(레이스 방지). 성공한 요청만 실제 반영으로 진행한다.
+    await this.claim(id, 'approved');
+    proposal.status = 'approved';
 
     try {
       await this.apply(owner, proposal);
     } catch (err) {
       proposal.status = 'failed';
-      proposal.resolvedAt = new Date();
-      await this.repo.save(proposal);
+      await this.repo.update({ id }, { status: 'failed' });
       await this.inboxService.cancelScheduleChangeRequest(owner.id, proposal.id);
       await this.notifyResult(proposal, 'failed');
       this.logger.warn(`schedule change ${id} apply failed: ${String(err)}`);
@@ -128,9 +156,6 @@ export class ScheduleChangeService {
       );
     }
 
-    proposal.status = 'approved';
-    proposal.resolvedAt = new Date();
-    await this.repo.save(proposal);
     await this.inboxService.cancelScheduleChangeRequest(owner.id, proposal.id);
     await this.notifyResult(proposal, 'approved');
     return this.toDto(proposal, proposal.requester);
@@ -140,12 +165,8 @@ export class ScheduleChangeService {
   async reject(owner: UserEntity, id: string): Promise<ScheduleChangeProposalDto> {
     const proposal = await this.load(id);
     await this.tripsService.findOne(proposal.tripId, owner.id);
-    if (proposal.status !== 'pending') {
-      throw new BadRequestException('이미 처리된 요청이에요.');
-    }
+    await this.claim(id, 'rejected');
     proposal.status = 'rejected';
-    proposal.resolvedAt = new Date();
-    await this.repo.save(proposal);
     await this.inboxService.cancelScheduleChangeRequest(owner.id, proposal.id);
     await this.notifyResult(proposal, 'rejected');
     return this.toDto(proposal, proposal.requester);
@@ -157,12 +178,7 @@ export class ScheduleChangeService {
     if (proposal.requesterId !== requester.id) {
       throw new ForbiddenException();
     }
-    if (proposal.status !== 'pending') {
-      throw new BadRequestException('이미 처리된 요청이에요.');
-    }
-    proposal.status = 'cancelled';
-    proposal.resolvedAt = new Date();
-    await this.repo.save(proposal);
+    await this.claim(id, 'cancelled');
     // owner 쪽 승인 요청 카드 제거(취소된 요청에 승인/거절 버튼이 남으면 안 됨)
     const trip = await this.tripsService.findOneForViewer(proposal.tripId, requester.id);
     await this.inboxService.cancelScheduleChangeRequest(trip.userId, proposal.id);
@@ -191,6 +207,11 @@ export class ScheduleChangeService {
       case 'replan':
         await this.replanningService.enqueue(owner.id, { ...payload.body, tripId });
         return;
+      default: {
+        // 알 수 없는 kind 는 조용히 no-op 되면 안 된다 — 승인 실패 경로로 흘려보낸다.
+        const _exhaustive: never = payload;
+        throw new BadRequestException(`지원하지 않는 변경 유형이에요: ${String((_exhaustive as { kind?: string })?.kind)}`);
+      }
     }
   }
 

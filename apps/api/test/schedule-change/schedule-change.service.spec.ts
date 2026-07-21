@@ -20,6 +20,10 @@ function setup(opts: { proposal?: Record<string, unknown> } = {}) {
       savedRows.push(row);
       return row;
     }),
+    // 원자적 선점: pending 일 때만 1행 갱신(레이스 시 후속 요청은 0행)
+    update: jest
+      .fn()
+      .mockResolvedValue({ affected: (opts.proposal?.status ?? 'pending') === 'pending' ? 1 : 0 }),
     find: jest.fn().mockResolvedValue([]),
     findOne: jest.fn().mockResolvedValue(opts.proposal ?? null),
   };
@@ -122,6 +126,16 @@ describe('ScheduleChangeService.propose', () => {
     expect(dto.summary).toBe('"불국사" → "카페한라" 대안 변경');
     expect(dto.targetItemId).toBe('i1');
   });
+
+  it('알 수 없는 kind 는 500 이 아닌 BadRequest 로 거절한다', async () => {
+    const { service } = setup();
+    await expect(
+      service.propose(member, {
+        tripId: 'trip-1',
+        payload: { kind: 'weird' } as never,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
 });
 
 describe('ScheduleChangeService.approve', () => {
@@ -136,7 +150,10 @@ describe('ScheduleChangeService.approve', () => {
       scheduledAt: '10:00',
     });
     expect(dto.status).toBe('approved');
-    expect(repo.save).toHaveBeenCalled();
+    expect(repo.update).toHaveBeenCalledWith(
+      { id: 'p1', status: 'pending' },
+      expect.objectContaining({ status: 'approved' }),
+    );
     expect(inboxService.cancelScheduleChangeRequest).toHaveBeenCalledWith('owner', 'p1');
     const resultNotif = inboxService.create.mock.calls[0][0];
     expect(resultNotif.userId).toBe('member');
@@ -193,14 +210,23 @@ describe('ScheduleChangeService.approve', () => {
     await expect(service.approve(owner, 'p1')).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('알 수 없는 kind 의 제안은 조용히 성공하지 않고 실패로 처리한다', async () => {
+    const { service, repo } = setup({
+      proposal: proposal({ kind: 'weird', payload: { kind: 'weird' } as never }),
+    });
+    await expect(service.approve(owner, 'p1')).rejects.toBeInstanceOf(BadRequestException);
+    const updateStatuses = repo.update.mock.calls.map((c) => (c[1] as { status: string }).status);
+    expect(updateStatuses).toContain('failed');
+  });
+
   it('재실행이 실패하면 failed 로 표시하고 실패 알림 후 BadRequest 로 전환한다', async () => {
     const { service, mainPlannerService, inboxService, repo } = setup({ proposal: proposal() });
     mainPlannerService.addItem.mockRejectedValue(new Error('사라진 항목'));
 
     await expect(service.approve(owner, 'p1')).rejects.toBeInstanceOf(BadRequestException);
 
-    const savedStatuses = repo.save.mock.calls.map((c) => (c[0] as { status: string }).status);
-    expect(savedStatuses).toContain('failed');
+    const updateStatuses = repo.update.mock.calls.map((c) => (c[1] as { status: string }).status);
+    expect(updateStatuses).toContain('failed');
     expect(inboxService.cancelScheduleChangeRequest).toHaveBeenCalledWith('owner', 'p1');
     const notif = inboxService.create.mock.calls[0][0];
     expect(notif.userId).toBe('member');
@@ -215,7 +241,10 @@ describe('ScheduleChangeService.reject / cancel', () => {
     const dto = await service.reject(owner, 'p1');
 
     expect(dto.status).toBe('rejected');
-    expect(repo.save).toHaveBeenCalled();
+    expect(repo.update).toHaveBeenCalledWith(
+      { id: 'p1', status: 'pending' },
+      expect.objectContaining({ status: 'rejected' }),
+    );
     expect(inboxService.cancelScheduleChangeRequest).toHaveBeenCalledWith('owner', 'p1');
     expect(inboxService.create.mock.calls[0][0].title).toContain('거절');
   });
@@ -225,8 +254,10 @@ describe('ScheduleChangeService.reject / cancel', () => {
 
     await service.cancel(member, 'p1');
 
-    const saved = repo.save.mock.calls[0][0] as { status: string };
-    expect(saved.status).toBe('cancelled');
+    expect(repo.update).toHaveBeenCalledWith(
+      { id: 'p1', status: 'pending' },
+      expect.objectContaining({ status: 'cancelled' }),
+    );
     expect(inboxService.cancelScheduleChangeRequest).toHaveBeenCalledWith('owner', 'p1');
   });
 
