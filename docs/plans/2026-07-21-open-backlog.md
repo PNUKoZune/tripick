@@ -105,7 +105,7 @@
 - [ ] inbox WebSocket invalidate(`inbox:<userId>`) `[코드확인: 없음]` ([inbox](../notification/inbox-and-trip-invite-v1.md#L450))
 - [ ] `trip_reminder`(D-1/D-day) 스케줄러 — `weather_alert`는 완료, `trip_reminder`는 type만 존재
 - [ ] invitee trip 뷰 owner 전용 UI 숨김(추가/제외/swap)
-- [ ] owner가 pending 멤버 취소 시 invitee 알림(현재 무음)
+- [x] owner가 pending 멤버 취소 시 invitee 알림(현재 무음) `[코드확인]` — `TripMembersService.remove`(두 삭제 경로 공통)가 pending invitee 취소 시 `InboxService.cancelTripInvite` 호출 → 남은 trip_invite 카드 삭제(jsonb tripMemberId 매칭) + general "초대 취소" 알림. 접근 불가라 open-trip 액션 없음
 - [ ] `friendUserId` 없는 핸들 친구 가입 유도 푸시
 - [ ] 알림 카테고리별 sub-filter
 - [ ] 알림 30일 자동 archive 정책
