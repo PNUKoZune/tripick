@@ -46,21 +46,21 @@ export function AuthStartActions() {
     <div className="space-y-3">
       <Link
         href="/signup"
-        className="flex h-14 w-full items-center justify-center rounded-[16px] bg-[#3182F6] text-[16px] font-black text-white hover:bg-[#1B64DA]"
+        className="flex h-14 w-full items-center justify-center rounded-[16px] bg-[color:var(--btn-bg)] text-[16px] font-black text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)]"
       >
         이메일로 회원가입
       </Link>
       <Link
         href="/login"
-        className="flex h-12 w-full items-center justify-center rounded-[16px] border border-[#E5E8EB] bg-white text-[15px] font-black text-[#191F28] hover:bg-[#FAFBFC]"
+        className="flex h-12 w-full items-center justify-center rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] text-[15px] font-black text-[color:var(--ink)] hover:bg-[color:var(--card-soft)]"
       >
         이메일로 로그인
       </Link>
 
       <div className="flex items-center gap-3">
-        <div className="h-px flex-1 bg-[#E5E8EB]" />
-        <span className="text-[12px] font-semibold text-[#8B95A1]">또는</span>
-        <div className="h-px flex-1 bg-[#E5E8EB]" />
+        <div className="h-px flex-1 bg-[color:var(--line)]" />
+        <span className="text-[12px] font-semibold text-[color:var(--ink-faint)]">또는</span>
+        <div className="h-px flex-1 bg-[color:var(--line)]" />
       </div>
 
       <PrimaryButton disabled={loading !== null} tone="kakao" onClick={handleKakaoStart}>
