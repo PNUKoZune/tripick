@@ -84,7 +84,7 @@
 - [x] 친구 요청 알림 채널(FCM/in-app toast) `[코드확인]` — FCM(`notifyFriendRequest`) + 인박스 목록 실시간 갱신(가상 row 라 `create` 우회 → `pushInboxRefresh` 로 직접 WS 신호, 요청 생성·취소 양쪽) + 전역 인앱 토스트(`inbox_toast` WS → providers `InboxToast`, 탭 시 /inbox) 3채널 완비. 토스트·FCM 은 `friend_request` 토글 따름, 목록 갱신은 토글 무관. 앱 전역 미읽음 배지 실시간은 모든 알림 공통 사안이라 별도로 완료(아래 §인박스·푸시 인프라) ([friends](../friends/friends-and-trip-members-v1.md#L312))
 - [ ] 비회원 멤버 직접 초대(이메일) `[보류: 우선순위·규모]` — 초대 토큰 발급 + 메일 발송 + 가입/합류 배선이라 규모가 크고, 미가입자는 FCM 대상이 아니라 외부 채널(이메일)이 별도로 필요. 현재는 핸들 등록(즉시 accepted 합류)으로 갈음
 - [x] 조율 `recommendation` ↔ 실 일정 item highlight 연결 `[제외: 기획 범위 밖]` — 조율 추천은 취향 태그 기반 설명 텍스트(`buildRecommendation`)로 충분하고, 이를 실 itinerary item 과 하이라이트로 잇는 건 기획상 불필요. 추천이 item id 를 담지 않는 현 구조 유지
-- [ ] `FriendMemberPicker` floating 로직 `@floating-ui/react` 추출
+- [ ] `FriendMemberPicker` floating 로직 `@floating-ui/react` 추출 `[보류: 현 구현 동작, payoff 는 shared primitive 통합 시에만]` — 유일 실사용처(friend-member-picker)는 이미 flip·maxHeight 동작해 one-off 교체 이득 미미. 진짜 가치는 shared/ui 에 `Popover` primitive 를 @floating-ui 로 만들어 [place-search-picker](../../apps/web/src/shared/ui/place-search-picker.tsx)·[destination-search-input](../../apps/web/src/features/destination-search/ui/destination-search-input.tsx) 까지 3곳 통합(flip·shift·portal 정합성 + dedup)할 때 생김. 별도 리팩터 과제라 우선순위 낮음
 
 ## 인증 · 설정
 
