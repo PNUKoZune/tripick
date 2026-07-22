@@ -11,3 +11,4 @@ export * from './main-planner';
 export * from './trip-member';
 export * from './friend';
 export * from './inbox';
+export * from './schedule-change';

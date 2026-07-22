@@ -7,6 +7,8 @@ import type {
   PlannerAlternativeResponseDto,
   PlannerMapMarkerDto,
   PlannerSwapPlaceDto,
+  PlannerSwapResponseDto,
+  ScheduleChangeProposalDto,
 } from '@tripick/types';
 
 import {
@@ -14,7 +16,16 @@ import {
   resolvePlannerPlace,
   swapPlannerItem,
 } from '@/entities/trip-plan';
+import { createScheduleChange } from '@/entities/schedule-change';
 import { queryKeys } from '@/shared/api/query-keys';
+
+type SwapResult = PlannerSwapResponseDto | ScheduleChangeProposalDto;
+
+type Options = {
+  /** owner 면 즉시 반영, 아니면 owner 승인 대기 제안으로 보낸다 */
+  isOwner?: boolean;
+  onProposed?: (summary: string) => void;
+};
 
 type State =
   | { status: 'idle' }
@@ -40,7 +51,12 @@ function toSwapPlace(alt: PlannerAlternativeDto): PlannerSwapPlaceDto {
   };
 }
 
-export function useAlternativeController(tripId: string, itemId: string | null) {
+export function useAlternativeController(
+  tripId: string,
+  itemId: string | null,
+  options: Options = {},
+) {
+  const { isOwner = true, onProposed } = options;
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [appliedName, setAppliedName] = useState<string | null>(null);
@@ -88,14 +104,23 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId, alternativesQuery.data]);
 
-  const swapMutation = useMutation({
+  const swapMutation = useMutation<SwapResult, Error, PlannerSwapPlaceDto>({
     mutationFn: (place: PlannerSwapPlaceDto) => {
       if (!itemId) throw new Error('일정 항목을 먼저 선택해주세요.');
-      return swapPlannerItem(tripId, { itemId, place });
+      return isOwner
+        ? swapPlannerItem(tripId, { itemId, place })
+        : createScheduleChange({ tripId, payload: { kind: 'swap', body: { itemId, place } } });
     },
     onSuccess: async (result) => {
-      setAppliedName(result.newItemName);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.planner.trip(tripId) });
+      if (isOwner) {
+        setAppliedName((result as PlannerSwapResponseDto).newItemName);
+        await queryClient.invalidateQueries({ queryKey: queryKeys.planner.trip(tripId) });
+      } else {
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.scheduleChanges.list(tripId),
+        });
+        onProposed?.((result as ScheduleChangeProposalDto).summary);
+      }
     },
   });
 
@@ -195,5 +220,6 @@ export function useAlternativeController(tripId: string, itemId: string | null) 
     swapToPlace,
     submitting: swapMutation.isPending,
     appliedName,
+    isProposalMode: !isOwner,
   };
 }

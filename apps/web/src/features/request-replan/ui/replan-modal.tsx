@@ -19,6 +19,10 @@ type Props = {
   onClose: () => void;
   /** 재계획 요청 전송 성공 시 호출 (토스트 등) */
   onRequested?: () => void;
+  /** owner 면 즉시 재계획, 아니면 owner 승인 대기 제안으로 보낸다 */
+  isOwner?: boolean;
+  /** 비-owner 제안 성공 시 요약 전달(토스트용) */
+  onProposed?: (summary: string) => void;
 };
 
 const PACE_OPTIONS: Array<{ value: ReplanPace; label: string }> = [
@@ -33,8 +37,18 @@ const BUDGET_OPTIONS: Array<{ value: ReplanBudget; label: string }> = [
   { value: 'premium', label: '프리미엄' },
 ];
 
-export function ReplanModal({ tripId, open, onClose, onRequested }: Props) {
-  const mutation = useRequestReplan(tripId);
+export function ReplanModal({
+  tripId,
+  open,
+  onClose,
+  onRequested,
+  isOwner = true,
+  onProposed,
+}: Props) {
+  const mutation = useRequestReplan(tripId, {
+    isOwner,
+    ...(onProposed ? { onProposed } : {}),
+  });
   const [note, setNote] = useState('');
   const [mustPlaces, setMustPlaces] = useState<ReplanPlaceDto[]>([]);
   const [pace, setPace] = useState<ReplanPace>('balanced');
@@ -68,7 +82,8 @@ export function ReplanModal({ tripId, open, onClose, onRequested }: Props) {
     };
     mutation.mutate(payload, {
       onSuccess: () => {
-        onRequested?.();
+        // owner 만 "AI가 다시 짜는 중" 토스트. 제안 모드는 훅이 onProposed 로 알린다.
+        if (isOwner) onRequested?.();
         onClose();
       },
     });
@@ -83,7 +98,11 @@ export function ReplanModal({ tripId, open, onClose, onRequested }: Props) {
           </span>
           <div>
             <h2 className="text-[18px] font-bold text-[#191F28]">AI 재계획</h2>
-            <p className="text-[12px] text-[#8B95A1]">원하는 방향을 알려주면 일정을 다시 짜드려요.</p>
+            <p className="text-[12px] text-[#8B95A1]">
+              {isOwner
+                ? '원하는 방향을 알려주면 일정을 다시 짜드려요.'
+                : '재계획 요청을 보내면 여행 관리자 승인 후 실행돼요.'}
+            </p>
           </div>
         </div>
 
@@ -168,7 +187,7 @@ export function ReplanModal({ tripId, open, onClose, onRequested }: Props) {
             disabled={mutation.isPending}
             onClick={handleSubmit}
           >
-            {mutation.isPending ? '요청 중…' : 'AI에게 다시 맡기기'}
+            {mutation.isPending ? '요청 중…' : isOwner ? 'AI에게 다시 맡기기' : '재계획 요청 보내기'}
           </Button>
         </div>
       </div>

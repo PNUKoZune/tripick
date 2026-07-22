@@ -31,6 +31,8 @@ type Props = {
   item?: PlannerItineraryItemDto | null;
   pending: boolean;
   error?: string | null;
+  /** 제출 버튼 라벨 override (비-owner 제안 모드: "변경 요청") */
+  submitLabel?: string;
   onClose: () => void;
   onSubmit: (values: ItemEditorValues) => void;
 };
@@ -50,7 +52,16 @@ const DEFAULTS: ItemEditorValues = {
   memo: '',
 };
 
-export function ItemEditorSheet({ open, mode, item, pending, error, onClose, onSubmit }: Props) {
+export function ItemEditorSheet({
+  open,
+  mode,
+  item,
+  pending,
+  error,
+  submitLabel,
+  onClose,
+  onSubmit,
+}: Props) {
   const [values, setValues] = useState<ItemEditorValues>(DEFAULTS);
 
   useEffect(() => {
@@ -201,7 +212,7 @@ export function ItemEditorSheet({ open, mode, item, pending, error, onClose, onS
               onSubmit({ ...values, name: values.name.trim(), memo: values.memo.trim() })
             }
           >
-            {pending ? '저장 중…' : mode === 'add' ? '추가' : '저장'}
+            {pending ? '저장 중…' : (submitLabel ?? (mode === 'add' ? '추가' : '저장'))}
           </Button>
         </div>
       </div>

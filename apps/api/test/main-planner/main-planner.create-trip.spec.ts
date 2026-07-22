@@ -35,6 +35,7 @@ function createHarness() {
   const tripMembersService = { findAll: jest.fn().mockResolvedValue([]), createFromFriend: jest.fn() };
   const friendsService = { findAcceptedById: jest.fn() };
   const preferencesService = { findByUser: jest.fn().mockResolvedValue(null) };
+  const inboxService = { create: jest.fn().mockResolvedValue(null) };
   const itemsRepo = {
     count: jest.fn().mockResolvedValue(0),
     find: jest.fn().mockResolvedValue([]),
@@ -48,7 +49,7 @@ function createHarness() {
     tripMembersService as any,
     friendsService as any,
     preferencesService as any,
-    noop, // inboxService
+    inboxService as any,
     noop, // weatherHelper
     noop, // kakaoLocal
     noop, // placeRetrieval
@@ -57,7 +58,7 @@ function createHarness() {
     noop, // routeHelper
   );
   const user = { id: 'u1', nickname: '앨리스' } as any;
-  return { service, tripsService, preferencesService, user };
+  return { service, tripsService, tripMembersService, friendsService, inboxService, preferencesService, user };
 }
 
 describe('MainPlannerService.createTrip — validation', () => {
@@ -110,5 +111,48 @@ describe('MainPlannerService.createTrip — success wiring', () => {
     await service.createTrip(user, validDto());
     const [, createdDto] = tripsService.create.mock.calls[0]!;
     expect(createdDto.transportMode).toBe('transit');
+  });
+});
+
+describe('MainPlannerService.createTrip — 참여자 초대', () => {
+  it('실계정 참여자를 포함해 생성하면 pending 초대(trip_invite)를 보낸다', async () => {
+    const { service, friendsService, tripMembersService, inboxService, user } = createHarness();
+    friendsService.findAcceptedById.mockResolvedValue({
+      id: 'f1',
+      friendUserId: 'u2',
+      nickname: '밥',
+      handle: 'bob',
+      color: '#000',
+    });
+    // 실계정 매칭 → pending 으로 생성됨
+    tripMembersService.createFromFriend.mockResolvedValue({
+      id: 'tm-1',
+      userId: 'u2',
+      status: 'pending',
+    });
+
+    await service.createTrip(user, validDto({ members: [{ id: 'tm-x', friendId: 'f1' } as any] }));
+
+    expect(inboxService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'u2',
+        category: 'trip_invite',
+        payload: expect.objectContaining({ tripId: 'trip-1', tripMemberId: 'tm-1' }),
+      }),
+    );
+  });
+
+  it('핸들만 등록된(비계정) 참여자는 즉시 accepted 라 초대를 보내지 않는다', async () => {
+    const { service, friendsService, tripMembersService, inboxService, user } = createHarness();
+    friendsService.findAcceptedById.mockResolvedValue({ id: 'f2', nickname: '캐럴', handle: 'carol' });
+    tripMembersService.createFromFriend.mockResolvedValue({
+      id: 'tm-2',
+      userId: null,
+      status: 'accepted',
+    });
+
+    await service.createTrip(user, validDto({ members: [{ id: 'tm-y', friendId: 'f2' } as any] }));
+
+    expect(inboxService.create).not.toHaveBeenCalled();
   });
 });

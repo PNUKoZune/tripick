@@ -37,6 +37,7 @@
 - [planner/planner-page-enhancements-v1.md](planner/planner-page-enhancements-v1.md) — 여행 일정 페이지 개편
 - [planner/routing-external-api-v1.md](planner/routing-external-api-v1.md) — 길찾기 외부 API 전환(카카오 모빌리티 · ODsay)
 - [planner/realtime-websocket-v1.md](planner/realtime-websocket-v1.md) — 실시간 재계획 WebSocket 연동
+- [planner/invitee-change-approval-v1.md](planner/invitee-change-approval-v1.md) — 참여자 일정 변경 owner 승인 흐름
 
 ## 취향 · 임베딩 (Preference)
 

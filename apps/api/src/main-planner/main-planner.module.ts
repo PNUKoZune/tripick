@@ -27,5 +27,6 @@ import { MainPlannerService } from './main-planner.service';
   ],
   controllers: [MainPlannerController, SharedItineraryController],
   providers: [MainPlannerService, DestinationsService],
+  exports: [MainPlannerService],
 })
 export class MainPlannerModule {}

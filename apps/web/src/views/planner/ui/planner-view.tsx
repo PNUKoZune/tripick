@@ -12,7 +12,12 @@ import {
 } from 'react-icons/fi';
 import { LuShare2, LuSparkles } from 'react-icons/lu';
 import { useQuery } from '@tanstack/react-query';
-import type { PlannerItineraryItemDto, PlannerMapMarkerDto, PlannerTripDto } from '@tripick/types';
+import type {
+  PlannerItineraryItemDto,
+  PlannerMapMarkerDto,
+  PlannerSwapResponseDto,
+  PlannerTripDto,
+} from '@tripick/types';
 
 import { SessionGuard } from '@/entities/session';
 import {
@@ -26,6 +31,10 @@ import { useApplySearchedPlace, type SearchedPlace } from '@/features/apply-sear
 import { DaySelector } from '@/features/day-selector';
 import { DeleteTripButton } from '@/features/delete-trip';
 import { EditableTimeline } from '@/features/edit-itinerary';
+import {
+  PendingProposalsPanel,
+  ScheduleChangePreviewModal,
+} from '@/features/manage-schedule-changes';
 import { TripMembersSheet } from '@/features/manage-trip-members';
 import { PlannerTabs, type PlannerTab } from '@/features/planner-tab-switch';
 import { ReplanModal } from '@/features/request-replan';
@@ -46,15 +55,36 @@ import { TripMapPanel } from '@/widgets/trip-map-panel';
 /** 태블릿 좌측 패널 접힘 상태 저장 키 */
 const SIDEBAR_COLLAPSED_KEY = 'tripick:planner:sidebar-collapsed';
 
-export function PlannerView({ tripId, initialDay }: { tripId?: string; initialDay?: number }) {
+export function PlannerView({
+  tripId,
+  initialDay,
+  initialProposalId,
+}: {
+  tripId?: string;
+  initialDay?: number;
+  /** 인박스 "확인" 딥링크로 열린 경우, 검토할 제안 id (owner) */
+  initialProposalId?: string;
+}) {
   return (
     <SessionGuard>
-      <PlannerContent {...(tripId ? { tripId } : {})} {...(initialDay ? { initialDay } : {})} />
+      <PlannerContent
+        {...(tripId ? { tripId } : {})}
+        {...(initialDay ? { initialDay } : {})}
+        {...(initialProposalId ? { initialProposalId } : {})}
+      />
     </SessionGuard>
   );
 }
 
-function PlannerContent({ tripId, initialDay }: { tripId?: string; initialDay?: number }) {
+function PlannerContent({
+  tripId,
+  initialDay,
+  initialProposalId,
+}: {
+  tripId?: string;
+  initialDay?: number;
+  initialProposalId?: string;
+}) {
   const router = useRouter();
   const [tab, setTab] = useState<PlannerTab>('schedule');
   const [day, setDay] = useState(initialDay ?? 1);
@@ -66,6 +96,10 @@ function PlannerContent({ tripId, initialDay }: { tripId?: string; initialDay?: 
   // 진행 중 여행이 있으면 우하단 "여행 중" FAB(ActiveTripFab)가 떠서 겹치므로 재계획 버튼을 그 위로 쌓는다
   const { active: activeTrip } = useActiveTrip();
   const [shareOpen, setShareOpen] = useState(false);
+  // owner: 검토 중인 일정 변경 제안 id (패널/인박스 딥링크에서 연다)
+  const [previewProposalId, setPreviewProposalId] = useState<string | null>(
+    initialProposalId ?? null,
+  );
   // 데스크탑 좌측 패널 탭 (2xl 미만: 우측 정보/조율 컬럼이 없어 좌측에서 전환)
   const [sidePanel, setSidePanel] = useState<'schedule' | 'info' | 'coordination'>('schedule');
   // 태블릿(2xl 미만)에서 좌측 패널을 접어 지도 영역을 넓힐 수 있게 한다.
@@ -157,7 +191,18 @@ function PlannerContent({ tripId, initialDay }: { tripId?: string; initialDay?: 
     : (trip?.mapCenter ?? { lat: 35.8347, lng: 129.2247, level: 7 });
 
   const focusedItem = itemsForDay.find((i) => i.id === focusedItemId) ?? null;
-  const applyPlace = useApplySearchedPlace(trip?.id ?? selectedTripId);
+  const isOwner = trip?.isOwner ?? false;
+  // 비-owner 변경 제안 성공 시 안내 토스트
+  const handleProposed = () =>
+    setPlaceToast({
+      tone: 'success',
+      title: '변경 요청을 보냈어요',
+      message: '여행 관리자가 승인하면 일정에 반영돼요.',
+    });
+  const applyPlace = useApplySearchedPlace(trip?.id ?? selectedTripId, {
+    isOwner,
+    onProposed: handleProposed,
+  });
 
   // 지도 검색으로 고른 장소를 "선택한 일정 항목"에 반영(swap)한다
   function handlePickSearchPlace(place: SearchedPlace) {
@@ -174,13 +219,16 @@ function PlannerContent({ tripId, initialDay }: { tripId?: string; initialDay?: 
       { itemId: focusedItem.id, place },
       {
         onSuccess: (result) => {
-          setSwapResult({ id: result.swappedItemId, name: result.newItemName });
+          // 비-owner 제안 모드: 훅이 onProposed 로 토스트를 띄우므로 여기선 반영 처리 안 함
+          if (!isOwner) return;
+          const swap = result as PlannerSwapResponseDto;
+          setSwapResult({ id: swap.swappedItemId, name: swap.newItemName });
           setPlaceToast({
             tone: 'success',
             title: `‘${targetName}’을(를) 바꿨어요`,
-            message: result.warnings?.length
-              ? `${result.newItemName} · ${result.warnings[0]}`
-              : `${result.newItemName}(으)로 변경했어요.`,
+            message: swap.warnings?.length
+              ? `${swap.newItemName} · ${swap.warnings[0]}`
+              : `${swap.newItemName}(으)로 변경했어요.`,
           });
         },
         onError: (err) => {
@@ -248,14 +296,23 @@ function PlannerContent({ tripId, initialDay }: { tripId?: string; initialDay?: 
           {!selectedTripId && !loadError ? <PlannerEmptyState loading={isResolvingTrip} /> : null}
 
           {tab === 'schedule' && trip ? (
-            <EditableTimeline
-              tripId={trip.id}
-              day={day}
-              items={itemsForDay}
-              selectedItemId={focusedItemId}
-              onSelectItem={(item) => setFocusedItemId(item.id)}
-              onSwitchItem={setOpenItem}
-            />
+            <>
+              <PendingProposalsPanel
+                tripId={trip.id}
+                isOwner={isOwner}
+                onOpenProposal={setPreviewProposalId}
+              />
+              <EditableTimeline
+                tripId={trip.id}
+                day={day}
+                items={itemsForDay}
+                selectedItemId={focusedItemId}
+                onSelectItem={(item) => setFocusedItemId(item.id)}
+                onSwitchItem={setOpenItem}
+                isOwner={isOwner}
+                onProposed={handleProposed}
+              />
+            </>
           ) : null}
           {tab === 'map' && trip ? (
             <TripMapPanel trip={trip} items={itemsForDay} onSelectItem={setOpenItem} />
@@ -446,14 +503,23 @@ function PlannerContent({ tripId, initialDay }: { tripId?: string; initialDay?: 
                 ) : activeSidePanel === 'coordination' ? (
                   <TripCoordinationPanel tripId={trip.id} />
                 ) : (
-                  <EditableTimeline
-                    tripId={trip.id}
-                    day={day}
-                    items={itemsForDay}
-                    selectedItemId={focusedItemId}
-                    onSelectItem={(item) => setFocusedItemId(item.id)}
-                    onSwitchItem={setOpenItem}
-                  />
+                  <>
+                    <PendingProposalsPanel
+                      tripId={trip.id}
+                      isOwner={isOwner}
+                      onOpenProposal={setPreviewProposalId}
+                    />
+                    <EditableTimeline
+                      tripId={trip.id}
+                      day={day}
+                      items={itemsForDay}
+                      selectedItemId={focusedItemId}
+                      onSelectItem={(item) => setFocusedItemId(item.id)}
+                      onSwitchItem={setOpenItem}
+                      isOwner={isOwner}
+                      onProposed={handleProposed}
+                    />
+                  </>
                 )}
               </div>
               <div className="border-t border-[#E5E8EB] bg-[#FAFBFC] px-5 py-3 text-[12px] text-[#6B7684]">
@@ -513,6 +579,8 @@ function PlannerContent({ tripId, initialDay }: { tripId?: string; initialDay?: 
         item={openItem}
         onClose={() => setOpenItem(null)}
         onApplied={(name, itemId) => setSwapResult({ id: itemId, name })}
+        isOwner={isOwner}
+        onProposed={handleProposed}
       />
 
       <TripMembersSheet
@@ -521,6 +589,7 @@ function PlannerContent({ tripId, initialDay }: { tripId?: string; initialDay?: 
         tripId={trip?.id ?? selectedTripId}
         tripTitle={trip?.title ?? '여행'}
         members={trip?.members ?? []}
+        isOwner={isOwner}
       />
 
       {trip ? (
@@ -540,6 +609,8 @@ function PlannerContent({ tripId, initialDay }: { tripId?: string; initialDay?: 
         tripId={trip?.id ?? selectedTripId}
         open={replanOpen}
         onClose={() => setReplanOpen(false)}
+        isOwner={isOwner}
+        onProposed={handleProposed}
         onRequested={() =>
           setPlaceToast({
             tone: 'success',
@@ -548,6 +619,15 @@ function PlannerContent({ tripId, initialDay }: { tripId?: string; initialDay?: 
           })
         }
       />
+
+      {/* 승인/거절은 owner 전용 — 비-owner 가 ?proposalId 딥링크로 와도 열지 않는다 */}
+      {previewProposalId && trip && isOwner ? (
+        <ScheduleChangePreviewModal
+          proposalId={previewProposalId}
+          tripItems={trip.items}
+          onClose={() => setPreviewProposalId(null)}
+        />
+      ) : null}
 
       {selectedTripId ? <ReplanToast tripId={selectedTripId} /> : null}
 
