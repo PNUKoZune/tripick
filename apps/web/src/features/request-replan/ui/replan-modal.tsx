@@ -91,14 +91,16 @@ export function ReplanModal({
 
   return (
     <BottomSheet open={open} onClose={onClose}>
-      <div className="px-5 pb-6 pt-2">
+      {/* @MX:NOTE: 목업의 사유 칩·"지금 일정" 비교 블록은 새 폼 상태를 도입하므로
+          의도적으로 제외한다(Out of Scope — spec.md §D, REQ-WVR-051). */}
+      <div className="wvr-scope px-5 pb-6 pt-2">
         <div className="flex items-center gap-2">
-          <span className="flex size-8 items-center justify-center rounded-full bg-[#EAF2FF] text-[#3182F6]">
+          <span className="flex size-8 items-center justify-center rounded-full bg-[color:var(--primary-tint)] text-[color:var(--primary)]">
             <LuSparkles className="size-4" />
           </span>
           <div>
-            <h2 className="text-[18px] font-bold text-[#191F28]">AI 재계획</h2>
-            <p className="text-[12px] text-[#8B95A1]">
+            <h2 className="text-[18px] font-bold text-[color:var(--ink)]">AI 재계획</h2>
+            <p className="text-[12px] text-[color:var(--ink-faint)]">
               {isOwner
                 ? '원하는 방향을 알려주면 일정을 다시 짜드려요.'
                 : '재계획 요청을 보내면 여행 관리자 승인 후 실행돼요.'}
@@ -114,7 +116,7 @@ export function ReplanModal({
               placeholder="예) 카페는 1곳만 가고 싶어요. 둘째 날은 바다 위주로 해주세요."
               maxLength={300}
               rows={3}
-              className="w-full resize-none rounded-[12px] border border-[#E5E8EB] bg-white px-3 py-2 text-[14px] text-[#191F28] outline-none focus:border-[#3182F6] focus:ring-2 focus:ring-[#E1ECFF]"
+              className="w-full resize-none rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-3 py-2.5 text-[15px] text-[color:var(--ink)] outline-none focus:border-[color:var(--primary)] focus:bg-[color:var(--card)] focus:ring-2 focus:ring-[color:var(--ring)]"
             />
           </Field>
 
@@ -147,14 +149,18 @@ export function ReplanModal({
               onChange={(e) => setAvoid(e.target.value)}
               placeholder="예) 대기 긴 맛집, 계단 많은 곳"
               maxLength={200}
-              className="h-11 w-full rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[15px] text-[#191F28] outline-none focus:border-[#3182F6] focus:ring-2 focus:ring-[#E1ECFF]"
+              className="h-11 w-full rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-3 text-[15px] text-[color:var(--ink)] outline-none focus:border-[color:var(--primary)] focus:bg-[color:var(--card)] focus:ring-2 focus:ring-[color:var(--ring)]"
             />
           </Field>
 
           <label className="flex items-center justify-between gap-3">
             <span>
-              <span className="block text-[14px] font-semibold text-[#191F28]">이동 동선 최소화</span>
-              <span className="block text-[12px] text-[#8B95A1]">가까운 장소끼리 묶어 이동을 줄여요</span>
+              <span className="block text-[14px] font-semibold text-[color:var(--ink)]">
+                이동 동선 최소화
+              </span>
+              <span className="block text-[12px] text-[color:var(--ink-faint)]">
+                가까운 장소끼리 묶어 이동을 줄여요
+              </span>
             </span>
             <Switch
               checked={minimizeTravel}
@@ -165,7 +171,7 @@ export function ReplanModal({
         </div>
 
         {mutation.error ? (
-          <div className="mt-3 rounded-[12px] border border-[#FECDD3] bg-[#FFECEE] px-3 py-2 text-[13px] text-[#F04452]">
+          <div className="mt-3 rounded-[12px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] px-3 py-2 text-[13px] text-[color:var(--danger)]">
             {mutation.error instanceof Error ? mutation.error.message : '요청에 실패했어요.'}
           </div>
         ) : null}
@@ -187,7 +193,17 @@ export function ReplanModal({
             disabled={mutation.isPending}
             onClick={handleSubmit}
           >
-            {mutation.isPending ? '요청 중…' : isOwner ? 'AI에게 다시 맡기기' : '재계획 요청 보내기'}
+            {/* 전송 중 로딩 상태 문구 — 기존 mutation.isPending "요청 중…" 유지(REQ-WVR-052) */}
+            {mutation.isPending ? (
+              <span className="inline-flex items-center gap-2">
+                <SendingSpinner />
+                요청 중…
+              </span>
+            ) : isOwner ? (
+              'AI에게 다시 맡기기'
+            ) : (
+              '재계획 요청 보내기'
+            )}
           </Button>
         </div>
       </div>
@@ -207,10 +223,27 @@ function Field({
   return (
     <div>
       <div className="mb-1.5 flex items-baseline gap-2">
-        <span className="text-[13px] font-semibold text-[#4E5968]">{label}</span>
-        {hint ? <span className="text-[11px] text-[#B0B8C1]">{hint}</span> : null}
+        <span className="text-[13px] font-semibold text-[color:var(--ink-sub)]">{label}</span>
+        {hint ? <span className="text-[11px] text-[color:var(--ink-faint)]">{hint}</span> : null}
       </div>
       {children}
     </div>
+  );
+}
+
+/** 전송 중 CTA 스피너 — 목업의 로딩 시각(spin 아이콘)만 반영, 기존 문구는 그대로 유지. */
+function SendingSpinner() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      className="animate-spin"
+    >
+      <circle cx="12" cy="12" r="9" stroke="rgba(255,255,255,.32)" strokeWidth="3" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
   );
 }
