@@ -7,6 +7,7 @@ import { RnBridge } from '@/shared/rn-bridge/rn-bridge';
 import { WebPush } from '@/shared/web-push';
 import { ActiveTripFab } from '@/widgets/active-trip-fab';
 import { InboxToast } from '@/features/subscribe-inbox-toast';
+import { InboxUnreadBadgeProvider } from '@/features/subscribe-inbox-unread';
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(createQueryClient);
@@ -15,7 +16,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <RnBridge />
       <WebPush />
-      {children}
+      <InboxUnreadBadgeProvider>{children}</InboxUnreadBadgeProvider>
       <ActiveTripFab />
       <InboxToast />
     </QueryClientProvider>
