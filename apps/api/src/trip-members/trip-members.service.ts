@@ -219,7 +219,10 @@ export class TripMembersService {
     }
     member.status = 'accepted';
     member.nickname = user.nickname;
-    return this.toDto(await this.membersRepo.save(member));
+    const saved = await this.membersRepo.save(member);
+    // 응답 완료 — 남아 있던 초대 카드(수락/거절 버튼)를 정리한다.
+    await this.inboxService.clearTripInvite(user.id, memberId);
+    return this.toDto(saved);
   }
 
   /** 초대받은 사용자가 trip 멤버 자격 거절 */
@@ -235,6 +238,8 @@ export class TripMembersService {
       throw new BadRequestException('owner member cannot reject');
     }
     await this.membersRepo.remove(member);
+    // 응답 완료 — 남아 있던 초대 카드(수락/거절 버튼)를 정리한다.
+    await this.inboxService.clearTripInvite(user.id, memberId);
   }
 
   async update(
