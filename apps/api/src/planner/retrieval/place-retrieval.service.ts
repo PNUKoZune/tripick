@@ -5,6 +5,7 @@ import { CragEvaluatorService } from './crag-evaluator.service';
 import { KakaoLocalService } from './kakao-local.service';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
+import { isEligibleItineraryCandidate } from './place-eligibility';
 import type {
   CandidatePlace,
   RawPlaceCandidate,
@@ -46,11 +47,14 @@ export class PlaceRetrievalService {
 
     await this.seedLocalCatalogIfNeeded(context.destination);
 
-    const pgvector = await this.placeEmbeddings.searchByEmbedding(
-      searchEmbedding,
-      context.destination,
-      limit * 3,
-      preferenceVector,
+    const pgvector = this.filterEligibleCandidates(
+      await this.placeEmbeddings.searchByEmbedding(
+        searchEmbedding,
+        context.destination,
+        limit * 3,
+        preferenceVector,
+      ),
+      'pgvector',
     );
     if (pgvector.length > 0) {
       sources.push('pgvector');
@@ -59,7 +63,10 @@ export class PlaceRetrievalService {
 
     let ranked = this.evaluator.rank(rawCandidates, context);
     if (!this.isStrongEnough(ranked, limit)) {
-      const kakao = await this.kakaoLocal.search(context, limit * 2);
+      const kakao = this.filterEligibleCandidates(
+        await this.kakaoLocal.search(context, limit * 2),
+        'kakao',
+      );
       if (kakao.length > 0) {
         sources.push('kakao');
         rawCandidates.push(...kakao);
@@ -68,7 +75,10 @@ export class PlaceRetrievalService {
     }
 
     if (!this.isStrongEnough(ranked, limit)) {
-      const seeds = getSeedCandidates(context.destination);
+      const seeds = this.filterEligibleCandidates(
+        getSeedCandidates(context.destination),
+        'seed',
+      );
       sources.push('seed');
       rawCandidates.push(...seeds);
       ranked = this.evaluator.rank(rawCandidates, context);
@@ -146,6 +156,18 @@ export class PlaceRetrievalService {
     if (candidates.length < Math.min(4, targetCount)) return false;
     const top = candidates.slice(0, targetCount);
     return this.averageConfidence(top) >= this.targetConfidence();
+  }
+
+  private filterEligibleCandidates(
+    candidates: RawPlaceCandidate[],
+    source: RetrievalSource,
+  ): RawPlaceCandidate[] {
+    const eligible = candidates.filter(isEligibleItineraryCandidate);
+    const excludedCount = candidates.length - eligible.length;
+    if (excludedCount > 0) {
+      this.logger.debug(`자동 일정 부적합 장소 ${excludedCount}건 제외 (source=${source})`);
+    }
+    return eligible;
   }
 
   private averageConfidence(candidates: CandidatePlace[]): number {

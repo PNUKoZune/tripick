@@ -82,7 +82,15 @@ describe('PlannerAgentService', () => {
           }),
           expect.objectContaining({
             role: 'user',
-            content: expect.stringContaining('하루 방문 체류 시간 합계가 기상-취침 가능 시간의 70-85%'),
+            content: expect.stringContaining('일정 강도별 기본 2개는 최소 기준이지 상한이 아니다'),
+          }),
+          expect.objectContaining({
+            role: 'user',
+            content: expect.stringContaining('하루 방문 체류 시간 합계가 기상-취침 가능 시간의 75-85%'),
+          }),
+          expect.objectContaining({
+            role: 'user',
+            content: expect.stringContaining('마지막 일정이 sleepTime 30-90분 전에 끝나는'),
           }),
         ]),
       }),
@@ -127,6 +135,7 @@ function baseOptions(): PlannerAgentOptions {
     sleepTime: '22:00',
     transportMode: 'transit',
     dayCount: 1,
+    minimumItemsPerDay: 2,
     itemsPerDay: 2,
     candidates: [candidate('busan-cafe', '광안리 브런치 카페', 'cafe'), candidate('busan-food', '기장 해산물 식당', 'restaurant')],
     tasteTags: {
