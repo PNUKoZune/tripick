@@ -1,7 +1,7 @@
 'use client';
 
 import { FiChevronRight } from 'react-icons/fi';
-import { LuExternalLink, LuGripVertical, LuPencil, LuTrash2 } from 'react-icons/lu';
+import { LuClock3, LuExternalLink, LuGripVertical, LuPencil, LuTrash2 } from 'react-icons/lu';
 import type { PlannerItineraryItemDto } from '@tripick/types';
 
 import { ChangeScheduleButton, Chip } from '@/shared/ui';
@@ -105,8 +105,17 @@ export function ItineraryItemCard({
           >
             {item.name}
           </div>
-          <div className="mt-1 flex items-center gap-2 text-[13px] leading-[18px] text-[#6B7684]">
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] leading-[18px] text-[#6B7684]">
             <span>{item.durationLabel}</span>
+            {item.openingHours ? (
+              <span
+                className="inline-flex items-center gap-1 text-[#3B7A57]"
+                aria-label={`영업시간 ${item.openingHours}`}
+              >
+                <LuClock3 aria-hidden className="size-3.5" />
+                {item.openingHours}
+              </span>
+            ) : null}
           </div>
           {item.memo ? (
             <div className="mt-1.5 line-clamp-2 rounded-[8px] bg-[#F7F8FA] px-2 py-1 text-[12px] leading-[17px] text-[#6B7684]">

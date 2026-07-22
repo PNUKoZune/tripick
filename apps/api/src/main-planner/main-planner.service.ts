@@ -947,6 +947,7 @@ export class MainPlannerService {
         : `체류 ${item.durationMin}분`,
       durationMin: item.durationMin,
       ...(item.memo ? { memo: item.memo } : {}),
+      ...(item.openingHours ? { openingHours: item.openingHours } : {}),
       ...(item.kakaoPlaceId ? { kakaoPlaceId: item.kakaoPlaceId } : {}),
     };
   }

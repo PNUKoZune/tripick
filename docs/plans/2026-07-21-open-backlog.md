@@ -23,7 +23,7 @@
 ## 공통 · 여러 문서에 반복 (우선순위 후보)
 
 - [ ] **"수락 → 재계획" 배선** `[코드확인: 없음]` — `deviation`/`weather` 트리거 타입·프롬프트·결과분기는 준비됨. 알림 탭 → planner 이동 후 재계획 진입점만 없음 ([arrival](../alerts/arrival-check-alert-v1.md#L142)·[crowd](../alerts/crowd-alert-scheduler-v1.md#L143)·[mid-term](../alerts/mid-term-forecast-v1.md#L113))
-- [ ] **iOS 푸시(APNs) 실기기 검증** `[대기: 실기기 + APNs Auth Key]` — Auth Key 업로드 + Xcode capability ([inbox](../notification/inbox-and-trip-invite-v1.md#L450)·[photo-taste](../preference/preference-photo-taste-analysis-v1.md#L152)·[trip-progress](../trips/trip-progress-live-v1.md#L147)·[mobile](../setup/mobile-webview-setup.md#L226))
+- [ ] **iOS 푸시(APNs) 실기기 검증** `[대기: 실기기 + APNs Auth Key]` — iPhone 17 Pro 시뮬레이터 Debug 빌드·설치·실행과 Firebase plist 번들 포함은 확인(2026-07-22). Auth Key 업로드 + Xcode capability 및 APNs 수신은 실기기에서 검증 ([inbox](../notification/inbox-and-trip-invite-v1.md#L450)·[photo-taste](../preference/preference-photo-taste-analysis-v1.md#L152)·[trip-progress](../trips/trip-progress-live-v1.md#L147)·[mobile](../setup/mobile-webview-setup.md#L226))
 - [x] **Web Push (Service Worker + VAPID)** — 브라우저 단독 사용자 푸시 수신 ([web-push](../notification/web-push-service-worker-v1.md)). 자동 권한 프롬프트→옵트인 UI, `platform='web'` 정밀 태깅은 후속
 - [ ] **DB 마이그레이션 인프라** `[코드확인: 없음]` `[대기: 라이브 스키마 반영 결정]` — `synchronize` 의존, 라이브 스키마 반영 미결 ([preferences-enh](../preference/preferences-enhancements-v1.md#L111)·[weighting](../preference/preference-embedding-weighting-v1.md#L94))
 - [x] **지도 폴리라인 동선 시각화** `[코드확인: 없음]` `[제외: 폴리라인 동선은 오히려 UI 상으로 불편할 수 있음]` — 내 위치 이동 버튼 포함 ([main-planner](../planner/main-planner-v1.md#L263)·[planner-enh](../planner/planner-page-enhancements-v1.md#L124))
@@ -60,7 +60,7 @@
 
 ## 취향 · 임베딩
 
-- [ ] confidence 활용(CRAG 보정/임계 필터) ([photo-taste](../preference/preference-photo-taste-analysis-v1.md#L152))
+- [x] confidence 활용(CRAG 보정/임계 필터) `[코드확인]` — confidence 0.35 미만 태그는 검색·CRAG 매칭에서 제외하고, 유효 태그 점수는 confidence 만큼 중립값에서 보정 ([photo-taste](../preference/preference-photo-taste-analysis-v1.md#L152))
 - [ ] 미분석 사진 전용 재분석 버튼
 - [ ] 검색 품질 평가 하네스(golden set) → blend weight·radius 튜닝 ([enrichment](../preference/place-embedding-enrichment-v1.md#L149))
 - [ ] ANN 스케일 region 코드 pre-filter
@@ -71,7 +71,7 @@
 
 - [ ] 관광공사 `areaBasedList2` — 전국 일정 카탈로그 ([destination](../trips/destination-tour-api-v1.md#L81))
 - [ ] 관광공사 `locationBasedList2` — 대안 후보(현재 좌표 주변)
-- [ ] 영업시간 화면 배지 노출(`PlannerItineraryItemDto.openingHours`) ([opening-hours](../trips/tour-api-opening-hours-v1.md#L147))
+- [x] 영업시간 화면 배지 노출(`PlannerItineraryItemDto.openingHours`) `[코드확인]` — API 응답에 영업시간을 연결하고 일정 카드에 시계 아이콘과 함께 노출 ([opening-hours](../trips/tour-api-opening-hours-v1.md#L147))
 - [ ] 카카오 전용 장소 영업시간 소스(구글 Places 등) 검토
 - [ ] backfill 스테일 처리(KTO가 영업시간 내린 경우)
 - [ ] 히어로 카드 날씨 미리보기 ([main-page](../trips/main-page-filters-card-v1.md#L107))
@@ -114,7 +114,7 @@
 
 - [ ] iOS/Android 번들 ID·applicationId 실도메인 확정 `[대기: 서비스 도메인 확정]` ([mobile](../setup/mobile-webview-setup.md#L226))
 - [ ] release keystore 분리(현재 debug fallback) `[대기: 라이브 배포]`
-- [ ] WebView 첫 로드 실패 시 retry UI
+- [x] WebView 첫 로드 실패 시 retry UI `[코드확인]` — 첫 네트워크/HTTP 오류에 안내와 재시도 버튼을 표시하고 WebView remount 로 복구
 - [ ] 카메라/사진 권한(사진 업로드)
 
 ## 테스트 · 운영

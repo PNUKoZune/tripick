@@ -63,11 +63,12 @@ describe('MainPlannerService.addItem — 영업시간 보강', () => {
         db: '09:00-18:00',
       });
 
-      await service.addItem(user, 'trip-1', { ...base, kakaoPlaceId: 'kakao-42', ...coords } as never);
+      const item = await service.addItem(user, 'trip-1', { ...base, kakaoPlaceId: 'kakao-42', ...coords } as never);
 
       expect(findOpeningHoursByKakaoId).toHaveBeenCalledWith('kakao-42');
       expect(resolveOpeningHours).not.toHaveBeenCalled();
       expect(saved[0]!.openingHours).toBe('09:00-18:00');
+      expect(item.openingHours).toBe('09:00-18:00');
     });
   });
 
