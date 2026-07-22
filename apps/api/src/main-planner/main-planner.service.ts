@@ -118,7 +118,7 @@ export class MainPlannerService {
       ...(notes ? { notes } : {}),
     } satisfies CreateTripDto);
 
-    await this.addDraftMembers(trip.id, user.id, dto.members);
+    await this.addDraftMembers(trip, user, dto.members);
     return this.toTripSummary(trip, user);
   }
 
@@ -204,15 +204,29 @@ export class MainPlannerService {
     const member = await this.tripMembersService.createFromFriend(tripId, user.id, friend);
     if (member.status === 'pending' && member.userId) {
       const trip = await this.tripsService.findOne(tripId, user.id);
-      await this.inboxService.create({
-        userId: member.userId,
-        category: 'trip_invite',
-        title: `${user.nickname} 님의 여행 초대`,
-        body: `"${trip.title}" (${trip.destination}, ${trip.startDate} ~ ${trip.endDate})에 함께 떠나요!`,
-        payload: { tripId, tripMemberId: member.id, inviterNickname: user.nickname },
-      });
+      await this.notifyTripInvite(trip, user, member);
     }
     return this.listPlannerMembers(user, tripId);
+  }
+
+  /**
+   * pending 초대 멤버(실계정 매칭)에게 trip_invite 인박스+FCM 발송.
+   * 이 알림이 있어야 초대받은 사용자가 인박스에서 수락 → accepted → 여행 목록에 노출된다.
+   * 여행 생성(addDraftMembers)·사후 추가(addMember) 양쪽에서 공용으로 쓴다.
+   */
+  private async notifyTripInvite(
+    trip: TripEntity,
+    inviter: UserEntity,
+    member: { id: string; userId?: string | null; status: string },
+  ): Promise<void> {
+    if (member.status !== 'pending' || !member.userId) return;
+    await this.inboxService.create({
+      userId: member.userId,
+      category: 'trip_invite',
+      title: `${inviter.nickname} 님의 여행 초대`,
+      body: `"${trip.title}" (${trip.destination}, ${trip.startDate} ~ ${trip.endDate})에 함께 떠나요!`,
+      payload: { tripId: trip.id, tripMemberId: member.id, inviterNickname: inviter.nickname },
+    });
   }
 
   async acceptInvite(
@@ -640,8 +654,8 @@ export class MainPlannerService {
   }
 
   private async addDraftMembers(
-    tripId: string,
-    userId: string,
+    trip: TripEntity,
+    inviter: UserEntity,
     members: PlannerMemberDto[],
   ): Promise<void> {
     const friendIds = members
@@ -649,13 +663,19 @@ export class MainPlannerService {
       .filter((friendId): friendId is string => Boolean(friendId));
 
     for (const friendId of [...new Set(friendIds)]) {
-      const friend = await this.friendsService.findAcceptedById(userId, friendId);
-      await this.tripMembersService.createFromFriend(tripId, userId, friend).catch((error) => {
-        if (error instanceof BadRequestException) {
-          return null;
-        }
-        throw error;
-      });
+      const friend = await this.friendsService.findAcceptedById(inviter.id, friendId);
+      const created = await this.tripMembersService
+        .createFromFriend(trip.id, inviter.id, friend)
+        .catch((error) => {
+          if (error instanceof BadRequestException) {
+            return null;
+          }
+          throw error;
+        });
+      // 생성 시에도 pending 초대 멤버에게 trip_invite 를 보내야 수락 → 목록 노출이 가능하다.
+      if (created) {
+        await this.notifyTripInvite(trip, inviter, created);
+      }
     }
   }
 
