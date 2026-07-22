@@ -105,6 +105,19 @@ export class FriendsService {
   async remove(ownerId: string, id: string): Promise<void> {
     const friend = await this.findOwned(id, ownerId);
     await this.friendsRepo.remove(friend);
+
+    // 보낸 요청(pending) 취소 시, 상대방에 남은 incoming 행도 함께 정리한다.
+    // (정리하지 않으면 상대 '받은 요청'에 유령 요청이 남는다)
+    if (friend.status === 'pending' && friend.friendUserId) {
+      const reciprocal = await this.friendsRepo.findOneBy({
+        ownerId: friend.friendUserId,
+        friendUserId: ownerId,
+        status: 'incoming',
+      });
+      if (reciprocal) {
+        await this.friendsRepo.remove(reciprocal);
+      }
+    }
   }
 
   async findAcceptedById(ownerId: string, id: string): Promise<ResolvedFriendDto> {

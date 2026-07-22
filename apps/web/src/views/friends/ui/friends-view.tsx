@@ -46,7 +46,7 @@ function FriendsContent() {
 
   const mutationError = addMutation.error instanceof Error ? addMutation.error.message : null;
 
-  const { pinned, others, incoming } = useMemo(() => {
+  const { pinned, others, incoming, sent } = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filtered = q
       ? friends.filter(
@@ -57,6 +57,7 @@ function FriendsContent() {
       pinned: filtered.filter((f) => f.status === 'accepted' && f.pinned),
       others: filtered.filter((f) => f.status === 'accepted' && !f.pinned),
       incoming: filtered.filter((f) => f.status === 'incoming'),
+      sent: filtered.filter((f) => f.status === 'pending'),
     };
   }, [friends, search]);
 
@@ -144,6 +145,32 @@ function FriendsContent() {
                     className="h-9 rounded-[10px] border border-[#E5E8EB] px-3 text-[12px] font-bold text-[#6B7684] hover:bg-[#FAFBFC]"
                   >
                     거절
+                  </button>
+                </div>
+              }
+            />
+          ))}
+        </FriendSection>
+      ) : null}
+
+      {sent.length > 0 ? (
+        <FriendSection title="보낸 요청" count={sent.length}>
+          {sent.map((friend) => (
+            <FriendRow
+              key={friend.id}
+              friend={friend}
+              trailing={
+                <div className="flex items-center gap-2">
+                  <span className="rounded-[8px] bg-[#F2F4F6] px-2 py-1 text-[11px] font-bold text-[#8B95A1]">
+                    수락 대기
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeMutation.mutate(friend.id)}
+                    aria-label={`${friend.nickname} 요청 취소`}
+                    className="h-9 rounded-[10px] border border-[#E5E8EB] px-3 text-[12px] font-bold text-[#6B7684] hover:bg-[#FAFBFC]"
+                  >
+                    요청 취소
                   </button>
                 </div>
               }
