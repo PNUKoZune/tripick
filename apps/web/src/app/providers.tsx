@@ -6,6 +6,7 @@ import { createQueryClient } from '@/shared/api/query-client';
 import { RnBridge } from '@/shared/rn-bridge/rn-bridge';
 import { WebPush } from '@/shared/web-push';
 import { ActiveTripFab } from '@/widgets/active-trip-fab';
+import { InboxToast } from '@/features/subscribe-inbox-toast';
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(createQueryClient);
@@ -16,6 +17,7 @@ export function Providers({ children }: { children: ReactNode }) {
       <WebPush />
       {children}
       <ActiveTripFab />
+      <InboxToast />
     </QueryClientProvider>
   );
 }

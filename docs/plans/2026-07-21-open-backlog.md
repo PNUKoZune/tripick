@@ -81,7 +81,7 @@
 
 ## 친구 · 멤버
 
-- [ ] 친구 요청 알림 채널(FCM/in-app toast) ([friends](../friends/friends-and-trip-members-v1.md#L312))
+- [x] 친구 요청 알림 채널(FCM/in-app toast) `[코드확인]` — FCM(`notifyFriendRequest`) + 인박스 목록 실시간 갱신(가상 row 라 `create` 우회 → `pushInboxRefresh` 로 직접 WS 신호, 요청 생성·취소 양쪽) + 전역 인앱 토스트(`inbox_toast` WS → providers `InboxToast`, 탭 시 /inbox) 3채널 완비. 토스트·FCM 은 `friend_request` 토글 따름, 목록 갱신은 토글 무관. **앱 전역 미읽음 배지 실시간은 모든 알림 공통 별개 이슈**(구독이 inbox-view 에만 마운트) ([friends](../friends/friends-and-trip-members-v1.md#L312))
 - [ ] 비회원 멤버 직접 초대(이메일)
 - [ ] 조율 `recommendation` ↔ 실 일정 item highlight 연결
 - [ ] `FriendMemberPicker` floating 로직 `@floating-ui/react` 추출

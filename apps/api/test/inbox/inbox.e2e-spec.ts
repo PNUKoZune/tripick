@@ -13,6 +13,7 @@ import { InboxController } from '../../src/inbox/inbox.controller';
 import { InboxService } from '../../src/inbox/inbox.service';
 import { UsersService } from '../../src/users/users.service';
 import { NotificationService } from '../../src/notification/notification.service';
+import { RealtimeGateway } from '../../src/realtime/realtime.gateway';
 import { JwtAuthGuard } from '../../src/auth/guards/jwt-auth.guard';
 
 describe('Inbox (e2e)', () => {
@@ -31,6 +32,7 @@ describe('Inbox (e2e)', () => {
         // list/markRead/markAllRead 는 이 둘을 쓰지 않지만 DI 충족을 위해 스텁 제공.
         { provide: UsersService, useValue: { findById: jest.fn(), prefersCategory: jest.fn() } },
         { provide: NotificationService, useValue: { sendToUser: jest.fn() } },
+        { provide: RealtimeGateway, useValue: { pushInboxInvalidate: jest.fn() } },
       ],
       overrideGuards: [{ guard: JwtAuthGuard, useValue: TestAuthGuard }],
     });

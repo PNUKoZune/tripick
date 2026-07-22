@@ -112,6 +112,16 @@ export class InboxService {
   }
 
   /**
+   * 친구 요청처럼 NotificationEntity 로 영속하지 않고 friends 가상 row 로 노출되는 항목이
+   * 추가/제거됐을 때, 해당 사용자의 인박스 목록을 실시간 갱신시킨다. `create` 는 영속 알림에
+   * 대해 이미 이 신호를 쏘지만, 가상 row 는 create 를 거치지 않아 별도 호출이 필요하다.
+   * 푸시 수신 토글과 무관하게 목록 자체는 항상 최신화한다(토글은 FCM 수신만 제어).
+   */
+  pushInboxRefresh(userId: string) {
+    this.realtimeGateway.pushInboxInvalidate(userId);
+  }
+
+  /**
    * 친구 요청 푸시. 인박스 목록에는 friends 테이블 기반 가상 row 로 이미 노출되므로
    * NotificationEntity 로 영속하지 않고 푸시만 발송한다(중복 인박스 row 방지).
    * friend_request 수신 토글이 꺼져 있으면 no-op. 푸시 실패는 friends 흐름에 영향 없음.
@@ -120,6 +130,14 @@ export class InboxService {
     if (!this.usersService.prefersCategory(recipient, 'friend_request')) {
       return;
     }
+    // 앱이 열려 있는(WS 연결) 클라이언트엔 즉시 토스트로도 알린다(FCM 은 닫힌 앱 담당).
+    // 목록 실시간 갱신(pushInboxRefresh)과 달리 능동 알림이라 friend_request 토글을 따른다.
+    this.realtimeGateway.pushInboxToast(recipient.id, {
+      tone: 'primary',
+      title: '새 친구 요청',
+      message: `${requester.nickname} 님이 친구를 신청했어요.`,
+      href: '/inbox',
+    });
     void this.notificationService.sendToUser({
       userId: recipient.id,
       type: 'friend_request',

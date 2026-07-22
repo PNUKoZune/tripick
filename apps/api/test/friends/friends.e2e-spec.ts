@@ -19,12 +19,16 @@ describe('Friends (e2e)', () => {
   let alice: string;
   let bob: string;
   const notifyFriendRequest = jest.fn().mockResolvedValue(undefined);
+  const pushInboxRefresh = jest.fn();
 
   beforeAll(async () => {
     app = await createE2EApp({
       entities: [UserEntity, FriendEntity],
       controllers: [FriendsController],
-      providers: [FriendsService, { provide: InboxService, useValue: { notifyFriendRequest } }],
+      providers: [
+        FriendsService,
+        { provide: InboxService, useValue: { notifyFriendRequest, pushInboxRefresh } },
+      ],
       overrideGuards: [{ guard: JwtAuthGuard, useValue: TestAuthGuard }],
     });
     http = request(app.getHttpServer());
@@ -44,6 +48,7 @@ describe('Friends (e2e)', () => {
   describe('POST /friends', () => {
     it('adding a registered user creates a pending link and an incoming request on the other side', async () => {
       notifyFriendRequest.mockClear();
+      pushInboxRefresh.mockClear();
       const res = await http.post('/friends').set('x-test-user-id', alice).send({ handle: '@bob' }).expect(201);
       expect(res.body).toMatchObject({ handle: '@bob', status: 'pending' });
 
@@ -58,6 +63,9 @@ describe('Friends (e2e)', () => {
       const [recipient, requester] = notifyFriendRequest.mock.calls[0];
       expect(recipient.id).toBe(bob);
       expect(requester.id).toBe(alice);
+
+      // 푸시 토글과 무관하게 수신자(bob) 인박스 목록 실시간 갱신 신호도 쏴야 한다.
+      expect(pushInboxRefresh).toHaveBeenCalledWith(bob);
     });
 
     it('adding an unregistered handle registers it directly as accepted', async () => {
@@ -137,9 +145,13 @@ describe('Friends (e2e)', () => {
       expect((await list(erin)).some((f) => f.status === 'incoming' && f.nickname === '데이브')).toBe(true);
 
       // dave 가 보낸 요청 취소 → 본인 pending 행과 erin 의 incoming 행이 모두 사라져야 한다.
+      pushInboxRefresh.mockClear();
       await http.delete(`/friends/${sent.body.id}`).set('x-test-user-id', dave).expect(204);
       expect((await list(dave)).some((f) => f.handle === '@erin')).toBe(false);
       expect((await list(erin)).some((f) => f.status === 'incoming' && f.nickname === '데이브')).toBe(false);
+
+      // erin 의 남은 incoming 카드가 즉시 사라지도록 갱신 신호를 쏴야 한다.
+      expect(pushInboxRefresh).toHaveBeenCalledWith(erin);
     });
   });
 });
