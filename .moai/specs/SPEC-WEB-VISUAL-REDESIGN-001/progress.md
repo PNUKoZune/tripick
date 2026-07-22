@@ -82,7 +82,7 @@ ac_fail_count: 0
 ac_pass_with_debt_count: 1
 preserve_list_post_run_count: 0  # apps/mobile, apps/api, packages 변경 0건
 l44_pre_commit_fetch: "0 311 (origin/main...HEAD, 세션 시작 시 검증)"
-l44_post_push_fetch: "pending — push 직후 재검증 예정"
+l44_post_push_fetch: "0 0 (origin/feat/ai-ui-ios-backlog...HEAD, push 후 git fetch + rev-list 재검증 완료 — 동기화 확인)"
 new_warnings_or_lints_introduced: "unknown — next lint 서브커맨드가 Next.js 16 에서
   제거되어 실행 불가(사전 존재 tooling gap, 본 SPEC 무관). eslint.config 부재도
   사전 상태. next build(Turbopack)+tsc --noEmit 은 경고 0건."
