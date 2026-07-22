@@ -81,7 +81,7 @@
 
 ## 친구 · 멤버
 
-- [x] 친구 요청 알림 채널(FCM/in-app toast) `[코드확인]` — FCM(`notifyFriendRequest`) + 인박스 목록 실시간 갱신(가상 row 라 `create` 우회 → `pushInboxRefresh` 로 직접 WS 신호, 요청 생성·취소 양쪽) + 전역 인앱 토스트(`inbox_toast` WS → providers `InboxToast`, 탭 시 /inbox) 3채널 완비. 토스트·FCM 은 `friend_request` 토글 따름, 목록 갱신은 토글 무관. **앱 전역 미읽음 배지 실시간은 모든 알림 공통 별개 이슈**(구독이 inbox-view 에만 마운트) ([friends](../friends/friends-and-trip-members-v1.md#L312))
+- [x] 친구 요청 알림 채널(FCM/in-app toast) `[코드확인]` — FCM(`notifyFriendRequest`) + 인박스 목록 실시간 갱신(가상 row 라 `create` 우회 → `pushInboxRefresh` 로 직접 WS 신호, 요청 생성·취소 양쪽) + 전역 인앱 토스트(`inbox_toast` WS → providers `InboxToast`, 탭 시 /inbox) 3채널 완비. 토스트·FCM 은 `friend_request` 토글 따름, 목록 갱신은 토글 무관. 앱 전역 미읽음 배지 실시간은 모든 알림 공통 사안이라 별도로 완료(아래 §인박스·푸시 인프라) ([friends](../friends/friends-and-trip-members-v1.md#L312))
 - [ ] 비회원 멤버 직접 초대(이메일)
 - [ ] 조율 `recommendation` ↔ 실 일정 item highlight 연결
 - [ ] `FriendMemberPicker` floating 로직 `@floating-ui/react` 추출
@@ -109,6 +109,7 @@
 - [x] `friendUserId` 없는 핸들 친구 가입 유도 푸시 `[제외: 미가입자 푸시 채널 부재]` — 핸들만 등록된(friendUserId 없는) 친구는 아직 서비스 미가입이라 FCM 토큰이 없어 보낼 대상 자체가 없음. SMS·카카오 알림톡 등 외부 채널이 필요해 현재 푸시 인프라 범위 밖. 현재는 즉시 accepted 합류 유지
 - [x] 알림 카테고리별 sub-filter `[코드확인]` — 기존 상태 필터(전체/읽지않음/응답필요)와 직교하는 카테고리 chip 열 추가. 현재 목록에 실제 존재하는 카테고리만 chip 노출(빈 카테고리 숨김), 선택 카테고리가 사라지면 전체로 폴백
 - [x] 알림 30일 자동 archive 정책 `[코드확인]` — `NotificationArchiveService`(04:00 KST 스캔)가 읽은 지 30일 지난 알림 hard delete. 미읽음은 나이 무관 보존(못 본 알림 유실 방지), 친구 요청은 friends 가상 row 라 무영향. `synchronize` 의존이라 soft flag 컬럼 대신 삭제 선택
+- [x] nav 미읽음 배지 앱 전역 실시간 `[코드확인]` — 기존 `inbox_invalidate` 구독이 inbox-view 에만 마운트돼 다른 페이지 배지가 안 갱신되던 공백 해소. `subscribe-inbox-unread`(세션 게이팅 인박스 요약 조회 + 전역 `inbox_invalidate` 구독)가 미읽음 수를 추적해 providers 에서 앱 트리에 주입, 하단 탭·데스크탑 nav 알림 아이템에 배지 노출(하단 9+·데스크탑 99+ 축약). shared(nav)는 `InboxBadgeProvider` context 계약만 두고 값은 상위 feature 가 채워 순수 유지(FSD). 쿼리 키가 inbox-view 와 같아 캐시 공유(중복 fetch 없음)
 
 ## 모바일 셸
 
