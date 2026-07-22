@@ -55,6 +55,118 @@ import { TripMapPanel } from '@/widgets/trip-map-panel';
 /** 태블릿 좌측 패널 접힘 상태 저장 키 */
 const SIDEBAR_COLLAPSED_KEY = 'tripick:planner:sidebar-collapsed';
 
+const TRIP_STATUS_LABEL: Record<PlannerTripDto['progress']['status'], string> = {
+  draft: '준비 중',
+  upcoming: '일정 완성',
+  ongoing: '여행 중',
+  done: '여행 종료',
+};
+
+/**
+ * @MX:ANCHOR: 결과 화면 "상단 요약 카드" — 목업 mockup 4 정본(상태 칩, 여행명, 기간,
+ * "하루의 빛" 가로 미니 레일, 핵심 톤 그라데이션 레일, 태그, 취향 출처 문구). REQ-WVR-040.
+ * @MX:REASON: fan_in — 모바일 셸 + 데스크탑 사이드바 두 진입점에서 공유하는 결과 화면의
+ * 시그니처 요약 컴포넌트.
+ */
+function TripLightSummaryCard({ trip, compact = false }: { trip: PlannerTripDto; compact?: boolean }) {
+  const tags = [
+    ...trip.meta.tasteTags.food,
+    ...trip.meta.tasteTags.mood,
+    ...trip.meta.tasteTags.environment,
+  ].slice(0, 4);
+  const toneText = tags.length > 0 ? tags.slice(0, 3).join(' · ') : null;
+
+  return (
+    <section
+      className={`wvr-scope rounded-[22px] border border-[color:var(--line)] bg-[color:var(--card)] shadow-[var(--shadow-card)] ${
+        compact ? 'p-4' : 'mx-4 mt-3 p-5'
+      }`}
+      aria-label="여행 요약"
+    >
+      <span className="inline-flex items-center gap-1.5 rounded-[8px] bg-[color:var(--primary-tint)] px-2.5 py-1 text-[11.5px] font-bold text-[color:var(--primary)]">
+        {TRIP_STATUS_LABEL[trip.progress.status]}
+      </span>
+
+      <h2 className="mt-2.5 text-[22px] font-extrabold leading-[1.25] tracking-[-0.03em] text-[color:var(--ink)]">
+        {trip.title}
+      </h2>
+      <p className="mt-1 text-[13px] font-semibold text-[color:var(--ink-sub)]">
+        {trip.meta.startDate} → {trip.meta.endDate} · {trip.meta.durationLabel}
+      </p>
+
+      {/* "하루의 빛" 가로 미니 레일 — 세로 타임라인과 동일 정지점(REQ-WVR-040) */}
+      <div
+        className="mt-4"
+        role="img"
+        aria-label="하루의 빛: 아침 파랑에서 저녁 코랄까지, 시간대별 색 안내"
+      >
+        <div
+          className="relative h-[3px] rounded-full"
+          style={{
+            background:
+              'linear-gradient(90deg, var(--t-morning) 0%, var(--t-noon) 36%, var(--t-gold) 70%, var(--t-dusk) 100%)',
+          }}
+        >
+          {(
+            [
+              ['--t-morning', '2%'],
+              ['--t-noon', '36%'],
+              ['--t-gold', '70%'],
+              ['--t-dusk', '98%'],
+            ] as const
+          ).map(([token, left]) => (
+            <span
+              key={token}
+              className="absolute top-1/2 size-[9px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2"
+              style={{ left, background: `var(${token})`, borderColor: 'var(--card)', boxShadow: '0 0 0 1px var(--line)' }}
+            />
+          ))}
+        </div>
+        <div className="mt-1.5 flex justify-between text-[10.5px] font-semibold text-[color:var(--ink-faint)]">
+          <span>아침</span>
+          <span>낮</span>
+          <span>오후</span>
+          <span>저녁</span>
+        </div>
+      </div>
+
+      {/* 핵심 톤 그라데이션 레일 — 취향 태그 요약(신뢰도 % 등 실데이터 없는 값은 제외) */}
+      {toneText ? (
+        <div
+          className="mt-4 border-l-[3px] pl-3"
+          style={{ borderImage: 'linear-gradient(180deg, var(--t-morning), var(--t-dusk)) 1' }}
+        >
+          <span className="block text-[11px] font-bold tracking-[0.05em] text-[color:var(--ink-faint)]">
+            핵심 톤
+          </span>
+          <p className="mt-0.5 text-[15px] font-semibold leading-[1.55] tracking-[-0.015em] text-[color:var(--ink)]">
+            {toneText}
+          </p>
+        </div>
+      ) : null}
+
+      {!compact && tags.length > 0 ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {tags.map((tag) => (
+            <span
+              key={tag}
+              className="rounded-full border border-[color:var(--line)] bg-[color:var(--card-soft)] px-2.5 py-1 text-[12.5px] font-semibold text-[color:var(--ink-sub)]"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {!compact ? (
+        <p className="mt-3 text-[12.5px] text-[color:var(--ink-faint)]">
+          취향 태그를 반영해 만든 일정이에요
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 export function PlannerView({
   tripId,
   initialDay,
@@ -252,9 +364,9 @@ function PlannerContent({
   const pickPlaceLabel = focusedItem ? '이 일정으로 변경' : '이 장소로 일정 변경';
 
   return (
-    <div className="min-h-dvh bg-[#F7F8FA]">
-      {/* < lg : phone shell (모바일 우선) */}
-      <div className="mx-auto min-h-dvh max-w-[430px] bg-white pb-[88px] lg:hidden">
+    <div className="min-h-dvh bg-[color:var(--app-bg)]">
+      {/* < lg : phone shell (모바일 우선) — 대상 화면(결과) 범위: wvr-scope 로컬 팔레트 */}
+      <div className="wvr-scope mx-auto min-h-dvh max-w-[430px] pb-[88px] lg:hidden">
         <PlannerHeader
           title={trip?.title ?? (isResolvingTrip ? '여행 찾는 중' : '여행을 먼저 만들어주세요')}
           members={trip?.members ?? []}
@@ -263,6 +375,8 @@ function PlannerContent({
         />
 
         {isLiveActive ? <LivePromoBanner /> : null}
+
+        {trip ? <TripLightSummaryCard trip={trip} /> : null}
 
         {trip ? (
           <PlannerMap
@@ -273,7 +387,7 @@ function PlannerContent({
             pickPlaceLabel={pickPlaceLabel}
           />
         ) : (
-          <div className="flex aspect-[390/290] items-center justify-center bg-[#F2F4F6] px-5 text-center text-[13px] font-semibold text-[#8B95A1]">
+          <div className="flex aspect-[390/290] items-center justify-center bg-[color:var(--card-soft)] px-5 text-center text-[13px] font-semibold text-[color:var(--ink-faint)]">
             {isResolvingTrip ? '내 여행을 찾는 중' : '새 여행을 만들면 일정과 지도가 표시돼요'}
           </div>
         )}
@@ -288,7 +402,7 @@ function PlannerContent({
 
         <div className="relative px-4 pb-8 pt-3">
           {loadError ? (
-            <div className="rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-4 text-[14px] text-[#F04452]">
+            <div className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]">
               {loadError}
             </div>
           ) : null}
@@ -321,7 +435,7 @@ function PlannerContent({
           {tab === 'coordination' && trip ? <TripCoordinationPanel tripId={trip.id} /> : null}
 
           {trip?.isOwner ? (
-            <div className="mt-6 border-t border-[#F2F4F6] pt-5">
+            <div className="mt-6 border-t border-[color:var(--card-soft)] pt-5">
               <DeleteTripButton tripId={trip.id} tripTitle={trip.title} variant="menu" />
             </div>
           ) : null}
@@ -331,10 +445,13 @@ function PlannerContent({
               type="button"
               aria-label="AI 재계획"
               onClick={() => setReplanOpen(true)}
-              className={`fixed z-20 flex size-14 items-center justify-center rounded-full bg-[#3182F6] text-white shadow-[0_12px_24px_rgba(49,130,246,0.32)] active:translate-y-px lg:hidden ${
+              className={`fixed z-20 flex size-14 items-center justify-center rounded-full text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] active:translate-y-px lg:hidden ${
                 activeTrip ? 'bottom-[152px]' : 'bottom-[96px]'
               }`}
-              style={{ right: 'max(20px, calc((100vw - 430px) / 2 + 20px))' }}
+              style={{
+                right: 'max(20px, calc((100vw - 430px) / 2 + 20px))',
+                background: 'var(--btn-bg)',
+              }}
             >
               <LuSparkles className="size-6" aria-hidden />
             </button>
@@ -343,25 +460,25 @@ function PlannerContent({
       </div>
       <AppBottomNavigation className="lg:hidden" />
 
-      {/* ≥ lg : 데스크탑 웹 레이아웃 */}
+      {/* ≥ lg : 데스크탑 웹 레이아웃 — 대상 화면(결과) 범위: wvr-scope 로컬 팔레트 */}
       <div className="mx-auto hidden w-full max-w-[1640px] lg:grid lg:min-h-dvh lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:px-6">
         <AppDesktopNavigation />
-        <div className="min-h-dvh overflow-hidden border-x border-[#E5E8EB] bg-white">
-          <header className="border-b border-[#E5E8EB] bg-white">
+        <div className="wvr-scope min-h-dvh overflow-hidden border-x border-[color:var(--line)] bg-[color:var(--card)]">
+          <header className="border-b border-[color:var(--line)] bg-[color:var(--card)]">
             <div className="mx-auto flex w-full max-w-[1360px] items-center justify-between gap-6 px-8 py-4 xl:px-10">
               <div className="flex items-center gap-4">
                 <Link
                   href="/trips"
-                  className="flex h-9 items-center gap-1 rounded-[12px] border border-[#E5E8EB] bg-white pl-2 pr-3 text-[13px] font-semibold text-[#6B7684] hover:bg-[#FAFBFC] hover:text-[#191F28]"
+                  className="flex h-9 items-center gap-1 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] pl-2 pr-3 text-[13px] font-semibold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink)]"
                 >
                   <FiChevronLeft className="size-4" aria-hidden />
                   <span>내 여행</span>
                 </Link>
                 <div>
-                  <div className="text-[12px] font-semibold tracking-wide text-[#3182F6]">
+                  <div className="text-[12px] font-semibold tracking-wide text-[color:var(--primary)]">
                     Tripick · 일정
                   </div>
-                  <h1 className="mt-0.5 text-[20px] font-bold leading-[28px] text-[#191F28]">
+                  <h1 className="mt-0.5 text-[20px] font-bold leading-[28px] text-[color:var(--ink)]">
                     {trip?.title ?? '여행 정보 불러오는 중'}
                   </h1>
                 </div>
@@ -378,17 +495,17 @@ function PlannerContent({
                     type="button"
                     onClick={() => setMembersOpen(true)}
                     aria-label="여행 멤버 관리"
-                    className="flex items-center gap-2 rounded-full px-2 py-1 transition hover:bg-[#F2F4F6]"
+                    className="flex items-center gap-2 rounded-full px-2 py-1 transition hover:bg-[color:var(--card-soft)]"
                   >
                     <MemberAvatars members={trip.members} />
-                    <FiUserPlus className="size-4 text-[#8B95A1]" aria-hidden />
+                    <FiUserPlus className="size-4 text-[color:var(--ink-faint)]" aria-hidden />
                   </button>
                 ) : null}
                 {trip ? (
                   <button
                     type="button"
                     onClick={() => setShareOpen(true)}
-                    className="flex h-9 items-center gap-1.5 rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[13px] font-semibold text-[#4E5968] hover:bg-[#FAFBFC] hover:text-[#191F28]"
+                    className="flex h-9 items-center gap-1.5 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[13px] font-semibold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink)]"
                   >
                     <LuShare2 className="size-4" />
                     공유
@@ -425,10 +542,11 @@ function PlannerContent({
           >
             {/* 좌측: 일정 패널 (2xl 미만에서는 정보·조율 탭도 이곳에서 전환) */}
             {sidebarVisible ? (
-              <aside className="flex h-[calc(100dvh-120px)] min-h-0 flex-col overflow-hidden rounded-[20px] border border-[#E5E8EB] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
-              <div className="border-b border-[#E5E8EB] px-5 py-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-[18px] font-bold leading-[26px] text-[#191F28]">
+              <aside className="flex h-[calc(100dvh-120px)] min-h-0 flex-col overflow-hidden rounded-[20px] border border-[color:var(--line)] bg-[color:var(--card)] shadow-[var(--shadow-card)]">
+              <div className="border-b border-[color:var(--line)] px-5 py-4">
+                {trip ? <TripLightSummaryCard trip={trip} compact /> : null}
+                <div className="mt-3 flex items-center justify-between">
+                  <h2 className="text-[18px] font-bold leading-[26px] text-[color:var(--ink)]">
                     {activeSidePanel === 'schedule'
                       ? '일정'
                       : activeSidePanel === 'info'
@@ -437,7 +555,7 @@ function PlannerContent({
                   </h2>
                   <div className="flex items-center gap-2">
                     {activeSidePanel === 'schedule' ? (
-                      <span className="text-[12px] font-semibold text-[#8B95A1]">
+                      <span className="text-[12px] font-semibold text-[color:var(--ink-faint)]">
                         {itemsForDay.length}개
                       </span>
                     ) : null}
@@ -447,7 +565,7 @@ function PlannerContent({
                       onClick={() => setSidebarCollapsed(true)}
                       aria-label="패널 접기"
                       title="패널 접기"
-                      className="flex size-7 items-center justify-center rounded-[8px] text-[#8B95A1] hover:bg-[#F2F4F6] hover:text-[#4E5968] 2xl:hidden"
+                      className="flex size-7 items-center justify-center rounded-[8px] text-[color:var(--ink-faint)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink-sub)] 2xl:hidden"
                     >
                       <FiChevronsLeft className="size-4" />
                     </button>
@@ -455,7 +573,7 @@ function PlannerContent({
                 </div>
                 {/* 2xl 미만: 우측 정보/조율 컬럼이 없으므로 좌측에서 탭으로 전환 */}
                 {trip ? (
-                  <div className="mt-3 flex gap-1 rounded-[12px] bg-[#F2F4F6] p-1 2xl:hidden">
+                  <div className="mt-3 flex gap-1 rounded-[12px] bg-[color:var(--card-soft)] p-1 2xl:hidden">
                     {(
                       [
                         { key: 'schedule', label: '일정' },
@@ -469,8 +587,8 @@ function PlannerContent({
                         onClick={() => setSidePanel(item.key)}
                         className={`h-8 flex-1 rounded-[8px] text-[13px] font-semibold transition ${
                           activeSidePanel === item.key
-                            ? 'bg-white text-[#191F28] shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
-                            : 'text-[#8B95A1] hover:text-[#4E5968]'
+                            ? 'bg-[color:var(--card)] text-[color:var(--ink)] shadow-[0_1px_3px_rgba(24,33,54,0.08)]'
+                            : 'text-[color:var(--ink-faint)] hover:text-[color:var(--ink-sub)]'
                         }`}
                       >
                         {item.label}
@@ -480,7 +598,7 @@ function PlannerContent({
                 ) : null}
                 {activeSidePanel === 'schedule' ? (
                   <>
-                    <p className="mt-3 text-[13px] leading-[20px] text-[#6B7684]">
+                    <p className="mt-3 text-[13px] leading-[20px] text-[color:var(--ink-sub)]">
                       일정을 클릭하면 지도가 이동하고, 변경 아이콘으로 대안을 볼 수 있어요.
                     </p>
                     {trip ? (
@@ -493,7 +611,7 @@ function PlannerContent({
               </div>
               <div className="flex-1 overflow-y-auto px-5 py-4">
                 {loadError ? (
-                  <div className="rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-4 text-[14px] text-[#F04452]">
+                  <div className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]">
                     {loadError}
                   </div>
                 ) : !selectedTripId || !trip ? (
@@ -522,14 +640,14 @@ function PlannerContent({
                   </>
                 )}
               </div>
-              <div className="border-t border-[#E5E8EB] bg-[#FAFBFC] px-5 py-3 text-[12px] text-[#6B7684]">
+              <div className="border-t border-[color:var(--line)] bg-[color:var(--card-soft)] px-5 py-3 text-[12px] text-[color:var(--ink-sub)]">
                 일정을 클릭하면 지도에서 초점이 맞춰지고, 변경 아이콘을 누르면 대안 시트가 열립니다.
               </div>
             </aside>
             ) : null}
 
             {/* 중앙: 큰 지도 */}
-            <main className="relative flex h-[calc(100dvh-120px)] min-h-0 flex-col overflow-hidden rounded-[20px] border border-[#E5E8EB] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
+            <main className="relative flex h-[calc(100dvh-120px)] min-h-0 flex-col overflow-hidden rounded-[20px] border border-[color:var(--line)] bg-[color:var(--card)] shadow-[var(--shadow-card)]">
               {/* 패널 접힘 상태: 지도 좌측 가장자리에 펼치기 핸들 (검색바와 겹치지 않게) */}
               {!sidebarVisible ? (
                 <button
@@ -537,7 +655,7 @@ function PlannerContent({
                   onClick={() => setSidebarCollapsed(false)}
                   aria-label="일정 패널 펼치기"
                   title="일정 패널 펼치기"
-                  className="absolute left-0 top-1/2 z-20 flex -translate-y-1/2 items-center rounded-r-[14px] border border-l-0 border-[#E5E8EB] bg-white py-4 pl-1 pr-1.5 text-[#4E5968] shadow-[0_4px_12px_rgba(15,23,42,0.1)] hover:bg-[#FAFBFC] hover:text-[#191F28]"
+                  className="absolute left-0 top-1/2 z-20 flex -translate-y-1/2 items-center rounded-r-[14px] border border-l-0 border-[color:var(--line)] bg-[color:var(--card)] py-4 pl-1 pr-1.5 text-[color:var(--ink-sub)] shadow-[0_4px_12px_rgba(15,23,42,0.1)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink)]"
                 >
                   <FiChevronsRight className="size-5" />
                 </button>
@@ -558,7 +676,7 @@ function PlannerContent({
                   pickPlaceLabel={pickPlaceLabel}
                 />
               ) : (
-                <div className="flex flex-1 items-center justify-center bg-[#F2F4F6] px-6 text-center text-[14px] font-semibold text-[#8B95A1]">
+                <div className="flex flex-1 items-center justify-center bg-[color:var(--card-soft)] px-6 text-center text-[14px] font-semibold text-[color:var(--ink-faint)]">
                   {isResolvingTrip ? '내 여행을 찾는 중' : '새 여행을 만들면 지도가 표시돼요'}
                 </div>
               )}
@@ -647,7 +765,8 @@ function LivePromoBanner() {
   return (
     <Link
       href="/trip/live"
-      className="flex items-center justify-between gap-3 bg-[#3182F6] px-4 py-2.5 text-white transition hover:bg-[#1B64DA]"
+      className="flex items-center justify-between gap-3 px-4 py-2.5 text-[color:var(--btn-text)] transition"
+      style={{ background: 'var(--btn-bg)' }}
     >
       <span className="flex items-center gap-2 text-[13px] font-bold">
         <span className="relative flex size-2">
@@ -667,22 +786,23 @@ function LivePromoBanner() {
 function PlannerEmptyState({ loading }: { loading: boolean }) {
   if (loading) {
     return (
-      <div className="rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] px-4 py-5 text-[14px] font-semibold text-[#8B95A1]">
+      <div className="rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-4 py-5 text-[14px] font-semibold text-[color:var(--ink-faint)]">
         내 여행을 불러오고 있어요.
       </div>
     );
   }
 
   return (
-    <div className="rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] px-4 py-5">
-      <div className="text-[12px] font-bold text-[#3182F6]">내 여행</div>
-      <h2 className="mt-1 text-[18px] font-bold text-[#191F28]">여행을 먼저 만들어주세요</h2>
-      <p className="mt-1 text-[13px] leading-5 text-[#6B7684]">
+    <div className="rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-4 py-5">
+      <div className="text-[12px] font-bold text-[color:var(--primary)]">내 여행</div>
+      <h2 className="mt-1 text-[18px] font-bold text-[color:var(--ink)]">여행을 먼저 만들어주세요</h2>
+      <p className="mt-1 text-[13px] leading-5 text-[color:var(--ink-sub)]">
         일정·지도·취향 조율은 여행 단위로 저장됩니다.
       </p>
       <Link
         href="/trips/new"
-        className="mt-4 inline-flex h-10 items-center rounded-full bg-[#3182F6] px-4 text-[13px] font-bold text-white hover:bg-[#1B64DA]"
+        className="mt-4 inline-flex h-10 items-center rounded-full px-4 text-[13px] font-bold text-[color:var(--btn-text)]"
+        style={{ background: 'var(--btn-bg)' }}
       >
         새 여행 만들기
       </Link>

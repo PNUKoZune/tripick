@@ -123,6 +123,13 @@ nextjs-portal {
   --accent-tint: #ffefe6;
   --hl: #ffdcc6;
 
+  /* 보조 시맨틱 토큰 — design.md 목업 팔레트엔 없으나(에러/성공 표시가 목업에 없음)
+     대상 화면의 기존 에러·영업시간 표시를 완전 토큰화하기 위한 로컬 확장(§D.0 hex=0). */
+  --danger: #f04452;
+  --danger-tint: #ffecee;
+  --danger-border: #fecdd3;
+  --ok: #3b7a57;
+
   /* 하루의 빛 — 4-stop 타임라인 색 (시그니처) */
   --t-morning: #8fbcff;
   --t-noon: #4f87ee;
@@ -173,6 +180,11 @@ nextjs-portal {
     --accent-deep: #ffad88;
     --accent-tint: #33231c;
     --hl: #4a2f20;
+
+    --danger: #ff6b76;
+    --danger-tint: #3a1519;
+    --danger-border: #5c2229;
+    --ok: #4caf7d;
 
     --t-morning: #8fbcff;
     --t-noon: #5b8def;
