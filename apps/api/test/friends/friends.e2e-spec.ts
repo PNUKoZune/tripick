@@ -125,5 +125,21 @@ describe('Friends (e2e)', () => {
       const remaining = await list(alice);
       expect(remaining.map((f) => f.handle)).not.toContain('@bye');
     });
+
+    it('canceling a sent (pending) request also clears the recipient’s incoming row', async () => {
+      // dave → erin 로 독립 시나리오 구성
+      const users = app.get<Repository<UserEntity>>(getRepositoryToken(UserEntity));
+      const dave = (await users.save(users.create({ nickname: '데이브', handle: 'dave' }))).id;
+      const erin = (await users.save(users.create({ nickname: '에린', handle: 'erin' }))).id;
+
+      const sent = await http.post('/friends').set('x-test-user-id', dave).send({ handle: '@erin' }).expect(201);
+      expect(sent.body.status).toBe('pending');
+      expect((await list(erin)).some((f) => f.status === 'incoming' && f.nickname === '데이브')).toBe(true);
+
+      // dave 가 보낸 요청 취소 → 본인 pending 행과 erin 의 incoming 행이 모두 사라져야 한다.
+      await http.delete(`/friends/${sent.body.id}`).set('x-test-user-id', dave).expect(204);
+      expect((await list(dave)).some((f) => f.handle === '@erin')).toBe(false);
+      expect((await list(erin)).some((f) => f.status === 'incoming' && f.nickname === '데이브')).toBe(false);
+    });
   });
 });
