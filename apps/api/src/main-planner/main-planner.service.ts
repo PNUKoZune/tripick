@@ -279,7 +279,8 @@ export class MainPlannerService {
     itemId: string,
     note?: string,
   ): Promise<PlannerAlternativeResponseDto> {
-    const trip = await this.tripsService.findOne(tripId, user.id);
+    // 읽기 전용 — 참여자도 대안을 봐야 swap 을 제안할 수 있으므로 accepted 멤버 허용.
+    const trip = await this.tripsService.findOneForViewer(tripId, user.id);
     const item = await this.findItem(tripId, itemId);
     const trimmedNote = note?.trim() || undefined;
 
@@ -325,7 +326,8 @@ export class MainPlannerService {
     itemId: string,
     query: string,
   ): Promise<PlannerResolvePlaceResponseDto> {
-    await this.tripsService.findOne(tripId, user.id);
+    // 읽기 전용(장소 이름 → 좌표 해석) — swap 제안을 위해 참여자도 허용.
+    await this.tripsService.findOneForViewer(tripId, user.id);
     const item = await this.findItem(tripId, itemId);
 
     const keyword = await this.extractSearchKeyword(query);
