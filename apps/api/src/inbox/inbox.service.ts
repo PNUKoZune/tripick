@@ -130,6 +130,14 @@ export class InboxService {
     if (!this.usersService.prefersCategory(recipient, 'friend_request')) {
       return;
     }
+    // 앱이 열려 있는(WS 연결) 클라이언트엔 즉시 토스트로도 알린다(FCM 은 닫힌 앱 담당).
+    // 목록 실시간 갱신(pushInboxRefresh)과 달리 능동 알림이라 friend_request 토글을 따른다.
+    this.realtimeGateway.pushInboxToast(recipient.id, {
+      tone: 'primary',
+      title: '새 친구 요청',
+      message: `${requester.nickname} 님이 친구를 신청했어요.`,
+      href: '/inbox',
+    });
     void this.notificationService.sendToUser({
       userId: recipient.id,
       type: 'friend_request',
