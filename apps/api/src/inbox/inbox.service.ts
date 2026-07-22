@@ -163,6 +163,22 @@ export class InboxService {
   }
 
   /**
+   * 초대받은 사용자가 스스로 수락/거절했을 때 본인 쪽 뒷정리.
+   * 남아 있던 trip_invite 카드(수락/거절 버튼)를 제거한다. owner 취소(cancelTripInvite)와 달리
+   * 본인 행동에 대한 결과라 별도 취소 알림은 발송하지 않는다.
+   */
+  async clearTripInvite(userId: string, tripMemberId: string): Promise<void> {
+    await this.notificationsRepo
+      .createQueryBuilder()
+      .delete()
+      .from(NotificationEntity)
+      .where('userId = :userId', { userId })
+      .andWhere('category = :category', { category: 'trip_invite' })
+      .andWhere("payload ->> 'tripMemberId' = :tripMemberId", { tripMemberId })
+      .execute();
+  }
+
+  /**
    * owner 가 일정 변경 제안을 승인/거절/취소로 처리했을 때 owner 쪽 뒷정리.
    * 살아 있던 schedule_change_request 카드(확인/거절 버튼)를 제거한다.
    * 결과 알림(요청자에게)은 도메인 서비스가 별도로 발송하므로 여기선 카드 제거만 한다.
