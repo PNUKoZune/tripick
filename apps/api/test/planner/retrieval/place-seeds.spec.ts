@@ -4,6 +4,7 @@ import type { TasteTagDto } from '@tripick/types';
 import {
   inferPlaceTags,
   parseSigungu,
+  regionPrefixStem,
   regionSearchStem,
   regionStem,
   tasteTagsToKeywords,
@@ -42,6 +43,20 @@ describe('regionSearchStem', () => {
   it('단일 토큰은 regionStem 과 같게 어간화한다', () => {
     expect(regionSearchStem('경주시')).toBe('경주');
     expect(regionSearchStem('경상북도')).toBe('경상북도');
+  });
+});
+
+describe('regionPrefixStem', () => {
+  it('LIKE 프리픽스용으로 도까지 떼어 짧은 라벨·풀네임을 함께 잡게 한다', () => {
+    expect(regionPrefixStem('경기도')).toBe('경기');
+    expect(regionPrefixStem('경상북도')).toBe('경상북');
+    expect(regionPrefixStem('강원특별자치도')).toBe('강원');
+  });
+
+  it('도가 없는 시·군·구·시도는 regionStem 과 동일하다', () => {
+    expect(regionPrefixStem('경주시')).toBe('경주');
+    expect(regionPrefixStem('부산광역시')).toBe('부산');
+    expect(regionPrefixStem('부산')).toBe('부산');
   });
 });
 

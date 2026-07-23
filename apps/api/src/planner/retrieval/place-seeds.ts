@@ -199,6 +199,16 @@ export function regionSearchStem(destination: string): string {
 }
 
 /**
+ * LIKE 프리픽스 매칭용 최단 어간. regionStem 에서 끝의 '도'까지 마저 떼어
+ * place_embeddings 에 섞여 있는 짧은 라벨('경기')과 풀네임('경기도')을 '경기%' 로 함께 잡는다.
+ * (regionStem 은 도를 유지하지만 그 값은 사용자에게 노출되지 않고, 프리픽스는 최단 어간이 필요.)
+ * 예: '경기도'→'경기', '경상북도'→'경상북', '강원특별자치도'→'강원', '경주시'→'경주'.
+ */
+export function regionPrefixStem(destination: string): string {
+  return regionStem(destination).replace(/도$/, '');
+}
+
+/**
  * 주소에서 시군구 라벨을 추출한다. 첫 토큰(시도)을 건너뛰고
  * 시/군/구로 끝나는 첫 토큰을 반환. 예: '경상북도 경주시 불국로 385'→'경주시'.
  * 세종특별자치시처럼 시군구가 없으면 null.
