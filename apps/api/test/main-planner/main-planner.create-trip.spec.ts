@@ -168,6 +168,22 @@ describe('MainPlannerService.createTrip — 일자별 지역(dayRegions)', () =>
     expect(tripsService.create).not.toHaveBeenCalled();
   });
 
+  it('일자별 지역 원소가 배열이 아니면(string[] 오전송) 500 아닌 400', async () => {
+    const { service, user, tripsService } = createHarness();
+    await expect(
+      service.createTrip(user, validDto({ dayRegions: ['부산', '경주'] as any })),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tripsService.create).not.toHaveBeenCalled();
+  });
+
+  it('일자별 지역 안에 문자열 아닌 값이 있으면 400', async () => {
+    const { service, user, tripsService } = createHarness();
+    await expect(
+      service.createTrip(user, validDto({ dayRegions: [['부산'], [123 as any]] })),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tripsService.create).not.toHaveBeenCalled();
+  });
+
   it('지역이 비어있는 일차가 있으면 400', async () => {
     const { service, user, tripsService } = createHarness();
     await expect(

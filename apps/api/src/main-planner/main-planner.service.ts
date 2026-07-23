@@ -708,7 +708,12 @@ export class MainPlannerService {
         throw new BadRequestException('일자별 지역 수가 여행 일수와 맞지 않아요.');
       }
       for (const regions of dto.dayRegions) {
-        const cleaned = (regions ?? []).map((r) => r?.trim()).filter(Boolean);
+        // @IsArray() 는 외곽만 검증하므로 내부 원소(배열·문자열) 형태는 여기서 막는다.
+        // 안 막으면 아래 .map 이 문자열/숫자에 대해 TypeError 를 던져 400 이 아닌 500 이 난다.
+        if (!Array.isArray(regions) || regions.some((r) => typeof r !== 'string')) {
+          throw new BadRequestException('일자별 지역 형식이 올바르지 않아요.');
+        }
+        const cleaned = regions.map((r) => r.trim()).filter(Boolean);
         if (cleaned.length === 0) {
           throw new BadRequestException('각 일자에 지역을 최소 하나 이상 선택해주세요.');
         }

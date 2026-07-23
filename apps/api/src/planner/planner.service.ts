@@ -143,7 +143,7 @@ export class PlannerService {
     let poolsByDay: CandidatePlace[][] | null = null;
     let traceLabel: string;
     if (perDayMode) {
-      poolsByDay = await this.retrievePerDay(dayRegions, sharedRetrieval, trip.destination, itemsPerDay);
+      poolsByDay = await this.retrievePerDay(dayRegions, sharedRetrieval, itemsPerDay);
       candidates = [...mustCandidates, ...poolsByDay.flat()];
       traceLabel = `per-day[${dayRegions.map((regions) => regions.join('/')).join(' | ')}]`;
     } else {
@@ -198,7 +198,7 @@ export class PlannerService {
       weatherHint,
     };
     // LLM 이 필수 포함 장소를 누락했으면 강제로 주입한다(시드+프롬프트는 best-effort 라 보장 안 됨).
-    const guaranteedPlan = this.enforceMustInclude(agentPlan, mustCandidates, dayCount);
+    const guaranteedPlan = this.enforceMustInclude(agentPlan, mustCandidates, dayCount, perDayMode);
     const aiDraft = await this.buildDraft(guaranteedPlan, draftContext);
     const aiValidation = await this.validateDraft(aiDraft, draftContext);
     // 검증 실패 시 후보 rotate 기반 결정적 재생성. 모드에 맞는 배치 생성기를 넘긴다.
@@ -214,6 +214,7 @@ export class PlannerService {
             ),
             mustCandidates,
             dayCount,
+            true,
           )
       : (attempt: number) =>
           this.enforceMustInclude(
@@ -437,15 +438,17 @@ export class PlannerService {
 
   /**
    * 일자별로 그 날 지역(들)의 후보 풀을 만든다. 하루에 여러 지역이면 각 지역을 조회해 id 기준 dedupe.
-   * 특정 일차 후보가 비면 대표 지역(trip.destination)으로 폴백해 빈 일차를 막는다.
+   * 특정 일차 후보가 비면 여행 내 다른 실제 지역으로 폴백해 빈 일차를 막는다
+   * (대표 destination 은 '부산 · 경주' 같은 결합 라벨이라 지역 검색이 안 되므로 쓰지 않는다).
    */
   private async retrievePerDay(
     dayRegions: string[][],
     sharedRetrieval: Omit<RetrievalContext, 'destination' | 'limit'>,
-    fallbackRegion: string,
     itemsPerDay: number,
   ): Promise<CandidatePlace[][]> {
     const perRegionLimit = Math.max(itemsPerDay + 3, 8);
+    // 여행 전체의 실제 지역 목록(폴백 후보). 결합 라벨이 아닌 개별 지역만 담긴다.
+    const allRegions = [...new Set(dayRegions.flat().map((r) => r.trim()).filter(Boolean))];
     const retrieveInto = async (merged: Map<string, CandidatePlace>, region: string) => {
       const result = await this.placeRetrieval.retrieve({
         ...sharedRetrieval,
@@ -462,8 +465,13 @@ export class PlannerService {
         for (const region of regions) {
           await retrieveInto(merged, region);
         }
-        if (merged.size === 0 && fallbackRegion.trim()) {
-          await retrieveInto(merged, fallbackRegion);
+        // 그 날 지역이 0건이면 여행 내 다른 지역으로 채운다 (이미 조회한 그 날 지역은 건너뜀).
+        if (merged.size === 0) {
+          for (const region of allRegions) {
+            if (regions.includes(region)) continue;
+            await retrieveInto(merged, region);
+            if (merged.size > 0) break;
+          }
         }
         return [...merged.values()];
       }),
@@ -564,6 +572,7 @@ export class PlannerService {
     plan: PlannedCandidate[],
     mustCandidates: CandidatePlace[],
     dayCount: number,
+    regionScoped = false,
   ): PlannedCandidate[] {
     if (mustCandidates.length === 0) return plan;
 
@@ -578,11 +587,29 @@ export class PlannerService {
     );
     if (missing.length === 0) return plan;
 
+    // 일자별 지역 모드: 이미 배치된 후보 중 좌표가 가장 가까운 항목의 일차에 넣어
+    // must 장소가 엉뚱한 지역 일차에 섞이지 않게 한다. 배치안이 비었으면 라운드로빈 폴백.
+    const pickDay = (must: CandidatePlace, index: number): number => {
+      if (!regionScoped || plan.length === 0) return (index % dayCount) + 1;
+      let bestDay = plan[0]!.day;
+      let bestDist = Infinity;
+      for (const planned of plan) {
+        const dLat = planned.candidate.coordinates.lat - must.coordinates.lat;
+        const dLng = planned.candidate.coordinates.lng - must.coordinates.lng;
+        const dist = dLat * dLat + dLng * dLng;
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestDay = planned.day;
+        }
+      }
+      return bestDay;
+    };
+
     const result = [...plan];
     missing.forEach((must, index) => {
       result.push({
         candidate: must,
-        day: (index % dayCount) + 1,
+        day: pickDay(must, index),
         // 음수 order → 해당 일차 정렬 최상단. buildDraft 가 최종 order 를 다시 매기므로 값 자체는 표시 안 됨.
         order: -1000 + index,
         durationMin: this.defaultDuration(must.category),
