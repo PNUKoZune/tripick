@@ -20,6 +20,7 @@ describe('PlaceRetrievalService candidate eligibility', () => {
       { searchByEmbedding: jest.fn().mockResolvedValue([hospital, museum]) } as any,
       { search: jest.fn().mockResolvedValue([]) } as any,
       evaluator as any,
+      { getPopularityIndex: jest.fn().mockResolvedValue(disabledPopularityIndex()) } as any,
     );
 
     const result = await service.retrieve({
@@ -66,10 +67,15 @@ function ranked(place: RawPlaceCandidate): CandidatePlace {
       context: 0.9,
       availability: 0.9,
       dataQuality: 0.9,
+      popularity: 0.5,
       matchedTags: [],
       penalties: [],
     },
   };
+}
+
+function disabledPopularityIndex() {
+  return { docCount: 0, mentions: () => 0, score: () => 0.5 };
 }
 
 function config(values: Record<string, string>) {

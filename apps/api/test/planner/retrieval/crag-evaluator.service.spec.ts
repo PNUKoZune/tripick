@@ -182,4 +182,50 @@ describe('CragEvaluatorService', () => {
     expect(ranked[0]!.crag.matchedTags).toEqual([]);
     expect(ranked[0]!.crag.taste).toBe(0.56);
   });
+
+  it('demotes a place unmentioned in Naver recommendations below a mentioned twin', () => {
+    const twin = (id: string, name: string): RawPlaceCandidate => ({
+      id,
+      name,
+      category: 'cafe',
+      address: '부산 수영구 광안해변로 219',
+      coordinates: { lat: 35.1532, lng: 129.1185 },
+      source: 'pgvector',
+      similarity: 0.88,
+      tags: ['cafe', 'beach', 'romantic'],
+      destinationRegion: 'busan',
+    });
+    // 두 후보는 유명세만 다르다: '광안리'는 추천 글에 있고 '무명'은 없다.
+    const popularityIndex = {
+      docCount: 4,
+      mentions: (name: string) => (name.includes('광안리') ? 5 : 0),
+      score: (name: string) => (name.includes('광안리') ? 0.87 : 0.15),
+    };
+
+    const ranked = service.rank(
+      [twin('minor', '무명 골목 카페'), twin('famous', '광안리 브런치 카페')],
+      { ...busanContext, popularityIndex },
+    );
+
+    expect(ranked[0]!.id).toBe('famous');
+    expect(ranked.find((c) => c.id === 'minor')!.crag.penalties).toContain('naver-unmentioned');
+  });
+
+  it('leaves ranking unchanged when no popularity index is provided (neutral)', () => {
+    const candidate: RawPlaceCandidate = {
+      id: 'c1',
+      name: '광안리 브런치 카페',
+      category: 'cafe',
+      address: '부산 수영구 광안해변로 219',
+      coordinates: { lat: 35.1532, lng: 129.1185 },
+      source: 'pgvector',
+      similarity: 0.86,
+      tags: ['cafe', 'beach', 'romantic'],
+      destinationRegion: 'busan',
+    };
+
+    const ranked = service.rank([candidate], busanContext);
+    expect(ranked[0]!.crag.popularity).toBe(0.5);
+    expect(ranked[0]!.crag.penalties).not.toContain('naver-unmentioned');
+  });
 });

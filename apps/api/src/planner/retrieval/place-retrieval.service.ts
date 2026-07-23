@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { getSeedCandidates, tasteTagsToKeywords } from './place-seeds';
 import { CragEvaluatorService } from './crag-evaluator.service';
 import { KakaoLocalService } from './kakao-local.service';
+import { NaverSearchService } from './naver-search.service';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { isEligibleItineraryCandidate } from './place-eligibility';
@@ -24,9 +25,14 @@ export class PlaceRetrievalService {
     private readonly placeEmbeddings: PlaceEmbeddingRepository,
     private readonly kakaoLocal: KakaoLocalService,
     private readonly evaluator: CragEvaluatorService,
+    private readonly naverSearch: NaverSearchService,
   ) {}
 
-  async retrieve(context: RetrievalContext): Promise<RetrievalResult> {
+  async retrieve(inputContext: RetrievalContext): Promise<RetrievalResult> {
+    // 앞단: 목적지 네이버 추천 글로 대중 인지도 인덱스를 만들어 랭킹 컨텍스트에 주입한다.
+    // 이후 모든 evaluator.rank 호출이 이 인덱스로 마이너 장소를 후순위로 민다.
+    const popularityIndex = await this.naverSearch.getPopularityIndex(inputContext.destination);
+    const context: RetrievalContext = { ...inputContext, popularityIndex };
     const limit = context.limit ?? 16;
     const queryText = this.buildQueryText(context);
     const sources: RetrievalSource[] = [];
@@ -91,8 +97,9 @@ export class PlaceRetrievalService {
     const averageConfidence = this.averageConfidence(places);
     const rejectedCount = Math.max(0, ranked.length - accepted.length);
 
+    const popularCount = places.filter((place) => popularityIndex.mentions(place.name) > 0).length;
     this.logger.log(
-      `CRAG retrieval for "${context.destination}" sources=${sources.join('+') || 'none'} avg=${averageConfidence.toFixed(2)} selected=${places.length}`,
+      `CRAG retrieval for "${context.destination}" sources=${sources.join('+') || 'none'} avg=${averageConfidence.toFixed(2)} selected=${places.length} naver=${popularityIndex.docCount}docs/${popularCount}matched`,
     );
 
     return {
