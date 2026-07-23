@@ -17,6 +17,9 @@ const INDOOR_TAGS = new Set<string>([
   'hotspring',
 ]);
 
+/** CRAG 총점에서 네이버 대중 인지도 항이 차지하는 가중치. accept 게이트 보정과 공유. */
+export const POPULARITY_WEIGHT = 0.12;
+
 @Injectable()
 export class CragEvaluatorService {
   rank(candidates: RawPlaceCandidate[], context: RetrievalContext): CandidatePlace[] {
@@ -63,7 +66,7 @@ export class CragEvaluatorService {
     const total = this.clamp(
       retrieval * 0.24 +
         taste * 0.2 +
-        popularity * 0.12 +
+        popularity * POPULARITY_WEIGHT +
         locality * 0.16 +
         contextScore * 0.13 +
         availability * 0.09 +

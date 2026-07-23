@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { getSeedCandidates, tasteTagsToKeywords } from './place-seeds';
-import { CragEvaluatorService } from './crag-evaluator.service';
+import { CragEvaluatorService, POPULARITY_WEIGHT } from './crag-evaluator.service';
 import { KakaoLocalService } from './kakao-local.service';
-import { NaverSearchService } from './naver-search.service';
+import { NaverSearchService, NEUTRAL_POPULARITY } from './naver-search.service';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { isEligibleItineraryCandidate } from './place-eligibility';
@@ -91,7 +91,13 @@ export class PlaceRetrievalService {
     }
 
     const minimumConfidence = this.minimumConfidence();
-    const accepted = ranked.filter((candidate) => candidate.confidence >= minimumConfidence);
+    // 인지도는 "소프트 재랭킹"이라 순위만 낮출 뿐 후보를 탈락시키면 안 된다.
+    // 중립값 아래로 깎인 감점분은 accept 게이트에서만 되돌려, 언급 0 이라는 이유로
+    // minimumConfidence 를 밑돌아 제거되는 일을 막는다(정렬 순서엔 감점 그대로 반영).
+    const gateConfidence = (candidate: CandidatePlace): number =>
+      candidate.confidence +
+      POPULARITY_WEIGHT * Math.max(0, NEUTRAL_POPULARITY - candidate.crag.popularity);
+    const accepted = ranked.filter((candidate) => gateConfidence(candidate) >= minimumConfidence);
     const finalPool = accepted.length >= Math.min(4, limit) ? accepted : ranked;
     const places = this.evaluator.selectTopDiverse(finalPool, limit);
     const averageConfidence = this.averageConfidence(places);

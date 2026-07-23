@@ -79,6 +79,23 @@ describe('NaverSearchService', () => {
     expect(mockedAxios.get.mock.calls.length).toBe(callsAfterFirst);
   });
 
+  it('keeps the succeeding endpoint corpus when the other endpoint fails', async () => {
+    mockedAxios.get.mockImplementation((url: string) =>
+      url.includes('/cafearticle')
+        ? Promise.reject(new Error('cafe down'))
+        : Promise.resolve({
+            data: { items: [{ title: '경주 <b>불국사</b> 후기', description: '불국사 최고' }] },
+          }),
+    );
+    const service = new NaverSearchService(
+      config({ NAVER_SEARCH_CLIENT_ID: 'id', NAVER_SEARCH_CLIENT_SECRET: 'secret' }),
+    );
+
+    const index = await service.getPopularityIndex('경주');
+    expect(index.docCount).toBeGreaterThan(0);
+    expect(index.mentions('불국사')).toBeGreaterThan(0);
+  });
+
   it('falls back to a neutral index when the search call fails', async () => {
     mockedAxios.get.mockRejectedValue(new Error('network'));
     const service = new NaverSearchService(

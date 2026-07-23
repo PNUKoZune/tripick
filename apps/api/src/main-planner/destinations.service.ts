@@ -6,7 +6,6 @@ import {
   PlaceEmbeddingRepository,
   type RegionRecommendation,
 } from '../planner/retrieval/place-embedding.repository';
-import { regionStem } from '../planner/retrieval/place-seeds';
 import { PreferencesService } from '../preferences/preferences.service';
 
 /** place_embeddings 에 정규화 슬러그로 저장된 지역 → 표시용 한글명 */
@@ -17,13 +16,22 @@ const SLUG_TO_KO: Record<string, string> = {
   gyeongju: '경주',
 };
 
-/** destination_region 원본값(시도명 or 슬러그) → 표시용 지역명. 'default' 등은 제외(null). */
+/**
+ * destination_region 원본값(시도명 or 슬러그) → 표시용 지역명. 'default' 등은 제외(null).
+ * 표시용은 매칭용 regionStem 과 달리 도·시까지 모두 떼어 짧은 라벨로 만든다.
+ * (슬러그 'jeju'→'제주' 와 시도명 '제주특별자치도'→'제주' 를 같은 라벨로 맞춰
+ *  후보 그룹이 '제주'/'제주도' 로 갈리지 않게 한다.)
+ * 예: '부산광역시'→'부산', '제주특별자치도'→'제주', '경기도'→'경기'
+ */
 function displayRegionName(raw: string): string | null {
   const key = raw.trim().toLowerCase();
   if (!key || key === 'default') return null;
   if (SLUG_TO_KO[key]) return SLUG_TO_KO[key];
-  // '부산광역시'→'부산', '제주특별자치도'→'제주', '경기도'→'경기'
-  return regionStem(raw) || raw;
+  const label = (raw.trim().split(/\s+/)[0] ?? '').replace(
+    /(특별자치도|특별자치시|특별시|광역시|자치도|자치시|도|시|군|구)$/,
+    '',
+  );
+  return label || raw;
 }
 
 /** 같은 시도 내 두 후보 중 next 를 대표로 바꿔야 하는지. 시군구 있는 후보 우선, 같은 급이면 고점수. */

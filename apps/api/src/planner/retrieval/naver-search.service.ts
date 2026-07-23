@@ -53,6 +53,12 @@ export class NaverSearchService {
 
     try {
       const corpus = await this.collectCorpus(destination, credentials);
+      // 두 엔드포인트가 모두 실패했거나 결과가 없으면 캐시하지 않고 비활성 반환 —
+      // 다음 조회에서 재시도하도록 둔다(6h 동안 빈 인덱스를 고정하지 않음).
+      if (corpus.docCount === 0) {
+        this.logger.warn(`네이버 코퍼스가 비어 인지도 보정 건너뜀 ("${destination}")`);
+        return DISABLED_INDEX;
+      }
       const index = new NaverPopularityIndex(corpus.text, corpus.docCount);
       this.cache.set(key, { index, expires: Date.now() + this.cacheTtlMs() });
       this.logger.log(
@@ -79,13 +85,22 @@ export class NaverSearchService {
     let docCount = 0;
 
     for (const query of queries) {
-      const [blog, cafe] = await Promise.all([
+      // 블로그·카페 중 한쪽이 실패해도 나머지 코퍼스는 살린다(allSettled).
+      const settled = await Promise.allSettled([
         this.search(NAVER_BLOG_URL, query, display, credentials),
         this.search(NAVER_CAFE_URL, query, display, credentials),
       ]);
-      for (const item of [...blog, ...cafe]) {
-        parts.push(item);
-        docCount += 1;
+      for (const result of settled) {
+        if (result.status !== 'fulfilled') {
+          this.logger.warn(
+            `네이버 검색 일부 실패 ("${query}"): ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+          );
+          continue;
+        }
+        for (const item of result.value) {
+          parts.push(item);
+          docCount += 1;
+        }
       }
     }
 
