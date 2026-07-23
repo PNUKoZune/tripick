@@ -9,11 +9,13 @@ import {
 } from '../../../src/planner/retrieval/place-seeds';
 
 describe('regionStem', () => {
-  it('시도 접미사를 제거해 어간을 만든다', () => {
+  it('시 계열 접미사는 어간화하되 도는 유지하고, 특별자치도만 도로 정규화한다', () => {
     expect(regionStem('서울특별시')).toBe('서울');
     expect(regionStem('부산광역시')).toBe('부산');
-    expect(regionStem('경상북도')).toBe('경상북');
-    expect(regionStem('제주특별자치도')).toBe('제주');
+    expect(regionStem('경상북도')).toBe('경상북도');
+    expect(regionStem('경기도')).toBe('경기도');
+    expect(regionStem('강원특별자치도')).toBe('강원도');
+    expect(regionStem('제주특별자치도')).toBe('제주도');
   });
 
   it('시군구 접미사도 제거한다', () => {
