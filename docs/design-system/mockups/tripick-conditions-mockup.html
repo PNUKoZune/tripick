@@ -1,0 +1,882 @@
+<title>TriPick — 여행 조건 입력 목업</title>
+<style>
+/* ============================================================
+   TriPick 여행 조건 입력 목업 — 시리즈 (C) 화면
+   랜딩 목업과 동일한 토큰·컬럼·버튼·모션 언어를 그대로 사용.
+   한 장의 mega-card 안에 조건 입력 전체를 담는다 (toss-v1 §C).
+   ============================================================ */
+
+/* ---------- tokens: light ---------- */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg:            #F5F7FB;
+  --card:          #FFFFFF;
+  --card-soft:     #F8FAFD;
+  --ink:           #182136;
+  --ink-sub:       #55617A;
+  --ink-faint:     #8A94AB;
+  --line:          #E4E9F2;
+  --line-dot:      #CBD5E6;
+
+  --primary:       #2E6BE6;
+  --primary-deep:  #1F55C4;
+  --primary-tint:  #EAF1FE;
+  --btn-bg:        #2E6BE6;
+  --btn-bg-press:  #1F55C4;
+  --btn-text:      #FFFFFF;
+  --ring:          rgba(46,107,230,.28);
+
+  --accent:        #FF9B70;
+  --accent-deep:   #DE6A3B;
+  --accent-tint:   #FFEFE6;
+  --hl:            #FFDCC6;   /* 헤드라인 마커 하이라이트 */
+
+  /* 하루의 빛 — 타임라인 색 */
+  --t-morning:     #8FBCFF;
+  --t-noon:        #4F87EE;
+  --t-gold:        #FFC46B;
+  --t-dusk:        #FF8A5C;
+
+  /* 광안리 장면 */
+  --sky-top:       #C9DFFC;
+  --sky-glow:      #FFDFC8;
+  --sun:           #FF9B70;
+  --sun-halo:      rgba(255,155,112,.42);
+  --sea-1:         #A9CAF6;
+  --sea-2:         #7FA9EF;
+  --sea-3:         #4C7FDD;
+  --sil:           #26406F;
+  --bridge:        #24365E;
+  --lights:        #FFB37F;
+  --star:          transparent;
+  --glass:         rgba(255,255,255,.88);
+
+  --shadow-card:   0 8px 24px rgba(24,33,54,.05);
+  --shadow-btn:    0 10px 22px rgba(46,107,230,.28);
+}
+
+/* ---------- tokens: dark (system) ---------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --bg:            #0B111E;
+    --card:          #131B2C;
+    --card-soft:     #172136;
+    --ink:           #E9EEF9;
+    --ink-sub:       #A3AEC6;
+    --ink-faint:     #75809A;
+    --line:          #263149;
+    --line-dot:      #34405C;
+
+    --primary:       #7CA5FC;
+    --primary-deep:  #9DBCFF;
+    --primary-tint:  #1B2A4A;
+    --btn-bg:        #3B76F0;
+    --btn-bg-press:  #2E63D6;
+    --btn-text:      #FFFFFF;
+    --ring:          rgba(124,165,252,.4);
+
+    --accent:        #FF9B70;
+    --accent-deep:   #FFAD88;
+    --accent-tint:   #33231C;
+    --hl:            #4A2F20;
+
+    --t-morning:     #8FBCFF;
+    --t-noon:        #5B8DEF;
+    --t-gold:        #FFC46B;
+    --t-dusk:        #FF8A5C;
+
+    --sky-top:       #0B152C;
+    --sky-glow:      #543246;
+    --sun:           #FFA97E;
+    --sun-halo:      rgba(255,169,126,.26);
+    --sea-1:         #223B69;
+    --sea-2:         #1A2E54;
+    --sea-3:         #12203D;
+    --sil:           #070D1C;
+    --bridge:        #0A1322;
+    --lights:        #FFC49A;
+    --star:          rgba(255,255,255,.55);
+    --glass:         rgba(9,14,26,.74);
+
+    --shadow-card:   0 8px 24px rgba(0,0,0,.3);
+    --shadow-btn:    0 10px 22px rgba(20,50,120,.5);
+  }
+}
+
+/* ---------- tokens: viewer toggle (must win over media query) ---------- */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg:            #0B111E;
+  --card:          #131B2C;
+  --card-soft:     #172136;
+  --ink:           #E9EEF9;
+  --ink-sub:       #A3AEC6;
+  --ink-faint:     #75809A;
+  --line:          #263149;
+  --line-dot:      #34405C;
+
+  --primary:       #7CA5FC;
+  --primary-deep:  #9DBCFF;
+  --primary-tint:  #1B2A4A;
+  --btn-bg:        #3B76F0;
+  --btn-bg-press:  #2E63D6;
+  --btn-text:      #FFFFFF;
+  --ring:          rgba(124,165,252,.4);
+
+  --accent:        #FF9B70;
+  --accent-deep:   #FFAD88;
+  --accent-tint:   #33231C;
+  --hl:            #4A2F20;
+
+  --t-morning:     #8FBCFF;
+  --t-noon:        #5B8DEF;
+  --t-gold:        #FFC46B;
+  --t-dusk:        #FF8A5C;
+
+  --sky-top:       #0B152C;
+  --sky-glow:      #543246;
+  --sun:           #FFA97E;
+  --sun-halo:      rgba(255,169,126,.26);
+  --sea-1:         #223B69;
+  --sea-2:         #1A2E54;
+  --sea-3:         #12203D;
+  --sil:           #070D1C;
+  --bridge:        #0A1322;
+  --lights:        #FFC49A;
+  --star:          rgba(255,255,255,.55);
+  --glass:         rgba(9,14,26,.74);
+
+  --shadow-card:   0 8px 24px rgba(0,0,0,.3);
+  --shadow-btn:    0 10px 22px rgba(20,50,120,.5);
+}
+
+/* ---------- base (랜딩과 동일) ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+.page {
+  min-height: 100vh;
+  overflow-x: clip;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+               Pretendard, "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page ::selection { background: var(--primary-tint); }
+
+.wrap {
+  max-width: 500px;
+  margin-inline: auto;
+  padding-inline: 20px;
+}
+
+.mono {
+  font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-feature-settings: "tnum";
+  letter-spacing: 0.04em;
+}
+
+.page a, .page button, .page input, .page textarea { font-family: inherit; }
+
+.page :focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--ring);
+  border-radius: 12px;
+}
+
+/* ---------- 앱 헤더: 뒤로 + 진행 세그먼트 + 단계 칩 ---------- */
+.top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-block: 16px 6px;
+}
+
+.back-btn {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.back-btn:focus-visible { border-radius: 13px; }
+
+.prog {
+  flex: 1;
+  display: flex;
+  gap: 5px;
+}
+
+.prog span {
+  flex: 1;
+  height: 4px;
+  border-radius: 4px;
+  background: var(--line);
+}
+
+.prog .done { background: var(--primary); opacity: .35; }
+.prog .now  { background: var(--primary); }
+
+.top-chip {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-tint);
+  border-radius: 999px;
+  padding: 6px 11px;
+  white-space: nowrap;
+}
+
+/* ---------- 화면 타이틀 ---------- */
+.head { padding-top: 18px; }
+
+.head .eyebrow {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: 0.01em;
+}
+
+.head h1 {
+  margin: 0;
+  font-size: clamp(24px, 6.6vw, 28px);
+  line-height: 1.36;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.head h1 .hl {
+  background-image: linear-gradient(transparent 60%, var(--hl) 60%, var(--hl) 92%, transparent 92%);
+}
+
+.head .lede {
+  margin: 10px 0 0;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--ink-sub);
+  max-width: 42ch;
+}
+
+/* ---------- mega-card (조건 입력 전체를 한 장에) ---------- */
+.form-card {
+  margin-top: 20px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 4px 20px 24px;
+  box-shadow: var(--shadow-card);
+}
+
+.grp { padding-top: 22px; }
+
+.grp + .grp {
+  margin-top: 24px;
+  border-top: 1px dashed var(--line);
+}
+
+.grp-cap {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-faint);
+  letter-spacing: 0.02em;
+}
+
+.grp-cap .mono {
+  margin-right: 7px;
+  font-size: 11px;
+  color: var(--primary);
+}
+
+/* ---------- 필드 공통 ---------- */
+.field { margin-top: 16px; }
+
+.field-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.opt-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--ink-faint);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1px 5px;
+  line-height: 1.5;
+}
+
+.field-hint {
+  margin: 7px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+.field-input {
+  width: 100%;
+  height: 56px;
+  padding: 0 16px;
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  background: var(--card-soft);
+  color: var(--ink);
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.field-input::placeholder { color: var(--ink-faint); }
+
+.field-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: var(--card);
+  box-shadow: 0 0 0 4px var(--ring);
+}
+
+.field-input:focus-visible { border-radius: 14px; }
+
+/* 아이콘이 안에 든 입력 (여행 지역 검색) */
+.in-ico { position: relative; }
+
+.in-ico > svg {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  translate: 0 -50%;
+  color: var(--ink-faint);
+  pointer-events: none;
+}
+
+.in-ico .field-input { padding-left: 46px; }
+
+/* ---------- 날짜 요약 컨트롤 (탭 → 달력 시트) ---------- */
+.date-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 56px;
+  padding: 0 13px 0 16px;
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  background: var(--card-soft);
+  color: var(--ink);
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.date-btn:focus-visible { border-radius: 14px; }
+
+.date-btn .cal, .date-btn .chev { flex: none; color: var(--ink-faint); }
+
+.date-btn .range { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.date-btn .nights {
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-tint);
+  border-radius: 999px;
+  padding: 4px 9px;
+}
+
+/* ---------- 동행자 칩 ---------- */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card-soft);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.chip-person .avatar {
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+.avatar--me { background: var(--primary-tint); color: var(--primary); }
+.avatar--f1 { background: var(--accent-tint); color: var(--accent-deep); }
+
+.chip-x {
+  display: flex;
+  padding: 2px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.chip-x:focus-visible { border-radius: 50%; }
+
+.chip-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1.5px dashed var(--line-dot);
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-sub);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chip-add:focus-visible { border-radius: 999px; }
+
+/* ---------- 세그먼트 (이동 수단 · 예산 · 일정 밀도) ---------- */
+.seg {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card-soft);
+}
+
+.seg .sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.seg label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 42px;
+  padding-inline: 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-sub);
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+}
+
+.seg label svg { flex: none; opacity: .75; }
+
+.seg input:checked + label {
+  background: var(--card);
+  border-color: var(--line);
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: 0 1px 6px rgba(24, 33, 54, .1);
+}
+
+.seg input:checked + label svg { opacity: 1; color: var(--primary); }
+
+.seg input:focus-visible + label {
+  box-shadow: 0 0 0 4px var(--ring);
+  border-radius: 10px;
+}
+
+/* 일정 밀도 — 선택에 따라 바뀌는 안내 문장 */
+.pace-hints span { display: none; }
+.field-pace:has(#pace-1:checked) .ph-1 { display: inline; }
+.field-pace:has(#pace-2:checked) .ph-2 { display: inline; }
+.field-pace:has(#pace-3:checked) .ph-3 { display: inline; }
+
+/* ---------- 꼭 포함할 장소 칩 ---------- */
+.chip-place {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 8px 12px;
+  border-radius: 11px;
+  background: var(--primary-tint);
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.chip-place .chip-x { color: currentColor; opacity: .72; }
+
+.chip-place-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 13px;
+  border: 1.5px dashed var(--line-dot);
+  border-radius: 11px;
+  background: none;
+  color: var(--ink-sub);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chip-place-add:focus-visible { border-radius: 11px; }
+
+/* ---------- 자유 서술 ---------- */
+.field-area {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  background: var(--card-soft);
+  color: var(--ink);
+  font-size: 15.5px;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+  resize: vertical;
+}
+
+.field-area::placeholder { color: var(--ink-faint); }
+
+.field-area:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: var(--card);
+  box-shadow: 0 0 0 4px var(--ring);
+}
+
+.field-area:focus-visible { border-radius: 14px; }
+
+/* ---------- CTA (랜딩 .btn 재사용 + sticky 바) ---------- */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 56px;
+  margin-top: 20px;
+  padding-inline: 20px;
+  border: none;
+  border-radius: 18px;
+  background: var(--btn-bg);
+  color: var(--btn-text);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  box-shadow: var(--shadow-btn);
+  transition: background-color .15s ease, transform .1s ease;
+}
+
+.btn:hover { background: var(--btn-bg-press); }
+.btn:active { transform: translateY(1px); }
+
+.btn svg { flex: none; }
+
+.btn-note {
+  margin: 11px 0 0;
+  font-size: 13px;
+  color: var(--ink-faint);
+  text-align: center;
+}
+
+.cta {
+  position: sticky;
+  bottom: 0;
+  margin-top: 8px;
+  padding: 14px 0 max(24px, env(safe-area-inset-bottom));
+  background: linear-gradient(to top, var(--bg) 74%, transparent);
+}
+
+.cta .btn { margin-top: 0; }
+
+/* Toss식 disabled CTA — 여행 지역이 비면 버튼이 꺼지고, 이유가 보인다.
+   (여행 지역 입력값을 지워 보면 이 상태를 확인할 수 있어요) */
+.page:has(.in-dest:placeholder-shown) .btn-cta,
+.page:has(.in-dest:placeholder-shown) .btn-cta:hover {
+  background: var(--line);
+  color: var(--ink-faint);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.page:has(.in-dest:placeholder-shown) .btn-cta:active { transform: none; }
+.page:has(.in-dest:placeholder-shown) .btn-cta svg { opacity: .5; }
+
+.note-need { display: none; }
+.page:has(.in-dest:placeholder-shown) .note-need { display: block; }
+.page:has(.in-dest:placeholder-shown) .note-ok { display: none; }
+
+/* ---------- motion (랜딩과 동일한 rise) ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .rise {
+    opacity: 0;
+    transform: translateY(10px);
+    animation: rise .7s cubic-bezier(.2,.7,.3,1) forwards;
+  }
+  .rise-1 { animation-delay: .05s; }
+  .rise-2 { animation-delay: .14s; }
+  .rise-3 { animation-delay: .23s; }
+  .rise-4 { animation-delay: .34s; }
+
+  @keyframes rise {
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* ---------- wide ---------- */
+@media (min-width: 760px) {
+  .wrap { max-width: 560px; }
+  .head { padding-top: 26px; }
+}
+</style>
+
+<div class="page">
+  <div class="wrap">
+
+    <!-- ===== 앱 헤더: 뒤로 · 진행 상황 · 단계 ===== -->
+    <header class="top rise rise-1">
+      <button type="button" class="back-btn" aria-label="이전 단계로">
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M12.5 4.5 7 10l5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <div class="prog" role="img" aria-label="3단계 중 2단계 진행 중">
+        <span class="done"></span><span class="now"></span><span></span>
+      </div>
+      <span class="top-chip mono">2 / 3</span>
+    </header>
+
+    <!-- ===== 타이틀 ===== -->
+    <div class="head rise rise-2">
+      <p class="eyebrow">취향 분석 완료 · 이제 조건만</p>
+      <h1>어디로 떠나는<br><span class="hl">여행</span>인가요?</h1>
+      <p class="lede">사진에서 취향은 충분히 읽었어요. 아래 몇 가지만 정해 주시면 그대로 일정을 짜 드릴게요.</p>
+    </div>
+
+    <!-- ===== mega-card: 조건 입력 전체 ===== -->
+    <form class="form-card rise rise-3">
+
+      <!-- 01 어디로, 언제 -->
+      <section class="grp">
+        <p class="grp-cap"><span class="mono">01</span>어디로, 언제</p>
+
+        <div class="field">
+          <label class="field-label" for="in-title">여행 제목 <span class="opt-badge">선택</span></label>
+          <input class="field-input" id="in-title" name="trip-title" type="text"
+                 placeholder="경주 1박 2일 · 친구들과 봄나들이" autocomplete="off">
+          <p class="field-hint">비워 두면 지역과 날짜로 알아서 지어 드려요.</p>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="in-dest">여행 지역</label>
+          <div class="in-ico">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <circle cx="9" cy="9" r="5.6" stroke="currentColor" stroke-width="1.7"/>
+              <path d="m13.4 13.4 3.2 3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+            <input class="field-input in-dest" id="in-dest" name="destination" type="text"
+                   value="경주" placeholder="도시나 동네 이름으로 검색" autocomplete="off">
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="field-label" id="lbl-date">여행 기간</span>
+          <button type="button" class="date-btn" aria-haspopup="dialog"
+                  aria-label="여행 기간 8월 14일부터 8월 15일, 1박 2일 — 탭해서 변경">
+            <svg class="cal" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3.5" y="5.5" width="17" height="14" rx="2.5"/>
+              <path d="M3.5 10h17M8 3.5v3.5M16 3.5v3.5"/>
+            </svg>
+            <span class="range">8월 14일 (금) ~ 8월 15일 (토)</span>
+            <span class="nights">1박 2일</span>
+            <svg class="chev" width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="m6 8 4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <p class="field-hint">탭하면 달력에서 바꿀 수 있어요 · 당일치기도 좋아요.</p>
+        </div>
+      </section>
+
+      <!-- 02 누구와, 어떻게 -->
+      <section class="grp">
+        <p class="grp-cap"><span class="mono">02</span>누구와, 어떻게</p>
+
+        <div class="field">
+          <span class="field-label" id="lbl-mate">동행자</span>
+          <div class="chips" role="group" aria-labelledby="lbl-mate">
+            <span class="chip-person"><span class="avatar avatar--me" aria-hidden="true">나</span>나</span>
+            <span class="chip-person">
+              <span class="avatar avatar--f1" aria-hidden="true">지</span>지수
+              <button type="button" class="chip-x" aria-label="지수 내보내기">
+                <svg width="13" height="13" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="m6 6 8 8M14 6l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </span>
+            <button type="button" class="chip-add">
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M10 4.5v11M4.5 10h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              </svg>
+              친구 추가
+            </button>
+          </div>
+          <p class="field-hint">친구를 초대하면 완성된 일정을 함께 보고 고칠 수 있어요.</p>
+        </div>
+
+        <fieldset class="field" style="border:none;margin-inline:0;padding:0;">
+          <legend class="field-label" style="padding:0;">이동 수단</legend>
+          <div class="seg">
+            <input class="sr" type="radio" name="move" id="move-1" checked>
+            <label for="move-1">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="5" y="3.5" width="14" height="14.5" rx="2.5"/>
+                <path d="M5 11h14M9 21l1-3M15 21l-1-3"/>
+                <circle cx="8.7" cy="14.6" r="1" fill="currentColor" stroke="none"/>
+                <circle cx="15.3" cy="14.6" r="1" fill="currentColor" stroke="none"/>
+              </svg>
+              대중교통
+            </label>
+            <input class="sr" type="radio" name="move" id="move-2">
+            <label for="move-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 13.5 5.8 8a2 2 0 0 1 1.9-1.4h8.6A2 2 0 0 1 18.2 8l1.8 5.5"/>
+                <rect x="3" y="13.5" width="18" height="5" rx="1.8"/>
+                <circle cx="7.4" cy="16" r="1" fill="currentColor" stroke="none"/>
+                <circle cx="16.6" cy="16" r="1" fill="currentColor" stroke="none"/>
+              </svg>
+              자가용
+            </label>
+          </div>
+          <p class="field-hint">동선과 이동 시간을 이 기준으로 계산해요.</p>
+        </fieldset>
+      </section>
+
+      <!-- 03 예산과 리듬 -->
+      <section class="grp">
+        <p class="grp-cap"><span class="mono">03</span>예산과 리듬</p>
+
+        <fieldset class="field" style="border:none;margin-inline:0;padding:0;">
+          <legend class="field-label" style="padding:0;">예산</legend>
+          <div class="seg">
+            <input class="sr" type="radio" name="budget" id="bud-1">
+            <label for="bud-1">알뜰</label>
+            <input class="sr" type="radio" name="budget" id="bud-2" checked>
+            <label for="bud-2">보통</label>
+            <input class="sr" type="radio" name="budget" id="bud-3">
+            <label for="bud-3">프리미엄</label>
+          </div>
+        </fieldset>
+
+        <fieldset class="field field-pace" style="border:none;margin-inline:0;padding:0;">
+          <legend class="field-label" style="padding:0;">하루 일정 밀도</legend>
+          <div class="seg">
+            <input class="sr" type="radio" name="pace" id="pace-1">
+            <label for="pace-1">여유롭게</label>
+            <input class="sr" type="radio" name="pace" id="pace-2" checked>
+            <label for="pace-2">균형</label>
+            <input class="sr" type="radio" name="pace" id="pace-3">
+            <label for="pace-3">알차게</label>
+          </div>
+          <p class="field-hint pace-hints">
+            <span class="ph-1">하루 2~3곳 — 산책과 카페의 쉼표를 넉넉하게.</span>
+            <span class="ph-2">하루 3~4곳 — 볼거리와 쉼표를 반반씩.</span>
+            <span class="ph-3">하루 5곳 이상 — 아침부터 저녁까지 꽉 채워요.</span>
+          </p>
+        </fieldset>
+      </section>
+
+      <!-- 04 더 반영하고 싶은 것 -->
+      <section class="grp">
+        <p class="grp-cap"><span class="mono">04</span>더 반영하고 싶은 것</p>
+
+        <div class="field">
+          <span class="field-label" id="lbl-must">꼭 포함할 장소 <span class="opt-badge">선택</span></span>
+          <div class="chips" role="group" aria-labelledby="lbl-must">
+            <span class="chip-place">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 21s-6.5-5.4-6.5-10a6.5 6.5 0 0 1 13 0c0 4.6-6.5 10-6.5 10Z"/>
+                <circle cx="12" cy="10.6" r="2.2"/>
+              </svg>
+              황리단길
+              <button type="button" class="chip-x" aria-label="황리단길 빼기">
+                <svg width="13" height="13" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="m6 6 8 8M14 6l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </span>
+            <button type="button" class="chip-place-add">
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M10 4.5v11M4.5 10h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              </svg>
+              장소 추가
+            </button>
+          </div>
+          <p class="field-hint">정해 둔 곳이 있으면 그 주변으로 동선을 잡아 드려요.</p>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="in-note">이번 여행에 반영할 사항 <span class="opt-badge">선택</span></label>
+          <textarea class="field-area" id="in-note" name="trip-note" rows="3"
+                    placeholder="예) 유아 동반이라 동선이 짧았으면 좋겠어요"></textarea>
+        </div>
+      </section>
+    </form>
+
+    <!-- ===== sticky CTA — 지역을 지우면 Toss식 disabled 상태가 보여요 ===== -->
+    <div class="cta rise rise-4">
+      <button type="button" class="btn btn-cta">
+        여행 만들기
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M4 10h11M10.5 5.5 15 10l-4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <p class="btn-note note-ok">보통 30초 안에 완성돼요 · 조건은 만든 뒤에도 바꿀 수 있어요</p>
+      <p class="btn-note note-need">여행 지역을 입력하면 여행을 만들 수 있어요</p>
+    </div>
+
+  </div>
+</div>

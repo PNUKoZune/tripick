@@ -1,0 +1,919 @@
+<title>TriPick — 개선 랜딩 목업</title>
+<style>
+/* ============================================================
+   TriPick 개선 랜딩 목업 — "광안리의 하루" 에디토리얼 트리트먼트
+   토큰: 종이/심야 잉크/바다 파랑/하늘 틴트/노을 살구/모래빛 회색
+   ============================================================ */
+
+/* ---------- tokens: light ---------- */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg:            #F5F7FB;
+  --card:          #FFFFFF;
+  --card-soft:     #F8FAFD;
+  --ink:           #182136;
+  --ink-sub:       #55617A;
+  --ink-faint:     #8A94AB;
+  --line:          #E4E9F2;
+  --line-dot:      #CBD5E6;
+
+  --primary:       #2E6BE6;
+  --primary-deep:  #1F55C4;
+  --primary-tint:  #EAF1FE;
+  --btn-bg:        #2E6BE6;
+  --btn-bg-press:  #1F55C4;
+  --btn-text:      #FFFFFF;
+  --ring:          rgba(46,107,230,.28);
+
+  --accent:        #FF9B70;
+  --accent-deep:   #DE6A3B;
+  --accent-tint:   #FFEFE6;
+  --hl:            #FFDCC6;   /* 헤드라인 마커 하이라이트 */
+
+  /* 하루의 빛 — 타임라인 색 */
+  --t-morning:     #8FBCFF;
+  --t-noon:        #4F87EE;
+  --t-gold:        #FFC46B;
+  --t-dusk:        #FF8A5C;
+
+  /* 광안리 장면 */
+  --sky-top:       #C9DFFC;
+  --sky-glow:      #FFDFC8;
+  --sun:           #FF9B70;
+  --sun-halo:      rgba(255,155,112,.42);
+  --sea-1:         #A9CAF6;
+  --sea-2:         #7FA9EF;
+  --sea-3:         #4C7FDD;
+  --sil:           #26406F;
+  --bridge:        #24365E;
+  --lights:        #FFB37F;
+  --star:          transparent;
+  --glass:         rgba(255,255,255,.88);
+
+  --shadow-card:   0 8px 24px rgba(24,33,54,.05);
+  --shadow-btn:    0 10px 22px rgba(46,107,230,.28);
+}
+
+/* ---------- tokens: dark (system) ---------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --bg:            #0B111E;
+    --card:          #131B2C;
+    --card-soft:     #172136;
+    --ink:           #E9EEF9;
+    --ink-sub:       #A3AEC6;
+    --ink-faint:     #75809A;
+    --line:          #263149;
+    --line-dot:      #34405C;
+
+    --primary:       #7CA5FC;
+    --primary-deep:  #9DBCFF;
+    --primary-tint:  #1B2A4A;
+    --btn-bg:        #3B76F0;
+    --btn-bg-press:  #2E63D6;
+    --btn-text:      #FFFFFF;
+    --ring:          rgba(124,165,252,.4);
+
+    --accent:        #FF9B70;
+    --accent-deep:   #FFAD88;
+    --accent-tint:   #33231C;
+    --hl:            #4A2F20;
+
+    --t-morning:     #8FBCFF;
+    --t-noon:        #5B8DEF;
+    --t-gold:        #FFC46B;
+    --t-dusk:        #FF8A5C;
+
+    --sky-top:       #0B152C;
+    --sky-glow:      #543246;
+    --sun:           #FFA97E;
+    --sun-halo:      rgba(255,169,126,.26);
+    --sea-1:         #223B69;
+    --sea-2:         #1A2E54;
+    --sea-3:         #12203D;
+    --sil:           #070D1C;
+    --bridge:        #0A1322;
+    --lights:        #FFC49A;
+    --star:          rgba(255,255,255,.55);
+    --glass:         rgba(9,14,26,.74);
+
+    --shadow-card:   0 8px 24px rgba(0,0,0,.3);
+    --shadow-btn:    0 10px 22px rgba(20,50,120,.5);
+  }
+}
+
+/* ---------- tokens: viewer toggle (must win over media query) ---------- */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg:            #0B111E;
+  --card:          #131B2C;
+  --card-soft:     #172136;
+  --ink:           #E9EEF9;
+  --ink-sub:       #A3AEC6;
+  --ink-faint:     #75809A;
+  --line:          #263149;
+  --line-dot:      #34405C;
+
+  --primary:       #7CA5FC;
+  --primary-deep:  #9DBCFF;
+  --primary-tint:  #1B2A4A;
+  --btn-bg:        #3B76F0;
+  --btn-bg-press:  #2E63D6;
+  --btn-text:      #FFFFFF;
+  --ring:          rgba(124,165,252,.4);
+
+  --accent:        #FF9B70;
+  --accent-deep:   #FFAD88;
+  --accent-tint:   #33231C;
+  --hl:            #4A2F20;
+
+  --t-morning:     #8FBCFF;
+  --t-noon:        #5B8DEF;
+  --t-gold:        #FFC46B;
+  --t-dusk:        #FF8A5C;
+
+  --sky-top:       #0B152C;
+  --sky-glow:      #543246;
+  --sun:           #FFA97E;
+  --sun-halo:      rgba(255,169,126,.26);
+  --sea-1:         #223B69;
+  --sea-2:         #1A2E54;
+  --sea-3:         #12203D;
+  --sil:           #070D1C;
+  --bridge:        #0A1322;
+  --lights:        #FFC49A;
+  --star:          rgba(255,255,255,.55);
+  --glass:         rgba(9,14,26,.74);
+
+  --shadow-card:   0 8px 24px rgba(0,0,0,.3);
+  --shadow-btn:    0 10px 22px rgba(20,50,120,.5);
+}
+
+/* ---------- base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+.page {
+  min-height: 100vh;
+  overflow-x: clip;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+               Pretendard, "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page ::selection { background: var(--primary-tint); }
+
+.wrap {
+  max-width: 500px;
+  margin-inline: auto;
+  padding-inline: 20px;
+}
+
+.mono {
+  font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-feature-settings: "tnum";
+  letter-spacing: 0.04em;
+}
+
+.page a, .page button { font-family: inherit; }
+
+.page :focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--ring);
+  border-radius: 12px;
+}
+
+/* ---------- header ---------- */
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-block: 18px 8px;
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.wordmark .sun-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translateY(-1px);
+}
+
+.wordmark small {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  letter-spacing: 0.06em;
+}
+
+.top-chip {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-tint);
+  border-radius: 999px;
+  padding: 6px 11px;
+  white-space: nowrap;
+}
+
+/* ---------- hero ---------- */
+.hero { padding-top: 26px; }
+
+.eyebrow {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: 0.01em;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(29px, 8vw, 38px);
+  line-height: 1.3;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.hero h1 .hl {
+  background-image: linear-gradient(transparent 60%, var(--hl) 60%, var(--hl) 92%, transparent 92%);
+}
+
+.lede {
+  margin: 14px 0 0;
+  font-size: 16px;
+  line-height: 1.68;
+  color: var(--ink-sub);
+  max-width: 42ch;
+}
+
+/* 광안리 장면 */
+.scene {
+  position: relative;
+  margin-top: 24px;
+  border-radius: 26px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+  line-height: 0;
+}
+
+.scene svg { width: 100%; height: auto; display: block; }
+
+.scene-chip {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--glass);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 7px 13px 7px 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.scene-chip .pin {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
+
+/* CTA */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 56px;
+  margin-top: 20px;
+  padding-inline: 20px;
+  border: none;
+  border-radius: 18px;
+  background: var(--btn-bg);
+  color: var(--btn-text);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  box-shadow: var(--shadow-btn);
+  transition: background-color .15s ease, transform .1s ease;
+}
+
+.btn:hover { background: var(--btn-bg-press); }
+.btn:active { transform: translateY(1px); }
+
+.btn svg { flex: none; }
+
+.btn-note {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--ink-faint);
+  text-align: center;
+}
+
+/* ---------- sections ---------- */
+.section { margin-top: 72px; }
+
+.section-eyebrow {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.section h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.4;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.section-lede {
+  margin: 10px 0 0;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--ink-sub);
+}
+
+/* ---------- 4단계 플로우 ---------- */
+.steps {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  margin-top: 30px;
+}
+
+.steps::before {
+  content: "";
+  position: absolute;
+  left: 23px;
+  top: 50px;
+  bottom: 30px;
+  border-left: 2px dotted var(--line-dot);
+}
+
+.step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.step-glyph {
+  position: relative;      /* 점선 위로 */
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: var(--primary-tint);
+  color: var(--primary);
+  border: 1px solid var(--line);
+}
+
+.step--warm .step-glyph {
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+}
+
+.step h3 {
+  margin: 2px 0 4px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.step p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.62;
+  color: var(--ink-sub);
+}
+
+/* ---------- 일정 미리보기 ---------- */
+.day-card {
+  margin-top: 26px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 22px 20px 20px;
+  box-shadow: var(--shadow-card);
+}
+
+.day-head { display: flex; flex-direction: column; gap: 6px; }
+
+.day-chip {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-tint);
+  border-radius: 8px;
+  padding: 4px 9px;
+}
+
+.day-title {
+  margin: 2px 0 0;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.day-sub {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-sub);
+}
+
+/* 하루의 빛 타임라인 */
+.tl {
+  list-style: none;
+  margin: 22px 0 0;
+  padding: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.tl::before {
+  content: "";
+  position: absolute;
+  left: 60px;               /* 시간 칼럼 + 도트 칼럼 중앙 */
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 3px;
+  background: linear-gradient(
+    180deg,
+    var(--t-morning) 0%,
+    var(--t-noon) 36%,
+    var(--t-gold) 70%,
+    var(--t-dusk) 100%
+  );
+}
+
+.tl li {
+  display: grid;
+  grid-template-columns: 44px 32px 1fr;
+  align-items: start;
+}
+
+.tl .time {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  padding-top: 2px;
+}
+
+.tl .dot {
+  position: relative;
+  justify-self: center;
+  width: 13px;
+  height: 13px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--dot, var(--primary));
+  border: 3px solid var(--card);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.tl strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.tl p {
+  margin: 3px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-sub);
+}
+
+.day-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.day-tags span {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-sub);
+  background: var(--card-soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 11px;
+}
+
+.replan-hint {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--line);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-sub);
+}
+
+.replan-hint svg { flex: none; margin-top: 2px; color: var(--accent-deep); }
+
+/* ---------- 마무리 ---------- */
+.closing {
+  margin-top: 72px;
+  background: var(--primary-tint);
+  border-radius: 26px;
+  padding: 30px 24px 26px;
+}
+
+.closing h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.38;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.closing p {
+  margin: 12px 0 0;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--ink-sub);
+}
+
+.closing .btn { margin-top: 22px; }
+
+.closing .btn-note { color: var(--ink-sub); opacity: .85; }
+
+/* ---------- footer ---------- */
+.foot {
+  margin-top: 64px;
+  padding-block: 28px 44px;
+  border-top: 1px solid var(--line);
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+/* ---------- motion ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .rise {
+    opacity: 0;
+    transform: translateY(10px);
+    animation: rise .7s cubic-bezier(.2,.7,.3,1) forwards;
+  }
+  .rise-1 { animation-delay: .05s; }
+  .rise-2 { animation-delay: .14s; }
+  .rise-3 { animation-delay: .23s; }
+  .rise-4 { animation-delay: .34s; }
+  .rise-5 { animation-delay: .44s; }
+
+  @keyframes rise {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .sun-halo { animation: breathe 7s ease-in-out infinite; }
+  @keyframes breathe {
+    0%, 100% { opacity: .9; }
+    50%      { opacity: .55; }
+  }
+
+  .gulls { animation: drift 10s ease-in-out infinite alternate; }
+  @keyframes drift {
+    from { transform: translateX(0); }
+    to   { transform: translateX(9px); }
+  }
+}
+
+/* ---------- wide ---------- */
+@media (min-width: 760px) {
+  .wrap { max-width: 560px; }
+  .hero { padding-top: 40px; }
+  .hero h1 { font-size: 42px; }
+  .section { margin-top: 88px; }
+  .closing { padding: 36px 32px 32px; }
+}
+</style>
+
+<div class="page">
+  <div class="wrap">
+
+    <!-- ===== 헤더 ===== -->
+    <header class="top">
+      <span class="wordmark">트리픽<span class="sun-dot" aria-hidden="true"></span><small class="mono">TRIPICK</small></span>
+      <span class="top-chip">로그인 없이 체험</span>
+    </header>
+
+    <!-- ===== 히어로 ===== -->
+    <section class="hero">
+      <p class="eyebrow rise rise-1">취향으로 골라주는 AI 여행 플래너</p>
+      <h1 class="rise rise-2">당신의 사진첩은 이미<br><span class="hl">다음 여행</span>을 알고 있어요</h1>
+      <p class="lede rise rise-3">
+        오래 들여다본 바다, 저장만 해 둔 골목길.
+        좋아하는 사진 몇 장을 고르면 트리픽이 그 취향 그대로
+        국내 여행 일정을 만들어 드려요.
+      </p>
+
+      <!-- 광안리의 저녁 — 인라인 SVG 장면 -->
+      <div class="scene rise rise-4">
+        <svg viewBox="0 0 390 232" role="img" aria-label="해 질 무렵 광안리 바다와 광안대교 일러스트">
+          <defs>
+            <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="var(--sky-top)"/>
+              <stop offset="1" stop-color="var(--sky-glow)"/>
+            </linearGradient>
+            <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+              <stop offset="0" stop-color="var(--sun-halo)"/>
+              <stop offset="1" stop-color="var(--sun-halo)" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+
+          <!-- 하늘 -->
+          <rect x="0" y="0" width="390" height="152" fill="url(#sky)"/>
+
+          <!-- 별 (다크 테마에서만 보임) -->
+          <g fill="var(--star)">
+            <circle cx="46"  cy="30" r="1.3"/>
+            <circle cx="112" cy="18" r="1"/>
+            <circle cx="180" cy="40" r="1.2"/>
+            <circle cx="330" cy="24" r="1.1"/>
+            <circle cx="358" cy="58" r="1"/>
+          </g>
+
+          <!-- 해 -->
+          <circle class="sun-halo" cx="288" cy="104" r="52" fill="url(#halo)"/>
+          <circle cx="288" cy="104" r="22" fill="var(--sun)"/>
+
+          <!-- 갈매기 -->
+          <g class="gulls" fill="none" stroke="var(--sil)" stroke-width="1.6" stroke-linecap="round" opacity=".75">
+            <path d="M58 56 q7 -7 14 0 q7 -7 14 0"/>
+            <path d="M96 42 q5 -5 10 0 q5 -5 10 0"/>
+          </g>
+
+          <!-- 먼 산 (황령산 자락) -->
+          <path d="M0 152 L0 132 Q34 112 72 128 Q104 141 138 148 L150 152 Z" fill="var(--sil)" opacity=".24"/>
+
+          <!-- 바다 -->
+          <rect x="0" y="150" width="390" height="82" fill="var(--sea-1)"/>
+          <path d="M0 174 Q40 167 80 174 T160 174 T240 174 T320 174 T400 174 L400 232 L0 232 Z" fill="var(--sea-2)"/>
+          <path d="M0 200 Q45 193 90 200 T180 200 T270 200 T360 200 T450 200 L450 232 L0 232 Z" fill="var(--sea-3)"/>
+
+          <!-- 노을 반사 -->
+          <g fill="var(--sun)">
+            <rect x="272" y="158" width="34" height="3.4" rx="1.7" opacity=".5"/>
+            <rect x="264" y="169" width="48" height="3.4" rx="1.7" opacity=".38"/>
+            <rect x="276" y="181" width="30" height="3.4" rx="1.7" opacity=".3"/>
+            <rect x="268" y="194" width="42" height="3.4" rx="1.7" opacity=".2"/>
+          </g>
+
+          <!-- 작은 배 -->
+          <g fill="var(--sil)">
+            <path d="M52 182 L86 182 L79 190 L58 190 Z"/>
+            <rect x="66" y="170" width="2" height="12" rx="1"/>
+          </g>
+
+          <!-- 광안대교 -->
+          <g>
+            <!-- 케이블 -->
+            <g fill="none" stroke="var(--bridge)" stroke-width="2">
+              <path d="M-10 120 Q60 142 122 100"/>
+              <path d="M122 100 Q195 152 268 100"/>
+              <path d="M268 100 Q330 142 400 120"/>
+            </g>
+            <!-- 행어 -->
+            <g stroke="var(--bridge)" stroke-width="1" opacity=".6">
+              <line x1="145" y1="117" x2="145" y2="147"/>
+              <line x1="163" y1="124" x2="163" y2="147"/>
+              <line x1="180" y1="127" x2="180" y2="147"/>
+              <line x1="196" y1="128" x2="196" y2="147"/>
+              <line x1="212" y1="127" x2="212" y2="147"/>
+              <line x1="229" y1="124" x2="229" y2="147"/>
+              <line x1="246" y1="117" x2="246" y2="147"/>
+            </g>
+            <!-- 주탑 -->
+            <rect x="119" y="94" width="6" height="56" rx="1.5" fill="var(--bridge)"/>
+            <rect x="265" y="94" width="6" height="56" rx="1.5" fill="var(--bridge)"/>
+            <!-- 상판 -->
+            <rect x="-10" y="146" width="410" height="5" rx="2" fill="var(--bridge)"/>
+            <!-- 교량 조명 -->
+            <g fill="var(--lights)">
+              <circle cx="18"  cy="144" r="1.6"/>
+              <circle cx="52"  cy="144" r="1.6"/>
+              <circle cx="86"  cy="144" r="1.6"/>
+              <circle cx="122" cy="144" r="1.6"/>
+              <circle cx="158" cy="144" r="1.6"/>
+              <circle cx="195" cy="144" r="1.6"/>
+              <circle cx="232" cy="144" r="1.6"/>
+              <circle cx="268" cy="144" r="1.6"/>
+              <circle cx="304" cy="144" r="1.6"/>
+              <circle cx="340" cy="144" r="1.6"/>
+              <circle cx="374" cy="144" r="1.6"/>
+            </g>
+          </g>
+        </svg>
+        <span class="scene-chip"><span class="pin" aria-hidden="true"></span>부산 광안리 · 저녁 7시</span>
+      </div>
+
+      <div class="rise rise-5">
+        <button type="button" class="btn">
+          내 취향으로 여행 만들기
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M4 10h11M10.5 5.5 15 10l-4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <p class="btn-note">로그인 없이 무료 · 3분이면 충분해요</p>
+      </div>
+    </section>
+
+    <!-- ===== 4단계 플로우 ===== -->
+    <section class="section">
+      <p class="section-eyebrow">이렇게 진행돼요</p>
+      <h2>사진 고르기부터 완성까지,<br>네 걸음이면 돼요</h2>
+
+      <div class="steps">
+        <div class="step">
+          <span class="step-glyph" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="15" height="13" rx="2.5"/>
+              <circle cx="7.6" cy="8.4" r="1.4"/>
+              <path d="M5.6 14.6l3-3.5 2.4 2.7 2-2.3 2.6 3.1"/>
+              <circle cx="18" cy="17.5" r="4" fill="currentColor" stroke="none"/>
+              <path d="M16.4 17.5l1.2 1.2 2-2.4" stroke="var(--card)" stroke-width="1.5"/>
+            </svg>
+          </span>
+          <div>
+            <h3>좋아하는 사진 고르기</h3>
+            <p>바다였는지 골목이었는지, 사진이 당신의 취향을 대신 말해줘요.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <span class="step-glyph" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3.5" y="5.5" width="17" height="14" rx="2.5"/>
+              <path d="M3.5 10h17M8 3.5v3.5M16 3.5v3.5"/>
+              <circle cx="12" cy="14.5" r="1.8" fill="currentColor" stroke="none"/>
+            </svg>
+          </span>
+          <div>
+            <h3>여행 조건 알려주기</h3>
+            <p>어디로, 며칠 동안, 어떤 리듬으로 다닐지 — 가벼운 질문 몇 개면 충분해요.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <span class="step-glyph" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4.5" y="3.5" width="15" height="8" rx="2"/>
+              <rect x="4.5" y="13.5" width="15" height="7" rx="2"/>
+              <path d="M8 7.5h6M8 17h4"/>
+            </svg>
+          </span>
+          <div>
+            <h3>완성된 일정 받아보기</h3>
+            <p>동선과 시간까지 계산된 하루하루가 카드로 정리돼요.</p>
+          </div>
+        </div>
+
+        <div class="step step--warm">
+          <span class="step-glyph" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5.5 9.5a7 7 0 0 1 12-2.3"/>
+              <path d="M17.8 3.6v3.8H14"/>
+              <path d="M18.5 14.5a7 7 0 0 1-12 2.3"/>
+              <path d="M6.2 20.4v-3.8H10"/>
+            </svg>
+          </span>
+          <div>
+            <h3>마음 바뀌면 다시 짜기</h3>
+            <p>비가 와도, 줄이 길어도 괜찮아요. 언제든 다시 부탁하면 그 자리에서 고쳐 드려요.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 일정 미리보기 ===== -->
+    <section class="section">
+      <p class="section-eyebrow">미리 보는 결과</p>
+      <h2>예를 들면, 이런 하루가 나와요</h2>
+      <p class="section-lede">바다 사진을 오래 보고, 한식을 즐겨 찍는 취향이라면 —</p>
+
+      <article class="day-card">
+        <header class="day-head">
+          <span class="day-chip mono">DAY 1</span>
+          <h3 class="day-title">부산 감도 코스</h3>
+          <p class="day-sub">광안리 산책부터 저녁 식사까지</p>
+        </header>
+
+        <ol class="tl">
+          <li style="--dot:#8FBCFF">
+            <span class="time mono">10:00</span>
+            <span class="dot" aria-hidden="true"></span>
+            <div>
+              <strong>광안리 해변 산책</strong>
+              <p>아침 바다를 따라 느리게 시작하는 하루</p>
+            </div>
+          </li>
+          <li style="--dot:#4F87EE">
+            <span class="time mono">12:30</span>
+            <span class="dot" aria-hidden="true"></span>
+            <div>
+              <strong>로컬 밥집에서 점심</strong>
+              <p>사진 속 한식 취향을 그대로 담았어요</p>
+            </div>
+          </li>
+          <li style="--dot:#FFC46B">
+            <span class="time mono">15:00</span>
+            <span class="dot" aria-hidden="true"></span>
+            <div>
+              <strong>바다가 보이는 카페</strong>
+              <p>커피 한 잔만큼의 쉼표</p>
+            </div>
+          </li>
+          <li style="--dot:#FF8A5C">
+            <span class="time mono">19:00</span>
+            <span class="dot" aria-hidden="true"></span>
+            <div>
+              <strong>광안대교 야경과 저녁</strong>
+              <p>다리에 불이 켜지면 오늘의 하이라이트</p>
+            </div>
+          </li>
+        </ol>
+
+        <div class="day-tags">
+          <span>대중교통 동선</span>
+          <span>걷기 적당히</span>
+          <span>웨이팅 길면 대안 추천</span>
+        </div>
+
+        <p class="replan-hint">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5.5 9.5a7 7 0 0 1 12-2.3M17.8 3.6v3.8H14M18.5 14.5a7 7 0 0 1-12 2.3M6.2 20.4v-3.8H10"/>
+          </svg>
+          저녁 자리가 아쉬우면 그 한 곳만 골라서 다시 추천받을 수 있어요.
+        </p>
+      </article>
+    </section>
+
+    <!-- ===== 마무리 ===== -->
+    <section class="closing">
+      <h2>다음 여행은,<br>취향에서 시작해 보세요</h2>
+      <p>
+        검색창에 &lsquo;부산 가볼 만한 곳&rsquo;을 열 번 치는 대신
+        좋아하는 사진 몇 장을 골라 주세요. 나머지는 트리픽이 정리할게요.
+      </p>
+      <button type="button" class="btn">
+        내 취향으로 여행 만들기
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M4 10h11M10.5 5.5 15 10l-4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <p class="btn-note">로그인 없이 무료 체험 · 고른 사진은 취향 분석에만 쓰여요</p>
+    </section>
+
+    <!-- ===== 푸터 ===== -->
+    <footer class="foot">
+      트리픽 TriPick — 취향으로 골라주는 국내 여행 AI 플래너
+    </footer>
+
+  </div>
+</div>
