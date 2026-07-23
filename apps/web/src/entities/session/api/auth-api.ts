@@ -9,6 +9,7 @@ import type {
 import { api, apiUrl } from '@/shared/api/client';
 import { deleteFcmToken, flushPendingFcmToken } from '@/entities/user';
 import { clearLastFcmToken, getLastFcmToken } from '@/shared/rn-bridge/fcm-token-storage';
+import { isNativeShell, requestNativeRefreshToken } from '@/shared/rn-bridge/native-refresh-token';
 import { clearSession, getStoredSession, storeSession } from '../model/session-storage';
 
 // ─── 이메일 가입 / 로그인 / 인증 / 재설정 ─────────────────────
@@ -62,7 +63,10 @@ export function redirectToKakao() {
 /** 서버에 refresh token 폐기 요청 + 로컬 세션 제거. 실패해도 로컬은 비운다. */
 export async function logout(): Promise<void> {
   const session = getStoredSession();
-  const refreshToken = session?.tokens.refreshToken;
+  // RN 웹뷰에선 refresh 가 네이티브 SecureStore 에 있어 브리지로 가져와 서버에 폐기 요청한다.
+  const refreshToken = isNativeShell()
+    ? await requestNativeRefreshToken()
+    : session?.tokens.refreshToken;
 
   // 이 기기에 등록된 FCM 토큰을 먼저 해제한다(세션 제거 전이라 access token 유효).
   // 안 지우면 로그아웃한 기기가 이전 사용자 앞으로 오는 푸시를 계속 받는다.
@@ -90,10 +94,16 @@ export async function logout(): Promise<void> {
 export async function refreshTokens(): Promise<AuthTokens | null> {
   const session = getStoredSession();
   if (!session) return null;
+  // RN 웹뷰에선 refresh 가 네이티브 SecureStore 에 있어 브리지로 가져온다.
+  const refreshToken = isNativeShell()
+    ? await requestNativeRefreshToken()
+    : session.tokens.refreshToken;
+  if (!refreshToken) {
+    clearSession();
+    return null;
+  }
   try {
-    const tokens = await api.post<AuthTokens>('/auth/refresh', {
-      refreshToken: session.tokens.refreshToken,
-    });
+    const tokens = await api.post<AuthTokens>('/auth/refresh', { refreshToken });
     storeSession({ ...session, tokens });
     return tokens;
   } catch {

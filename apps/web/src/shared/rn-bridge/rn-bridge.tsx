@@ -7,6 +7,11 @@ import { useEffect } from 'react';
 import { updateFcmToken } from '@/entities/user';
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { getReactNativeWebView } from '@/shared/rn-bridge/rn-webview';
+import {
+  isNativeShell,
+  resolveNativeRefreshToken,
+} from '@/shared/rn-bridge/native-refresh-token';
+import { persistSession } from '@/shared/lib/session-token';
 import { queryKeys } from '@/shared/api/query-keys';
 import { routeForNotification } from '@/shared/web-push/route';
 import {
@@ -21,7 +26,8 @@ type RnBridgeMessage =
   | { type: 'PUSH_NOTIFICATION'; data?: { data?: Record<string, string> } }
   | { type: 'NOTIFICATION_TAP'; data?: Record<string, string> }
   | { type: 'LOCATION_UPDATE'; lat: number; lng: number; accuracy?: number; timestamp?: number }
-  | { type: 'LOCATION_ERROR'; code: number; message: string };
+  | { type: 'LOCATION_ERROR'; code: number; message: string }
+  | { type: 'REFRESH_TOKEN'; token: string | null };
 
 /**
  * RN WebView → Web 브릿지 수신부.
@@ -65,6 +71,12 @@ export function useRnBridge() {
         return;
       }
 
+      if (msg.type === 'REFRESH_TOKEN') {
+        // 네이티브 SecureStore 조회 응답 → 대기 중인 refresh Promise 를 푼다.
+        resolveNativeRefreshToken(msg.token ?? null);
+        return;
+      }
+
       if (msg.type === 'PUSH_NOTIFICATION') {
         queryClient.invalidateQueries({ queryKey: queryKeys.inbox.list });
         return;
@@ -77,6 +89,13 @@ export function useRnBridge() {
         if (route) router.push(route);
         return;
       }
+    }
+
+    // 업그레이드 이관: 이 변경 이전 빌드가 localStorage 에 남긴 refresh 토큰을
+    // 네이티브 SecureStore 로 옮기고 localStorage 에선 지운다(1회성, 이후엔 항상 stripped 저장).
+    if (isNativeShell()) {
+      const session = getStoredSession();
+      if (session?.tokens?.refreshToken) persistSession(session);
     }
 
     window.addEventListener('message', handle);

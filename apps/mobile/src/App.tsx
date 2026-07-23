@@ -15,6 +15,7 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { getApps } from '@react-native-firebase/app';
 import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
 import Geolocation from 'react-native-geolocation-service';
+import * as Keychain from 'react-native-keychain';
 
 type FirebaseMessagingModule = typeof import('@react-native-firebase/messaging');
 
@@ -45,6 +46,9 @@ type BridgeMessage =
   | { type: 'START_LOCATION_TRACKING' }
   | { type: 'STOP_LOCATION_TRACKING' }
   | { type: 'LOCATION_AUTH'; apiBaseUrl: string; accessToken: string }
+  | { type: 'STORE_REFRESH_TOKEN'; token: string }
+  | { type: 'CLEAR_REFRESH_TOKEN' }
+  | { type: 'REQUEST_REFRESH_TOKEN' }
   | { type: 'OPEN_EXTERNAL'; url: string }
   | { type: 'WEB_READY' }
   | { type: 'NAV_STATE'; canGoBack: boolean };
@@ -65,6 +69,11 @@ const LOCATION_EVENT = 'TripickLocationUpdate';
 const LOCATION_ERROR_EVENT = 'TripickLocationError';
 // 서버 위치 보고 최소 간격(ms). 미도착 판정은 분 단위라 과보고를 막는다(웹 스로틀과 동일).
 const LOCATION_REPORT_THROTTLE_MS = 60_000;
+
+// refresh 토큰을 담는 SecureStore(iOS Keychain / Android Keystore) 서비스 키.
+// WebView localStorage 에 두던 장수 자격증명을 여기로 옮겨 검사·탈취 노출면을 줄인다.
+const REFRESH_TOKEN_SERVICE = 'place.tripick.refreshToken';
+const REFRESH_TOKEN_ACCOUNT = 'refreshToken';
 
 const androidOnlyProps =
   Platform.OS === 'android'
@@ -401,6 +410,28 @@ export default function App() {
     if (msg.type === 'LOCATION_AUTH' && msg.apiBaseUrl && msg.accessToken) {
       // 웹뷰가 사라진 뒤에도 서버로 위치를 직접 POST 하도록 인증정보를 보관한다.
       locationConfigRef.current = { apiBaseUrl: msg.apiBaseUrl, accessToken: msg.accessToken };
+      return;
+    }
+    if (msg.type === 'STORE_REFRESH_TOKEN' && typeof msg.token === 'string' && msg.token) {
+      // 로그인·토큰 회전 시 refresh 를 SecureStore 에 저장. 잠금 해제 후엔 백그라운드에서도 조회 가능.
+      Keychain.setGenericPassword(REFRESH_TOKEN_ACCOUNT, msg.token, {
+        service: REFRESH_TOKEN_SERVICE,
+        accessible: Keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK,
+      }).catch((err) => console.warn('[TriPick] refresh 토큰 저장 실패:', err));
+      return;
+    }
+    if (msg.type === 'CLEAR_REFRESH_TOKEN') {
+      // 로그아웃·탈퇴 시 SecureStore 에서 refresh 제거.
+      Keychain.resetGenericPassword({ service: REFRESH_TOKEN_SERVICE }).catch((err) =>
+        console.warn('[TriPick] refresh 토큰 삭제 실패:', err),
+      );
+      return;
+    }
+    if (msg.type === 'REQUEST_REFRESH_TOKEN') {
+      // 웹의 refresh 흐름이 요청 → SecureStore 값을 REFRESH_TOKEN 응답으로 돌려준다(없으면 null).
+      Keychain.getGenericPassword({ service: REFRESH_TOKEN_SERVICE })
+        .then((cred) => postToWeb({ type: 'REFRESH_TOKEN', token: cred ? cred.password : null }))
+        .catch(() => postToWeb({ type: 'REFRESH_TOKEN', token: null }));
       return;
     }
     if (msg.type === 'OPEN_EXTERNAL' && msg.url) {
