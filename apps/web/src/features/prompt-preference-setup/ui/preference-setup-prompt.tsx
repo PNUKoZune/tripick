@@ -24,6 +24,7 @@ export function PreferenceSetupPrompt() {
   const [dismissed, setDismissed] = useState(true);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorage 닫힘 플래그를 마운트 후 반영(SSR-safe)
     setDismissed(sessionStorage.getItem(DISMISS_KEY) === '1');
   }, []);
 

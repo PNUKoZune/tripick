@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
 type Props = {
   /** 확정된 현재 값 (서버 기준). 변경되면 draft 가 동기화된다. */
@@ -41,9 +41,12 @@ export function InlineEditableText({
   const cancelRef = useRef(false);
   const [draft, setDraft] = useState(value);
 
-  useEffect(() => {
+  // 외부 value 가 바뀌면 draft 를 동기화 (effect 대신 렌더 단계 조정).
+  const [prevValue, setPrevValue] = useState(value);
+  if (prevValue !== value) {
+    setPrevValue(value);
     setDraft(value);
-  }, [value]);
+  }
 
   function commit() {
     if (cancelRef.current) {

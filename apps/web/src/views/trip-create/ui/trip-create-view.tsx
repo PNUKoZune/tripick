@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { DayPicker, type DateRange } from 'react-day-picker';
 import { ko } from 'react-day-picker/locale';
 import { format } from 'date-fns';
@@ -122,11 +122,16 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
   }, [startDate, endDate]);
 
   // 일자별 모드에서 기간이 바뀌면 일차 수에 맞춰 지역 리스트 길이를 재조정(기존 선택 보존).
-  useEffect(() => {
-    if (sameRegion || dayCount === 0) return;
-    setDayRegionsList((prev) => Array.from({ length: dayCount }, (_, i) => prev[i] ?? []));
-    setExpandedDay((prev) => (prev >= dayCount ? 0 : prev));
-  }, [dayCount, sameRegion]);
+  // effect 대신 렌더 단계에서 (dayCount, sameRegion) 변화를 감지해 조정한다.
+  const sizingKey = `${dayCount}|${sameRegion}`;
+  const [prevSizingKey, setPrevSizingKey] = useState(sizingKey);
+  if (prevSizingKey !== sizingKey) {
+    setPrevSizingKey(sizingKey);
+    if (!sameRegion && dayCount > 0) {
+      setDayRegionsList((prev) => Array.from({ length: dayCount }, (_, i) => prev[i] ?? []));
+      setExpandedDay((prev) => (prev >= dayCount ? 0 : prev));
+    }
+  }
 
   const addDayRegion = (dayIndex: number, region: string) => {
     const value = region.trim();

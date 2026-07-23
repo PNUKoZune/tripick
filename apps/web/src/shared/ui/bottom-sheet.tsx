@@ -49,6 +49,7 @@ export function BottomSheet({ open, onClose, children, topSlot }: Props) {
     if (open) {
       clearCloseTimer();
       // 첫 페인트는 'opening'(translate-y-full)로 마운트한 뒤, 두 번째 rAF에서 'open'으로 전환해야 transition 이 보장된다.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- rAF 트랜지션 보장을 위한 애니메이션 phase 전환
       setPhase((current) => (current === 'open' ? 'open' : 'opening'));
       openRafs.current.push(
         requestAnimationFrame(() => {

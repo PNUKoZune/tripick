@@ -251,6 +251,7 @@ export default function App() {
       // Firebase 자격 파일(google-services.json / GoogleService-Info.plist) 미배치 시 정상적으로 건너뛴다.
       console.warn('[TriPick] FCM 초기화 생략:', error instanceof Error ? error.message : error);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dispatchNotificationTap 은 postToWeb(webviewRef) 만 쓰는 안정 함수라, 재구독을 막으려 빈 deps 를 의도적으로 유지
   }, []);
 
   // 단발 위치 조회 (이전 호환용 — 웹은 현재 START_LOCATION_TRACKING 을 보낸다)

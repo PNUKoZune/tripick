@@ -58,6 +58,7 @@ export function ReplanModal({
 
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 모달이 열릴 때 입력 필드 초기화
     setNote('');
     setMustPlaces([]);
     setPace('balanced');

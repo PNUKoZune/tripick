@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { fetchInbox } from '@/entities/inbox';
-import { getStoredSession } from '@/entities/session/model/session-storage';
+import { useHasSession } from '@/entities/session';
 import { queryKeys } from '@/shared/api/query-keys';
 import { getRealtimeSocket } from '@/shared/realtime';
 
@@ -17,10 +17,7 @@ import { getRealtimeSocket } from '@/shared/realtime';
  * - 쿼리 키가 inbox-view 와 동일해 캐시를 공유한다(중복 fetch 없음).
  */
 export function useInboxUnread(): number {
-  const [hasSession, setHasSession] = useState(false);
-  useEffect(() => {
-    setHasSession(Boolean(getStoredSession()));
-  }, []);
+  const hasSession = useHasSession();
 
   const queryClient = useQueryClient();
   const { data } = useQuery({

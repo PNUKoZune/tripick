@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { InboxItemDto, InboxItemKind, NotificationCategory } from '@tripick/types';
 
@@ -123,11 +123,10 @@ function InboxContent() {
   }, [items]);
 
   // 현재 목록에 없는 카테고리가 선택돼 있으면(읽음 처리 등으로 사라짐) 전체로 되돌린다.
-  useEffect(() => {
-    if (kindFilter !== 'all' && !availableKinds.includes(kindFilter)) {
-      setKindFilter('all');
-    }
-  }, [availableKinds, kindFilter]);
+  // effect 대신 렌더 단계에서 조정한다 — 조정 후 조건이 거짓이 되어 무한 루프가 없다.
+  if (kindFilter !== 'all' && !availableKinds.includes(kindFilter)) {
+    setKindFilter('all');
+  }
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {

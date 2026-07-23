@@ -53,6 +53,7 @@ export function AlternativeSheet({
   // 시트를 새로 열 때마다 입력 초기화
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 시트가 열릴 때 입력 초기화
       setKeepOriginal(false);
       setRequestText('');
       setPlaceName('');

@@ -30,6 +30,7 @@ interface Params {
 export function useReportLiveLocation({ position, enabled = true }: Params) {
   // 최신 위치를 ref 로 들고 있다가 하트비트가 읽는다 — 위치가 갱신되지 않아도(정지) 재보고하려고.
   const positionRef = useRef(position);
+  // eslint-disable-next-line react-hooks/refs -- 최신 위치를 ref 로 미러 — 하트비트가 렌더와 무관하게 읽는다
   positionRef.current = position;
 
   // 렌더마다 최신 토큰을 읽는다(SSR-safe). 값이 바뀌면 아래 effect 가 다시 브리지한다.

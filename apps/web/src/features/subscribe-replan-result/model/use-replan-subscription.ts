@@ -30,6 +30,7 @@ export function useReplanSubscription(tripId: string) {
 
     let active = true;
     const socket = getRealtimeSocket();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 소켓 재구독 시작 시 거부 상태 리셋
     setAccessDenied(false);
 
     // join 시 서버가 멤버십을 확인해 joined / join-denied 를 ack 로 돌려준다
