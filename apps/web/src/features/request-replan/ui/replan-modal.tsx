@@ -9,7 +9,7 @@ import type {
   ReplanPreferencesDto,
 } from '@tripick/types';
 
-import { BottomSheet, Button, PlaceSearchPicker, SegmentToggle, Switch } from '@/shared/ui';
+import { BottomSheet, PlaceSearchPicker, SegmentToggle, Switch } from '@/shared/ui';
 
 import { useRequestReplan, type ReplanFormPayload } from '../model/use-request-replan';
 
@@ -177,21 +177,19 @@ export function ReplanModal({
         ) : null}
 
         <div className="mt-5 flex gap-2">
-          <Button
-            variant="secondary"
-            size="lg"
-            className="flex-1"
+          <button
+            type="button"
             onClick={onClose}
             disabled={mutation.isPending}
+            className="inline-flex h-14 flex-1 items-center justify-center rounded-[18px] border border-[color:var(--line)] bg-[color:var(--card)] text-[16px] font-semibold text-[color:var(--ink)] transition-colors hover:bg-[color:var(--card-soft)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             취소
-          </Button>
-          <Button
-            variant="primary"
-            size="lg"
-            className="flex-1"
+          </button>
+          <button
+            type="button"
             disabled={mutation.isPending}
             onClick={handleSubmit}
+            className="inline-flex h-14 flex-1 items-center justify-center rounded-[18px] bg-[color:var(--btn-bg)] text-[16px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none"
           >
             {/* 전송 중 로딩 상태 문구 — 기존 mutation.isPending "요청 중…" 유지(REQ-WVR-052) */}
             {mutation.isPending ? (
@@ -204,7 +202,7 @@ export function ReplanModal({
             ) : (
               '재계획 요청 보내기'
             )}
-          </Button>
+          </button>
         </div>
       </div>
     </BottomSheet>

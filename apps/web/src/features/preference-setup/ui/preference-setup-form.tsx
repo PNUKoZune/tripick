@@ -571,15 +571,47 @@ export function PreferenceSetupForm() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex size-20 flex-col items-center justify-center gap-1 rounded-[16px] border border-dashed border-[color:var(--line-dot)] bg-[color:var(--primary-tint)] text-[color:var(--primary-deep)]"
+                  className="flex size-20 flex-col items-center justify-center gap-1.5 rounded-[16px] border border-dashed border-[color:var(--line-dot)] bg-[color:var(--card)] text-[color:var(--primary-deep)] transition-colors hover:border-[color:var(--primary)] hover:bg-[color:var(--primary-tint)]"
                 >
-                  <FiImage className="size-5" aria-hidden />
+                  <span className="flex size-8 items-center justify-center rounded-full bg-[color:var(--primary-tint)]">
+                    <FiImage className="size-4" aria-hidden />
+                  </span>
                   <span className="text-[11px] font-semibold">사진 추가</span>
                 </button>
               ) : null}
+              {/* 빈 상태 무드 스와치 — 어떤 사진을 올리면 좋을지 톤으로 암시(장식용, 목업의
+                  sea/alley 스와치 언어). 사진이 하나라도 생기면 사라진다. */}
+              {previews.length === 0 && savedPhotoUrls.length === 0 ? (
+                <>
+                  <div
+                    aria-hidden="true"
+                    className="relative flex size-20 items-end overflow-hidden rounded-[16px] opacity-80"
+                    style={{
+                      background:
+                        'linear-gradient(165deg, var(--sky-top) 0%, var(--sea-1) 45%, var(--sea-3) 100%)',
+                    }}
+                  >
+                    <span className="w-full px-2 pb-1.5 text-[10px] font-semibold text-white/90">
+                      바다 감성
+                    </span>
+                  </div>
+                  <div
+                    aria-hidden="true"
+                    className="relative flex size-20 items-end overflow-hidden rounded-[16px] opacity-80"
+                    style={{
+                      background:
+                        'linear-gradient(165deg, var(--hl) 0%, var(--accent) 55%, var(--accent-deep) 100%)',
+                    }}
+                  >
+                    <span className="w-full px-2 pb-1.5 text-[10px] font-semibold text-white/90">
+                      골목 감성
+                    </span>
+                  </div>
+                </>
+              ) : null}
             </div>
             <p className="mt-2 text-[12px] font-medium text-[color:var(--ink-faint)]">
-              사진을 여기로 끌어다 놓아도 돼요.
+              사진을 여기로 끌어다 놓아도 돼요. 바다든 골목이든, 눈이 오래 머문 사진이면 충분해요.
             </p>
           </div>
 

@@ -313,8 +313,8 @@ export function PlannerMap({
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 px-3 pt-3">
           <div className="flex items-start gap-2">
           <div className="pointer-events-auto relative flex-1">
-            <div className="flex h-9 items-center rounded-[16px] border border-[#E5E8EB] bg-white px-3 shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
-              <FiSearch aria-hidden className="mr-2 size-4 shrink-0 text-[#8B95A1]" />
+            <div className="flex h-9 items-center rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
+              <FiSearch aria-hidden className="mr-2 size-4 shrink-0 text-[color:var(--ink-faint)]" />
               <input
                 type="text"
                 value={searchQuery}
@@ -326,21 +326,21 @@ export function PlannerMap({
                 placeholder={sdkReady ? placeholder : '지도를 불러오는 중…'}
                 disabled={!sdkReady}
                 autoComplete="off"
-                className="h-full min-w-0 flex-1 bg-transparent text-[13px] text-[#191F28] outline-none placeholder:text-[#8B95A1] disabled:cursor-not-allowed"
+                className="h-full min-w-0 flex-1 bg-transparent text-[13px] text-[color:var(--ink)] outline-none placeholder:text-[color:var(--ink-faint)] disabled:cursor-not-allowed"
               />
               {searchQuery ? (
                 <button
                   type="button"
                   onClick={clearSearch}
                   aria-label="검색 지우기"
-                  className="ml-1 flex shrink-0 items-center text-[#B0B8C1] hover:text-[#6B7684]"
+                  className="ml-1 flex shrink-0 items-center text-[color:var(--ink-faint)] hover:text-[color:var(--ink-sub)]"
                 >
                   <FiX className="size-4" />
                 </button>
               ) : null}
             </div>
             {searchOpen && searchResults.length > 0 ? (
-              <div className="absolute left-0 right-0 top-[calc(100%+4px)] max-h-64 overflow-y-auto rounded-[14px] border border-[#E5E8EB] bg-white py-1 shadow-[0_12px_28px_rgba(0,0,0,0.12)]">
+              <div className="absolute left-0 right-0 top-[calc(100%+4px)] max-h-64 overflow-y-auto rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card)] py-1 shadow-[0_12px_28px_rgba(0,0,0,0.12)]">
                 {searchResults.map((place, index) => (
                   <button
                     key={`${place.place_name}-${index}`}
@@ -349,12 +349,12 @@ export function PlannerMap({
                       event.preventDefault();
                       selectSearchPlace(place);
                     }}
-                    className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-[#F7F8FA]"
+                    className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-[color:var(--card-soft)]"
                   >
-                    <span className="text-[13px] font-semibold text-[#191F28]">
+                    <span className="text-[13px] font-semibold text-[color:var(--ink)]">
                       {place.place_name}
                     </span>
-                    <span className="text-[11px] text-[#8B95A1]">
+                    <span className="text-[11px] text-[color:var(--ink-faint)]">
                       {place.road_address_name || place.address_name}
                     </span>
                   </button>
@@ -368,22 +368,22 @@ export function PlannerMap({
             disabled={!directionsTarget}
             aria-label="길찾기"
             title={directionsTarget ? `${directionsTarget.name} 길찾기` : '길찾기 대상이 없어요'}
-            className="pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-[16px] bg-[#3182F6] px-3 text-[13px] font-semibold text-white shadow-[0_4px_12px_rgba(49,130,246,0.24)] disabled:cursor-not-allowed disabled:opacity-40"
+            className="pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-[16px] bg-[color:var(--btn-bg)] px-3 text-[13px] font-semibold text-[color:var(--btn-text)] shadow-[0_4px_12px_rgba(49,130,246,0.24)] disabled:cursor-not-allowed disabled:opacity-40"
           >
             <FiNavigation className="size-4" />
             길찾기
           </button>
           </div>
           {onPickSearchPlace && selectedPlace && !searchOpen ? (
-            <div className="pointer-events-auto mt-2 flex items-center justify-between gap-2 rounded-[14px] border border-[#C7DCFF] bg-[#EAF2FF] px-3 py-2 shadow-[0_4px_12px_rgba(49,130,246,0.14)]">
-              <span className="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-[#1B64DA]">
+            <div className="pointer-events-auto mt-2 flex items-center justify-between gap-2 rounded-[14px] border border-[color:var(--line)] bg-[color:var(--primary-tint)] px-3 py-2 shadow-[0_4px_12px_rgba(49,130,246,0.14)]">
+              <span className="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-[color:var(--primary-deep)]">
                 <FiMapPin aria-hidden className="size-3.5 shrink-0" />
                 <span className="truncate">{selectedPlace.name}</span>
               </span>
               <button
                 type="button"
                 onClick={() => onPickSearchPlace(selectedPlace)}
-                className="shrink-0 rounded-[10px] bg-[#3182F6] px-2.5 py-1.5 text-[12px] font-bold text-white hover:bg-[#1B64DA]"
+                className="shrink-0 rounded-[10px] bg-[color:var(--btn-bg)] px-2.5 py-1.5 text-[12px] font-bold text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)]"
               >
                 {pickPlaceLabel}
               </button>
