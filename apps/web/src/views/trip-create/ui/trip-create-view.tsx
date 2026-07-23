@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DayPicker, type DateRange } from 'react-day-picker';
 import { ko } from 'react-day-picker/locale';
 import { format } from 'date-fns';
+import { LuChevronDown, LuPlus, LuX } from 'react-icons/lu';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   PlannerMemberDto,
@@ -66,6 +67,11 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
   const seedDestination = initialDestination?.trim() ?? '';
   const [title, setTitle] = useState(seedDestination ? `${seedDestination} 여행` : '');
   const [destination, setDestination] = useState(seedDestination);
+  // 모든 날 같은 지역(기본) vs 일자별 지역. 일자별이면 dayRegionsList[i] = (i+1)일차 지역들.
+  const [sameRegion, setSameRegion] = useState(true);
+  const [dayRegionsList, setDayRegionsList] = useState<string[][]>([]);
+  // 아코디언: 한 번에 한 일차만 펼쳐 편집. -1 이면 모두 접힘.
+  const [expandedDay, setExpandedDay] = useState(0);
   const [range, setRange] = useState<DateRange | undefined>(undefined);
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('18:00');
@@ -109,15 +115,51 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
   const timeError =
     sameDay && startTime >= endTime ? '도착 시각은 출발 시각보다 늦어야 해요.' : null;
 
+  const dayCount = useMemo(() => {
+    if (!startDate || !endDate) return 0;
+    const diff = Math.round((Date.parse(endDate) - Date.parse(startDate)) / 86_400_000);
+    return Number.isFinite(diff) && diff >= 0 ? diff + 1 : 0;
+  }, [startDate, endDate]);
+
+  // 일자별 모드에서 기간이 바뀌면 일차 수에 맞춰 지역 리스트 길이를 재조정(기존 선택 보존).
+  useEffect(() => {
+    if (sameRegion || dayCount === 0) return;
+    setDayRegionsList((prev) => Array.from({ length: dayCount }, (_, i) => prev[i] ?? []));
+    setExpandedDay((prev) => (prev >= dayCount ? 0 : prev));
+  }, [dayCount, sameRegion]);
+
+  const addDayRegion = (dayIndex: number, region: string) => {
+    const value = region.trim();
+    if (!value) return;
+    setDayRegionsList((prev) => {
+      const next = prev.map((regions) => [...regions]);
+      while (next.length <= dayIndex) next.push([]);
+      if (!next[dayIndex]!.includes(value)) next[dayIndex]!.push(value);
+      return next;
+    });
+  };
+
+  const removeDayRegion = (dayIndex: number, regionIndex: number) => {
+    setDayRegionsList((prev) =>
+      prev.map((regions, i) => (i === dayIndex ? regions.filter((_, ri) => ri !== regionIndex) : regions)),
+    );
+  };
+
+  const everyDayHasRegion =
+    dayCount > 0 &&
+    dayRegionsList.length >= dayCount &&
+    dayRegionsList.slice(0, dayCount).every((regions) => regions.length > 0);
+
   const canSubmit = useMemo(() => {
+    const hasRegion = sameRegion ? destination.trim().length > 0 : everyDayHasRegion;
     return (
       title.trim().length > 0 &&
-      destination.trim().length > 0 &&
+      hasRegion &&
       startDate.length > 0 &&
       endDate.length > 0 &&
       !timeError
     );
-  }, [title, destination, startDate, endDate, timeError]);
+  }, [title, sameRegion, destination, everyDayHasRegion, startDate, endDate, timeError]);
 
   function addMember(member: DraftMember) {
     setMembers((prev) => (prev.some((m) => m.id === member.id) ? prev : [...prev, member]));
@@ -130,9 +172,15 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
   function handleSubmit() {
     if (!canSubmit || showLoading) return;
     const trimmedNotes = notes.trim();
+    const dayRegions = sameRegion ? undefined : dayRegionsList.slice(0, dayCount);
+    // 대표 지역: 일자별이면 고유 지역을 합쳐 라벨로(80자 제한), 단일이면 입력값 그대로.
+    const representative = sameRegion
+      ? destination.trim()
+      : [...new Set((dayRegions ?? []).flat())].join(' · ').slice(0, 80) || destination.trim();
     mutate({
       title: title.trim(),
-      destination: destination.trim(),
+      destination: representative,
+      ...(dayRegions ? { dayRegions } : {}),
       startDate,
       endDate,
       startTime,
@@ -145,6 +193,13 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
       ...(trimmedNotes ? { notes: trimmedNotes } : {}),
     });
   }
+
+  const dayDateShort = (index: number) => {
+    if (!range?.from) return '';
+    const date = new Date(range.from);
+    date.setDate(date.getDate() + index);
+    return format(date, 'M월 d일 (E)', { locale: ko });
+  };
 
   const rangeLabel = (() => {
     if (!range?.from) return '여행 기간을 선택해주세요';
@@ -172,13 +227,57 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
           />
         </Field>
 
-        <Field label="여행 지역" hint="자동완성·지도에서 선택하거나 직접 입력할 수 있어요">
-          <div className="flex items-start gap-2">
-            <div className="flex-1">
-              <DestinationSearchInput value={destination} onChange={setDestination} />
-            </div>
-            <DestinationMapPicker onSelect={setDestination} />
+        <Field
+          label="여행 지역"
+          hint={sameRegion ? '자동완성·지도에서 선택하거나 직접 입력할 수 있어요' : '일차마다 지역을 지정해요'}
+        >
+          <div className="mb-3 flex items-center justify-between rounded-[12px] bg-[color:var(--card-soft)] px-3.5 py-2.5">
+            <span className="text-[13px] font-semibold text-[color:var(--ink)]">모든 날 같은 지역</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={sameRegion}
+              aria-label="모든 날 같은 지역"
+              onClick={() => setSameRegion((prev) => !prev)}
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                sameRegion ? 'bg-[color:var(--primary)]' : 'bg-[color:var(--line-dot)]'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 size-5 rounded-full bg-[color:var(--card)] shadow transition-all ${
+                  sameRegion ? 'left-[22px]' : 'left-0.5'
+                }`}
+              />
+            </button>
           </div>
+
+          {sameRegion ? (
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <DestinationSearchInput value={destination} onChange={setDestination} />
+              </div>
+              <DestinationMapPicker onSelect={setDestination} />
+            </div>
+          ) : dayCount === 0 ? (
+            <p className="rounded-[12px] border border-dashed border-[color:var(--line)] px-4 py-5 text-center text-[13px] text-[color:var(--ink-faint)]">
+              여행 기간을 먼저 선택하면 일차별로 지역을 정할 수 있어요.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {Array.from({ length: dayCount }, (_, index) => (
+                <DayRegionAccordionItem
+                  key={index}
+                  dayNo={index + 1}
+                  dateLabel={dayDateShort(index)}
+                  regions={dayRegionsList[index] ?? []}
+                  expanded={expandedDay === index}
+                  onToggle={() => setExpandedDay((prev) => (prev === index ? -1 : index))}
+                  onAdd={(region) => addDayRegion(index, region)}
+                  onRemove={(regionIndex) => removeDayRegion(index, regionIndex)}
+                />
+              ))}
+            </div>
+          )}
         </Field>
 
         <Field label="여행 기간" hint="달력에서 시작일과 종료일을 차례로 눌러주세요">
@@ -400,5 +499,106 @@ function Group({
       </p>
       <div className="space-y-4">{children}</div>
     </section>
+  );
+}
+
+function DayRegionAccordionItem({
+  dayNo,
+  dateLabel,
+  regions,
+  expanded,
+  onToggle,
+  onAdd,
+  onRemove,
+}: {
+  dayNo: number;
+  dateLabel: string;
+  regions: string[];
+  expanded: boolean;
+  onToggle: () => void;
+  onAdd: (region: string) => void;
+  onRemove: (regionIndex: number) => void;
+}) {
+  const [draft, setDraft] = useState('');
+
+  const commit = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    onAdd(trimmed);
+    setDraft('');
+  };
+
+  return (
+    <div className="overflow-hidden rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card)]">
+      {/* 접힘 상태에서도 일차·선택 지역을 한 줄로 요약해 세로 길이를 최소화 */}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-2 px-3.5 py-3 text-left"
+      >
+        <span className="shrink-0 text-[13px] font-bold text-[color:var(--ink)]">{dayNo}일차</span>
+        {dateLabel ? (
+          <span className="shrink-0 text-[12px] text-[color:var(--ink-faint)]">{dateLabel}</span>
+        ) : null}
+        <span className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-1.5">
+          {regions.length > 0 ? (
+            <span className="truncate text-[13px] font-semibold text-[color:var(--primary)]">
+              {regions.join(' · ')}
+            </span>
+          ) : (
+            <span className="shrink-0 text-[13px] text-[color:var(--ink-faint)]">지역 선택</span>
+          )}
+          <LuChevronDown
+            className={`size-4 shrink-0 text-[color:var(--ink-faint)] transition-transform ${expanded ? 'rotate-180' : ''}`}
+          />
+        </span>
+      </button>
+
+      {expanded ? (
+        <div className="border-t border-[color:var(--line)] px-3.5 pb-3.5 pt-3">
+          {regions.length > 0 ? (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {regions.map((region, index) => (
+                <span
+                  key={`${region}-${index}`}
+                  className="inline-flex h-8 items-center gap-1 rounded-full bg-[color:var(--primary-tint)] pl-3 pr-1 text-[13px] font-semibold text-[color:var(--primary)]"
+                >
+                  {region}
+                  <button
+                    type="button"
+                    aria-label={`${region} 삭제`}
+                    onClick={() => onRemove(index)}
+                    className="flex size-5 items-center justify-center rounded-full text-[color:var(--primary-deep)] hover:bg-[color:var(--primary-tint)]"
+                  >
+                    <LuX className="size-3.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <DestinationSearchInput
+                value={draft}
+                onChange={setDraft}
+                onSelectSuggestion={(suggestion) => commit(suggestion.name)}
+              />
+            </div>
+            <button
+              type="button"
+              aria-label="지역 추가"
+              onClick={() => commit(draft)}
+              disabled={!draft.trim()}
+              className="flex h-12 items-center gap-1 rounded-[14px] bg-[color:var(--primary)] px-3.5 text-[14px] font-semibold text-[color:var(--btn-text)] transition disabled:bg-[color:var(--line-dot)]"
+            >
+              <LuPlus className="size-4" />
+              추가
+            </button>
+            <DestinationMapPicker onSelect={(name) => commit(name)} />
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }

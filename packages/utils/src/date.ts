@@ -64,6 +64,22 @@ export function addDaysToIsoDate(iso: string, days: number): string {
 }
 
 /**
+ * 여행 일수(당일치기=1). "YYYY-MM-DD" 두 날짜의 포함 일수를 UTC 정수 연산으로 계산하므로
+ * 서버 TZ·서머타임에 영향받지 않는다. 날짜 파싱 실패나 endIso < startIso 면 1 로 클램프.
+ * @example countTripDays("2026-07-10", "2026-07-11") → 2
+ */
+export function countTripDays(startIso: string, endIso: string): number {
+  const toUtc = (iso: string) => {
+    const [y = 0, m = 1, d = 1] = iso.split('-').map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  const start = toUtc(startIso);
+  const end = toUtc(endIso);
+  if (Number.isNaN(start) || Number.isNaN(end)) return 1;
+  return Math.max(1, Math.floor((end - start) / 86_400_000) + 1);
+}
+
+/**
  * "HH:mm" 시간 문자열 → 분 단위 정수
  * @example timeToMinutes("08:30") → 510
  */

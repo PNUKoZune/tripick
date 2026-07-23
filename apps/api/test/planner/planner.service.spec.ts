@@ -106,6 +106,10 @@ function createHarness(pace?: 'relaxed' | 'balanced' | 'packed') {
     findOneBy: jest.fn().mockResolvedValue({ ...TRIP }),
     save: jest.fn().mockResolvedValue({ ...TRIP, status: 'confirmed' }),
   };
+  // trip_days 없음 → 모든 날 = trip.destination(단일 지역) 경로를 탄다
+  const tripDaysRepo = {
+    find: jest.fn().mockResolvedValue([]),
+  };
   const itineraryService = {
     findByTrip: jest.fn().mockResolvedValue([]),
     replaceTripItems: jest.fn(async (_tripId: string, items: ItineraryItemDto[]) =>
@@ -163,6 +167,7 @@ function createHarness(pace?: 'relaxed' | 'balanced' | 'packed') {
   };
   const service = new PlannerService(
     tripsRepo as any,
+    tripDaysRepo as any,
     itineraryService as any,
     preferencesService as any,
     plannerAgent as any,
@@ -181,6 +186,81 @@ function createHarness(pace?: 'relaxed' | 'balanced' | 'packed') {
     plannerAgent,
   };
 }
+
+describe('PlannerService 일자별 지역', () => {
+  it('일자별 지역이면 각 일차를 그 날 지역 후보로만 채우고 AI 플래너를 쓰지 않는다', async () => {
+    const busan = place('busan-1', '광안리 카페', 'cafe');
+    const gyeongju = place('gyeongju-1', '불국사', 'attraction');
+    const trip = { ...TRIP, startDate: '2026-07-10', endDate: '2026-07-11' }; // 2일
+
+    const tripsRepo = {
+      findOneBy: jest.fn().mockResolvedValue(trip),
+      save: jest.fn().mockResolvedValue({ ...trip, status: 'confirmed' }),
+    };
+    const tripDaysRepo = {
+      find: jest.fn().mockResolvedValue([
+        { tripId: trip.id, day: 1, region: '부산', sortOrder: 0 },
+        { tripId: trip.id, day: 2, region: '경주', sortOrder: 0 },
+      ]),
+    };
+    const itineraryService = {
+      findByTrip: jest.fn().mockResolvedValue([]),
+      replaceTripItems: jest.fn(async (_tripId: string, items: ItineraryItemDto[]) =>
+        items.map((item, index) => ({
+          ...item,
+          id: `saved-${index + 1}`,
+          scheduledAt: new Date(item.scheduledAt),
+        })),
+      ),
+    };
+    const preferencesService = {
+      findByUser: jest.fn().mockResolvedValue(null),
+      getPreferenceVector: jest.fn().mockResolvedValue(null),
+    };
+    // 일자별 모드에서는 호출되면 안 된다.
+    const plannerAgent = { plan: jest.fn() };
+    const weatherHelper = {
+      getExtendedForecast: jest.fn().mockResolvedValue(new Map()),
+      buildWeatherHint: jest.fn().mockReturnValue('날씨 양호'),
+    };
+    const routeHelper = { getDrivingEta: jest.fn(), getTransitEta: jest.fn() };
+    const placeRetrieval = {
+      retrieve: jest.fn(async (ctx: { destination: string }) => ({
+        places: ctx.destination === '부산' ? [busan] : [gyeongju],
+        trace: { sources: ['fixture'], averageConfidence: 0.9 },
+      })),
+    };
+    const scheduleConstraint = { apply: jest.fn((items: ItineraryItemDto[]) => items) };
+    const constraintEngine = {
+      validate: jest.fn(async (items: ItineraryItemDto[]) => ({ valid: true, issues: [], items })),
+    };
+
+    const service = new PlannerService(
+      tripsRepo as any,
+      tripDaysRepo as any,
+      itineraryService as any,
+      preferencesService as any,
+      plannerAgent as any,
+      weatherHelper as any,
+      routeHelper as any,
+      placeRetrieval as any,
+      scheduleConstraint as any,
+      constraintEngine as any,
+    );
+
+    await service.generateItinerary(trip.id);
+
+    // 지역-스코프 결정적 배치를 쓰므로 AI 플래너는 호출되지 않는다.
+    expect(plannerAgent.plan).not.toHaveBeenCalled();
+    // 지역별로 각각 조회한다.
+    expect(placeRetrieval.retrieve).toHaveBeenCalledWith(expect.objectContaining({ destination: '부산' }));
+    expect(placeRetrieval.retrieve).toHaveBeenCalledWith(expect.objectContaining({ destination: '경주' }));
+
+    const stored = itineraryService.replaceTripItems.mock.calls[0]?.[1] ?? [];
+    expect(stored.filter((i) => i.day === 1).map((i) => i.name)).toEqual(['광안리 카페']);
+    expect(stored.filter((i) => i.day === 2).map((i) => i.name)).toEqual(['불국사']);
+  });
+});
 
 function place(id: string, name: string, category: string): CandidatePlace {
   return {

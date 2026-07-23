@@ -9,6 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TripEntity } from './trip.entity';
+import { TripDayEntity } from './trip-day.entity';
 import { PlannerService } from '../planner/planner.service';
 import { TripMemberEntity } from '../trip-members/trip-member.entity';
 import type { CreateTripDto, UpdateTripDto } from '@tripick/types';
@@ -20,6 +21,8 @@ export class TripsService {
   constructor(
     @InjectRepository(TripEntity)
     private readonly repo: Repository<TripEntity>,
+    @InjectRepository(TripDayEntity)
+    private readonly tripDaysRepo: Repository<TripDayEntity>,
     @InjectRepository(TripMemberEntity)
     private readonly membersRepo: Repository<TripMemberEntity>,
     private readonly plannerService: PlannerService,
@@ -77,6 +80,22 @@ export class TripsService {
       sleepTime: dto.sleepTime ?? '22:00',
     });
     const saved = await this.repo.save(trip);
+    // 일자별 지역은 반드시 일정 생성 전에 저장한다 — planner 가 generateItinerary 안에서
+    // trip_days 를 읽어 각 일차를 해당 지역 후보로 채우기 때문. 롤백 시 trip 삭제의 CASCADE 로 함께 제거된다.
+    if (dto.dayRegions?.length) {
+      await this.tripDaysRepo.save(
+        dto.dayRegions.flatMap((regions, dayIndex) =>
+          regions.map((region, sortOrder) =>
+            this.tripDaysRepo.create({
+              tripId: saved.id,
+              day: dayIndex + 1,
+              region,
+              sortOrder,
+            }),
+          ),
+        ),
+      );
+    }
     try {
       await this.plannerService.generateItinerary(saved.id);
     } catch (error) {
