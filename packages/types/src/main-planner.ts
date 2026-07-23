@@ -335,7 +335,13 @@ export interface DestinationSuggestionDto {
 
 export interface CreateTripRequestDto {
   title: string;
+  /** 대표 지역(지도 중심·표지 등 표시용). 일자별 지역을 쓰더라도 요약 라벨로 항상 채운다 */
   destination: string;
+  /**
+   * 일자별 지역 목록. 인덱스 i = (i+1)일차, 각 원소는 그 날의 지역 배열(하루 여러 지역 허용).
+   * 생략하면 모든 날을 `destination` 하나로 채운다('모든 날 같은 지역'). 있으면 길이는 여행 일수와 같아야 한다.
+   */
+  dayRegions?: string[][];
   /** ISO date (YYYY-MM-DD) */
   startDate: string;
   /** "HH:mm" 출발 시각 */
