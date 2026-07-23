@@ -7,10 +7,7 @@ import { useEffect } from 'react';
 import { updateFcmToken } from '@/entities/user';
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { getReactNativeWebView } from '@/shared/rn-bridge/rn-webview';
-import {
-  isNativeShell,
-  resolveNativeRefreshToken,
-} from '@/shared/rn-bridge/native-refresh-token';
+import { isNativeShell } from '@/shared/rn-bridge/native-refresh-token';
 import { persistSession } from '@/shared/lib/session-token';
 import { queryKeys } from '@/shared/api/query-keys';
 import { routeForNotification } from '@/shared/web-push/route';
@@ -26,8 +23,7 @@ type RnBridgeMessage =
   | { type: 'PUSH_NOTIFICATION'; data?: { data?: Record<string, string> } }
   | { type: 'NOTIFICATION_TAP'; data?: Record<string, string> }
   | { type: 'LOCATION_UPDATE'; lat: number; lng: number; accuracy?: number; timestamp?: number }
-  | { type: 'LOCATION_ERROR'; code: number; message: string }
-  | { type: 'REFRESH_TOKEN'; token: string | null };
+  | { type: 'LOCATION_ERROR'; code: number; message: string };
 
 /**
  * RN WebView → Web 브릿지 수신부.
@@ -68,12 +64,6 @@ export function useRnBridge() {
             clearPendingFcmToken();
           })
           .catch((err) => console.warn('[rn-bridge] fcm-token update failed:', err));
-        return;
-      }
-
-      if (msg.type === 'REFRESH_TOKEN') {
-        // 네이티브 SecureStore 조회 응답 → 대기 중인 refresh Promise 를 푼다.
-        resolveNativeRefreshToken(msg.token ?? null);
         return;
       }
 

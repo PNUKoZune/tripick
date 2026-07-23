@@ -48,7 +48,7 @@ type BridgeMessage =
   | { type: 'LOCATION_AUTH'; apiBaseUrl: string; accessToken: string }
   | { type: 'STORE_REFRESH_TOKEN'; token: string }
   | { type: 'CLEAR_REFRESH_TOKEN' }
-  | { type: 'REQUEST_REFRESH_TOKEN' }
+  | { type: 'REQUEST_REFRESH_TOKEN'; requestId: string }
   | { type: 'OPEN_EXTERNAL'; url: string }
   | { type: 'WEB_READY' }
   | { type: 'NAV_STATE'; canGoBack: boolean };
@@ -427,11 +427,15 @@ export default function App() {
       );
       return;
     }
-    if (msg.type === 'REQUEST_REFRESH_TOKEN') {
+    if (msg.type === 'REQUEST_REFRESH_TOKEN' && typeof msg.requestId === 'string') {
       // 웹의 refresh 흐름이 요청 → SecureStore 값을 REFRESH_TOKEN 응답으로 돌려준다(없으면 null).
+      // requestId 를 그대로 실어 웹이 어느 요청의 응답인지 상관(correlate)하게 한다.
+      const { requestId } = msg;
       Keychain.getGenericPassword({ service: REFRESH_TOKEN_SERVICE })
-        .then((cred) => postToWeb({ type: 'REFRESH_TOKEN', token: cred ? cred.password : null }))
-        .catch(() => postToWeb({ type: 'REFRESH_TOKEN', token: null }));
+        .then((cred) =>
+          postToWeb({ type: 'REFRESH_TOKEN', requestId, token: cred ? cred.password : null }),
+        )
+        .catch(() => postToWeb({ type: 'REFRESH_TOKEN', requestId, token: null }));
       return;
     }
     if (msg.type === 'OPEN_EXTERNAL' && msg.url) {

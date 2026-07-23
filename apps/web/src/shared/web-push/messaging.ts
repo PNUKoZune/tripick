@@ -7,7 +7,7 @@ import {
   type MessagePayload,
 } from 'firebase/messaging';
 
-import { getReactNativeWebView } from '@/shared/rn-bridge/rn-webview';
+import { isNativeShell } from '@/shared/rn-bridge/native-refresh-token';
 import { firebaseConfig, isWebPushConfigured, serviceWorkerUrl, vapidKey } from './config';
 
 /**
@@ -17,7 +17,7 @@ import { firebaseConfig, isWebPushConfigured, serviceWorkerUrl, vapidKey } from 
  */
 async function canUseWebPush(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
-  if (getReactNativeWebView()) return false;
+  if (isNativeShell()) return false;
   if (!isWebPushConfigured()) return false;
   if (!('serviceWorker' in navigator) || !('Notification' in window)) return false;
   try {

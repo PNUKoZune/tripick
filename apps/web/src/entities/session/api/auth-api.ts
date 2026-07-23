@@ -98,6 +98,9 @@ export async function refreshTokens(): Promise<AuthTokens | null> {
   const refreshToken = isNativeShell()
     ? await requestNativeRefreshToken()
     : session.tokens.refreshToken;
+  // undefined = 브리지 순단(판정 불가) → 세션 보존하고 다음 기회에 재시도.
+  if (refreshToken === undefined) return null;
+  // null/'' = 토큰 확정 부재 → 세션 소실이라 로컬도 비운다.
   if (!refreshToken) {
     clearSession();
     return null;
