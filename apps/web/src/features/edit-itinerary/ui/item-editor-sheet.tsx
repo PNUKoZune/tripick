@@ -67,6 +67,7 @@ export function ItemEditorSheet({
   useEffect(() => {
     if (!open) return;
     if (mode === 'edit' && item) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 시트가 열릴 때 편집 대상 값으로 폼 초기화
       setValues({
         name: item.name,
         type: item.type,

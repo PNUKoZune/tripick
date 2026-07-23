@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { LuGripVertical, LuPlus } from 'react-icons/lu';
 import { DragDropProvider } from '@dnd-kit/react';
 import { useSortable } from '@dnd-kit/react/sortable';
@@ -48,11 +48,14 @@ export function EditableTimeline({
   const [editor, setEditor] = useState<EditorState>(null);
   const [confirmDelete, setConfirmDelete] = useState<PlannerItineraryItemDto | null>(null);
 
-  // 서버 데이터가 바뀌면(추가/삭제/재정렬 반영 후) 로컬 순서를 동기화
+  // 서버 데이터가 바뀌면(추가/삭제/재정렬 반영 후) 로컬 순서를 동기화.
+  // effect 대신 렌더 단계에서 이전 키와 비교해 조정한다.
   const itemsKey = items.map((i) => i.id).join(',');
-  useEffect(() => {
+  const [prevItemsKey, setPrevItemsKey] = useState(itemsKey);
+  if (prevItemsKey !== itemsKey) {
+    setPrevItemsKey(itemsKey);
     setOrder(items.map((i) => i.id));
-  }, [itemsKey]);
+  }
 
   const byId = new Map(items.map((i) => [i.id, i]));
   const orderedItems = order

@@ -80,24 +80,29 @@ export function useAlternativeController(
     placeholderData: (prev) => prev,
   });
 
-  // itemId 가 바뀌면 로컬 상태 초기화
-  useEffect(() => {
+  // itemId 가 바뀌면 로컬 상태 초기화 (effect 대신 렌더 단계 조정).
+  const [prevItemId, setPrevItemId] = useState(itemId);
+  if (prevItemId !== itemId) {
+    setPrevItemId(itemId);
     setPending(null);
     setPendingSelectedId(null);
     setSelectedId(null);
     setAppliedName(null);
     setNote('');
-  }, [itemId]);
+  }
 
   const alternatives = alternativesQuery.data?.alternatives ?? [];
 
-  // 목록이 채워지면 첫 항목을 기본 선택
+  // 목록이 채워지면 첫 항목을 기본 선택. selectedId·후보 목록·서버 refetch 타이밍이
+  // 얽혀 있어 렌더 단계 조정으로 옮기면 선택이 튈 수 있으므로 effect 로 유지한다.
   useEffect(() => {
     if (!itemId) return;
     if (alternatives.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 후보 없으면 선택 해제(외부 데이터 동기화)
       setSelectedId(null);
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 서버 후보 목록에 맞춰 기본 선택 동기화
     setSelectedId((current) =>
       current && alternatives.some((alt) => alt.id === current) ? current : alternatives[0]!.id,
     );

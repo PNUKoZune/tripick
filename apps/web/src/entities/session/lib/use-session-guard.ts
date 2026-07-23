@@ -21,6 +21,7 @@ export function useSessionGuard(redirectTo = '/login'): SessionGuardState {
   useEffect(() => {
     const exists = Boolean(getStoredSession());
     if (exists) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 세션 확인 결과 반영 후 이어서 리다이렉트하는 side-effect
       setState('authenticated');
       return;
     }
@@ -41,6 +42,7 @@ export function useGuestGuard(redirectTo = '/'): GuestGuardState {
   useEffect(() => {
     const exists = Boolean(getStoredSession());
     if (!exists) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 세션 확인 결과 반영 후 이어서 리다이렉트하는 side-effect(게스트 가드)
       setState('guest');
       return;
     }

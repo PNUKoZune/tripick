@@ -99,6 +99,7 @@ export function PlannerMap({
   useEffect(() => {
     let cancelled = false;
     if (!getKakaoKey()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- SDK 로드 effect: 카카오 키 없음을 시도 완료로 표시
       setSdkAttempted(true);
       return;
     }
@@ -200,6 +201,7 @@ export function PlannerMap({
     if (!services) return;
     const keyword = searchQuery.trim();
     if (keyword.length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 검색어가 짧으면 결과를 비움(비동기 검색 effect)
       setSearchResults([]);
       return;
     }

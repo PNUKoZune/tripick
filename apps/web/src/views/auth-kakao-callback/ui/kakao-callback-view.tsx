@@ -19,6 +19,7 @@ export function KakaoCallbackView() {
     const params = new URLSearchParams(window.location.search);
     const error = params.get('error');
     if (error) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 콜백 URL 파싱 결과를 마운트 시 반영
       setState({ status: 'error', message: normalizeCallbackError(error) });
       return;
     }

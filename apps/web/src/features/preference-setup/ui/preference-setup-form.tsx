@@ -113,6 +113,7 @@ export function PreferenceSetupForm() {
     // 이미 사진 분석으로 저장된 취향 태그가 있으면 그대로 노출
     const tags = preferenceQuery.data.tasteTags;
     if (tags && tags.food.length + tags.mood.length + tags.environment.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 서버 취향 데이터로 폼을 1회 하이드레이트
       setAnalyzedTags(tags);
     }
     setSavedPhotoUrls(preferenceQuery.data.photoUrls ?? []);
@@ -127,6 +128,7 @@ export function PreferenceSetupForm() {
   // 새로고침·페이지 이동으로 돌아왔을 때 진행 중이던 분석을 다시 따라간다.
   useEffect(() => {
     const stored = readAnalysisJob();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 마운트 시 진행 중이던 분석 잡을 localStorage 에서 복원
     if (stored) setActiveJobId(stored);
   }, []);
 
@@ -158,6 +160,7 @@ export function PreferenceSetupForm() {
     if (!activeJobId || !analysisJob) return;
     if (analysisJob.status === 'queued' || analysisJob.status === 'running') return;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 분석 완료 시 잡 추적 종료(쿼리 무효화 side-effect 동반)
     setActiveJobId(null);
     forgetAnalysisJob();
     queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
@@ -195,6 +198,7 @@ export function PreferenceSetupForm() {
    */
   useEffect(() => {
     if (!isJobGone(analysisJobQuery.error)) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 잡 만료(404) 시 추적 종료(쿼리 무효화 동반)
     setActiveJobId(null);
     forgetAnalysisJob();
     queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
@@ -203,12 +207,14 @@ export function PreferenceSetupForm() {
   // 선택한 사진의 미리보기 URL 생성/해제
   useEffect(() => {
     const urls = photos.map((file) => URL.createObjectURL(file));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 미리보기 objectURL 생성/해제(cleanup 동반 effect)
     setPreviews(urls);
     return () => urls.forEach((url) => URL.revokeObjectURL(url));
   }, [photos]);
 
   useEffect(() => {
     if (preferenceQuery.error instanceof Error) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 쿼리 에러를 안내 토스트로 표시
       setNotice({
         title: '불러오기 실패',
         description: preferenceQuery.error.message,
