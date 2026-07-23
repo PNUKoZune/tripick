@@ -35,6 +35,7 @@
 
 - [planner/main-planner-v1.md](planner/main-planner-v1.md) — Screen 3 메인 플래너 / Screen 4 대안 팝업
 - [planner/rag-crag-v1.md](planner/rag-crag-v1.md) — RAG / CRAG 플래너 파이프라인
+- [planner/naver-popularity-signal-v1.md](planner/naver-popularity-signal-v1.md) — 네이버 추천 글 대중 인지도 신호 (마이너 장소 소프트 재랭킹)
 - [planner/alternative-place-picker-v1.md](planner/alternative-place-picker-v1.md) — 대안 장소 선택(Alternative Popup) · swap · 재계획
 - [planner/planner-page-enhancements-v1.md](planner/planner-page-enhancements-v1.md) — 여행 일정 페이지 개편
 - [planner/routing-external-api-v1.md](planner/routing-external-api-v1.md) — 길찾기 외부 API 전환(카카오 모빌리티 · ODsay)

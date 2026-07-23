@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { FOOD_PREFERENCES, type Coordinates } from '@tripick/types';
 import { inferPlaceTags, normalizeDestinationRegion, tasteTagsToKeywords } from './place-seeds';
+import { NEUTRAL_POPULARITY } from './naver-search.service';
 import type { CandidatePlace, CragScore, RawPlaceCandidate, RetrievalContext } from './types';
 
 // 비(날씨) 재계획에서 실내 후보를 우대할 때 쓰는 태그.
@@ -15,6 +16,9 @@ const INDOOR_TAGS = new Set<string>([
   'city',
   'hotspring',
 ]);
+
+/** CRAG 총점에서 네이버 대중 인지도 항이 차지하는 가중치. accept 게이트 보정과 공유. */
+export const POPULARITY_WEIGHT = 0.12;
 
 @Injectable()
 export class CragEvaluatorService {
@@ -56,13 +60,17 @@ export class CragEvaluatorService {
     const contextScore = this.contextScore(candidate, tags, context);
     const availability = this.availabilityScore(candidate, context, penalties);
     const dataQuality = this.dataQualityScore(candidate, penalties);
+    const popularity = this.popularityScore(candidate, context, penalties);
+    // 네이버 인지도 항(0.12)을 더해 마이너 장소를 후순위로 민다.
+    // 인덱스 비활성 시 popularity=중립값이라 나머지 항 비율만 유지되고 순위는 불변.
     const total = this.clamp(
-      retrieval * 0.27 +
-        taste * 0.23 +
-        locality * 0.18 +
-        contextScore * 0.15 +
-        availability * 0.1 +
-        dataQuality * 0.07,
+      retrieval * 0.24 +
+        taste * 0.2 +
+        popularity * POPULARITY_WEIGHT +
+        locality * 0.16 +
+        contextScore * 0.13 +
+        availability * 0.09 +
+        dataQuality * 0.06,
     );
 
     const crag: CragScore = {
@@ -73,6 +81,7 @@ export class CragEvaluatorService {
       context: contextScore,
       availability,
       dataQuality,
+      popularity,
       matchedTags,
       penalties,
       ...(personalization !== undefined ? { personalization } : {}),
@@ -113,6 +122,22 @@ export class CragEvaluatorService {
     // 취향 벡터 유사도가 있으면 태그 매칭보다 우선해 리랭킹 (벡터 기반 개인화)
     if (personalization === undefined) return tagScore;
     return this.clamp(tagScore * 0.45 + personalization * 0.55);
+  }
+
+  /**
+   * 네이버 추천 글 대중 인지도 점수. 인덱스가 없으면 중립값이라 순위에 영향 없음.
+   * 언급 0(마이너 장소)이면 낮은 점수 → 소프트 감점, 제거는 아니다.
+   */
+  private popularityScore(
+    candidate: RawPlaceCandidate,
+    context: RetrievalContext,
+    penalties: string[],
+  ): number {
+    const index = context.popularityIndex;
+    if (!index || index.docCount === 0) return NEUTRAL_POPULARITY;
+    const score = index.score(candidate.name);
+    if (index.mentions(candidate.name) === 0) penalties.push('naver-unmentioned');
+    return score;
   }
 
   /** 저장된 취향 벡터와의 코사인 유사도(-1~1)를 0~1 점수로 정규화 */
@@ -223,7 +248,9 @@ export class CragEvaluatorService {
       score.personalization !== undefined && score.personalization >= 0.6
         ? `, 취향 벡터 ${Math.round(score.personalization * 100)}% 부합`
         : '';
-    return `${matched}, ${sourceLabel} confidence ${confidence}%${personalized}${fallback}`;
+    // NEUTRAL_POPULARITY(0.5) 초과는 네이버 추천 글에 실제 언급된 장소를 뜻한다.
+    const popular = score.popularity > NEUTRAL_POPULARITY ? ', 네이버 추천 글 다수 언급' : '';
+    return `${matched}, ${sourceLabel} confidence ${confidence}%${personalized}${popular}${fallback}`;
   }
 
   private deduplicate(candidates: RawPlaceCandidate[]): RawPlaceCandidate[] {

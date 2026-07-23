@@ -4,16 +4,20 @@ import type { TasteTagDto } from '@tripick/types';
 import {
   inferPlaceTags,
   parseSigungu,
+  regionPrefixStem,
+  regionSearchStem,
   regionStem,
   tasteTagsToKeywords,
 } from '../../../src/planner/retrieval/place-seeds';
 
 describe('regionStem', () => {
-  it('시도 접미사를 제거해 어간을 만든다', () => {
+  it('시 계열 접미사는 어간화하되 도는 유지하고, 특별자치도만 도로 정규화한다', () => {
     expect(regionStem('서울특별시')).toBe('서울');
     expect(regionStem('부산광역시')).toBe('부산');
-    expect(regionStem('경상북도')).toBe('경상북');
-    expect(regionStem('제주특별자치도')).toBe('제주');
+    expect(regionStem('경상북도')).toBe('경상북도');
+    expect(regionStem('경기도')).toBe('경기도');
+    expect(regionStem('강원특별자치도')).toBe('강원도');
+    expect(regionStem('제주특별자치도')).toBe('제주도');
   });
 
   it('시군구 접미사도 제거한다', () => {
@@ -25,6 +29,34 @@ describe('regionStem', () => {
     expect(regionStem('서울')).toBe('서울');
     expect(regionStem('경주')).toBe('경주');
     expect(regionStem('부산 해운대')).toBe('부산');
+  });
+});
+
+describe('regionSearchStem', () => {
+  it('모든 토큰을 어간화해 서브지역까지 보존한다', () => {
+    expect(regionSearchStem('부산광역시 해운대구')).toBe('부산 해운대');
+    expect(regionSearchStem('부산 해운대')).toBe('부산 해운대');
+    expect(regionSearchStem('부산 광안리')).toBe('부산 광안리');
+    expect(regionSearchStem('제주 서귀포시')).toBe('제주 서귀포');
+  });
+
+  it('단일 토큰은 regionStem 과 같게 어간화한다', () => {
+    expect(regionSearchStem('경주시')).toBe('경주');
+    expect(regionSearchStem('경상북도')).toBe('경상북도');
+  });
+});
+
+describe('regionPrefixStem', () => {
+  it('LIKE 프리픽스용으로 도까지 떼어 짧은 라벨·풀네임을 함께 잡게 한다', () => {
+    expect(regionPrefixStem('경기도')).toBe('경기');
+    expect(regionPrefixStem('경상북도')).toBe('경상북');
+    expect(regionPrefixStem('강원특별자치도')).toBe('강원');
+  });
+
+  it('도가 없는 시·군·구·시도는 regionStem 과 동일하다', () => {
+    expect(regionPrefixStem('경주시')).toBe('경주');
+    expect(regionPrefixStem('부산광역시')).toBe('부산');
+    expect(regionPrefixStem('부산')).toBe('부산');
   });
 });
 

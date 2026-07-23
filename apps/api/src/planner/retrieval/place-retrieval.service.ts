@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { getSeedCandidates, tasteTagsToKeywords } from './place-seeds';
-import { CragEvaluatorService } from './crag-evaluator.service';
+import { CragEvaluatorService, POPULARITY_WEIGHT } from './crag-evaluator.service';
 import { KakaoLocalService } from './kakao-local.service';
+import { NaverSearchService, NEUTRAL_POPULARITY } from './naver-search.service';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { isEligibleItineraryCandidate } from './place-eligibility';
@@ -24,9 +25,14 @@ export class PlaceRetrievalService {
     private readonly placeEmbeddings: PlaceEmbeddingRepository,
     private readonly kakaoLocal: KakaoLocalService,
     private readonly evaluator: CragEvaluatorService,
+    private readonly naverSearch: NaverSearchService,
   ) {}
 
-  async retrieve(context: RetrievalContext): Promise<RetrievalResult> {
+  async retrieve(inputContext: RetrievalContext): Promise<RetrievalResult> {
+    // 앞단: 목적지 네이버 추천 글로 대중 인지도 인덱스를 만들어 랭킹 컨텍스트에 주입한다.
+    // 이후 모든 evaluator.rank 호출이 이 인덱스로 마이너 장소를 후순위로 민다.
+    const popularityIndex = await this.naverSearch.getPopularityIndex(inputContext.destination);
+    const context: RetrievalContext = { ...inputContext, popularityIndex };
     const limit = context.limit ?? 16;
     const queryText = this.buildQueryText(context);
     const sources: RetrievalSource[] = [];
@@ -85,14 +91,21 @@ export class PlaceRetrievalService {
     }
 
     const minimumConfidence = this.minimumConfidence();
-    const accepted = ranked.filter((candidate) => candidate.confidence >= minimumConfidence);
+    // 인지도는 "소프트 재랭킹"이라 순위만 낮출 뿐 후보를 탈락시키면 안 된다.
+    // 중립값 아래로 깎인 감점분은 accept 게이트에서만 되돌려, 언급 0 이라는 이유로
+    // minimumConfidence 를 밑돌아 제거되는 일을 막는다(정렬 순서엔 감점 그대로 반영).
+    const gateConfidence = (candidate: CandidatePlace): number =>
+      candidate.confidence +
+      POPULARITY_WEIGHT * Math.max(0, NEUTRAL_POPULARITY - candidate.crag.popularity);
+    const accepted = ranked.filter((candidate) => gateConfidence(candidate) >= minimumConfidence);
     const finalPool = accepted.length >= Math.min(4, limit) ? accepted : ranked;
     const places = this.evaluator.selectTopDiverse(finalPool, limit);
     const averageConfidence = this.averageConfidence(places);
     const rejectedCount = Math.max(0, ranked.length - accepted.length);
 
+    const popularCount = places.filter((place) => popularityIndex.mentions(place.name) > 0).length;
     this.logger.log(
-      `CRAG retrieval for "${context.destination}" sources=${sources.join('+') || 'none'} avg=${averageConfidence.toFixed(2)} selected=${places.length}`,
+      `CRAG retrieval for "${context.destination}" sources=${sources.join('+') || 'none'} avg=${averageConfidence.toFixed(2)} selected=${places.length} naver=${popularityIndex.docCount}docs/${popularCount}matched`,
     );
 
     return {

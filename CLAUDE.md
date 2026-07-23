@@ -80,6 +80,7 @@
 
 - **카카오맵 / Local API**: place search, map rendering
 - **카카오 모빌리티 / ODsay**: route ETA (car), public transit
+- **네이버 블로그·카페 검색** (NCP API Hub): popularity signal (대중 인지도로 후보 재랭킹)
 - **Korea Meteorological Admin.**: weather forecast (기상청 단기예보, nx·ny 격자 변환)
 - **사용자 갤러리 직접 업로드**: 취향 사진 수집 (Instagram Graph API는 API 한계로 미채택, 갤러리 직접 선택으로 대체)
 - **Firebase FCM**: push notification
@@ -230,6 +231,7 @@ src/
 | 관광정보    | 한국관광공사 국문 관광정보    | 관광지 기본정보, 영업시간, 좌표       | 수집→임베딩해 pgvector 적재 + 영업시간 보강(Constraint Engine) |
 | 관광정보    | ~~한국관광공사 연관 관광지~~  | (미채택)                              | "이 여행지 다음에 저 여행지 많이 감" 식의 일반 통계라 사용자 취향 기반 추천 성격과 맞지 않음. 대안 후보는 pgvector(KTO 관광정보+카카오 로컬 적재 풀)의 취향 유사도 검색으로 대체 |
 | 관광정보    | 한국관광공사 관광지 집중률(방문자 추이 예측) | 혼잡 예상 시 일정 변경 "추천" 알림 | `TatsCnctrRateService`. areaCd/signguCd=법정동 코드(ldongCode2 로 조달), tAtsNm(관광지)만 데이터. **플래닝 점수에는 미반영** — 취향을 흐릴 수 있어 날씨 알림과 동일하게 inbox 추천(`crowd_alert`)만, 자동 재계획 안 함 |
+| 인기도      | 네이버 블로그·카페 검색(NCP API Hub) | "OO 여행지 추천" 글의 후보 언급 빈도 → 대중 인지도 재랭킹 | `NaverSearchService`. 취향만 보면 마이너 장소가 많이 나와 앞단에 붙인 신호. **플래닝 점수에 popularity 0.12 가중(집중률과 달리 반영)**, 단 소프트 재랭킹(마이너 후순위, 제거 아님)이고 키 없으면 중립값으로 랭킹 불변 |
 | 날씨        | 기상청 단기예보               | 날씨·강수 예보 (최대 5일)             | nx·ny 격자 변환 필수    |
 | 인증        | 카카오 OAuth 2.0              | 로그인, JWT 발급                      |                         |
 | 이미지      | 사용자 갤러리 직접 업로드     | 취향 사진 수집                        | Instagram Graph API는 API 한계로 미채택 |
@@ -250,6 +252,14 @@ src/
 - base_time: 02·05·08·11·14·17·20·23시 발표, 발표 후 10분 지연 여유 필요
 - PCP 필드: "강수없음", "1mm 미만" 등 문자열로 올 수 있어 파싱 예외처리 필수
 
+**네이버 검색 API 주의사항**
+
+- **NCP API Hub 경유** (`naverapihub.apigw.ntruss.com/search/v1/{blog,cafearticle}`) — 구 `openapi.naver.com` 아님. 인증은 `X-NCP-APIGW-API-KEY-ID`(Client ID) + `X-NCP-APIGW-API-KEY`(Secret) **헤더** (`NAVER_SEARCH_CLIENT_ID`/`_SECRET`)
+- 응답 `items[].title`/`description` 은 검색어가 `<b>` 로 강조돼 온다 — 태그·HTML 엔티티 제거 후 코퍼스화
+- 매칭은 **역방향**: 블로그에서 장소명 추출(불안정한 한글 NER)이 아니라, 깨끗한 후보 `name` 이 코퍼스에 몇 번 나오는지 카운트. 정식명이 블로그 표현보다 길면(예 '국립경주박물관' vs '경주박물관') 기관 수식어(국립·도립·시립·공립·사립) 뗀 코어로 폴백
+- 목적지 어간은 **서브지역까지 보존**(`regionSearchStem`, '부산 해운대'≠'부산 광안리'). 목적지별 코퍼스는 6h TTL 캐시. 블로그·카페 중 한쪽 실패해도 나머지 코퍼스 유지(`allSettled`)
+- 인지도 감점은 **순위만 낮추고 후보를 탈락(제거)시키지 않는다** — accept 게이트(`minimumConfidence`)에서 중립값 아래 감점분을 되돌려 소프트 재랭킹 보장
+
 ## 7. 개발 시 주의사항
 
 - PostgreSQL 이미지는 반드시 `pgvector/pgvector:pg16` 사용 (일반 `postgres:16` 사용 금지)
@@ -260,5 +270,6 @@ src/
 - 경로 이탈(미도착)도 날씨·혼잡과 동일하게 자동 재계획 없이 "알림"만 한다. `ArrivalAlertModule`(5분 주기 스캔)이 이동 중 연속 이탈 판정 대신 **각 일정 항목의 시작 시각+유예(15분)에 사용자 최신 위치가 그 좌표 반경(500m) 밖이면** `arrival_alert` inbox + FCM 알림을 보낸다. 판정은 서버가 하며, 클라이언트는 진행 중 위치를 `POST /live/location`(`LiveLocationService`, Redis 캐시)으로 주기 보고한다. 위치 없음/오래됨(10분↑)이면 판정 스킵, 알림은 (여행·사용자·일차)당 1회. 클릭 시 planner 로 이동해 사용자가 직접 재계획. 배너 confirm 을 눌러야 신고되던 web 연속 이탈 감지(semi-manual)를 대체한다. 위치 보고 주체는 실행 환경으로 갈린다 — **브라우저 단독이면 웹**이 직접 보고하고, **RN 앱이면 네이티브**(App.tsx)가 foreground service 로 잡은 위치를 포그라운드·백그라운드 모두 직접 POST 한다(웹뷰 JS 는 백그라운드에서 멈추므로). RN 에선 웹이 인증정보(access token + 절대 API base)만 `LOCATION_AUTH` 브리지로 네이티브에 넘기고 자체 보고는 하지 않는다. access token TTL 이 7일이라 여행 세션 동안 리프레시 없이 유효
 - 날씨 변화는 자동 재계획을 트리거하지 않고 일정 조정을 "추천"(inbox 알림)만 한다. 실제 재계획은 사용자가 확인 후 수동 요청 (`trigger: 'weather'`)
 - 관광지 혼잡(집중률)도 날씨와 동일하게 자동 재계획 없이 "추천"만 한다. `CrowdAlertModule`(하루 1회 스캔)이 여행 일정 관광지의 예측 집중률이 그 장소 평균 대비 높은 날을 찾아 `crowd_alert` inbox 알림을 보낸다. 클릭 시 planner 로 이동해 사용자가 직접 재계획. **집중률은 일정 생성/재계획 점수에는 넣지 않는다**(취향 신호를 흐릴 수 있음)
+- 네이버 인기도(popularity)는 집중률·날씨와 달리 **일정 생성/재계획 점수에 반영한다**(CRAG 가중 0.12, `PlaceRetrievalService`가 앞단에서 `NaverSearchService` 인지도 인덱스를 주입). 취향만 보면 마이너 장소가 많이 나오는 걸 보정하려는 것 — 단 취향 개인화(pgvector)를 죽이지 않도록 소프트 재랭킹이며, 후보를 제거하지 않고 마이너를 후순위로만 민다
 - 모든 외부 API는 추상화된 이름(Object Storage, 지도 API 등)으로 인터페이스 설계, 특정 서비스 교체 시 환경변수만 변경
 - BullMQ Worker: `attempts: 3`, `backoff: 2000` 재시도 설정 기본 적용
