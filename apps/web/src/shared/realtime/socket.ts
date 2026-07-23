@@ -10,9 +10,16 @@ let socket: Socket | null = null;
 function resolveWsBase(): string {
   const fromEnv = process.env.NEXT_PUBLIC_WS_URL;
   if (fromEnv) return fromEnv;
-  // env 미설정 시 현재 origin 으로 폴백 (SSR 단계에서는 호출되지 않음)
-  if (typeof window !== 'undefined') return window.location.origin;
-  return '';
+  if (typeof window === 'undefined') return ''; // SSR 단계에서는 호출되지 않음
+  // dev: 백엔드는 웹을 서빙한 것과 같은 호스트의 4000 포트에 있다(브라우저=localhost, 에뮬=10.0.2.2).
+  // origin 을 그대로 쓰면 Next(:3000)로 가버리므로 호스트만 취해 포트를 백엔드로 바꾼다 —
+  // 이렇게 하면 절대 URL env 를 타깃마다 갈아끼우지 않아도 브라우저·에뮬레이터가 자동으로 맞는다.
+  if (process.env.NODE_ENV === 'development') {
+    const { protocol, hostname } = window.location;
+    return `${protocol}//${hostname}:4000`;
+  }
+  // prod 는 NEXT_PUBLIC_WS_URL 이 설정돼 위에서 반환됨. 미설정이면 same-origin(nginx WS 업그레이드) 폴백.
+  return window.location.origin;
 }
 
 /**
