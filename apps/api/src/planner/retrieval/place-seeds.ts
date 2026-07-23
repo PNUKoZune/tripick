@@ -172,11 +172,30 @@ const TAG_HINTS: Array<[string | RegExp, string[]]> = [
  * 같은 어간('강원도')으로 맞도록 한다(집중률 시도 인덱스 매칭).
  * 첫 토큰만 사용해 '부산 해운대' 같은 다중 토큰도 시도 어간으로 정규화.
  */
-export function regionStem(destination: string): string {
-  const first = destination.trim().split(/\s+/)[0] ?? '';
-  return first
+/** 한 토큰의 행정구역 접미사를 어간화. 도는 유지, 특별자치도만 도로 정규화. */
+function stemRegionToken(token: string): string {
+  return token
     .replace(/특별자치도$/, '도')
     .replace(/(특별자치시|특별시|광역시|자치시|시|군|구)$/, '');
+}
+
+export function regionStem(destination: string): string {
+  const first = destination.trim().split(/\s+/)[0] ?? '';
+  return stemRegionToken(first);
+}
+
+/**
+ * 목적지의 모든 토큰을 어간화해 합친다. regionStem 이 첫 토큰(시도)만 보는 것과 달리
+ * 서브지역까지 보존한다. 예: '부산광역시 해운대구'→'부산 해운대', '경주시'→'경주'.
+ * 네이버 검색 질의처럼 목적지 전체 특이성이 필요할 때 쓴다.
+ */
+export function regionSearchStem(destination: string): string {
+  return destination
+    .trim()
+    .split(/\s+/)
+    .map(stemRegionToken)
+    .filter(Boolean)
+    .join(' ');
 }
 
 /**

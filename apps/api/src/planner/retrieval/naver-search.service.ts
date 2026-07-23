@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import { regionStem } from './place-seeds';
+import { regionSearchStem } from './place-seeds';
 import type { PopularityIndex } from './types';
 
 /** blog·cafearticle 공통 응답 형태 (필요한 필드만). */
@@ -47,7 +47,7 @@ export class NaverSearchService {
     const credentials = this.credentials();
     if (!credentials) return DISABLED_INDEX;
 
-    const key = regionStem(destination).toLowerCase() || destination.toLowerCase();
+    const key = regionSearchStem(destination).toLowerCase() || destination.toLowerCase();
     const cached = this.cache.get(key);
     if (cached && cached.expires > Date.now()) return cached.index;
 
@@ -78,7 +78,8 @@ export class NaverSearchService {
     destination: string,
     credentials: { id: string; secret: string },
   ): Promise<{ text: string; docCount: number }> {
-    const stem = regionStem(destination) || destination;
+    // 서브지역(부산 해운대 등)까지 보존해야 그 지역의 인기 장소가 코퍼스에 잡힌다.
+    const stem = regionSearchStem(destination) || destination;
     const queries = RECOMMEND_SUFFIXES.map((suffix) => `${stem} ${suffix}`);
     const display = this.display();
     const parts: string[] = [];

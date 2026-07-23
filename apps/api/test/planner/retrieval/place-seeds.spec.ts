@@ -4,6 +4,7 @@ import type { TasteTagDto } from '@tripick/types';
 import {
   inferPlaceTags,
   parseSigungu,
+  regionSearchStem,
   regionStem,
   tasteTagsToKeywords,
 } from '../../../src/planner/retrieval/place-seeds';
@@ -27,6 +28,20 @@ describe('regionStem', () => {
     expect(regionStem('서울')).toBe('서울');
     expect(regionStem('경주')).toBe('경주');
     expect(regionStem('부산 해운대')).toBe('부산');
+  });
+});
+
+describe('regionSearchStem', () => {
+  it('모든 토큰을 어간화해 서브지역까지 보존한다', () => {
+    expect(regionSearchStem('부산광역시 해운대구')).toBe('부산 해운대');
+    expect(regionSearchStem('부산 해운대')).toBe('부산 해운대');
+    expect(regionSearchStem('부산 광안리')).toBe('부산 광안리');
+    expect(regionSearchStem('제주 서귀포시')).toBe('제주 서귀포');
+  });
+
+  it('단일 토큰은 regionStem 과 같게 어간화한다', () => {
+    expect(regionSearchStem('경주시')).toBe('경주');
+    expect(regionSearchStem('경상북도')).toBe('경상북도');
   });
 });
 
