@@ -28,11 +28,11 @@ export function PlannerHeader({
         <Link
           href={backHref}
           aria-label={`${backLabel} 으로 돌아가기`}
-          className="flex size-9 shrink-0 items-center justify-center rounded-full text-[#191F28] hover:bg-[#F2F4F6]"
+          className="flex size-9 shrink-0 items-center justify-center rounded-full text-[color:var(--ink)] hover:bg-[color:var(--card-soft)]"
         >
           <FiChevronLeft className="size-5" />
         </Link>
-        <h1 className="truncate text-[18px] font-bold leading-[26px] text-[#191F28]">{title}</h1>
+        <h1 className="truncate text-[18px] font-bold leading-[26px] text-[color:var(--ink)]">{title}</h1>
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {onShareClick ? (
@@ -40,7 +40,7 @@ export function PlannerHeader({
             type="button"
             onClick={onShareClick}
             aria-label="일정 공유"
-            className="flex size-9 items-center justify-center rounded-full text-[#4E5968] hover:bg-[#F2F4F6]"
+            className="flex size-9 items-center justify-center rounded-full text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]"
           >
             <LuShare2 className="size-[18px]" />
           </button>
@@ -50,10 +50,10 @@ export function PlannerHeader({
           type="button"
           onClick={onMembersClick}
           aria-label="여행 멤버 관리"
-          className="-mx-2 flex items-center gap-2 rounded-full px-2 py-1 transition hover:bg-[#F2F4F6]"
+          className="-mx-2 flex items-center gap-2 rounded-full px-2 py-1 transition hover:bg-[color:var(--card-soft)]"
         >
             <MemberAvatars members={members} />
-            <FiPlus className="size-4 text-[#8B95A1]" aria-hidden />
+            <FiPlus className="size-4 text-[color:var(--ink-faint)]" aria-hidden />
           </button>
         ) : (
           <MemberAvatars members={members} />

@@ -19,7 +19,7 @@ import { SessionGuard } from '@/entities/session';
 import { createTrip } from '@/entities/trip-plan';
 import { DestinationSearchInput, DestinationMapPicker } from '@/features/destination-search';
 import { queryKeys } from '@/shared/api/query-keys';
-import { Button, PlaceSearchPicker, SegmentToggle, TimeField } from '@/shared/ui';
+import { PlaceSearchPicker, SegmentToggle, TimeField } from '@/shared/ui';
 import { AppFrame } from '@/shared/ui/app-frame';
 
 import { FriendMemberPicker } from './friend-member-picker';
@@ -407,16 +407,17 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
                 </h1>
               </div>
             </div>
-            {/* 데스크탑 CTA */}
-            <Button
-              variant="primary"
-              size="md"
-              className="hidden h-10 px-5 text-[14px] lg:inline-flex"
-              onClick={handleSubmit}
-              disabled={!canSubmit || showLoading}
-            >
-              {showLoading ? '생성 중…' : '여행 만들기'}
-            </Button>
+            {/* 데스크탑 CTA — 모바일에선 wrapper 로 확실히 숨긴다(모바일 primary CTA 는 sticky 1개만) */}
+            <div className="hidden lg:block">
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={!canSubmit || showLoading}
+                className="inline-flex h-10 items-center justify-center rounded-[14px] bg-[color:var(--btn-bg)] px-5 text-[14px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none"
+              >
+                {showLoading ? '생성 중…' : '여행 만들기'}
+              </button>
+            </div>
           </div>
         </header>
 
@@ -427,29 +428,27 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
             <p className="text-[12px] text-[color:var(--ink-faint)]">
               {ctaHelper ?? '생성한 여행은 내 계정에 저장되고 친구 목록 기반으로 멤버를 관리합니다.'}
             </p>
-            <Button
-              variant="primary"
-              size="lg"
-              className="shrink-0 px-8"
+            <button
+              type="button"
               onClick={handleSubmit}
               disabled={!canSubmit || showLoading}
+              className="inline-flex h-14 shrink-0 items-center justify-center rounded-[18px] bg-[color:var(--btn-bg)] px-8 text-[16px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none"
             >
               {showLoading ? '생성 중…' : '여행 만들기'}
-            </Button>
+            </button>
           </div>
         </div>
 
         {/* 모바일 sticky CTA: bottom nav 바로 위 (nav 높이 = pt-1.5 6px + grid 66px + safe-area pb) */}
         <div className="fixed inset-x-0 bottom-[calc(72px+max(10px,env(safe-area-inset-bottom)))] z-20 mx-auto max-w-[430px] border-t border-[color:var(--line)] bg-[color:var(--card)] px-5 py-3 lg:hidden">
-          <Button
-            variant="primary"
-            size="lg"
-            fullWidth
+          <button
+            type="button"
             onClick={handleSubmit}
             disabled={!canSubmit || showLoading}
+            className="inline-flex h-14 w-full items-center justify-center rounded-[18px] bg-[color:var(--btn-bg)] text-[16px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none"
           >
             {showLoading ? '생성 중…' : '여행 만들기'}
-          </Button>
+          </button>
           {ctaHelper ? (
             <p className="mt-2 text-center text-[12.5px] text-[color:var(--ink-faint)]">{ctaHelper}</p>
           ) : null}

@@ -43,7 +43,7 @@ import { ReplanToast } from '@/features/subscribe-replan-result';
 import { queryKeys } from '@/shared/api/query-keys';
 import { useMediaQuery } from '@/shared/lib';
 import { readJson, writeJson } from '@/shared/lib/storage';
-import { Button, Chip, Toast } from '@/shared/ui';
+import { Chip, Toast } from '@/shared/ui';
 import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
 import { AlternativeSheet } from '@/widgets/alternative-sheet';
 import { PlannerHeader } from '@/widgets/planner-header';
@@ -364,7 +364,7 @@ function PlannerContent({
   const pickPlaceLabel = focusedItem ? '이 일정으로 변경' : '이 장소로 일정 변경';
 
   return (
-    <div className="min-h-dvh bg-[color:var(--app-bg)]">
+    <div className="wvr-scope min-h-dvh bg-[color:var(--bg)]">
       {/* < lg : phone shell (모바일 우선) — 대상 화면(결과) 범위: wvr-scope 로컬 팔레트 */}
       <div className="wvr-scope mx-auto min-h-dvh max-w-[430px] pb-[88px] lg:hidden">
         <PlannerHeader
@@ -515,17 +515,16 @@ function PlannerContent({
                   <DeleteTripButton tripId={trip.id} tripTitle={trip.title} variant="compact" />
                 ) : null}
                 {trip ? (
-                  <Button
-                    variant="primary"
-                    size="md"
-                    className="h-10 px-4 text-[14px]"
+                  <button
+                    type="button"
                     onClick={() => setReplanOpen(true)}
+                    className="inline-flex h-10 items-center justify-center rounded-[14px] bg-[color:var(--btn-bg)] px-4 text-[14px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)]"
                   >
                     <span className="flex items-center gap-1.5">
                       <LuSparkles className="size-4" aria-hidden />
                       AI 재계획
                     </span>
-                  </Button>
+                  </button>
                 ) : null}
               </div>
             </div>

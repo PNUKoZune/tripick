@@ -101,19 +101,19 @@ export function EditableTimeline({
   return (
     <div className="pb-4">
       {isProposalMode ? (
-        <p className="mb-3 rounded-[12px] border border-[#C7DCFF] bg-[#F5F9FF] px-3 py-2 text-[12px] leading-[18px] text-[#1B64DA]">
+        <p className="mb-3 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--primary-tint)] px-3 py-2 text-[12px] leading-[18px] text-[color:var(--primary-deep)]">
           일정 변경은 여행 관리자 승인 후 반영돼요. 변경 요청을 보내면 관리자에게 알림이 전송됩니다.
         </p>
       ) : null}
       {orderedItems.length === 0 ? (
-        <div className="rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] p-5 text-center text-[14px] text-[#6B7684]">
+        <div className="rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card-soft)] p-5 text-center text-[14px] text-[color:var(--ink-sub)]">
           이 날짜에 등록된 일정이 없어요. 아래에서 추가해 보세요.
         </div>
       ) : (
         <>
         {orderedItems.length >= 2 ? (
-          <p className="mb-2 flex items-center gap-1.5 rounded-[10px] bg-[#F2F4F6] px-2.5 py-1.5 text-[12px] font-medium text-[#6B7684]">
-            <LuGripVertical className="size-3.5 shrink-0 text-[#8B95A1]" />
+          <p className="mb-2 flex items-center gap-1.5 rounded-[10px] bg-[color:var(--card-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[color:var(--ink-sub)]">
+            <LuGripVertical className="size-3.5 shrink-0 text-[color:var(--ink-faint)]" />
             왼쪽 손잡이를 잡고 끌어 순서를 바꿀 수 있어요
           </p>
         ) : null}
@@ -156,7 +156,7 @@ export function EditableTimeline({
       <button
         type="button"
         onClick={() => setEditor({ mode: 'add' })}
-        className="mt-3 flex h-11 w-full items-center justify-center gap-1.5 rounded-[12px] border border-dashed border-[#C7DCFF] bg-[#F5F9FF] text-[14px] font-semibold text-[#3182F6] hover:bg-[#EAF2FF]"
+        className="mt-3 flex h-11 w-full items-center justify-center gap-1.5 rounded-[12px] border border-dashed border-[color:var(--line)] bg-[color:var(--card-soft)] text-[14px] font-semibold text-[color:var(--primary)] hover:bg-[color:var(--primary-tint)]"
       >
         <LuPlus className="size-4" />
         {isProposalMode ? '일정 추가 요청' : '일정 추가'}
@@ -245,11 +245,11 @@ function DeleteConfirm({
       }}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-5"
     >
-      <div className="w-full max-w-[360px] rounded-[20px] bg-white p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
-        <h2 className="text-[17px] font-bold text-[#191F28]">
+      <div className="w-full max-w-[360px] rounded-[20px] bg-[color:var(--card)] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
+        <h2 className="text-[17px] font-bold text-[color:var(--ink)]">
           {proposalMode ? '이 일정 삭제를 요청할까요?' : '이 일정을 삭제할까요?'}
         </h2>
-        <p className="mt-2 text-[13px] leading-[20px] text-[#4E5968]">
+        <p className="mt-2 text-[13px] leading-[20px] text-[color:var(--ink-sub)]">
           {proposalMode
             ? `“${name}” 삭제 요청을 여행 관리자에게 보냅니다.`
             : `“${name}” 항목이 일정에서 제거됩니다.`}
@@ -259,7 +259,7 @@ function DeleteConfirm({
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="h-11 flex-1 rounded-[12px] border border-[#E5E8EB] bg-white text-[14px] font-bold text-[#6B7684] hover:bg-[#FAFBFC] disabled:opacity-50"
+            className="h-11 flex-1 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] text-[14px] font-bold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)] disabled:opacity-50"
           >
             취소
           </button>
@@ -267,7 +267,7 @@ function DeleteConfirm({
             type="button"
             onClick={onConfirm}
             disabled={pending}
-            className="h-11 flex-1 rounded-[12px] bg-[#F04452] text-[14px] font-bold text-white hover:bg-[#D93645] disabled:opacity-50"
+            className="h-11 flex-1 rounded-[12px] bg-[color:var(--danger)] text-[14px] font-bold text-[color:var(--btn-text)] hover:brightness-95 disabled:opacity-50"
           >
             {pending ? '처리 중…' : proposalMode ? '삭제 요청' : '삭제'}
           </button>

@@ -86,10 +86,10 @@ export function ItemEditorSheet({
   return (
     <BottomSheet open={open} onClose={onClose}>
       <div className="px-5 pb-6 pt-2">
-        <h2 className="text-[18px] font-bold text-[#191F28]">
+        <h2 className="text-[18px] font-bold text-[color:var(--ink)]">
           {mode === 'add' ? '일정 추가' : '일정 수정'}
         </h2>
-        <p className="mt-1 text-[13px] text-[#8B95A1]">
+        <p className="mt-1 text-[13px] text-[color:var(--ink-faint)]">
           {mode === 'add'
             ? '실제 장소를 검색해 추가해요. 장소를 고르면 지도 위치도 함께 저장됩니다.'
             : '시간·체류시간·메모를 수정할 수 있어요. 장소를 바꾸려면 카드의 변경(대안) 버튼을 이용하세요.'}
@@ -132,9 +132,9 @@ export function ItemEditorSheet({
             </Field>
           ) : (
             <Field label="장소">
-              <div className="flex items-center gap-2 rounded-[12px] border border-[#E5E8EB] bg-[#F7F8FA] px-3 py-2.5">
-                <LuMapPin className="size-4 shrink-0 text-[#8B95A1]" />
-                <span className="truncate text-[15px] font-semibold text-[#191F28]">
+              <div className="flex items-center gap-2 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-3 py-2.5">
+                <LuMapPin className="size-4 shrink-0 text-[color:var(--ink-faint)]" />
+                <span className="truncate text-[15px] font-semibold text-[color:var(--ink)]">
                   {values.name}
                 </span>
               </div>
@@ -157,7 +157,7 @@ export function ItemEditorSheet({
                 type="time"
                 value={values.scheduledAt}
                 onChange={(e) => setValues((v) => ({ ...v, scheduledAt: e.target.value }))}
-                className="h-11 w-full rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[15px] text-[#191F28] outline-none focus:border-[#3182F6] focus:ring-2 focus:ring-[#E1ECFF]"
+                className="h-11 w-full rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[15px] text-[color:var(--ink)] outline-none focus:border-[color:var(--primary)] focus:ring-2 focus:ring-[color:var(--ring)]"
               />
             </Field>
             <Field label="체류 시간(분)">
@@ -170,7 +170,7 @@ export function ItemEditorSheet({
                 onChange={(e) =>
                   setValues((v) => ({ ...v, durationMin: Number(e.target.value) || 0 }))
                 }
-                className="h-11 w-full rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[15px] text-[#191F28] outline-none focus:border-[#3182F6] focus:ring-2 focus:ring-[#E1ECFF]"
+                className="h-11 w-full rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[15px] text-[color:var(--ink)] outline-none focus:border-[color:var(--primary)] focus:ring-2 focus:ring-[color:var(--ring)]"
               />
             </Field>
           </div>
@@ -182,13 +182,13 @@ export function ItemEditorSheet({
               placeholder="예약 시간, 준비물 등 나만의 메모를 남겨보세요."
               maxLength={500}
               rows={3}
-              className="w-full resize-none rounded-[12px] border border-[#E5E8EB] bg-white px-3 py-2 text-[14px] text-[#191F28] outline-none focus:border-[#3182F6] focus:ring-2 focus:ring-[#E1ECFF]"
+              className="w-full resize-none rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 py-2 text-[14px] text-[color:var(--ink)] outline-none focus:border-[color:var(--primary)] focus:ring-2 focus:ring-[color:var(--ring)]"
             />
           </Field>
         </div>
 
         {error ? (
-          <div className="mt-3 rounded-[12px] border border-[#FECDD3] bg-[#FFECEE] px-3 py-2 text-[13px] text-[#F04452]">
+          <div className="mt-3 rounded-[12px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] px-3 py-2 text-[13px] text-[color:var(--danger)]">
             {error}
           </div>
         ) : null}
@@ -248,20 +248,20 @@ function PlaceSearchField({
 
   if (picked) {
     return (
-      <div className="flex items-center gap-2 rounded-[12px] border border-[#C7DCFF] bg-[#EAF2FF] px-3 py-2.5">
-        <LuMapPin className="size-4 shrink-0 text-[#3182F6]" />
+      <div className="flex items-center gap-2 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--primary-tint)] px-3 py-2.5">
+        <LuMapPin className="size-4 shrink-0 text-[color:var(--primary)]" />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[15px] font-semibold text-[#191F28]">
+          <span className="block truncate text-[15px] font-semibold text-[color:var(--ink)]">
             {picked.name}
           </span>
           {picked.address ? (
-            <span className="block truncate text-[12px] text-[#6B7684]">{picked.address}</span>
+            <span className="block truncate text-[12px] text-[color:var(--ink-sub)]">{picked.address}</span>
           ) : null}
         </span>
         <button
           type="button"
           onClick={onClear}
-          className="shrink-0 rounded-[8px] px-2 py-1 text-[12px] font-semibold text-[#3182F6] hover:bg-white"
+          className="shrink-0 rounded-[8px] px-2 py-1 text-[12px] font-semibold text-[color:var(--primary)] hover:bg-[color:var(--card)]"
         >
           다시 검색
         </button>
@@ -271,8 +271,8 @@ function PlaceSearchField({
 
   return (
     <div className="relative">
-      <div className="flex h-11 items-center rounded-[12px] border border-[#E5E8EB] bg-white px-3 focus-within:border-[#3182F6] focus-within:ring-2 focus-within:ring-[#E1ECFF]">
-        <LuSearch className="mr-2 size-4 shrink-0 text-[#8B95A1]" />
+      <div className="flex h-11 items-center rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 focus-within:border-[color:var(--primary)] focus-within:ring-2 focus-within:ring-[color:var(--ring)]">
+        <LuSearch className="mr-2 size-4 shrink-0 text-[color:var(--ink-faint)]" />
         <input
           type="text"
           value={query}
@@ -286,11 +286,11 @@ function PlaceSearchField({
           placeholder={ready ? '장소 이름을 검색하세요 (예: 첨성대)' : '지도를 불러오는 중…'}
           disabled={!ready}
           autoComplete="off"
-          className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-[#191F28] outline-none placeholder:text-[#B0B8C1] disabled:cursor-not-allowed"
+          className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-[color:var(--ink)] outline-none placeholder:text-[color:var(--ink-faint)] disabled:cursor-not-allowed"
         />
       </div>
       {openList && results.length > 0 ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-10 max-h-64 overflow-y-auto rounded-[12px] border border-[#E5E8EB] bg-white py-1 shadow-[0_12px_28px_rgba(0,0,0,0.12)]">
+        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-10 max-h-64 overflow-y-auto rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] py-1 shadow-[0_12px_28px_rgba(0,0,0,0.12)]">
           {results.map((place, index) => (
             <button
               key={`${place.place_name}-${index}`}
@@ -301,10 +301,10 @@ function PlaceSearchField({
                 onPick(toResolvedPlace(place));
                 setOpenList(false);
               }}
-              className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-[#F7F8FA]"
+              className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-[color:var(--card-soft)]"
             >
-              <span className="text-[14px] font-semibold text-[#191F28]">{place.place_name}</span>
-              <span className="text-[12px] text-[#8B95A1]">
+              <span className="text-[14px] font-semibold text-[color:var(--ink)]">{place.place_name}</span>
+              <span className="text-[12px] text-[color:var(--ink-faint)]">
                 {place.road_address_name || place.address_name}
               </span>
             </button>
@@ -318,7 +318,7 @@ function PlaceSearchField({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[13px] font-semibold text-[#4E5968]">{label}</span>
+      <span className="mb-1.5 block text-[13px] font-semibold text-[color:var(--ink-sub)]">{label}</span>
       {children}
     </label>
   );

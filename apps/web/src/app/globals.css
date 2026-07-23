@@ -159,6 +159,25 @@ nextjs-portal {
   .wvr-scope {
     color-scheme: dark;
 
+    /* 전역 토큰 섀도잉: :root 의 라이트 전용 토큰(--text-*, --app-*, --blue-* 등)을
+       참조하는 shared/ui 컴포넌트(TimeField·SegmentToggle·헤더 등)가 wvr 화면 안에서
+       렌더될 때만 다크 값을 상속받도록 스코프 내부에서 덮어쓴다. :root 자체와
+       비대상 화면은 변경되지 않음(REQ-WVR-004 로컬 스코프 결정 준수). */
+    --app-bg: #0b111e;
+    --app-surface: #131b2c;
+    --soft-bg: #172136;
+    --pressed-bg: #1b2740;
+    --line-strong: rgba(233, 238, 249, 0.18);
+    --text-primary: #e9eef9;
+    --text-secondary: #a3aec6;
+    --text-tertiary: #75809a;
+    --blue-50: #1b2a4a;
+    --blue-100: #21335a;
+    --blue-500: #7ca5fc;
+    --blue-600: #3b76f0;
+    --blue-700: #2e63d6;
+    --blue-800: #9dbcff;
+
     --bg: #0b111e;
     --card: #131b2c;
     --card-soft: #172136;
