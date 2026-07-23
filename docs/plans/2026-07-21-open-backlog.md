@@ -92,7 +92,7 @@
 - [ ] `APP_VERSION` package.json 자동주입 `[코드확인: '0.1.0' 하드코딩]`
 - [ ] 탈퇴 사유 수집 + soft delete(`deletedAt`) + 30일 grace `[코드확인: hard delete]`
 - [ ] 디바이스별 푸시 토큰 관리 UI — 백엔드 `fcm_tokens` 테이블은 완료, 목록/해제 UI만
-- [ ] refresh 토큰 RN SecureStore 이전 ([email-login](../auth/email-login-and-session-v1.md#L163))
+- [x] refresh 토큰 RN SecureStore 이전 `[코드확인]` — WebView localStorage 대신 네이티브 Keychain/Keystore 에 refresh 보관, access 만 웹뷰 유지. 웹=auth HTTP·네이티브=순수 SecureStore, correlation id 브리지 + 타임아웃/확정부재 구분. `pnpm install` + 네이티브 rebuild 후 실기 검증 남음 ([refresh-token-securestore](../auth/refresh-token-securestore-v1.md)·[email-login](../auth/email-login-and-session-v1.md#L163))
 - [ ] 429 응답 한국어 메시지 + 재시도 UI
 - [ ] 이메일 인증/재설정 메일 템플릿 정리
 - [ ] 프로필 이미지 webp 변환 + 썸네일

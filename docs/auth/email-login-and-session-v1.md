@@ -126,6 +126,7 @@
 
 - 현재 access/refresh 모두 localStorage. sessionStorage 는 XSS 위협 모델이 동일(보안 이득 없음)하고 수명만 짧아져 WebView UX 악화 → 채택 안 함.
 - 더 안전한 방향(access 는 메모리, refresh 는 httpOnly 쿠키 / 네이티브 SecureStore)은 RN WebView 브리지 복잡도로 **후속**. reuse detection + 회전으로 최악은 완화.
+- **갱신(2026-07-23)**: RN 은 refresh 토큰을 네이티브 SecureStore(Keychain/Keystore)로 이전 완료 → [refresh-token-securestore-v1.md](refresh-token-securestore-v1.md). access 메모리화는 여전히 후속.
 
 ## 5. 데이터 모델 변경
 
@@ -162,7 +163,7 @@ SMTP_SECURE=false
 
 ## 7. 후속 / TODO
 
-- refresh 토큰을 RN 네이티브 SecureStore 로 이전, access 만 WebView 주입.
+- ~~refresh 토큰을 RN 네이티브 SecureStore 로 이전, access 만 WebView 주입.~~ → 완료: [refresh-token-securestore-v1.md](refresh-token-securestore-v1.md)
 - 429 응답 한국어 메시지 + 재시도 안내 UI.
 - 이메일 인증/재설정 메일 템플릿 디자인 정리.
 - 핸들 기반 친구 초대 링크 / QR (이번 핸들 위에 얹기).
