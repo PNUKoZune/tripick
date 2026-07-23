@@ -4,6 +4,7 @@ import {
   getRefreshToken,
   replaceTokens,
 } from '@/shared/lib/session-token';
+import { isNativeShell, requestNativeRefreshToken } from '@/shared/rn-bridge/native-refresh-token';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1';
 
@@ -75,7 +76,8 @@ async function fetcher<T>(path: string, init?: RequestInit, attempt = 0): Promis
 async function tryRefresh(): Promise<string | null> {
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
-    const refreshToken = getRefreshToken();
+    // RN 웹뷰에선 refresh 가 네이티브 SecureStore 에 있어 브리지로 가져온다.
+    const refreshToken = isNativeShell() ? await requestNativeRefreshToken() : getRefreshToken();
     if (!refreshToken) return null;
     try {
       const res = await fetch(apiUrl('/auth/refresh'), {

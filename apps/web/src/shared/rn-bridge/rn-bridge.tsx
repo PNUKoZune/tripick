@@ -7,6 +7,8 @@ import { useEffect } from 'react';
 import { updateFcmToken } from '@/entities/user';
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { getReactNativeWebView } from '@/shared/rn-bridge/rn-webview';
+import { isNativeShell } from '@/shared/rn-bridge/native-refresh-token';
+import { persistSession } from '@/shared/lib/session-token';
 import { queryKeys } from '@/shared/api/query-keys';
 import { routeForNotification } from '@/shared/web-push/route';
 import {
@@ -77,6 +79,13 @@ export function useRnBridge() {
         if (route) router.push(route);
         return;
       }
+    }
+
+    // 업그레이드 이관: 이 변경 이전 빌드가 localStorage 에 남긴 refresh 토큰을
+    // 네이티브 SecureStore 로 옮기고 localStorage 에선 지운다(1회성, 이후엔 항상 stripped 저장).
+    if (isNativeShell()) {
+      const session = getStoredSession();
+      if (session?.tokens?.refreshToken) persistSession(session);
     }
 
     window.addEventListener('message', handle);

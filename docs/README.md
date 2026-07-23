@@ -20,6 +20,7 @@
 ## 인증
 
 - [auth/email-login-and-session-v1.md](auth/email-login-and-session-v1.md) — 이메일 로그인 · 세션 · 사용자 핸들
+- [auth/refresh-token-securestore-v1.md](auth/refresh-token-securestore-v1.md) — refresh 토큰 RN SecureStore 이전 (Keychain/Keystore)
 
 ## 여행 (Trips)
 

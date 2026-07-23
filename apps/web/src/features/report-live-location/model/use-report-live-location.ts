@@ -5,6 +5,7 @@ import { useEffect, useRef } from 'react';
 import { reportLiveLocation } from '@/entities/trip-plan';
 import { apiBaseUrl } from '@/shared/api/client';
 import { getReactNativeWebView } from '@/shared/rn-bridge/rn-webview';
+import { isNativeShell } from '@/shared/rn-bridge/native-refresh-token';
 import { getAccessToken } from '@/shared/lib/session-token';
 import type { GeoPosition } from '@/shared/location';
 
@@ -51,7 +52,7 @@ export function useReportLiveLocation({ position, enabled = true }: Params) {
   // 계속 재보고해 캐시를 신선하게 유지한다.
   useEffect(() => {
     if (!enabled) return;
-    if (getReactNativeWebView()) return;
+    if (isNativeShell()) return;
 
     const report = () => {
       const p = positionRef.current;
