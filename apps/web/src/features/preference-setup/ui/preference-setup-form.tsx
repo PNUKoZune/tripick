@@ -45,12 +45,7 @@ import {
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { startDemoSession } from '@/entities/session/api/auth-api';
 import { queryKeys } from '@/shared/api/query-keys';
-import {
-  InlineNotice,
-  PrimaryButton,
-  SecondaryButton,
-  SegmentedOption,
-} from '@/shared/ui/app-frame';
+import { InlineNotice, SegmentedOption } from '@/shared/ui/app-frame';
 import { ConfirmDialog, TimeField, Toast } from '@/shared/ui';
 
 type Notice = {
@@ -644,15 +639,21 @@ export function PreferenceSetupForm() {
       ) : null}
       <div className="border-t border-[color:var(--line)] pt-6">
         <div className="space-y-2.5 lg:mx-auto lg:max-w-[420px]">
-          <PrimaryButton
+          <button
+            type="button"
             disabled={savePreferenceMutation.isPending || !ready}
             onClick={handleSubmit}
+            className="h-14 w-full rounded-[18px] bg-[color:var(--btn-bg)] text-[16px] font-bold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none"
           >
             {savePreferenceMutation.isPending ? '저장 중' : '취향 저장'}
-          </PrimaryButton>
-          <SecondaryButton onClick={() => setResetDialogOpen(true)}>
+          </button>
+          <button
+            type="button"
+            onClick={() => setResetDialogOpen(true)}
+            className="h-12 w-full rounded-[18px] bg-[color:var(--card-soft)] text-[15px] font-semibold text-[color:var(--ink-sub)] transition-colors hover:bg-[color:var(--line)]"
+          >
             기본값 되돌리기
-          </SecondaryButton>
+          </button>
         </div>
       </div>
 
