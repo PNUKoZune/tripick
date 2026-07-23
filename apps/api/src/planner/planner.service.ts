@@ -12,7 +12,7 @@ import type { PlannedCandidate } from './agent/planner-agent.service';
 import { PlaceRetrievalService } from './retrieval/place-retrieval.service';
 import { TripEntity } from '../trips/trip.entity';
 import { TripDayEntity } from '../trips/trip-day.entity';
-import { addDaysToIsoDate } from '@tripick/utils';
+import { addDaysToIsoDate, countTripDays } from '@tripick/utils';
 import type {
   CreateItineraryItemDto,
   ItineraryItemDto,
@@ -114,7 +114,7 @@ export class PlannerService {
     const tasteTags = preference?.tasteTags;
     // 저장된 취향 벡터로 pgvector 검색을 개인화 (블렌딩 + 리랭킹)
     const preferenceVector = await this.preferencesService.getPreferenceVector(trip.userId);
-    const dayCount = this.getDayCount(trip.startDate, trip.endDate);
+    const dayCount = countTripDays(trip.startDate, trip.endDate);
     const wakeTime = trip.wakeTime ?? '08:30';
     const sleepTime = trip.sleepTime ?? '22:00';
     // 일정 강도(pace)에 따라 하루 일정 개수를 조절한다
@@ -449,27 +449,32 @@ export class PlannerService {
     const perRegionLimit = Math.max(itemsPerDay + 3, 8);
     // 여행 전체의 실제 지역 목록(폴백 후보). 결합 라벨이 아닌 개별 지역만 담긴다.
     const allRegions = [...new Set(dayRegions.flat().map((r) => r.trim()).filter(Boolean))];
-    const retrieveInto = async (merged: Map<string, CandidatePlace>, region: string) => {
+    const retrieveRegion = async (region: string): Promise<CandidatePlace[]> => {
       const result = await this.placeRetrieval.retrieve({
         ...sharedRetrieval,
         destination: region,
         limit: perRegionLimit,
       });
-      for (const place of result.places) {
-        if (!merged.has(place.id)) merged.set(place.id, place);
+      return result.places;
+    };
+    // region 순서대로 id dedupe (앞 지역 우선). 병렬 조회 결과를 순서대로 합쳐 결정성을 유지한다.
+    const mergeOrdered = (merged: Map<string, CandidatePlace>, lists: CandidatePlace[][]) => {
+      for (const places of lists) {
+        for (const place of places) {
+          if (!merged.has(place.id)) merged.set(place.id, place);
+        }
       }
     };
     return Promise.all(
       dayRegions.map(async (regions) => {
         const merged = new Map<string, CandidatePlace>();
-        for (const region of regions) {
-          await retrieveInto(merged, region);
-        }
+        // 한 일차의 여러 지역은 서로 독립이라 병렬 조회한다.
+        mergeOrdered(merged, await Promise.all(regions.map((region) => retrieveRegion(region))));
         // 그 날 지역이 0건이면 여행 내 다른 지역으로 채운다 (이미 조회한 그 날 지역은 건너뜀).
         if (merged.size === 0) {
           for (const region of allRegions) {
             if (regions.includes(region)) continue;
-            await retrieveInto(merged, region);
+            mergeOrdered(merged, [await retrieveRegion(region)]);
             if (merged.size > 0) break;
           }
         }
@@ -694,13 +699,6 @@ export class PlannerService {
     if (category === 'restaurant') return 'restaurant';
     if (category === 'cafe') return 'cafe';
     return 'attraction';
-  }
-
-  private getDayCount(startDate: string, endDate: string): number {
-    const start = new Date(`${startDate}T00:00:00+09:00`);
-    const end = new Date(`${endDate}T00:00:00+09:00`);
-    const diff = Math.floor((end.getTime() - start.getTime()) / 86400000);
-    return Math.max(1, diff + 1);
   }
 
   private offsetDate(dateText: string, offset: number): string {

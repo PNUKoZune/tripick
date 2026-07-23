@@ -19,7 +19,7 @@ import { PlaceRetrievalService } from '../planner/retrieval/place-retrieval.serv
 import { TourApiService } from '../planner/retrieval/tour-api.service';
 import type { CandidatePlace, RawPlaceCandidate } from '../planner/retrieval/types';
 import type { ParsedForecast } from '@tripick/utils';
-import { addDaysToIsoDate, getKstMinutes, toKstIsoDate } from '@tripick/utils';
+import { addDaysToIsoDate, countTripDays, getKstMinutes, toKstIsoDate } from '@tripick/utils';
 import type {
   AddTripMemberRequestDto,
   CreateTripDto,
@@ -703,7 +703,7 @@ export class MainPlannerService {
       throw new BadRequestException('도착 시각은 출발 시각보다 늦어야 합니다.');
     }
     if (dto.dayRegions !== undefined) {
-      const dayCount = this.tripDayCount(dto.startDate, dto.endDate);
+      const dayCount = countTripDays(dto.startDate, dto.endDate);
       if (!Array.isArray(dto.dayRegions) || dto.dayRegions.length !== dayCount) {
         throw new BadRequestException('일자별 지역 수가 여행 일수와 맞지 않아요.');
       }
@@ -722,14 +722,6 @@ export class MainPlannerService {
         }
       }
     }
-  }
-
-  /** 여행 일수(당일치기=1). startDate/endDate 는 YYYY-MM-DD. */
-  private tripDayCount(startDate: string, endDate: string): number {
-    const start = Date.parse(`${startDate}T00:00:00Z`);
-    const end = Date.parse(`${endDate}T00:00:00Z`);
-    if (Number.isNaN(start) || Number.isNaN(end)) return 1;
-    return Math.floor((end - start) / 86_400_000) + 1;
   }
 
   /** 일자별 지역을 정규화(trim + 빈 값 제거). 값이 없으면 undefined 로 반환해 단일 지역 흐름을 탄다. */

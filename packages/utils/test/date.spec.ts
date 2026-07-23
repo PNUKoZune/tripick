@@ -5,9 +5,29 @@ import {
   timeToMinutes,
   minutesToTime,
   daysBetween,
+  countTripDays,
   getKstParts,
   getBaseDateTime,
 } from '../src/date';
+
+describe('countTripDays', () => {
+  it('당일치기는 1', () => {
+    expect(countTripDays('2026-07-10', '2026-07-10')).toBe(1);
+  });
+
+  it('1박 2일 = 2', () => {
+    expect(countTripDays('2026-07-10', '2026-07-11')).toBe(2);
+  });
+
+  it('월 경계를 넘어도 포함 일수로 계산', () => {
+    expect(countTripDays('2026-07-30', '2026-08-02')).toBe(4);
+  });
+
+  it('endIso < startIso 또는 파싱 실패면 1 로 클램프', () => {
+    expect(countTripDays('2026-07-11', '2026-07-10')).toBe(1);
+    expect(countTripDays('', '')).toBe(1);
+  });
+});
 
 describe('toKmaDate', () => {
   it('formats a date as YYYYMMDD with zero padding', () => {
