@@ -116,6 +116,8 @@ export class FriendsService {
       });
       if (reciprocal) {
         await this.friendsRepo.remove(reciprocal);
+        // 상대 '받은 요청' 인박스에 남은 친구 요청 카드가 즉시 사라지도록 갱신 신호를 쏜다.
+        this.inboxService.pushInboxRefresh(friend.friendUserId);
       }
     }
   }
@@ -159,6 +161,8 @@ export class FriendsService {
 
     // 새 incoming 요청이 생성된 경우에만 푸시 — 중복 요청(early return)엔 재발송하지 않는다.
     await this.inboxService.notifyFriendRequest(recipient, requester);
+    // 가상 row 라 create 를 안 거치므로 인박스 실시간 갱신 신호를 직접 쏜다(푸시 토글과 무관).
+    this.inboxService.pushInboxRefresh(recipient.id);
   }
 
   private async findOwned(id: string, ownerId: string): Promise<FriendEntity> {

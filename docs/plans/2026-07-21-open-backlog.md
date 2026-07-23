@@ -23,7 +23,7 @@
 ## 공통 · 여러 문서에 반복 (우선순위 후보)
 
 - [ ] **"수락 → 재계획" 배선** `[코드확인: 없음]` — `deviation`/`weather` 트리거 타입·프롬프트·결과분기는 준비됨. 알림 탭 → planner 이동 후 재계획 진입점만 없음 ([arrival](../alerts/arrival-check-alert-v1.md#L142)·[crowd](../alerts/crowd-alert-scheduler-v1.md#L143)·[mid-term](../alerts/mid-term-forecast-v1.md#L113))
-- [ ] **iOS 푸시(APNs) 실기기 검증** `[대기: 실기기 + APNs Auth Key]` — iPhone 17 Pro 시뮬레이터 Debug 빌드·설치·실행과 Firebase plist 번들 포함은 확인(2026-07-22). Auth Key 업로드 + Xcode capability 및 APNs 수신은 실기기에서 검증 ([inbox](../notification/inbox-and-trip-invite-v1.md#L450)·[photo-taste](../preference/preference-photo-taste-analysis-v1.md#L152)·[trip-progress](../trips/trip-progress-live-v1.md#L147)·[mobile](../setup/mobile-webview-setup.md#L226))
+- [ ] **iOS 푸시(APNs) 실기기 검증** `[대기: 실기기 + APNs Auth Key]` — Auth Key 업로드 + Xcode capability ([inbox](../notification/inbox-and-trip-invite-v1.md#L450)·[photo-taste](../preference/preference-photo-taste-analysis-v1.md#L152)·[trip-progress](../trips/trip-progress-live-v1.md#L147)·[mobile](../setup/mobile-webview-setup.md#L226))
 - [x] **Web Push (Service Worker + VAPID)** — 브라우저 단독 사용자 푸시 수신 ([web-push](../notification/web-push-service-worker-v1.md)). 자동 권한 프롬프트→옵트인 UI, `platform='web'` 정밀 태깅은 후속
 - [ ] **DB 마이그레이션 인프라** `[코드확인: 없음]` `[대기: 라이브 스키마 반영 결정]` — `synchronize` 의존, 라이브 스키마 반영 미결 ([preferences-enh](../preference/preferences-enhancements-v1.md#L111)·[weighting](../preference/preference-embedding-weighting-v1.md#L94))
 - [x] **지도 폴리라인 동선 시각화** `[코드확인: 없음]` `[제외: 폴리라인 동선은 오히려 UI 상으로 불편할 수 있음]` — 내 위치 이동 버튼 포함 ([main-planner](../planner/main-planner-v1.md#L263)·[planner-enh](../planner/planner-page-enhancements-v1.md#L124))
@@ -60,7 +60,7 @@
 
 ## 취향 · 임베딩
 
-- [x] confidence 활용(CRAG 보정/임계 필터) `[코드확인]` — confidence 0.35 미만 태그는 검색·CRAG 매칭에서 제외하고, 유효 태그 점수는 confidence 만큼 중립값에서 보정 ([photo-taste](../preference/preference-photo-taste-analysis-v1.md#L152))
+- [ ] confidence 활용(CRAG 보정/임계 필터) ([photo-taste](../preference/preference-photo-taste-analysis-v1.md#L152))
 - [ ] 미분석 사진 전용 재분석 버튼
 - [ ] 검색 품질 평가 하네스(golden set) → blend weight·radius 튜닝 ([enrichment](../preference/place-embedding-enrichment-v1.md#L149))
 - [ ] ANN 스케일 region 코드 pre-filter
@@ -69,22 +69,22 @@
 
 ## 트립
 
-- [ ] 관광공사 `areaBasedList2` — 전국 일정 카탈로그 ([destination](../trips/destination-tour-api-v1.md#L81))
-- [ ] 관광공사 `locationBasedList2` — 대안 후보(현재 좌표 주변)
-- [x] 영업시간 화면 배지 노출(`PlannerItineraryItemDto.openingHours`) `[코드확인]` — API 응답에 영업시간을 연결하고 일정 카드에 시계 아이콘과 함께 노출 ([opening-hours](../trips/tour-api-opening-hours-v1.md#L147))
-- [ ] 카카오 전용 장소 영업시간 소스(구글 Places 등) 검토
-- [ ] backfill 스테일 처리(KTO가 영업시간 내린 경우)
-- [ ] 히어로 카드 날씨 미리보기 ([main-page](../trips/main-page-filters-card-v1.md#L107))
-- [ ] 추천 여행지 서버 캐시(현재 프론트 staleTime만)
-- [ ] 시군구 인제스천 커버리지 확대(현재 경북·대구)
-- [ ] 멤버 입력 초대 링크 확장 ([trip-create](../trips/trip-create-v1.md#L195))
+- [x] 관광공사 `areaBasedList2` — 전국 일정 카탈로그 `[코드확인]` — 이미 적재 파이프라인에 연결(`TourApiService.fetchByArea`→`areaBasedList2`→pgvector 적재, [tour-api.service.ts](../../apps/api/src/planner/retrieval/tour-api.service.ts#L479)). 리트리벌은 pgvector 우선·seed 폴백. "연동"은 done, 남은 건 적재 커버리지(아래 §시군구 인제스천) ([destination](../trips/destination-tour-api-v1.md#L81))
+- [x] 관광공사 `locationBasedList2` — 대안 후보(현재 좌표 주변) `[제외: 카카오+pgvector 로 대체]` `[코드확인]` — "현재 좌표 주변 대안 후보"는 이미 구현됨. `ReplanRequestDto.currentLocation` → `RetrievalContext` → [kakao-local.service.ts](../../apps/api/src/planner/retrieval/kakao-local.service.ts#L75) `search` 가 좌표를 center+radius 로 카카오 주변 검색, [crag-evaluator.service.ts](../../apps/api/src/planner/retrieval/crag-evaluator.service.ts#L141) 가 거리 점수 가점. KTO `locationBasedList2` 는 불필요(CLAUDE.md "대안 후보는 pgvector 취향 유사도로 대체" 방침 일치)
+- [ ] 영업시간 화면 배지 노출(`PlannerItineraryItemDto.openingHours`) ([opening-hours](../trips/tour-api-opening-hours-v1.md#L147))
+- [x] 카카오 전용 장소 영업시간 소스(구글 Places 등) 검토 `[제외: 비용]` — 구글 Places 는 호출 비용이 붙어 도입 안 함. KTO 미등록 카카오 전용 장소(카페·프랜차이즈) 영업시간은 빈 채로 유지(문서 §7 한계 그대로)
+- [ ] backfill 스테일 처리(KTO가 영업시간 내린 경우) `[보류: 빈도 낮음·실익 미미]` — 현재 "마지막 확보값 유지". KTO 가 영업시간 필드를 내리는 빈도가 낮아 후순위
+- [x] 히어로 카드 날씨 미리보기 `[제외: 불필요]` — 요약 API 마다 격자 변환+예보 조회가 붙어 응답이 무거워지는 데 비해 목록 화면 날씨 미리보기 가치가 낮음 ([main-page](../trips/main-page-filters-card-v1.md#L107))
+- [ ] 추천 여행지 서버 캐시(현재 프론트 staleTime만) `[보류: 부하 미발생]` — `DestinationsService.recommend` 는 사용자별 pgvector 집계라 캐시 이득이 있으나, 트래픽 부하가 실제로 생기기 전엔 프론트 staleTime 으로 충분
+- [x] 시군구 인제스천 커버리지 확대(현재 경북·대구) — 코드가 아니라 적재 스크립트를 지역별로 돌리는 운영 작업이라 필요 시점에 인제스천 실행으로 커버. 코드 과제 아님
+- [ ] 멤버 입력 초대 링크 확장 `[보류: 우선순위·규모]` — 초대 토큰 발급 + 외부 채널이라 규모가 크고, 친구 §"비회원 멤버 직접 초대(이메일)"와 겹침 ([trip-create](../trips/trip-create-v1.md#L195))
 
 ## 친구 · 멤버
 
-- [ ] 친구 요청 알림 채널(FCM/in-app toast) ([friends](../friends/friends-and-trip-members-v1.md#L312))
-- [ ] 비회원 멤버 직접 초대(이메일)
-- [ ] 조율 `recommendation` ↔ 실 일정 item highlight 연결
-- [ ] `FriendMemberPicker` floating 로직 `@floating-ui/react` 추출
+- [x] 친구 요청 알림 채널(FCM/in-app toast) `[코드확인]` — FCM(`notifyFriendRequest`) + 인박스 목록 실시간 갱신(가상 row 라 `create` 우회 → `pushInboxRefresh` 로 직접 WS 신호, 요청 생성·취소 양쪽) + 전역 인앱 토스트(`inbox_toast` WS → providers `InboxToast`, 탭 시 /inbox) 3채널 완비. 토스트·FCM 은 `friend_request` 토글 따름, 목록 갱신은 토글 무관. 앱 전역 미읽음 배지 실시간은 모든 알림 공통 사안이라 별도로 완료(아래 §인박스·푸시 인프라) ([friends](../friends/friends-and-trip-members-v1.md#L312))
+- [ ] 비회원 멤버 직접 초대(이메일) `[보류: 우선순위·규모]` — 초대 토큰 발급 + 메일 발송 + 가입/합류 배선이라 규모가 크고, 미가입자는 FCM 대상이 아니라 외부 채널(이메일)이 별도로 필요. 현재는 핸들 등록(즉시 accepted 합류)으로 갈음
+- [x] 조율 `recommendation` ↔ 실 일정 item highlight 연결 `[제외: 기획 범위 밖]` — 조율 추천은 취향 태그 기반 설명 텍스트(`buildRecommendation`)로 충분하고, 이를 실 itinerary item 과 하이라이트로 잇는 건 기획상 불필요. 추천이 item id 를 담지 않는 현 구조 유지
+- [ ] `FriendMemberPicker` floating 로직 `@floating-ui/react` 추출 `[보류: 현 구현 동작, payoff 는 shared primitive 통합 시에만]` — 유일 실사용처(friend-member-picker)는 이미 flip·maxHeight 동작해 one-off 교체 이득 미미. 진짜 가치는 shared/ui 에 `Popover` primitive 를 @floating-ui 로 만들어 [place-search-picker](../../apps/web/src/shared/ui/place-search-picker.tsx)·[destination-search-input](../../apps/web/src/features/destination-search/ui/destination-search-input.tsx) 까지 3곳 통합(flip·shift·portal 정합성 + dedup)할 때 생김. 별도 리팩터 과제라 우선순위 낮음
 
 ## 인증 · 설정
 
@@ -109,12 +109,13 @@
 - [x] `friendUserId` 없는 핸들 친구 가입 유도 푸시 `[제외: 미가입자 푸시 채널 부재]` — 핸들만 등록된(friendUserId 없는) 친구는 아직 서비스 미가입이라 FCM 토큰이 없어 보낼 대상 자체가 없음. SMS·카카오 알림톡 등 외부 채널이 필요해 현재 푸시 인프라 범위 밖. 현재는 즉시 accepted 합류 유지
 - [x] 알림 카테고리별 sub-filter `[코드확인]` — 기존 상태 필터(전체/읽지않음/응답필요)와 직교하는 카테고리 chip 열 추가. 현재 목록에 실제 존재하는 카테고리만 chip 노출(빈 카테고리 숨김), 선택 카테고리가 사라지면 전체로 폴백
 - [x] 알림 30일 자동 archive 정책 `[코드확인]` — `NotificationArchiveService`(04:00 KST 스캔)가 읽은 지 30일 지난 알림 hard delete. 미읽음은 나이 무관 보존(못 본 알림 유실 방지), 친구 요청은 friends 가상 row 라 무영향. `synchronize` 의존이라 soft flag 컬럼 대신 삭제 선택
+- [x] nav 미읽음 배지 앱 전역 실시간 `[코드확인]` — 기존 `inbox_invalidate` 구독이 inbox-view 에만 마운트돼 다른 페이지 배지가 안 갱신되던 공백 해소. `subscribe-inbox-unread`(세션 게이팅 인박스 요약 조회 + 전역 `inbox_invalidate` 구독)가 미읽음 수를 추적해 providers 에서 앱 트리에 주입, 하단 탭·데스크탑 nav 알림 아이템에 배지 노출(하단 9+·데스크탑 99+ 축약). shared(nav)는 `InboxBadgeProvider` context 계약만 두고 값은 상위 feature 가 채워 순수 유지(FSD). 쿼리 키가 inbox-view 와 같아 캐시 공유(중복 fetch 없음)
 
 ## 모바일 셸
 
 - [ ] iOS/Android 번들 ID·applicationId 실도메인 확정 `[대기: 서비스 도메인 확정]` ([mobile](../setup/mobile-webview-setup.md#L226))
 - [ ] release keystore 분리(현재 debug fallback) `[대기: 라이브 배포]`
-- [x] WebView 첫 로드 실패 시 retry UI `[코드확인]` — 첫 네트워크/HTTP 오류에 안내와 재시도 버튼을 표시하고 WebView remount 로 복구
+- [ ] WebView 첫 로드 실패 시 retry UI
 - [ ] 카메라/사진 권한(사진 업로드)
 
 ## 테스트 · 운영

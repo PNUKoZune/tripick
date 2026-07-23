@@ -11,7 +11,7 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import type { JwtPayload, ReplanResultDto } from '@tripick/types';
+import type { InboxToastDto, JwtPayload, ReplanResultDto } from '@tripick/types';
 import { TripMembersService } from '../trip-members/trip-members.service';
 
 /** 인증을 통과한 소켓의 client.data 에 담기는 사용자 정보 */
@@ -112,6 +112,15 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
    */
   pushInboxInvalidate(userId: string) {
     this.server.to(`inbox:${userId}`).emit('inbox_invalidate');
+  }
+
+  /**
+   * 앱이 열려 있는(소켓 연결) 클라이언트에 즉시 토스트를 띄운다.
+   * 목록 갱신(pushInboxInvalidate)과 독립적인 능동 알림 — 친구 요청처럼 heads-up 이
+   * 필요한 흐름에서만 호출한다. FCM 이 닫힌 앱을 담당한다면 이건 열린 앱을 담당한다.
+   */
+  pushInboxToast(userId: string, toast: InboxToastDto) {
+    this.server.to(`inbox:${userId}`).emit('inbox_toast', toast);
   }
 
   /**

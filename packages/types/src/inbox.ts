@@ -62,6 +62,19 @@ export interface InboxSummaryDto {
   unreadCount: number;
 }
 
+/**
+ * WS 실시간 토스트 payload — 앱이 열려 있는(소켓 연결) 클라이언트에 즉시 뜨는 heads-up.
+ * 인박스 목록 갱신(`inbox_invalidate`)과 독립: 목록은 항상 갱신하되, 토스트는 능동 알림이라
+ * 필요한 경우에만 별도로 emit 한다(예: 친구 요청).
+ */
+export interface InboxToastDto {
+  tone: 'neutral' | 'primary' | 'success' | 'warning' | 'error';
+  title: string;
+  message?: string;
+  /** 탭 시 이동할 앱 내 경로 (없으면 닫기만) */
+  href?: string;
+}
+
 export interface CreateNotificationDto {
   userId: string;
   category: NotificationCategory;

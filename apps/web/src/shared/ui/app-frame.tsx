@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 
+import { useInboxUnreadCount } from './inbox-badge-context';
+
 const NAV_ITEMS = [
   { href: '/', label: '홈', icon: 'home' },
   { href: '/preferences', label: '취향', icon: 'preference' },
@@ -101,6 +103,7 @@ export function PageContainer({
 
 export function AppBottomNavigation({ className = '' }: { className?: string }) {
   const pathname = usePathname();
+  const inboxUnread = useInboxUnreadCount();
 
   return (
     <nav
@@ -110,6 +113,7 @@ export function AppBottomNavigation({ className = '' }: { className?: string }) 
       <div className="grid h-[66px] grid-cols-5 items-stretch">
         {NAV_ITEMS.map((item) => {
           const active = isNavItemActive(pathname, item.href);
+          const badge = item.icon === 'inbox' ? inboxUnread : 0;
           return (
             <Link
               key={item.href}
@@ -121,7 +125,10 @@ export function AppBottomNavigation({ className = '' }: { className?: string }) 
                   : 'text-[color:var(--text-tertiary)] hover:text-[color:var(--text-secondary)]'
               }`}
             >
-              <NavIcon name={item.icon} active={active} />
+              <span className="relative">
+                <NavIcon name={item.icon} active={active} />
+                <NavBadge count={badge} />
+              </span>
               <span>{item.label}</span>
             </Link>
           );
@@ -131,8 +138,25 @@ export function AppBottomNavigation({ className = '' }: { className?: string }) 
   );
 }
 
+/**
+ * nav 아이콘 위에 겹치는 미읽음 배지. 0 이면 렌더하지 않는다.
+ * 9 초과는 "9+" 로 축약(하단 탭 폭 제약).
+ */
+function NavBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      aria-label={`읽지 않은 알림 ${count}개`}
+      className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#F04452] px-1 text-[10px] font-bold leading-none text-white"
+    >
+      {count > 9 ? '9+' : count}
+    </span>
+  );
+}
+
 export function AppDesktopNavigation() {
   const pathname = usePathname();
+  const inboxUnread = useInboxUnreadCount();
 
   return (
     <aside className="hidden py-8 lg:block">
@@ -143,6 +167,7 @@ export function AppDesktopNavigation() {
         <nav aria-label="데스크탑 내비게이션" className="mt-8 space-y-1">
           {NAV_ITEMS.map((item) => {
             const active = isNavItemActive(pathname, item.href);
+            const badge = item.icon === 'inbox' ? inboxUnread : 0;
             return (
               <Link
                 key={item.href}
@@ -156,6 +181,14 @@ export function AppDesktopNavigation() {
               >
                 <NavIcon name={item.icon} active={active} />
                 <span>{item.label}</span>
+                {badge > 0 ? (
+                  <span
+                    aria-label={`읽지 않은 알림 ${badge}개`}
+                    className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[#F04452] px-1.5 text-[11px] font-bold leading-none text-white"
+                  >
+                    {badge > 99 ? '99+' : badge}
+                  </span>
+                ) : null}
               </Link>
             );
           })}
