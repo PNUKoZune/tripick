@@ -85,6 +85,7 @@
 - [ops/deployment-railway-vercel-runpod.md](ops/deployment-railway-vercel-runpod.md) — 배포(Railway · Vercel · RunPod)
 - [ops/production-ai-long-term-readiness.md](ops/production-ai-long-term-readiness.md) — production AI 장기 운영 준비
 - [ops/test-coverage-expansion-v1.md](ops/test-coverage-expansion-v1.md) — API 테스트 커버리지 확장
+- [ops/eslint-flat-config-v1.md](ops/eslint-flat-config-v1.md) — ESLint 9 flat config 워크스페이스 세팅 + react-hooks 오류 해소
 
 ## 수정 기록 (Fix)
 
