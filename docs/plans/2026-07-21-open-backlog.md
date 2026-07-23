@@ -69,15 +69,15 @@
 
 ## 트립
 
-- [ ] 관광공사 `areaBasedList2` — 전국 일정 카탈로그 ([destination](../trips/destination-tour-api-v1.md#L81))
-- [ ] 관광공사 `locationBasedList2` — 대안 후보(현재 좌표 주변)
+- [x] 관광공사 `areaBasedList2` — 전국 일정 카탈로그 `[코드확인]` — 이미 적재 파이프라인에 연결(`TourApiService.fetchByArea`→`areaBasedList2`→pgvector 적재, [tour-api.service.ts](../../apps/api/src/planner/retrieval/tour-api.service.ts#L479)). 리트리벌은 pgvector 우선·seed 폴백. "연동"은 done, 남은 건 적재 커버리지(아래 §시군구 인제스천) ([destination](../trips/destination-tour-api-v1.md#L81))
+- [x] 관광공사 `locationBasedList2` — 대안 후보(현재 좌표 주변) `[제외: 카카오+pgvector 로 대체]` `[코드확인]` — "현재 좌표 주변 대안 후보"는 이미 구현됨. `ReplanRequestDto.currentLocation` → `RetrievalContext` → [kakao-local.service.ts](../../apps/api/src/planner/retrieval/kakao-local.service.ts#L75) `search` 가 좌표를 center+radius 로 카카오 주변 검색, [crag-evaluator.service.ts](../../apps/api/src/planner/retrieval/crag-evaluator.service.ts#L141) 가 거리 점수 가점. KTO `locationBasedList2` 는 불필요(CLAUDE.md "대안 후보는 pgvector 취향 유사도로 대체" 방침 일치)
 - [ ] 영업시간 화면 배지 노출(`PlannerItineraryItemDto.openingHours`) ([opening-hours](../trips/tour-api-opening-hours-v1.md#L147))
-- [ ] 카카오 전용 장소 영업시간 소스(구글 Places 등) 검토
-- [ ] backfill 스테일 처리(KTO가 영업시간 내린 경우)
-- [ ] 히어로 카드 날씨 미리보기 ([main-page](../trips/main-page-filters-card-v1.md#L107))
-- [ ] 추천 여행지 서버 캐시(현재 프론트 staleTime만)
-- [ ] 시군구 인제스천 커버리지 확대(현재 경북·대구)
-- [ ] 멤버 입력 초대 링크 확장 ([trip-create](../trips/trip-create-v1.md#L195))
+- [x] 카카오 전용 장소 영업시간 소스(구글 Places 등) 검토 `[제외: 비용]` — 구글 Places 는 호출 비용이 붙어 도입 안 함. KTO 미등록 카카오 전용 장소(카페·프랜차이즈) 영업시간은 빈 채로 유지(문서 §7 한계 그대로)
+- [ ] backfill 스테일 처리(KTO가 영업시간 내린 경우) `[보류: 빈도 낮음·실익 미미]` — 현재 "마지막 확보값 유지". KTO 가 영업시간 필드를 내리는 빈도가 낮아 후순위
+- [x] 히어로 카드 날씨 미리보기 `[제외: 불필요]` — 요약 API 마다 격자 변환+예보 조회가 붙어 응답이 무거워지는 데 비해 목록 화면 날씨 미리보기 가치가 낮음 ([main-page](../trips/main-page-filters-card-v1.md#L107))
+- [ ] 추천 여행지 서버 캐시(현재 프론트 staleTime만) `[보류: 부하 미발생]` — `DestinationsService.recommend` 는 사용자별 pgvector 집계라 캐시 이득이 있으나, 트래픽 부하가 실제로 생기기 전엔 프론트 staleTime 으로 충분
+- [x] 시군구 인제스천 커버리지 확대(현재 경북·대구) — 코드가 아니라 적재 스크립트를 지역별로 돌리는 운영 작업이라 필요 시점에 인제스천 실행으로 커버. 코드 과제 아님
+- [ ] 멤버 입력 초대 링크 확장 `[보류: 우선순위·규모]` — 초대 토큰 발급 + 외부 채널이라 규모가 크고, 친구 §"비회원 멤버 직접 초대(이메일)"와 겹침 ([trip-create](../trips/trip-create-v1.md#L195))
 
 ## 친구 · 멤버
 
