@@ -231,8 +231,18 @@ export function inferPlaceTags(
   return [...tags];
 }
 
+/** 검색 개인화에 사용할 수 있는 최소 사진 분석 신뢰도. */
+export const MIN_ACTIONABLE_TASTE_CONFIDENCE = 0.35;
+
 export function tasteTagsToKeywords(tasteTags?: TasteTagDto): string[] {
-  if (!tasteTags) return [];
+  // 애매한 사진 분석 결과가 목적지와 동선 신호보다 강하게 작동하지 않게 한다.
+  if (
+    !tasteTags ||
+    !Number.isFinite(tasteTags.confidence) ||
+    tasteTags.confidence < MIN_ACTIONABLE_TASTE_CONFIDENCE
+  ) {
+    return [];
+  }
   return [
     ...(tasteTags.food ?? []),
     ...(tasteTags.mood ?? []),

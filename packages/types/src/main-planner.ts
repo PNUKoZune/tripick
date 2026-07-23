@@ -55,6 +55,8 @@ export interface PlannerItineraryItemDto {
   durationMin: number;
   /** 사용자 메모 — 편집 폼 prefill 용 */
   memo?: string;
+  /** 알려진 영업시간(HH:MM-HH:MM). 없으면 미제공 */
+  openingHours?: string;
   /** 카카오 장소 ID — 있으면 카카오맵 장소 페이지 링크에 사용 */
   kakaoPlaceId?: string;
 }

@@ -135,4 +135,51 @@ describe('CragEvaluatorService', () => {
     expect(highPref.crag.taste).toBeGreaterThan(lowPref.crag.taste);
     expect(highPref.confidence).toBeGreaterThan(lowPref.confidence);
   });
+
+  it('weights tag matching by photo-analysis confidence', () => {
+    const candidate: RawPlaceCandidate = {
+      id: 'matched-cafe',
+      name: '광안리 브런치 카페',
+      category: 'cafe',
+      address: '부산 수영구 광안해변로 219',
+      coordinates: { lat: 35.1532, lng: 129.1185 },
+      source: 'pgvector',
+      similarity: 0.8,
+      tags: ['cafe', 'beach', 'romantic'],
+      destinationRegion: 'busan',
+    };
+
+    const highConfidence = service.rank([candidate], busanContext)[0]!;
+    const lowConfidence = service.rank([candidate], {
+      ...busanContext,
+      tasteTags: { ...busanContext.tasteTags!, confidence: 0.4 },
+    })[0]!;
+
+    expect(highConfidence.crag.taste).toBeGreaterThan(lowConfidence.crag.taste);
+    expect(highConfidence.confidence).toBeGreaterThan(lowConfidence.confidence);
+  });
+
+  it('ignores matched tags below the actionable confidence threshold', () => {
+    const ranked = service.rank(
+      [
+        {
+          id: 'uncertain-cafe',
+          name: '광안리 브런치 카페',
+          category: 'cafe',
+          address: '부산 수영구 광안해변로 219',
+          coordinates: { lat: 35.1532, lng: 129.1185 },
+          source: 'seed',
+          tags: ['cafe', 'beach', 'romantic'],
+          destinationRegion: 'busan',
+        },
+      ],
+      {
+        ...busanContext,
+        tasteTags: { ...busanContext.tasteTags!, confidence: 0.2 },
+      },
+    );
+
+    expect(ranked[0]!.crag.matchedTags).toEqual([]);
+    expect(ranked[0]!.crag.taste).toBe(0.56);
+  });
 });

@@ -309,3 +309,59 @@
 3. 랜딩/입력/결과/재계획 모두 모바일 단일 컬럼을 기준으로 통일한다.
 4. 결과 화면의 핵심 단위는 지도보다 카드형 일정 item이다.
 5. 모든 CTA 상태는 enabled/disabled/loading 이유가 명확해야 한다.
+
+---
+
+## 부록 v2 — "광안리의 하루" 규칙 완화 (SPEC-WEB-VISUAL-REDESIGN-001)
+
+> v1 본문은 그대로 유지한다. 아래는 대상 5개 화면(랜딩 · 취향 입력 · 여행 조건 ·
+> 결과/플래너 · 재계획 시트)에 한해 v1 §3/§11 의 두 규칙을 **의도적으로 완화**한
+> 결정을 기록한 것이다. v1 나머지 원칙(모바일 단일 컬럼, 화면당 primary CTA 1개,
+> 카드 리듬, 정보 위계, disabled CTA 이유 표시 등)은 그대로 적용·진화한다.
+
+### v2.1 완화된 규칙
+
+| v1 규칙 | 완화 내용 | 적용 위치 | 적용 범위 |
+|---------|-----------|-----------|-----------|
+| §3 "그라데이션 금지" | 4-stop 타임라인 그라데이션 허용 | 결과 화면 세로 타임라인 연결선 + 상단 요약 카드 가로 미니 레일 | 대상 5개 화면 로컬 스코프만 |
+| §11 "hero 배경 이미지/일러스트는 v1에서 쓰지 않는다" | 인라인 SVG 일러스트 허용 (사진/래스터 이미지는 여전히 금지) | 랜딩 hero (광안리 노을 장면) | 랜딩 화면만 |
+
+### v2.2 "하루의 빛" — 시그니처 타임라인 그라데이션
+
+결과 화면 타임라인 연결선과 랜딩 hero 는 같은 시각 은유(하루의 빛)를 공유한다.
+
+- **4-stop 정지점**: 아침 파랑(`--t-morning`) → 낮 파랑(`--t-noon`) → 오후 금빛
+  (`--t-gold`) → 저녁 코랄(`--t-dusk`).
+- **세로 rail**(결과 화면 타임라인): `linear-gradient(180deg, morning 0%, noon 36%,
+  gold 70%, dusk 100%)`.
+- **가로 미니 레일**(결과 요약 카드): 동일 정지점, `90deg` 방향.
+- **항목 도트 색**: 컨테이너 레벨 그라데이션과 별개로, 각 일정 항목의 도트는
+  그 항목 **시각의 시간대**에서 결정되는 순수 함수로 매핑한다(백엔드 호출 없음).
+  구현: `apps/web/src/shared/config/design-tokens.ts` `timeSlotColorVar()`.
+
+### v2.3 새 primary 색 — 로컬 스코프 한정
+
+- 새 파란색 `#2E6BE6`(기존 `#3182F6` 대비 더 깊은 톤)는 **대상 5개 화면에만**
+  로컬 스코프로 적용한다(`apps/web/src/app/globals.css` `.wvr-scope` 클래스).
+- `shared/ui` 의 전역 버튼·칩·세그먼트 등이 참조하는 기존 `--blue-*` /
+  `design-tokens.ts` `colors.primary`(`#3182F6`)는 **이번 스코프에서 불변**이다.
+  두 파란색이 같은 화면에 공존하는 지점(예: `SegmentToggle`, `PlaceSearchPicker`
+  등 보존 대상 shared/ui 컴포넌트)은 의도된 상태이며 버그가 아니다.
+
+### v2.4 다크 모드 — 시스템 선호도 자동 감지만
+
+- `prefers-color-scheme: dark` 미디어 쿼리 기반 **자동 감지만** 구현한다.
+- 뷰어 테마 토글 UI, `data-theme` 훅은 이번 스코프에 포함하지 않는다(별도
+  요청 시 추가).
+
+### v2.5 확장 팔레트 SSOT
+
+토큰 값의 정본은 `docs/design-system/mockups/tripick-landing-mockup.html` 의
+CSS 커스텀 프로퍼티 블록이며, 코드 반영 SSOT 는 다음 두 곳이다(항상 동일 값
+유지):
+
+- `apps/web/src/shared/config/design-tokens.ts` — `wvrPaletteLight` /
+  `wvrPaletteDark` / `wvrTimelineColors` / `wvrSceneColorsLight` /
+  `wvrSceneColorsDark`
+- `apps/web/src/app/globals.css` — `.wvr-scope` 클래스 (라이트) +
+  `@media (prefers-color-scheme: dark) { .wvr-scope { ... } }` (다크)

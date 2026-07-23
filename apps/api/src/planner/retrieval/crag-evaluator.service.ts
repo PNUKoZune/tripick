@@ -100,11 +100,16 @@ export class CragEvaluatorService {
     context: RetrievalContext,
     personalization?: number,
   ): number {
+    const neutralScore = 0.56;
     const preferred = tasteTagsToKeywords(context.tasteTags);
-    const tagScore =
+    const rawTagScore =
       preferred.length === 0
-        ? 0.56
+        ? neutralScore
         : this.clamp(0.35 + preferred.filter((tag) => tags.includes(tag)).length / preferred.length);
+    const rawConfidence = context.tasteTags?.confidence ?? 0;
+    const tasteConfidence = Number.isFinite(rawConfidence) ? this.clamp(rawConfidence) : 0;
+    // 사진 분석 confidence 만큼만 태그 매칭 점수를 중립값에서 움직인다.
+    const tagScore = neutralScore + (rawTagScore - neutralScore) * tasteConfidence;
     // 취향 벡터 유사도가 있으면 태그 매칭보다 우선해 리랭킹 (벡터 기반 개인화)
     if (personalization === undefined) return tagScore;
     return this.clamp(tagScore * 0.45 + personalization * 0.55);

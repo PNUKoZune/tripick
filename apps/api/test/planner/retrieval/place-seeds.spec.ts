@@ -1,9 +1,11 @@
 /// <reference types="jest" />
 
+import type { TasteTagDto } from '@tripick/types';
 import {
   inferPlaceTags,
   parseSigungu,
   regionStem,
+  tasteTagsToKeywords,
 } from '../../../src/planner/retrieval/place-seeds';
 
 describe('regionStem', () => {
@@ -89,5 +91,26 @@ describe('inferPlaceTags', () => {
     expect(
       inferPlaceTags({ name: 'N서울타워 전망대', category: 'attraction', address: '서울특별시 중구' }),
     ).toContain('nightview');
+  });
+});
+
+describe('tasteTagsToKeywords', () => {
+  const tags: Omit<TasteTagDto, 'confidence'> = {
+    food: ['cafe'],
+    mood: ['healing'],
+    environment: ['nature'],
+  };
+
+  it('신뢰도가 낮거나 유효하지 않은 사진 태그는 검색 키워드에서 제외한다', () => {
+    expect(tasteTagsToKeywords({ ...tags, confidence: 0.34 })).toEqual([]);
+    expect(tasteTagsToKeywords({ ...tags, confidence: Number.NaN })).toEqual([]);
+  });
+
+  it('최소 신뢰도 이상의 사진 태그만 검색 키워드로 사용한다', () => {
+    expect(tasteTagsToKeywords({ ...tags, confidence: 0.35 })).toEqual([
+      'cafe',
+      'healing',
+      'nature',
+    ]);
   });
 });

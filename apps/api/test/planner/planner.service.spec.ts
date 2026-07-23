@@ -6,6 +6,26 @@ import type { CandidatePlace } from '../../src/planner/retrieval/types';
 import type { ItineraryItemDto } from '@tripick/types';
 
 describe('PlannerService hard constraints', () => {
+  it('expands the daily target beyond the pace minimum for a long activity window', async () => {
+    const harness = createHarness('relaxed');
+    harness.constraintEngine.validate.mockImplementation(async (items: ItineraryItemDto[]) => ({
+      valid: true,
+      issues: [],
+      items,
+    }));
+
+    await harness.service.generateItinerary(TRIP.id);
+
+    expect(harness.plannerAgent.plan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        minimumItemsPerDay: 3,
+        itemsPerDay: 5,
+        wakeTime: '09:00',
+        sleepTime: '22:00',
+      }),
+    );
+  });
+
   it('rebuilds an invalid AI draft with deterministic CRAG fallback before saving', async () => {
     const harness = createHarness();
     // 1회차(AI 초안)는 제약 위반, 이후(폴백 초안)는 통과하도록 구성한다.
@@ -80,7 +100,7 @@ const TRIP = {
   notes: '카페 위주',
 };
 
-function createHarness() {
+function createHarness(pace?: 'relaxed' | 'balanced' | 'packed') {
   const candidate = place('place-1', '광안리 카페', 'cafe');
   const tripsRepo = {
     findOneBy: jest.fn().mockResolvedValue({ ...TRIP }),
@@ -108,6 +128,7 @@ function createHarness() {
         environment: ['beach'],
         confidence: 0.9,
       },
+      ...(pace ? { profile: { pace } } : {}),
     }),
     getPreferenceVector: jest.fn().mockResolvedValue(null),
   };
@@ -162,6 +183,7 @@ function createHarness() {
     tripsRepo,
     itineraryService,
     constraintEngine,
+    plannerAgent,
   };
 }
 

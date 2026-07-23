@@ -3,6 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import type { ReplanTrigger, RouteMode, TasteTagDto } from '@tripick/types';
 import type { CandidatePlace } from '../retrieval/types';
+import {
+  defaultVisitDuration,
+  distributeFallbackDurations,
+} from '../helpers/itinerary-density';
 
 export interface PlannerAgentOptions {
   destination: string;
@@ -12,6 +16,7 @@ export interface PlannerAgentOptions {
   sleepTime: string;
   transportMode: RouteMode;
   dayCount: number;
+  minimumItemsPerDay: number;
   itemsPerDay: number;
   candidates: CandidatePlace[];
   tasteTags?: TasteTagDto;
@@ -130,13 +135,15 @@ export class PlannerAgentService {
         `Return exactly ${Math.min(targetCount, options.candidates.length)} items if possible.`,
         `day must be between 1 and ${options.dayCount}.`,
         `order must be between 1 and ${options.itemsPerDay}.`,
+        `일정 강도별 기본 ${options.minimumItemsPerDay}개는 최소 기준이지 상한이 아니다. 활동 시간이 길어 계산된 하루 목표 ${options.itemsPerDay}개를 가능한 모두 사용한다.`,
         'durationMin must be 45-150.',
         'Prefer high confidence candidates, but category balance beats small confidence differences.',
         '카페는 하루 최대 1개만 배치한다. 후보가 부족할 때만 예외로 2개까지 허용하고 memo에 이유를 쓴다.',
         '같은 category를 연속 배치하지 않는다. 특히 cafe-cafe, restaurant-restaurant 연속 배치는 피한다.',
         '하루마다 attraction, park, cultural 계열 후보를 가능한 2개 이상 포함해 여행 목적지를 실제로 둘러보게 한다.',
         'restaurant는 점심/저녁 역할로 하루 1-2개 배치하고, cafe는 이동 중 휴식 슬롯으로만 쓴다.',
-        '하루 방문 체류 시간 합계가 기상-취침 가능 시간의 70-85%가 되도록 durationMin을 적극적으로 사용한다.',
+        '하루 방문 체류 시간 합계가 기상-취침 가능 시간의 75-85%가 되도록 durationMin을 적극적으로 사용한다.',
+        '이동시간까지 고려했을 때 마지막 일정이 sleepTime 30-90분 전에 끝나는 종일 동선을 목표로 한다.',
         '짧은 cafe/restaurant 위주로 일찍 끝나는 일정을 만들지 말고, 긴 체류 attraction을 중심축으로 둔다.',
         'Respect wake/sleep/opening hours as much as possible.',
       ],
@@ -171,7 +178,8 @@ export class PlannerAgentService {
         sleepTime: options.sleepTime,
         transportMode: options.transportMode,
         dayCount: options.dayCount,
-        itemsPerDay: options.itemsPerDay,
+        minimumItemsPerDay: options.minimumItemsPerDay,
+        targetItemsPerDay: options.itemsPerDay,
         trigger: options.trigger ?? 'initial',
         notes: options.notes ?? null,
         taste,
@@ -219,16 +227,23 @@ export class PlannerAgentService {
 
   private buildFallbackPlan(options: PlannerAgentOptions): PlannedCandidate[] {
     const planned: PlannedCandidate[] = [];
-    const targetCount = Math.min(options.candidates.length, options.dayCount * options.itemsPerDay);
-    for (let index = 0; index < targetCount; index += 1) {
-      const candidate = options.candidates[index]!;
-      planned.push({
-        candidate,
-        day: Math.floor(index / options.itemsPerDay) + 1,
-        order: (index % options.itemsPerDay) + 1,
-        durationMin: this.defaultDuration(candidate.category),
-        memo: 'AI planner fallback: CRAG 후보 순위 기반 배치',
-        aiGenerated: false,
+    for (let day = 1; day <= options.dayCount; day += 1) {
+      const offset = (day - 1) * options.itemsPerDay;
+      const dayCandidates = options.candidates.slice(offset, offset + options.itemsPerDay);
+      const durations = distributeFallbackDurations(
+        dayCandidates.map((candidate) => candidate.category),
+        options.wakeTime,
+        options.sleepTime,
+      );
+      dayCandidates.forEach((candidate, index) => {
+        planned.push({
+          candidate,
+          day,
+          order: index + 1,
+          durationMin: durations[index] ?? defaultVisitDuration(candidate.category),
+          memo: 'AI planner fallback: CRAG 후보 순위 기반 배치',
+          aiGenerated: false,
+        });
       });
     }
     return planned;
@@ -236,14 +251,8 @@ export class PlannerAgentService {
 
   private normalizeDuration(value: unknown, category: string): number {
     const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return this.defaultDuration(category);
+    if (!Number.isFinite(parsed)) return defaultVisitDuration(category);
     return Math.max(45, Math.min(150, Math.round(parsed)));
-  }
-
-  private defaultDuration(category: string): number {
-    if (category === 'restaurant') return 80;
-    if (category === 'cafe') return 60;
-    return 90;
   }
 
   private normalizeMemo(value: unknown): string {

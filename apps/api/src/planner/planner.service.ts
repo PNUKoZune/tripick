@@ -6,6 +6,12 @@ import { PreferencesService } from '../preferences/preferences.service';
 import { WeatherHelper } from './helpers/weather.helper';
 import { RouteHelper } from './helpers/route.helper';
 import { ScheduleConstraint } from './helpers/schedule.constraint';
+import {
+  defaultVisitDuration,
+  distributeFallbackDurations,
+  minimumItemsPerDay,
+  targetItemsPerDay,
+} from './helpers/itinerary-density';
 import { ConstraintEngine, type ValidationResult } from './constraint/constraint.engine';
 import { PlannerAgentService } from './agent/planner-agent.service';
 import type { PlannedCandidate } from './agent/planner-agent.service';
@@ -117,8 +123,10 @@ export class PlannerService {
     const dayCount = countTripDays(trip.startDate, trip.endDate);
     const wakeTime = trip.wakeTime ?? '08:30';
     const sleepTime = trip.sleepTime ?? '22:00';
-    // 일정 강도(pace)에 따라 하루 일정 개수를 조절한다
-    const itemsPerDay = this.itemsPerDayForPace(options.preferences?.pace);
+    const pace = options.preferences?.pace ?? preference?.profile?.pace;
+    // 강도별 3/4/5개는 최소 밀도다. 활동 시간이 길면 하루가 일찍 끝나지 않도록 늘린다.
+    const minimumDailyItems = minimumItemsPerDay(pace);
+    const itemsPerDay = targetItemsPerDay(pace, wakeTime, sleepTime);
     // 여행 고정 노트 + 재계획 요청 노트 + 구조화 옵션을 하나의 지시문으로 합쳐 검색·프롬프트에 반영
     const combinedNotes = this.buildCombinedNotes(trip.notes, options);
     // 검색 컨텍스트 중 지역(destination)·개수(limit) 외 공통 항목. 단일/일자별 두 경로가 공유한다.
@@ -165,7 +173,6 @@ export class PlannerService {
       ? await this.weatherHelper.getExtendedForecast(firstCandidate.coordinates.lat, firstCandidate.coordinates.lng)
       : new Map();
     const weatherHint = this.weatherHelper.buildWeatherHint(forecast);
-
     // 단일 지역: AI 플래너가 하루 리듬·카테고리 균형을 맞춘다.
     // 일자별 지역: 각 일차를 그 날 지역 후보로만 채워야 하므로 지역-스코프 결정적 배치를 쓴다
     // (AI 는 여러 지역을 섞어 배치할 위험이 있어 일자별 모드에선 사용하지 않는다).
@@ -179,6 +186,7 @@ export class PlannerService {
           sleepTime,
           transportMode: trip.transportMode,
           dayCount,
+          minimumItemsPerDay: minimumDailyItems,
           itemsPerDay,
           candidates,
           notes: combinedNotes,
@@ -218,7 +226,7 @@ export class PlannerService {
           )
       : (attempt: number) =>
           this.enforceMustInclude(
-            this.buildDeterministicPlan(this.rotate(candidates, attempt), dayCount, itemsPerDay),
+            this.buildDeterministicPlan(this.rotate(candidates, attempt), draftContext),
             mustCandidates,
             dayCount,
           );
@@ -398,21 +406,29 @@ export class PlannerService {
 
   private buildDeterministicPlan(
     candidates: CandidatePlace[],
-    dayCount: number,
-    itemsPerDay: number,
+    context: DraftBuildContext,
   ): PlannedCandidate[] {
-    const targetCount = Math.min(candidates.length, dayCount * itemsPerDay);
-    return Array.from({ length: targetCount }, (_, index) => {
-      const candidate = candidates[index]!;
-      return {
-        candidate,
-        day: Math.floor(index / itemsPerDay) + 1,
-        order: (index % itemsPerDay) + 1,
-        durationMin: this.defaultDuration(candidate.category),
-        memo: 'CRAG 후보 순위 기반 배치',
-        aiGenerated: false,
-      };
-    });
+    const planned: PlannedCandidate[] = [];
+    for (let day = 1; day <= context.dayCount; day += 1) {
+      const offset = (day - 1) * context.itemsPerDay;
+      const dayCandidates = candidates.slice(offset, offset + context.itemsPerDay);
+      const durations = distributeFallbackDurations(
+        dayCandidates.map((candidate) => candidate.category),
+        context.wakeTime,
+        context.sleepTime,
+      );
+      dayCandidates.forEach((candidate, index) => {
+        planned.push({
+          candidate,
+          day,
+          order: index + 1,
+          durationMin: durations[index] ?? defaultVisitDuration(candidate.category),
+          memo: 'CRAG 후보 순위 기반 배치',
+          aiGenerated: false,
+        });
+      });
+    }
+    return planned;
   }
 
   /**
@@ -498,20 +514,13 @@ export class PlannerService {
           candidate,
           day: dayIndex + 1,
           order: index + 1,
-          durationMin: this.defaultDuration(candidate.category),
+          durationMin: defaultVisitDuration(candidate.category),
           memo: '일자별 지역 후보 순위 기반 배치',
           aiGenerated: false,
         });
       });
     });
     return planned;
-  }
-
-  /** 일정 강도(pace) → 하루 일정 개수 */
-  private itemsPerDayForPace(pace?: ReplanPace): number {
-    if (pace === 'relaxed') return 3;
-    if (pace === 'packed') return 5;
-    return 4;
   }
 
   /** 여행 노트 + 재계획 요청 노트 + 구조화 옵션을 하나의 지시문으로 합친다. */
@@ -617,7 +626,7 @@ export class PlannerService {
         day: pickDay(must, index),
         // 음수 order → 해당 일차 정렬 최상단. buildDraft 가 최종 order 를 다시 매기므로 값 자체는 표시 안 됨.
         order: -1000 + index,
-        durationMin: this.defaultDuration(must.category),
+        durationMin: defaultVisitDuration(must.category),
         memo: '사용자가 반드시 포함을 요청한 장소',
         aiGenerated: false,
       });
@@ -726,12 +735,6 @@ export class PlannerService {
     const adjusted = new Date(date);
     adjusted.setUTCHours(Number(startHour) - 9, Number(startMinute), 0, 0);
     return adjusted;
-  }
-
-  private defaultDuration(category: string): number {
-    if (category === 'restaurant') return 80;
-    if (category === 'cafe') return 60;
-    return 90;
   }
 
   private rotate<T>(items: T[], offset: number): T[] {

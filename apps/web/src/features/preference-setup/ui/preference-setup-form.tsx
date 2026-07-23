@@ -45,12 +45,7 @@ import {
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { startDemoSession } from '@/entities/session/api/auth-api';
 import { queryKeys } from '@/shared/api/query-keys';
-import {
-  InlineNotice,
-  PrimaryButton,
-  SecondaryButton,
-  SegmentedOption,
-} from '@/shared/ui/app-frame';
+import { InlineNotice, SegmentedOption } from '@/shared/ui/app-frame';
 import { ConfirmDialog, TimeField, Toast } from '@/shared/ui';
 
 type Notice = {
@@ -378,7 +373,7 @@ export function PreferenceSetupForm() {
         {Array.from({ length: 5 }).map((_, index) => (
           <div
             key={index}
-            className="h-20 animate-pulse rounded-[16px] bg-[color:var(--soft-bg)]"
+            className="h-20 animate-pulse rounded-[16px] bg-[color:var(--card-soft)]"
           />
         ))}
       </div>
@@ -386,15 +381,15 @@ export function PreferenceSetupForm() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="wvr-scope space-y-8">
       <SetupBlock title="테마/장소 선호도">
-        <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--text-tertiary)]">
+        <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--ink-faint)]">
           좋아하는 건 선호, 피하고 싶은 건 불호로 골라주세요. 고르지 않으면 중립이에요.
         </p>
         <div className="space-y-4">
           {THEME_GROUPS.map((group) => (
             <div key={group.key}>
-              <h3 className="mb-1.5 text-[13px] font-bold leading-5 text-[color:var(--text-secondary)]">
+              <h3 className="mb-1.5 text-[13px] font-bold leading-5 text-[color:var(--ink-sub)]">
                 {group.label}
               </h3>
               <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-2">
@@ -429,6 +424,8 @@ export function PreferenceSetupForm() {
               onChange={(wakeTime) => setForm((current) => ({ ...current, wakeTime }))}
             />
           </div>
+          {/* 하루의 리듬 — 목업 가로 밴드를 실제 취침/기상 값으로 시각화(REQ-WVR-020, 읽기 전용 요약) */}
+          <RhythmBand wakeTime={form.wakeTime} sleepTime={form.sleepTime} />
         </SetupBlock>
 
         <SetupBlock title="선호 이동 수단">
@@ -487,7 +484,7 @@ export function PreferenceSetupForm() {
         </SetupBlock>
 
         <SetupBlock title="사진으로 취향 분석">
-          <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--text-tertiary)]">
+          <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--ink-faint)]">
             좋아하는 장소·음식 사진을 올리면 취향을 자동으로 분석해요. (한 번에{' '}
             {MAX_PREFERENCE_UPLOAD}장, 총 {MAX_PREFERENCE_PHOTOS}장)
           </p>
@@ -505,7 +502,7 @@ export function PreferenceSetupForm() {
           />
           {savedPhotoUrls.length > 0 ? (
             <div className="mb-3">
-              <div className="mb-1.5 text-[12px] font-semibold text-[#8B95A1]">
+              <div className="mb-1.5 text-[12px] font-semibold text-[color:var(--ink-faint)]">
                 저장된 사진 {savedPhotoUrls.length}장 · 태그를 눌러 켜고 끌 수 있어요
               </div>
               <ul className="space-y-2">
@@ -551,13 +548,13 @@ export function PreferenceSetupForm() {
             }}
             className={`rounded-[14px] border border-dashed p-3 transition ${
               dragActive
-                ? 'border-[color:var(--blue-600)] bg-[color:var(--blue-50)]'
-                : 'border-[#E5E8EB]'
+                ? 'border-[color:var(--primary)] bg-[color:var(--primary-tint)]'
+                : 'border-[color:var(--line)]'
             }`}
           >
             <div className="flex flex-wrap gap-2">
               {previews.map((url, index) => (
-                <div key={url} className="relative size-20 overflow-hidden rounded-[12px]">
+                <div key={url} className="relative size-20 overflow-hidden rounded-[16px]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={url} alt="" className="size-full object-cover" />
                   <button
@@ -574,14 +571,14 @@ export function PreferenceSetupForm() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex size-20 flex-col items-center justify-center gap-1 rounded-[12px] border border-dashed border-[#C9CDD2] text-[color:var(--text-tertiary)]"
+                  className="flex size-20 flex-col items-center justify-center gap-1 rounded-[16px] border border-dashed border-[color:var(--line-dot)] bg-[color:var(--primary-tint)] text-[color:var(--primary-deep)]"
                 >
                   <FiImage className="size-5" aria-hidden />
                   <span className="text-[11px] font-semibold">사진 추가</span>
                 </button>
               ) : null}
             </div>
-            <p className="mt-2 text-[12px] font-medium text-[color:var(--text-tertiary)]">
+            <p className="mt-2 text-[12px] font-medium text-[color:var(--ink-faint)]">
               사진을 여기로 끌어다 놓아도 돼요.
             </p>
           </div>
@@ -591,7 +588,7 @@ export function PreferenceSetupForm() {
               type="button"
               onClick={() => analyzePhotosMutation.mutate(photos)}
               disabled={analyzePhotosMutation.isPending || analyzing}
-              className="mt-3 h-11 w-full rounded-[14px] bg-[color:var(--blue-50)] text-[14px] font-bold text-[color:var(--blue-700)] transition active:scale-[0.99] disabled:text-[color:var(--text-tertiary)] lg:max-w-[280px]"
+              className="mt-3 h-11 w-full rounded-[14px] bg-[color:var(--primary-tint)] text-[14px] font-bold text-[color:var(--primary-deep)] transition active:scale-[0.99] disabled:text-[color:var(--ink-faint)] lg:max-w-[280px]"
             >
               {analyzePhotosMutation.isPending
                 ? '올리는 중…'
@@ -603,13 +600,13 @@ export function PreferenceSetupForm() {
 
           {analyzedTags ? (
             <div className="mt-3">
-              <div className="text-[12px] font-semibold text-[#8B95A1]">분석된 취향 태그</div>
+              <div className="text-[12px] font-semibold text-[color:var(--ink-faint)]">분석된 취향 태그</div>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {[...analyzedTags.food, ...analyzedTags.mood, ...analyzedTags.environment].map(
                   (tag) => (
                     <span
                       key={tag}
-                      className="rounded-full bg-[color:var(--blue-50)] px-3 py-1 text-[13px] font-bold text-[color:var(--blue-700)]"
+                      className="rounded-full bg-[color:var(--primary-tint)] px-3 py-1 text-[13px] font-bold text-[color:var(--primary-deep)]"
                     >
                       {TASTE_TAG_LABELS[tag] ?? tag}
                     </span>
@@ -619,7 +616,7 @@ export function PreferenceSetupForm() {
                   analyzedTags.mood.length +
                   analyzedTags.environment.length ===
                 0 ? (
-                  <span className="text-[13px] font-medium text-[color:var(--text-tertiary)]">
+                  <span className="text-[13px] font-medium text-[color:var(--ink-faint)]">
                     뚜렷한 취향을 찾지 못했어요.
                   </span>
                 ) : null}
@@ -642,15 +639,21 @@ export function PreferenceSetupForm() {
       ) : null}
       <div className="border-t border-[color:var(--line)] pt-6">
         <div className="space-y-2.5 lg:mx-auto lg:max-w-[420px]">
-          <PrimaryButton
+          <button
+            type="button"
             disabled={savePreferenceMutation.isPending || !ready}
             onClick={handleSubmit}
+            className="h-14 w-full rounded-[18px] bg-[color:var(--btn-bg)] text-[16px] font-bold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none"
           >
             {savePreferenceMutation.isPending ? '저장 중' : '취향 저장'}
-          </PrimaryButton>
-          <SecondaryButton onClick={() => setResetDialogOpen(true)}>
+          </button>
+          <button
+            type="button"
+            onClick={() => setResetDialogOpen(true)}
+            className="h-12 w-full rounded-[18px] bg-[color:var(--card-soft)] text-[15px] font-semibold text-[color:var(--ink-sub)] transition-colors hover:bg-[color:var(--line)]"
+          >
             기본값 되돌리기
-          </SecondaryButton>
+          </button>
         </div>
       </div>
 
@@ -769,8 +772,8 @@ function ChoiceCard({
       onClick={onClick}
       className={`flex flex-col items-center justify-center gap-0.5 rounded-[16px] px-3 py-3 text-center transition ${
         active
-          ? 'bg-[color:var(--blue-50)] text-[color:var(--blue-700)] ring-2 ring-[color:var(--blue-600)]'
-          : 'bg-[color:var(--soft-bg)] text-[color:var(--text-tertiary)]'
+          ? 'bg-[color:var(--primary-tint)] text-[color:var(--primary-deep)] ring-2 ring-[color:var(--primary)]'
+          : 'bg-[color:var(--card-soft)] text-[color:var(--ink-faint)]'
       }`}
     >
       <span className="text-[14px] font-bold leading-5">{label}</span>
@@ -816,8 +819,8 @@ function SavedPhotoRow({
                 aria-pressed={enabled}
                 className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[13px] font-bold transition disabled:opacity-50 ${
                   enabled
-                    ? 'bg-[color:var(--blue-50)] text-[color:var(--blue-700)]'
-                    : 'bg-[color:var(--soft-bg)] text-[color:var(--text-tertiary)] line-through'
+                    ? 'bg-[color:var(--primary-tint)] text-[color:var(--primary-deep)]'
+                    : 'bg-[color:var(--card-soft)] text-[color:var(--ink-faint)] line-through'
                 }`}
               >
                 {enabled ? (
@@ -830,12 +833,12 @@ function SavedPhotoRow({
             ))}
           </div>
         ) : pending ? (
-          <p className="flex items-center gap-1.5 text-[13px] font-medium text-[color:var(--text-tertiary)]">
+          <p className="flex items-center gap-1.5 text-[13px] font-medium text-[color:var(--ink-faint)]">
             <FiLoader className="size-3.5 animate-spin" aria-hidden />
             취향을 분석하고 있어요…
           </p>
         ) : (
-          <p className="text-[13px] font-medium text-[color:var(--text-tertiary)]">
+          <p className="text-[13px] font-medium text-[color:var(--ink-faint)]">
             이 사진에서는 뚜렷한 취향을 찾지 못했어요.
           </p>
         )}
@@ -845,7 +848,7 @@ function SavedPhotoRow({
         onClick={onDelete}
         disabled={busy}
         aria-label="사진 삭제"
-        className="size-7 shrink-0 self-start rounded-full text-[color:var(--text-tertiary)] transition hover:bg-[color:var(--soft-bg)] disabled:opacity-50"
+        className="size-7 shrink-0 self-start rounded-full text-[color:var(--ink-faint)] transition hover:bg-[color:var(--card-soft)] disabled:opacity-50"
       >
         <FiX className="mx-auto size-4" aria-hidden />
       </button>
@@ -865,10 +868,10 @@ function AnalysisProgress({ job }: { job: PreferenceAnalysisJobDto | null | unde
   const percent = total > 0 ? Math.round((analyzed / total) * 100) : 0;
 
   return (
-    <div className="mb-3 rounded-[14px] border border-[color:var(--blue-100)] bg-[color:var(--blue-50)] p-3">
+    <div className="mb-3 rounded-[14px] border border-[color:var(--primary-tint)] bg-[color:var(--primary-tint)] p-3">
       <div className="flex items-center gap-2">
-        <FiLoader className="size-4 animate-spin text-[color:var(--blue-700)]" aria-hidden />
-        <span className="text-[13px] font-bold text-[color:var(--blue-700)]">
+        <FiLoader className="size-4 animate-spin text-[color:var(--primary-deep)]" aria-hidden />
+        <span className="text-[13px] font-bold text-[color:var(--primary-deep)]">
           {queued ? '분석 대기 중이에요' : `취향 분석 중… ${analyzed}/${total}장`}
         </span>
       </div>
@@ -881,11 +884,11 @@ function AnalysisProgress({ job }: { job: PreferenceAnalysisJobDto | null | unde
         aria-label="취향 분석 진행률"
       >
         <div
-          className="h-full rounded-full bg-[color:var(--blue-600)] transition-[width] duration-500"
+          className="h-full rounded-full bg-[color:var(--primary)] transition-[width] duration-500"
           style={{ width: `${queued ? 0 : percent}%` }}
         />
       </div>
-      <p className="mt-2 text-[12px] font-medium leading-4 text-[color:var(--blue-700)]/80">
+      <p className="mt-2 text-[12px] font-medium leading-4 text-[color:var(--primary-deep)]/80">
         사진 한 장에 30초 정도 걸려요. 완료되면 알림으로 알려드릴게요 — 이 페이지를 떠나도
         분석은 계속됩니다.
       </p>
@@ -895,11 +898,74 @@ function AnalysisProgress({ job }: { job: PreferenceAnalysisJobDto | null | unde
 
 function SetupBlock({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="border-t border-[color:var(--line)] pt-6 first:border-t-0 first:pt-0">
-      <h2 className="mb-3 text-[18px] font-black leading-6">{title}</h2>
+    <section className="rounded-[22px] border border-[color:var(--line)] bg-[color:var(--card)] p-5 shadow-[var(--shadow-card)]">
+      <h2 className="mb-3 text-[18px] font-black leading-6 text-[color:var(--ink)]">{title}</h2>
       {children}
     </section>
   );
+}
+
+/**
+ * 하루의 리듬 — 목업 가로 밴드(그라데이션 + 취침/기상 핸들)를 실제
+ * form.wakeTime/form.sleepTime 값으로 렌더하는 읽기 전용 시각 요약(REQ-WVR-020).
+ * 새 폼 상태를 추가하지 않는다 — TimeField 입력값을 그대로 반영만 한다.
+ */
+function RhythmBand({ wakeTime, sleepTime }: { wakeTime: string; sleepTime: string }) {
+  const wakePct = timeToDayPercent(wakeTime);
+  const sleepPct = timeToDayPercent(sleepTime);
+  return (
+    <div className="mt-4">
+      <div
+        className="mb-1.5 flex justify-between font-mono text-[10.5px] text-[color:var(--ink-faint)]"
+        aria-hidden="true"
+      >
+        <span>0시</span>
+        <span>6시</span>
+        <span>12시</span>
+        <span>18시</span>
+        <span>24시</span>
+      </div>
+      <div
+        className="relative h-3 rounded-full border border-[color:var(--line)] bg-[color:var(--card-soft)]"
+        role="img"
+        aria-label={`깨어 있는 시간: ${wakeTime}부터 ${sleepTime}까지`}
+      >
+        <span
+          aria-hidden="true"
+          className="absolute inset-y-px rounded-full"
+          style={{
+            left: `${wakePct}%`,
+            right: `${100 - sleepPct}%`,
+            background:
+              'linear-gradient(90deg, var(--t-morning) 0%, var(--t-noon) 38%, var(--t-gold) 74%, var(--t-dusk) 100%)',
+          }}
+        />
+        <span
+          aria-hidden="true"
+          className="absolute top-1/2 size-[18px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px]"
+          style={{ left: `${wakePct}%`, background: 'var(--card)', borderColor: 'var(--t-morning)' }}
+        />
+        <span
+          aria-hidden="true"
+          className="absolute top-1/2 size-[18px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px]"
+          style={{ left: `${sleepPct}%`, background: 'var(--card)', borderColor: 'var(--t-dusk)' }}
+        />
+      </div>
+      <p className="mt-2 text-[12.5px] text-[color:var(--ink-faint)]">
+        일정은 이 리듬 안에서만 짜 드려요.
+      </p>
+    </div>
+  );
+}
+
+/** "HH:mm" → 0~100 사이 하루 중 위치(%) 순수 함수. */
+function timeToDayPercent(time: string): number {
+  const parts = time.split(':').map(Number);
+  const h = parts[0] ?? Number.NaN;
+  const m = parts[1] ?? 0;
+  if (Number.isNaN(h)) return 0;
+  const minutes = h * 60 + (Number.isNaN(m) ? 0 : m);
+  return Math.min(100, Math.max(0, (minutes / (24 * 60)) * 100));
 }
 
 function ThemeStanceRow({
@@ -914,10 +980,10 @@ function ThemeStanceRow({
   onSelect: (stance: ThemeStance) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2 rounded-[12px] bg-[color:var(--soft-bg)] px-3 py-1.5">
+    <div className="flex items-center justify-between gap-2 rounded-[12px] bg-[color:var(--card-soft)] px-3 py-1.5">
       <div className="flex min-w-0 items-baseline gap-1.5">
-        <span className="shrink-0 text-[14px] font-bold leading-6 text-[#191F28]">{label}</span>
-        <span className="truncate text-[11px] font-medium text-[color:var(--text-tertiary)]">
+        <span className="shrink-0 text-[14px] font-bold leading-6 text-[color:var(--ink)]">{label}</span>
+        <span className="truncate text-[11px] font-medium text-[color:var(--ink-faint)]">
           {examples.join(' · ')}
         </span>
       </div>
@@ -944,7 +1010,7 @@ function StanceButton({
 }) {
   const like = tone === 'like';
   const label = like ? '선호' : '불호';
-  const activeClass = like ? 'bg-[color:var(--blue-600)] text-white' : 'bg-[#F04452] text-white';
+  const activeClass = like ? 'bg-[color:var(--primary)] text-white' : 'bg-[color:var(--danger)] text-white';
   return (
     <button
       type="button"
@@ -953,7 +1019,7 @@ function StanceButton({
       aria-label={label}
       title={label}
       className={`flex size-7 items-center justify-center rounded-full transition ${
-        active ? activeClass : 'bg-white text-[color:var(--text-tertiary)]'
+        active ? activeClass : 'bg-[color:var(--card)] text-[color:var(--ink-faint)]'
       }`}
     >
       {like ? (

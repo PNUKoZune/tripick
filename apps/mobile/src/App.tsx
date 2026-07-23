@@ -3,8 +3,10 @@ import {
   BackHandler,
   Platform,
   PermissionsAndroid,
+  Pressable,
   StatusBar,
   StyleSheet,
+  Text,
   View,
   Linking,
   NativeModules,
@@ -88,7 +90,10 @@ export default function App() {
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // 앱이 종료 상태에서 푸시 탭으로 켜졌을 때, WebView 로드가 끝나기 전 도착한 탭을 보관했다가 flush.
   const pendingTapRef = useRef<Record<string, string> | null>(null);
+  const hasLoadedOnceRef = useRef(false);
   const [canGoBack, setCanGoBack] = useState(false);
+  const [webViewKey, setWebViewKey] = useState(0);
+  const [initialLoadFailed, setInitialLoadFailed] = useState(false);
 
   useEffect(() => {
     requestPermissions();
@@ -416,10 +421,21 @@ export default function App() {
     }
   }
 
+  const handleInitialLoadError = useCallback(() => {
+    if (!hasLoadedOnceRef.current) setInitialLoadFailed(true);
+  }, []);
+
+  const retryInitialLoad = useCallback(() => {
+    hasLoadedOnceRef.current = false;
+    setInitialLoadFailed(false);
+    setWebViewKey((current) => current + 1);
+  }, []);
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <WebView
+        key={webViewKey}
         ref={webViewRef}
         source={{ uri: `${WEB_APP_URL}${ENTRY_PATH}` }}
         style={styles.webview}
@@ -447,11 +463,34 @@ export default function App() {
           console.log('[TriPick] WebView URL:', state.url);
           setCanGoBack(state.canGoBack);
         }}
+        onLoad={() => {
+          hasLoadedOnceRef.current = true;
+          setInitialLoadFailed(false);
+        }}
+        onError={handleInitialLoadError}
+        onHttpError={(event) => {
+          if (event.nativeEvent.statusCode >= 400) handleInitialLoadError();
+        }}
         onMessage={handleMessage}
         // 로딩 인디케이터는 web 의 스켈레톤이 담당하므로 native 에선 비움
         renderLoading={() => <View style={styles.loadingFill} />}
+        renderError={() => <View style={styles.loadingFill} />}
         startInLoadingState
       />
+      {initialLoadFailed ? (
+        <View style={styles.loadError} accessibilityRole="alert">
+          <Text style={styles.loadErrorTitle}>페이지를 불러오지 못했어요</Text>
+          <Text style={styles.loadErrorMessage}>네트워크 연결을 확인하고 다시 시도해 주세요.</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="페이지 다시 불러오기"
+            onPress={retryInitialLoad}
+            style={({ pressed }) => [styles.retryButton, pressed && styles.retryButtonPressed]}
+          >
+            <Text style={styles.retryButtonText}>다시 시도</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -460,4 +499,41 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F7F8FA' },
   webview: { flex: 1, backgroundColor: '#F7F8FA' },
   loadingFill: { flex: 1, backgroundColor: '#F7F8FA' },
+  loadError: {
+    alignItems: 'center',
+    bottom: 0,
+    justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    backgroundColor: '#F7F8FA',
+    paddingHorizontal: 32,
+  },
+  loadErrorTitle: {
+    color: '#191F28',
+    fontSize: 20,
+    fontWeight: '700',
+    lineHeight: 28,
+    textAlign: 'center',
+  },
+  loadErrorMessage: {
+    color: '#6B7684',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  retryButton: {
+    alignItems: 'center',
+    backgroundColor: '#3182F6',
+    borderRadius: 8,
+    height: 48,
+    justifyContent: 'center',
+    marginTop: 24,
+    minWidth: 136,
+    paddingHorizontal: 24,
+  },
+  retryButtonPressed: { backgroundColor: '#1B64DA' },
+  retryButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
 });

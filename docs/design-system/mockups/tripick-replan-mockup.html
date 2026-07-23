@@ -1,0 +1,916 @@
+<title>TriPick — 재계획 모달 목업</title>
+<style>
+/* ============================================================
+   TriPick 재계획 바텀시트 목업 — 화면 E
+   질문(사유) → 선택지(추가 입력) → CTA 3단 구조
+   랜딩 목업과 동일 토큰(verbatim). 뒤에 결과 화면(D)의 흔적이
+   비치고, 그 위로 시트가 올라오는 구성.
+   ============================================================ */
+
+/* ---------- tokens: light ---------- */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg:            #F5F7FB;
+  --card:          #FFFFFF;
+  --card-soft:     #F8FAFD;
+  --ink:           #182136;
+  --ink-sub:       #55617A;
+  --ink-faint:     #8A94AB;
+  --line:          #E4E9F2;
+  --line-dot:      #CBD5E6;
+
+  --primary:       #2E6BE6;
+  --primary-deep:  #1F55C4;
+  --primary-tint:  #EAF1FE;
+  --btn-bg:        #2E6BE6;
+  --btn-bg-press:  #1F55C4;
+  --btn-text:      #FFFFFF;
+  --ring:          rgba(46,107,230,.28);
+
+  --accent:        #FF9B70;
+  --accent-deep:   #DE6A3B;
+  --accent-tint:   #FFEFE6;
+  --hl:            #FFDCC6;   /* 헤드라인 마커 하이라이트 */
+
+  /* 하루의 빛 — 타임라인 색 */
+  --t-morning:     #8FBCFF;
+  --t-noon:        #4F87EE;
+  --t-gold:        #FFC46B;
+  --t-dusk:        #FF8A5C;
+
+  /* 광안리 장면 */
+  --sky-top:       #C9DFFC;
+  --sky-glow:      #FFDFC8;
+  --sun:           #FF9B70;
+  --sun-halo:      rgba(255,155,112,.42);
+  --sea-1:         #A9CAF6;
+  --sea-2:         #7FA9EF;
+  --sea-3:         #4C7FDD;
+  --sil:           #26406F;
+  --bridge:        #24365E;
+  --lights:        #FFB37F;
+  --star:          transparent;
+  --glass:         rgba(255,255,255,.88);
+
+  --shadow-card:   0 8px 24px rgba(24,33,54,.05);
+  --shadow-btn:    0 10px 22px rgba(46,107,230,.28);
+}
+
+/* ---------- tokens: dark (system) ---------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --bg:            #0B111E;
+    --card:          #131B2C;
+    --card-soft:     #172136;
+    --ink:           #E9EEF9;
+    --ink-sub:       #A3AEC6;
+    --ink-faint:     #75809A;
+    --line:          #263149;
+    --line-dot:      #34405C;
+
+    --primary:       #7CA5FC;
+    --primary-deep:  #9DBCFF;
+    --primary-tint:  #1B2A4A;
+    --btn-bg:        #3B76F0;
+    --btn-bg-press:  #2E63D6;
+    --btn-text:      #FFFFFF;
+    --ring:          rgba(124,165,252,.4);
+
+    --accent:        #FF9B70;
+    --accent-deep:   #FFAD88;
+    --accent-tint:   #33231C;
+    --hl:            #4A2F20;
+
+    --t-morning:     #8FBCFF;
+    --t-noon:        #5B8DEF;
+    --t-gold:        #FFC46B;
+    --t-dusk:        #FF8A5C;
+
+    --sky-top:       #0B152C;
+    --sky-glow:      #543246;
+    --sun:           #FFA97E;
+    --sun-halo:      rgba(255,169,126,.26);
+    --sea-1:         #223B69;
+    --sea-2:         #1A2E54;
+    --sea-3:         #12203D;
+    --sil:           #070D1C;
+    --bridge:        #0A1322;
+    --lights:        #FFC49A;
+    --star:          rgba(255,255,255,.55);
+    --glass:         rgba(9,14,26,.74);
+
+    --shadow-card:   0 8px 24px rgba(0,0,0,.3);
+    --shadow-btn:    0 10px 22px rgba(20,50,120,.5);
+  }
+}
+
+/* ---------- tokens: viewer toggle (must win over media query) ---------- */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg:            #0B111E;
+  --card:          #131B2C;
+  --card-soft:     #172136;
+  --ink:           #E9EEF9;
+  --ink-sub:       #A3AEC6;
+  --ink-faint:     #75809A;
+  --line:          #263149;
+  --line-dot:      #34405C;
+
+  --primary:       #7CA5FC;
+  --primary-deep:  #9DBCFF;
+  --primary-tint:  #1B2A4A;
+  --btn-bg:        #3B76F0;
+  --btn-bg-press:  #2E63D6;
+  --btn-text:      #FFFFFF;
+  --ring:          rgba(124,165,252,.4);
+
+  --accent:        #FF9B70;
+  --accent-deep:   #FFAD88;
+  --accent-tint:   #33231C;
+  --hl:            #4A2F20;
+
+  --t-morning:     #8FBCFF;
+  --t-noon:        #5B8DEF;
+  --t-gold:        #FFC46B;
+  --t-dusk:        #FF8A5C;
+
+  --sky-top:       #0B152C;
+  --sky-glow:      #543246;
+  --sun:           #FFA97E;
+  --sun-halo:      rgba(255,169,126,.26);
+  --sea-1:         #223B69;
+  --sea-2:         #1A2E54;
+  --sea-3:         #12203D;
+  --sil:           #070D1C;
+  --bridge:        #0A1322;
+  --lights:        #FFC49A;
+  --star:          rgba(255,255,255,.55);
+  --glass:         rgba(9,14,26,.74);
+
+  --shadow-card:   0 8px 24px rgba(0,0,0,.3);
+  --shadow-btn:    0 10px 22px rgba(20,50,120,.5);
+}
+
+/* ---------- base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+.page {
+  position: relative;
+  min-height: 100dvh;
+  overflow-x: clip;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+               Pretendard, "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page ::selection { background: var(--primary-tint); }
+
+.mono {
+  font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-feature-settings: "tnum";
+  letter-spacing: 0.04em;
+}
+
+.page a, .page button, .page textarea, .page input { font-family: inherit; }
+
+.page :focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--ring);
+  border-radius: 12px;
+}
+
+.sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   뒤에 비치는 결과 화면(D)의 흔적 — 고정 레이어, 스크림에 눌림
+   ============================================================ */
+.phone-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.bg-col {
+  width: min(430px, 100%);
+  margin-inline: auto;
+  padding-inline: 20px;
+}
+
+.bg-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-block: 18px 12px;
+}
+
+.bg-back {
+  flex: none;
+  width: 36px; height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--ink-sub);
+}
+
+.bg-title { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.3; }
+.bg-sub   { margin: 1px 0 0; font-size: 12.5px; color: var(--ink-sub); line-height: 1.4; }
+.bg-top .day-chip { margin-left: auto; }
+
+/* ---------- 일정 카드 (랜딩의 .day-card / .tl 패턴 축약 재사용) ---------- */
+.day-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 22px 20px 20px;
+  box-shadow: var(--shadow-card);
+}
+
+.day-chip {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-tint);
+  border-radius: 8px;
+  padding: 4px 9px;
+}
+
+.day-title { margin: 6px 0 0; font-size: 20px; font-weight: 800; letter-spacing: -0.025em; }
+.day-sub   { margin: 2px 0 0; font-size: 14px; color: var(--ink-sub); }
+
+.tl {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.tl::before {
+  content: "";
+  position: absolute;
+  left: 60px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 3px;
+  background: linear-gradient(
+    180deg,
+    var(--t-noon) 0%,
+    var(--t-gold) 55%,
+    var(--t-dusk) 100%
+  );
+}
+
+.tl li {
+  display: grid;
+  grid-template-columns: 44px 32px 1fr;
+  align-items: start;
+}
+
+.tl .time { font-size: 13px; font-weight: 600; color: var(--ink-faint); padding-top: 2px; }
+
+.tl .dot {
+  position: relative;
+  justify-self: center;
+  width: 13px; height: 13px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--dot, var(--primary));
+  border: 3px solid var(--card);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.tl strong { display: block; font-size: 16px; font-weight: 700; letter-spacing: -0.02em; }
+.tl p { margin: 3px 0 0; font-size: 14px; line-height: 1.55; color: var(--ink-sub); }
+
+/* ---------- 스크림 ---------- */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: rgba(16, 24, 42, .46);
+  -webkit-backdrop-filter: blur(3px) saturate(.92);
+  backdrop-filter: blur(3px) saturate(.92);
+}
+
+@media (prefers-color-scheme: dark) {
+  .scrim { background: rgba(3, 7, 15, .6); }
+}
+:root[data-theme="dark"] .scrim { background: rgba(3, 7, 15, .6); }
+:root[data-theme="light"] .scrim { background: rgba(16, 24, 42, .46); }
+
+/* ============================================================
+   바텀시트
+   ============================================================ */
+.sheet-wrap {
+  position: relative;
+  z-index: 2;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding-top: clamp(148px, 30vh, 280px);
+}
+
+.sheet {
+  width: min(430px, 100%);
+  margin: auto auto 0;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-bottom: none;
+  border-radius: 26px 26px 0 0;
+  box-shadow: 0 -18px 44px rgba(9, 14, 26, .3);
+  padding: 10px 22px calc(30px + env(safe-area-inset-bottom, 0px));
+}
+
+.grabber {
+  width: 44px; height: 5px;
+  border-radius: 999px;
+  background: var(--line-dot);
+  margin: 4px auto 14px;
+}
+
+/* ---------- 헤더: 질문 ---------- */
+.sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.sheet-head h2 {
+  margin: 2px 0 0;
+  font-size: 21px;
+  line-height: 1.35;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.sheet-head .sub {
+  margin: 6px 0 0;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--ink-sub);
+}
+
+.close {
+  flex: none;
+  width: 36px; height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card-soft);
+  color: var(--ink-sub);
+  cursor: pointer;
+}
+
+/* ---------- 지금 일정 — 비교 기준이 되는 섹션 ---------- */
+.now {
+  margin-top: 18px;
+  background: var(--card-soft);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px 16px 13px;
+}
+
+.now-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.now-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-tint);
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+
+.now-scope { font-size: 12.5px; font-weight: 600; color: var(--ink-faint); }
+
+.now-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.now-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.now-list .t { width: 42px; flex: none; font-size: 12.5px; font-weight: 600; color: var(--ink-faint); }
+
+.now-list .d {
+  flex: none;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--dot, var(--primary));
+}
+
+.now-note {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-sub);
+}
+
+/* ---------- 폼: 선택지 ---------- */
+.sheet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin-top: 22px;
+}
+
+.fs { border: 0; padding: 0; margin: 0; min-width: 0; }
+
+.f-legend {
+  float: left;
+  width: 100%;
+  margin: 0 0 10px;
+  padding: 0;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+.f-legend .opt {
+  margin-left: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-faint);
+}
+
+.fs > .chips, .fs > .seg, .fs > textarea { clear: both; }
+
+/* 사유 칩 */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 15px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card-soft);
+  color: var(--ink-sub);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.chips input:checked + .chip {
+  background: var(--primary-tint);
+  border-color: var(--primary);
+  color: var(--primary-deep);
+}
+
+.chips input.sr:focus-visible + .chip {
+  box-shadow: 0 0 0 4px var(--ring);
+}
+
+/* 꼭 들를 장소 */
+.chip--place {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+  color: var(--accent-deep);
+  cursor: default;
+  padding-right: 9px;
+}
+
+.chip-x {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px; height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: .8;
+}
+
+.chip-x:hover { opacity: 1; }
+.chip-x:focus-visible { border-radius: 50%; }
+
+.chip--add {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--line-dot);
+  color: var(--primary);
+}
+
+.chip--add:hover { border-color: var(--primary); background: var(--primary-tint); }
+.chip--add:focus-visible { border-radius: 999px; }
+
+/* 세그먼트 (화면 C와 동일한 컨트롤) */
+.seg {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 4px;
+  background: var(--card-soft);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.seg label {
+  text-align: center;
+  padding: 10px 4px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-sub);
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+}
+
+.seg input:checked + label {
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: 0 1px 6px rgba(9, 14, 26, .12), 0 0 0 1px var(--line);
+}
+
+.seg input.sr:focus-visible + label {
+  box-shadow: 0 0 0 4px var(--ring);
+  border-radius: 10px;
+}
+
+/* 자유 입력 */
+.sheet textarea {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card-soft);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.55;
+  letter-spacing: -0.01em;
+}
+
+.sheet textarea::placeholder { color: var(--ink-faint); }
+
+.sheet textarea:focus-visible {
+  border-radius: 14px;
+  border-color: var(--primary);
+}
+
+/* ---------- CTA (랜딩 .btn 패턴 그대로) ---------- */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 56px;
+  margin-top: 20px;
+  padding-inline: 20px;
+  border: none;
+  border-radius: 18px;
+  background: var(--btn-bg);
+  color: var(--btn-text);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  box-shadow: var(--shadow-btn);
+  transition: background-color .15s ease, transform .1s ease;
+}
+
+.btn:hover { background: var(--btn-bg-press); }
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible { border-radius: 18px; }
+.btn svg { flex: none; }
+
+.btn-note {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-faint);
+  text-align: center;
+}
+
+.cta { margin-top: 2px; }
+.cta .btn { margin-top: 0; }
+
+/* ---------- 보낸 뒤 상태 예시 ---------- */
+.state-demo {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--line);
+}
+
+.demo-tag {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+
+.btn--loading {
+  min-height: 50px;
+  margin-top: 0;
+  font-size: 15.5px;
+  cursor: default;
+  box-shadow: none;
+  opacity: .95;
+}
+
+.btn--loading:hover { background: var(--btn-bg); }
+.btn--loading:active { transform: none; }
+
+.demo-progress {
+  margin-top: 10px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--card-soft);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.demo-progress span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--btn-bg);
+}
+
+.demo-note {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-sub);
+}
+
+/* ---------- motion ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .rise {
+    opacity: 0;
+    transform: translateY(10px);
+    animation: rise .7s cubic-bezier(.2,.7,.3,1) forwards;
+  }
+  .rise-1 { animation-delay: .12s; }
+  .rise-2 { animation-delay: .2s; }
+  .rise-3 { animation-delay: .28s; }
+  .rise-4 { animation-delay: .36s; }
+  .rise-5 { animation-delay: .46s; }
+
+  @keyframes rise {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .scrim { animation: fade .45s ease both; }
+  @keyframes fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  .sheet { animation: sheet-up .6s cubic-bezier(.2,.75,.25,1) both; }
+  @keyframes sheet-up {
+    from { transform: translateY(48px); opacity: .5; }
+    to   { transform: translateY(0); opacity: 1; }
+  }
+
+  .spin { animation: spin 1s linear infinite; transform-origin: center; }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .demo-progress span { animation: nudge 2.4s ease-in-out infinite alternate; }
+  @keyframes nudge {
+    from { opacity: .75; }
+    to   { opacity: 1; }
+  }
+}
+</style>
+
+<div class="page">
+
+  <!-- ===== 뒤에 비치는 결과 화면(D) 흔적 ===== -->
+  <div class="phone-bg" aria-hidden="true">
+    <div class="bg-col">
+      <div class="bg-top">
+        <span class="bg-back">
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+            <path d="M12.5 4.5 7 10l5.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <div>
+          <p class="bg-title">부산 감도 코스</p>
+          <p class="bg-sub">1박 2일 · 취향 반영 완료</p>
+        </div>
+        <span class="day-chip mono">DAY 1</span>
+      </div>
+
+      <article class="day-card">
+        <h3 class="day-title">광안리의 하루</h3>
+        <p class="day-sub">산책부터 야경까지, 바다 중심 동선</p>
+        <ol class="tl">
+          <li style="--dot:#4F87EE">
+            <span class="time mono">12:30</span>
+            <span class="dot"></span>
+            <div>
+              <strong>로컬 밥집에서 점심</strong>
+              <p>사진 속 한식 취향을 그대로 담았어요</p>
+            </div>
+          </li>
+          <li style="--dot:#FFC46B">
+            <span class="time mono">15:00</span>
+            <span class="dot"></span>
+            <div>
+              <strong>바다가 보이는 카페</strong>
+              <p>커피 한 잔만큼의 쉼표</p>
+            </div>
+          </li>
+          <li style="--dot:#FF8A5C">
+            <span class="time mono">19:00</span>
+            <span class="dot"></span>
+            <div>
+              <strong>광안대교 야경과 저녁</strong>
+              <p>다리에 불이 켜지면 오늘의 하이라이트</p>
+            </div>
+          </li>
+        </ol>
+      </article>
+    </div>
+  </div>
+
+  <div class="scrim" aria-hidden="true"></div>
+
+  <!-- ===== 재계획 바텀시트 ===== -->
+  <main class="sheet-wrap">
+    <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="replan-title">
+      <div class="grabber" aria-hidden="true"></div>
+
+      <header class="sheet-head rise rise-1">
+        <div>
+          <h2 id="replan-title">트리픽에게 다시 맡기기</h2>
+          <p class="sub">바꾸고 싶은 방향만 알려주세요. 나머지는 다시 계산할게요.</p>
+        </div>
+        <button type="button" class="close" aria-label="재계획 닫기">
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </header>
+
+      <!-- 비교 기준: 지금 일정 -->
+      <section class="now rise rise-2" aria-label="지금 일정 요약">
+        <div class="now-head">
+          <span class="now-tag mono">지금 일정</span>
+          <span class="now-scope">DAY 1 · 오후 2곳</span>
+        </div>
+        <ul class="now-list">
+          <li><span class="t mono">15:00</span><span class="d" style="--dot:#FFC46B" aria-hidden="true"></span>바다가 보이는 카페</li>
+          <li><span class="t mono">19:00</span><span class="d" style="--dot:#FF8A5C" aria-hidden="true"></span>광안대교 야경과 저녁</li>
+        </ul>
+        <p class="now-note">새 일정이 나오면 지금 일정 옆에 나란히 놓고 비교한 뒤에 바꿔요. 마음에 안 들면 그대로 두면 돼요.</p>
+      </section>
+
+      <form class="sheet-form">
+
+        <fieldset class="fs rise rise-3">
+          <legend class="f-legend">어떤 점이 아쉬웠나요?</legend>
+          <div class="chips">
+            <input class="sr" type="radio" name="reason" id="reason-route" checked>
+            <label class="chip" for="reason-route">이동이 너무 길어요</label>
+
+            <input class="sr" type="radio" name="reason" id="reason-wait">
+            <label class="chip" for="reason-wait">웨이팅 긴 곳은 빼주세요</label>
+
+            <input class="sr" type="radio" name="reason" id="reason-weather">
+            <label class="chip" for="reason-weather">날씨가 바뀌었어요</label>
+          </div>
+        </fieldset>
+
+        <div class="fs rise rise-3">
+          <span class="f-legend" id="place-label">꼭 들르고 싶은 곳<span class="opt">선택</span></span>
+          <div class="chips" role="group" aria-labelledby="place-label">
+            <span class="chip chip--place">해운대 블루라인파크
+              <button type="button" class="chip-x" aria-label="해운대 블루라인파크 빼기">
+                <svg width="11" height="11" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </span>
+            <button type="button" class="chip chip--add">＋ 장소 추가</button>
+          </div>
+        </div>
+
+        <fieldset class="fs rise rise-4">
+          <legend class="f-legend">하루 밀도</legend>
+          <div class="seg">
+            <input class="sr" type="radio" name="pace" id="pace-slow">
+            <label for="pace-slow">여유롭게</label>
+            <input class="sr" type="radio" name="pace" id="pace-mid" checked>
+            <label for="pace-mid">균형</label>
+            <input class="sr" type="radio" name="pace" id="pace-full">
+            <label for="pace-full">알차게</label>
+          </div>
+        </fieldset>
+
+        <fieldset class="fs rise rise-4">
+          <legend class="f-legend">예산</legend>
+          <div class="seg">
+            <input class="sr" type="radio" name="budget" id="budget-low">
+            <label for="budget-low">알뜰</label>
+            <input class="sr" type="radio" name="budget" id="budget-mid" checked>
+            <label for="budget-mid">보통</label>
+            <input class="sr" type="radio" name="budget" id="budget-high">
+            <label for="budget-high">프리미엄</label>
+          </div>
+        </fieldset>
+
+        <div class="fs rise rise-4">
+          <label class="f-legend" for="free-note">따로 부탁하고 싶은 게 있다면<span class="opt">선택</span></label>
+          <textarea id="free-note" name="free-note" rows="3"
+            placeholder="예) 카페는 1곳만 가고 싶어요. 둘째 날은 바다 위주로 해주세요."></textarea>
+        </div>
+
+        <div class="cta rise rise-5">
+          <button type="button" class="btn">
+            재계획 요청 보내기
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M4 10h11M10.5 5.5 15 10l-4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <p class="btn-note">함께 가는 멤버가 요청을 확인하면 새 일정 계산이 시작돼요.</p>
+        </div>
+      </form>
+
+      <!-- 보낸 뒤 CTA 상태 예시 -->
+      <aside class="state-demo rise rise-5" aria-label="요청을 보낸 뒤 버튼 상태 예시">
+        <p class="demo-tag mono">참고 · 보낸 뒤 이 버튼은</p>
+        <div class="btn btn--loading">
+          <svg class="spin" width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" stroke="rgba(255,255,255,.32)" stroke-width="3"/>
+            <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+          AI가 다시 짜는 중
+        </div>
+        <div class="demo-progress" role="progressbar" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1" aria-label="재계획 진행 단계">
+          <span style="width:36%"></span>
+        </div>
+        <p class="demo-note">1/3 단계 · 이동 동선부터 다시 계산하고 있어요</p>
+      </aside>
+
+    </section>
+  </main>
+</div>

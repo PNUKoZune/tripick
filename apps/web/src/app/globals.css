@@ -88,3 +88,213 @@ input[type='number'] {
 nextjs-portal {
   display: none !important;
 }
+
+/* ============================================================
+   SPEC-WEB-VISUAL-REDESIGN-001 — "광안리의 하루" 확장 팔레트
+   대상 5개 화면(랜딩 · 취향 입력 · 여행 조건 · 결과/플래너 · 재계획 시트)에
+   `.wvr-scope` 클래스로만 로컬 스코프 적용한다. 위 :root 의 --app-bg,
+   --blue-* 등 전역 토큰(shared/ui 버튼·칩·세그먼트가 참조)은 이 블록과
+   이름이 겹치지 않으며 절대 변경하지 않는다(사용자 확정 — plan.md §B).
+   정본: docs/design-system/mockups/tripick-landing-mockup.html
+   토큰 값 SSOT: apps/web/src/shared/config/design-tokens.ts (wvrPalette*)
+   ============================================================ */
+.wvr-scope {
+  color-scheme: light;
+
+  --bg: #f5f7fb;
+  --card: #ffffff;
+  --card-soft: #f8fafd;
+  --ink: #182136;
+  --ink-sub: #55617a;
+  --ink-faint: #8a94ab;
+  --line: #e4e9f2;
+  --line-dot: #cbd5e6;
+
+  --primary: #2e6be6;
+  --primary-deep: #1f55c4;
+  --primary-tint: #eaf1fe;
+  --btn-bg: #2e6be6;
+  --btn-bg-press: #1f55c4;
+  --btn-text: #ffffff;
+  --ring: rgba(46, 107, 230, 0.28);
+
+  --accent: #ff9b70;
+  --accent-deep: #de6a3b;
+  --accent-tint: #ffefe6;
+  --hl: #ffdcc6;
+
+  /* 보조 시맨틱 토큰 — design.md 목업 팔레트엔 없으나(에러/성공 표시가 목업에 없음)
+     대상 화면의 기존 에러·영업시간 표시를 완전 토큰화하기 위한 로컬 확장(§D.0 hex=0). */
+  --danger: #f04452;
+  --danger-tint: #ffecee;
+  --danger-border: #fecdd3;
+  --ok: #3b7a57;
+
+  /* 하루의 빛 — 4-stop 타임라인 색 (시그니처) */
+  --t-morning: #8fbcff;
+  --t-noon: #4f87ee;
+  --t-gold: #ffc46b;
+  --t-dusk: #ff8a5c;
+
+  /* 광안리 장면 색 (랜딩 hero SVG 전용) */
+  --sky-top: #c9dffc;
+  --sky-glow: #ffdfc8;
+  --sun: #ff9b70;
+  --sun-halo: rgba(255, 155, 112, 0.42);
+  --sea-1: #a9caf6;
+  --sea-2: #7fa9ef;
+  --sea-3: #4c7fdd;
+  --sil: #26406f;
+  --bridge: #24365e;
+  --lights: #ffb37f;
+  --star: transparent;
+  --glass: rgba(255, 255, 255, 0.88);
+
+  --shadow-card: 0 8px 24px rgba(24, 33, 54, 0.05);
+  --shadow-btn: 0 10px 22px rgba(46, 107, 230, 0.28);
+}
+
+/* 다크 — 시스템 선호도 자동 감지만(사용자 확정: 뷰어 토글 UI·data-theme 훅 없음) */
+@media (prefers-color-scheme: dark) {
+  .wvr-scope {
+    color-scheme: dark;
+
+    --bg: #0b111e;
+    --card: #131b2c;
+    --card-soft: #172136;
+    --ink: #e9eef9;
+    --ink-sub: #a3aec6;
+    --ink-faint: #75809a;
+    --line: #263149;
+    --line-dot: #34405c;
+
+    --primary: #7ca5fc;
+    --primary-deep: #9dbcff;
+    --primary-tint: #1b2a4a;
+    --btn-bg: #3b76f0;
+    --btn-bg-press: #2e63d6;
+    --btn-text: #ffffff;
+    --ring: rgba(124, 165, 252, 0.4);
+
+    --accent: #ff9b70;
+    --accent-deep: #ffad88;
+    --accent-tint: #33231c;
+    --hl: #4a2f20;
+
+    --danger: #ff6b76;
+    --danger-tint: #3a1519;
+    --danger-border: #5c2229;
+    --ok: #4caf7d;
+
+    --t-morning: #8fbcff;
+    --t-noon: #5b8def;
+    --t-gold: #ffc46b;
+    --t-dusk: #ff8a5c;
+
+    --sky-top: #0b152c;
+    --sky-glow: #543246;
+    --sun: #ffa97e;
+    --sun-halo: rgba(255, 169, 126, 0.26);
+    --sea-1: #223b69;
+    --sea-2: #1a2e54;
+    --sea-3: #12203d;
+    --sil: #070d1c;
+    --bridge: #0a1322;
+    --lights: #ffc49a;
+    --star: rgba(255, 255, 255, 0.55);
+    --glass: rgba(9, 14, 26, 0.74);
+
+    --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.3);
+    --shadow-btn: 0 10px 22px rgba(20, 50, 120, 0.5);
+  }
+}
+
+.wvr-scope {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.wvr-scope :focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--ring);
+  border-radius: 12px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .wvr-scope .wvr-rise {
+    opacity: 0;
+    transform: translateY(10px);
+    animation: wvr-rise 0.7s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+  }
+  .wvr-scope .wvr-rise-1 {
+    animation-delay: 0.05s;
+  }
+  .wvr-scope .wvr-rise-2 {
+    animation-delay: 0.14s;
+  }
+  .wvr-scope .wvr-rise-3 {
+    animation-delay: 0.23s;
+  }
+  .wvr-scope .wvr-rise-4 {
+    animation-delay: 0.34s;
+  }
+  .wvr-scope .wvr-rise-5 {
+    animation-delay: 0.44s;
+  }
+  @keyframes wvr-rise {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .wvr-scope .wvr-sun-halo {
+    animation: wvr-breathe 7s ease-in-out infinite;
+  }
+  @keyframes wvr-breathe {
+    0%,
+    100% {
+      opacity: 0.9;
+    }
+    50% {
+      opacity: 0.55;
+    }
+  }
+  .wvr-scope .wvr-gulls {
+    animation: wvr-drift 10s ease-in-out infinite alternate;
+  }
+  @keyframes wvr-drift {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(9px);
+    }
+  }
+  .wvr-scope .wvr-scan-track::after {
+    animation: wvr-scan 1.7s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate;
+  }
+  @keyframes wvr-scan {
+    from {
+      transform: translateX(-30%);
+    }
+    to {
+      transform: translateX(150%);
+    }
+  }
+  .wvr-scope .wvr-scan-dot {
+    animation: wvr-blink 1.2s ease-in-out infinite;
+  }
+  @keyframes wvr-blink {
+    0%,
+    100% {
+      opacity: 0.3;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}
+
+/* prefers-reduced-motion: reduce 에서는 위 @media 블록 자체가 매칭되지 않아
+   .wvr-rise 등 애니메이션 클래스가 transform/opacity 없이 정적으로 렌더된다
+   (REQ-WVR-071). */
