@@ -106,9 +106,11 @@ export class MainPlannerService {
     this.assertCreateTrip(dto);
     const preference = await this.preferencesService.findByUser(user.id);
     const notes = this.composeCreateTripNotes(dto);
+    const dayRegions = this.normalizeDayRegions(dto);
     const trip = await this.tripsService.create(user.id, {
       title: dto.title.trim(),
       destination: dto.destination.trim(),
+      ...(dayRegions ? { dayRegions } : {}),
       startDate: dto.startDate,
       endDate: dto.endDate,
       wakeTime: preference?.profile?.wakeTime ?? '08:00',
@@ -700,6 +702,41 @@ export class MainPlannerService {
     if (dto.startDate === dto.endDate && dto.startTime >= dto.endTime) {
       throw new BadRequestException('도착 시각은 출발 시각보다 늦어야 합니다.');
     }
+    if (dto.dayRegions !== undefined) {
+      const dayCount = this.tripDayCount(dto.startDate, dto.endDate);
+      if (!Array.isArray(dto.dayRegions) || dto.dayRegions.length !== dayCount) {
+        throw new BadRequestException('일자별 지역 수가 여행 일수와 맞지 않아요.');
+      }
+      for (const regions of dto.dayRegions) {
+        const cleaned = (regions ?? []).map((r) => r?.trim()).filter(Boolean);
+        if (cleaned.length === 0) {
+          throw new BadRequestException('각 일자에 지역을 최소 하나 이상 선택해주세요.');
+        }
+        if (cleaned.some((r) => r!.length > 80)) {
+          throw new BadRequestException('지역 이름이 너무 길어요.');
+        }
+      }
+    }
+  }
+
+  /** 여행 일수(당일치기=1). startDate/endDate 는 YYYY-MM-DD. */
+  private tripDayCount(startDate: string, endDate: string): number {
+    const start = Date.parse(`${startDate}T00:00:00Z`);
+    const end = Date.parse(`${endDate}T00:00:00Z`);
+    if (Number.isNaN(start) || Number.isNaN(end)) return 1;
+    return Math.floor((end - start) / 86_400_000) + 1;
+  }
+
+  /** 일자별 지역을 정규화(trim + 빈 값 제거). 값이 없으면 undefined 로 반환해 단일 지역 흐름을 탄다. */
+  private normalizeDayRegions(dto: CreateTripRequestDto): string[][] | undefined {
+    if (!dto.dayRegions?.length) return undefined;
+    const normalized = dto.dayRegions.map((regions) =>
+      (regions ?? []).map((r) => r?.trim()).filter((r): r is string => Boolean(r)),
+    );
+    // 모든 날이 같은 단일 지역이면 별도 저장 없이 destination 하나로 처리한다.
+    const distinct = new Set(normalized.flat());
+    if (distinct.size <= 1) return undefined;
+    return normalized;
   }
 
   /**

@@ -22,6 +22,11 @@ export interface TripDto {
 export interface CreateTripDto {
   title: string;
   destination: string;
+  /**
+   * 일자별 지역 목록. 인덱스 i = (i+1)일차, 각 원소는 그 날의 지역 배열(하루 여러 지역 허용).
+   * 생략 시 모든 날을 `destination` 하나로 채운다. 있으면 길이는 여행 일수와 같아야 한다.
+   */
+  dayRegions?: string[][];
   startDate: string;
   endDate: string;
   /** 취침 시간 (HH:mm) */

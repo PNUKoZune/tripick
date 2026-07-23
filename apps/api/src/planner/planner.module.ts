@@ -18,10 +18,11 @@ import { EmbeddingModule } from '../embedding/embedding.module';
 import { ItineraryModule } from '../itinerary/itinerary.module';
 import { PreferencesModule } from '../preferences/preferences.module';
 import { TripEntity } from '../trips/trip.entity';
+import { TripDayEntity } from '../trips/trip-day.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([TripEntity]),
+    TypeOrmModule.forFeature([TripEntity, TripDayEntity]),
     ItineraryModule,
     PreferencesModule,
     EmbeddingModule,

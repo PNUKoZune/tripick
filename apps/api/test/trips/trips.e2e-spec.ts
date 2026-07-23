@@ -6,6 +6,7 @@ import type { Repository } from 'typeorm';
 import request from 'supertest';
 import { createE2EApp, TestAuthGuard } from '../e2e/create-e2e-app';
 import { TripEntity } from '../../src/trips/trip.entity';
+import { TripDayEntity } from '../../src/trips/trip-day.entity';
 import { TripMemberEntity } from '../../src/trip-members/trip-member.entity';
 import { UserEntity } from '../../src/users/user.entity';
 import { TripsController } from '../../src/trips/trips.controller';
@@ -35,7 +36,7 @@ describe('Trips (e2e)', () => {
 
   beforeAll(async () => {
     app = await createE2EApp({
-      entities: [UserEntity, TripEntity, TripMemberEntity],
+      entities: [UserEntity, TripEntity, TripDayEntity, TripMemberEntity],
       controllers: [TripsController],
       providers: [TripsService, { provide: PlannerService, useValue: { generateItinerary } }],
       overrideGuards: [{ guard: JwtAuthGuard, useValue: TestAuthGuard }],

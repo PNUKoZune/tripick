@@ -78,6 +78,12 @@ export class CreateTripRequestBodyDto implements CreateTripRequestDto {
   @MaxLength(80)
   destination!: string;
 
+  // string[][] 는 class-validator 데코레이터로 깔끔히 검증되지 않아 외곽 형태만 여기서 막고
+  // 길이·내용(일수 일치, 지역 비어있음/길이)은 MainPlannerService.assertCreateTrip 에서 검증한다.
+  @IsOptional()
+  @IsArray()
+  dayRegions?: string[][];
+
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   startDate!: string;
 

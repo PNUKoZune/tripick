@@ -11,6 +11,7 @@ import { PlannerAgentService } from './agent/planner-agent.service';
 import type { PlannedCandidate } from './agent/planner-agent.service';
 import { PlaceRetrievalService } from './retrieval/place-retrieval.service';
 import { TripEntity } from '../trips/trip.entity';
+import { TripDayEntity } from '../trips/trip-day.entity';
 import { addDaysToIsoDate } from '@tripick/utils';
 import type {
   CreateItineraryItemDto,
@@ -21,7 +22,7 @@ import type {
   ReplanRequestDto,
   TasteTagDto,
 } from '@tripick/types';
-import type { CandidatePlace } from './retrieval/types';
+import type { CandidatePlace, RetrievalContext } from './retrieval/types';
 
 const PACE_HINT: Record<ReplanPace, string> = {
   relaxed: '여유로운 일정(하루 일정 수를 줄이고 이동·대기 부담 최소화)',
@@ -65,6 +66,8 @@ export class PlannerService {
   constructor(
     @InjectRepository(TripEntity)
     private readonly tripsRepo: Repository<TripEntity>,
+    @InjectRepository(TripDayEntity)
+    private readonly tripDaysRepo: Repository<TripDayEntity>,
     private readonly itineraryService: ItineraryService,
     private readonly preferencesService: PreferencesService,
     private readonly plannerAgent: PlannerAgentService,
@@ -118,20 +121,40 @@ export class PlannerService {
     const itemsPerDay = this.itemsPerDayForPace(options.preferences?.pace);
     // 여행 고정 노트 + 재계획 요청 노트 + 구조화 옵션을 하나의 지시문으로 합쳐 검색·프롬프트에 반영
     const combinedNotes = this.buildCombinedNotes(trip.notes, options);
-    const retrieval = await this.placeRetrieval.retrieve({
+    // 검색 컨텍스트 중 지역(destination)·개수(limit) 외 공통 항목. 단일/일자별 두 경로가 공유한다.
+    const sharedRetrieval = {
       userId: trip.userId,
-      destination: trip.destination,
       notes: combinedNotes,
-      limit: Math.max(dayCount * itemsPerDay + 4, 12),
       startAt: this.makeDateTime(trip.startDate, wakeTime),
       ...(tasteTags !== undefined ? { tasteTags } : {}),
       ...(preferenceVector ? { preferenceVector } : {}),
       ...(options.trigger !== undefined ? { trigger: options.trigger } : {}),
       ...(options.currentLocation !== undefined ? { currentLocation: options.currentLocation } : {}),
-    });
+    } satisfies Omit<RetrievalContext, 'destination' | 'limit'>;
+
     // 반드시 포함할 장소는 최상위 후보로 시드해 배치 우선순위를 높인다
     const mustCandidates = this.buildMustIncludeCandidates(options.mustIncludePlaces);
-    const candidates = [...mustCandidates, ...retrieval.places];
+    // 일자별 지역 매핑(trip_days). 미설정이면 모든 날 = trip.destination 으로 채워진다.
+    const dayRegions = await this.resolveDayRegions(trip, dayCount);
+    // 서로 다른 지역이 2개 이상이면 일자별 경로, 아니면 기존 단일 풀 + AI 플래너 경로.
+    const perDayMode = new Set(dayRegions.flat()).size > 1;
+
+    let candidates: CandidatePlace[];
+    let poolsByDay: CandidatePlace[][] | null = null;
+    let traceLabel: string;
+    if (perDayMode) {
+      poolsByDay = await this.retrievePerDay(dayRegions, sharedRetrieval, trip.destination, itemsPerDay);
+      candidates = [...mustCandidates, ...poolsByDay.flat()];
+      traceLabel = `per-day[${dayRegions.map((regions) => regions.join('/')).join(' | ')}]`;
+    } else {
+      const retrieval = await this.placeRetrieval.retrieve({
+        ...sharedRetrieval,
+        destination: trip.destination,
+        limit: Math.max(dayCount * itemsPerDay + 4, 12),
+      });
+      candidates = [...mustCandidates, ...retrieval.places];
+      traceLabel = `${trip.destination} sources=${retrieval.trace.sources.join('+') || 'none'} avg=${retrieval.trace.averageConfidence.toFixed(2)}`;
+    }
 
     if (candidates.length === 0) {
       throw new BadRequestException('No place candidates found for itinerary generation');
@@ -142,21 +165,27 @@ export class PlannerService {
       ? await this.weatherHelper.getExtendedForecast(firstCandidate.coordinates.lat, firstCandidate.coordinates.lng)
       : new Map();
     const weatherHint = this.weatherHelper.buildWeatherHint(forecast);
-    const agentPlan = await this.plannerAgent.plan({
-      destination: trip.destination,
-      startDate: trip.startDate,
-      endDate: trip.endDate,
-      wakeTime,
-      sleepTime,
-      transportMode: trip.transportMode,
-      dayCount,
-      itemsPerDay,
-      candidates,
-      notes: combinedNotes,
-      weatherHint,
-      ...(tasteTags !== undefined ? { tasteTags } : {}),
-      ...(options.trigger !== undefined ? { trigger: options.trigger } : {}),
-    });
+
+    // 단일 지역: AI 플래너가 하루 리듬·카테고리 균형을 맞춘다.
+    // 일자별 지역: 각 일차를 그 날 지역 후보로만 채워야 하므로 지역-스코프 결정적 배치를 쓴다
+    // (AI 는 여러 지역을 섞어 배치할 위험이 있어 일자별 모드에선 사용하지 않는다).
+    const agentPlan = perDayMode
+      ? this.buildPerDayDeterministicPlan(poolsByDay!, itemsPerDay)
+      : await this.plannerAgent.plan({
+          destination: trip.destination,
+          startDate: trip.startDate,
+          endDate: trip.endDate,
+          wakeTime,
+          sleepTime,
+          transportMode: trip.transportMode,
+          dayCount,
+          itemsPerDay,
+          candidates,
+          notes: combinedNotes,
+          weatherHint,
+          ...(tasteTags !== undefined ? { tasteTags } : {}),
+          ...(options.trigger !== undefined ? { trigger: options.trigger } : {}),
+        });
 
     const draftContext: DraftBuildContext = {
       trip,
@@ -172,9 +201,29 @@ export class PlannerService {
     const guaranteedPlan = this.enforceMustInclude(agentPlan, mustCandidates, dayCount);
     const aiDraft = await this.buildDraft(guaranteedPlan, draftContext);
     const aiValidation = await this.validateDraft(aiDraft, draftContext);
+    // 검증 실패 시 후보 rotate 기반 결정적 재생성. 모드에 맞는 배치 생성기를 넘긴다.
+    const rebuildAttempts = perDayMode
+      ? Math.min(3, Math.max(1, ...poolsByDay!.map((pool) => pool.length)))
+      : Math.min(3, candidates.length);
+    const planFactory = perDayMode
+      ? (attempt: number) =>
+          this.enforceMustInclude(
+            this.buildPerDayDeterministicPlan(
+              poolsByDay!.map((pool) => this.rotate(pool, attempt)),
+              itemsPerDay,
+            ),
+            mustCandidates,
+            dayCount,
+          )
+      : (attempt: number) =>
+          this.enforceMustInclude(
+            this.buildDeterministicPlan(this.rotate(candidates, attempt), dayCount, itemsPerDay),
+            mustCandidates,
+            dayCount,
+          );
     const finalItems = aiValidation.valid
       ? aiValidation.items
-      : await this.rebuildValidDraft(candidates, draftContext, aiValidation);
+      : await this.rebuildValidDraft(planFactory, draftContext, aiValidation, rebuildAttempts);
 
     // memo 는 사용자가 직접 남기는 메모 공간이므로 생성 단계의 AI 추론(취향·confidence·
     // 날씨 힌트)을 저장하지 않는다. 새 일정의 memo 는 비어 있는 채로 시작한다.
@@ -205,7 +254,7 @@ export class PlannerService {
 
     const saved = await this.itineraryService.replaceTripItems(trip.id, toStore);
     this.logger.log(
-      `Generated ${saved.length} itinerary items for trip ${trip.id} using CRAG sources=${retrieval.trace.sources.join('+')} avg=${retrieval.trace.averageConfidence.toFixed(2)}`,
+      `Generated ${saved.length} itinerary items for trip ${trip.id} using CRAG ${traceLabel}`,
     );
     return saved.map((item) => ({
       id: item.id,
@@ -317,28 +366,19 @@ export class PlannerService {
   }
 
   private async rebuildValidDraft(
-    candidates: CandidatePlace[],
+    makePlan: (attempt: number) => PlannedCandidate[],
     context: DraftBuildContext,
     failedAiValidation: ValidationResult,
+    attempts: number,
   ): Promise<ItineraryItemDto[]> {
     this.logger.warn(
       `AI planner itinerary for trip ${context.trip.id} violated hard constraints: ${failedAiValidation.issues.join('; ')}`,
     );
 
-    const mustCandidates = this.buildMustIncludeCandidates(context.options.mustIncludePlaces);
     let lastValidation = failedAiValidation;
-    const attempts = Math.min(3, candidates.length);
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       // 후보 rotate 로 필수 장소가 상위 slice 밖으로 밀릴 수 있어 결정적 폴백에서도 강제 주입한다.
-      const fallbackPlan = this.enforceMustInclude(
-        this.buildDeterministicPlan(
-          this.rotate(candidates, attempt),
-          context.dayCount,
-          context.itemsPerDay,
-        ),
-        mustCandidates,
-        context.dayCount,
-      );
+      const fallbackPlan = makePlan(attempt);
       const fallbackDraft = await this.buildDraft(fallbackPlan, context);
       const fallbackValidation = await this.validateDraft(fallbackDraft, context);
       if (fallbackValidation.valid) {
@@ -372,6 +412,86 @@ export class PlannerService {
         aiGenerated: false,
       };
     });
+  }
+
+  /**
+   * 여행의 일자별 지역 목록을 조회한다. trip_days 미설정 시 모든 날을 trip.destination 으로 채운다
+   * (단일 지역 여행·기존 데이터 하위호환). 반환 길이는 항상 dayCount 와 같다.
+   */
+  private async resolveDayRegions(trip: TripEntity, dayCount: number): Promise<string[][]> {
+    const rows = await this.tripDaysRepo.find({
+      where: { tripId: trip.id },
+      order: { day: 'ASC', sortOrder: 'ASC' },
+    });
+    const byDay = new Map<number, string[]>();
+    for (const row of rows) {
+      const list = byDay.get(row.day) ?? [];
+      list.push(row.region);
+      byDay.set(row.day, list);
+    }
+    return Array.from({ length: dayCount }, (_, index) => {
+      const regions = byDay.get(index + 1);
+      return regions && regions.length > 0 ? regions : [trip.destination];
+    });
+  }
+
+  /**
+   * 일자별로 그 날 지역(들)의 후보 풀을 만든다. 하루에 여러 지역이면 각 지역을 조회해 id 기준 dedupe.
+   * 특정 일차 후보가 비면 대표 지역(trip.destination)으로 폴백해 빈 일차를 막는다.
+   */
+  private async retrievePerDay(
+    dayRegions: string[][],
+    sharedRetrieval: Omit<RetrievalContext, 'destination' | 'limit'>,
+    fallbackRegion: string,
+    itemsPerDay: number,
+  ): Promise<CandidatePlace[][]> {
+    const perRegionLimit = Math.max(itemsPerDay + 3, 8);
+    const retrieveInto = async (merged: Map<string, CandidatePlace>, region: string) => {
+      const result = await this.placeRetrieval.retrieve({
+        ...sharedRetrieval,
+        destination: region,
+        limit: perRegionLimit,
+      });
+      for (const place of result.places) {
+        if (!merged.has(place.id)) merged.set(place.id, place);
+      }
+    };
+    return Promise.all(
+      dayRegions.map(async (regions) => {
+        const merged = new Map<string, CandidatePlace>();
+        for (const region of regions) {
+          await retrieveInto(merged, region);
+        }
+        if (merged.size === 0 && fallbackRegion.trim()) {
+          await retrieveInto(merged, fallbackRegion);
+        }
+        return [...merged.values()];
+      }),
+    );
+  }
+
+  /**
+   * 일자별 지역 풀을 각 일차에 그대로 배치한다. buildDraft 가 item.day 로 그룹핑하므로
+   * 각 일차는 반드시 그 날 지역 후보로만 채워진다 (지역 간 섞임 없음).
+   */
+  private buildPerDayDeterministicPlan(
+    poolsByDay: CandidatePlace[][],
+    itemsPerDay: number,
+  ): PlannedCandidate[] {
+    const planned: PlannedCandidate[] = [];
+    poolsByDay.forEach((pool, dayIndex) => {
+      pool.slice(0, itemsPerDay).forEach((candidate, index) => {
+        planned.push({
+          candidate,
+          day: dayIndex + 1,
+          order: index + 1,
+          durationMin: this.defaultDuration(candidate.category),
+          memo: '일자별 지역 후보 순위 기반 배치',
+          aiGenerated: false,
+        });
+      });
+    });
+    return planned;
   }
 
   /** 일정 강도(pace) → 하루 일정 개수 */
