@@ -25,6 +25,7 @@
 
 - [trips/trip-create-v1.md](trips/trip-create-v1.md) — 새 여행 만들기 (`/trips/new` 폼)
 - [trips/destination-tour-api-v1.md](trips/destination-tour-api-v1.md) — 여행 지역 선택 · 관광공사 API 연동
+- [trips/per-day-region-v1.md](trips/per-day-region-v1.md) — 여행 일자별 지역 선택 (하루 여러 지역 · planner 지역-스코프 배치)
 - [trips/tour-api-opening-hours-v1.md](trips/tour-api-opening-hours-v1.md) — 관광공사 detailIntro2 영업시간 연동
 - [trips/trip-progress-live-v1.md](trips/trip-progress-live-v1.md) — 여행 진행(Live) 화면
 - [trips/main-page-filters-card-v1.md](trips/main-page-filters-card-v1.md) — 메인 여행 목록 개편(필터·카드)
