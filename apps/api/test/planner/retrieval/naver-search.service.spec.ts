@@ -50,6 +50,20 @@ describe('NaverPopularityIndex', () => {
   });
 });
 
+describe('NaverPopularityIndex institution-qualifier matching', () => {
+  const idx = new NaverPopularityIndex('경주박물관 관람 후기, 경주박물관 주차. 시내 도서관 도서관 카페.', 2);
+
+  it('정식명이 블로그 표현보다 길 때 수식어 뗀 코어로 매칭한다', () => {
+    // 블로그는 '경주박물관'으로만 쓰지만 후보 정식명은 '국립경주박물관'
+    expect(idx.mentions('국립경주박물관')).toBe(2);
+  });
+
+  it('너무 짧은 일반어 코어로는 부풀리지 않는다', () => {
+    // '시립도서관'→코어 '도서관'(3<4)이라 코어 매칭 생략 → 정식명 부재로 0
+    expect(idx.mentions('시립도서관')).toBe(0);
+  });
+});
+
 describe('NaverSearchService', () => {
   afterEach(() => jest.clearAllMocks());
 

@@ -169,10 +169,26 @@ export class NaverPopularityIndex implements PopularityIndex {
     this.compact = corpus.replace(/\s+/g, '');
   }
 
+  /** 정식명에 붙는 기관 수식어. 블로그는 보통 이걸 떼고 쓴다('국립경주박물관'→'경주박물관'). */
+  private static readonly INSTITUTION_QUALIFIER = /(국립|도립|시립|공립|사립)/;
+  /** 수식어를 뗀 코어를 매칭에 쓰기 위한 최소 길이. '도서관'·'극장' 같은 일반어 오탐 방지. */
+  private static readonly MIN_CORE_LENGTH = 4;
+
   mentions(name: string): number {
     const needle = name.replace(/\s+/g, '').toLowerCase();
     // 1글자 장소명은 오탐이 심해 세지 않는다.
     if (needle.length < 2 || this.compact.length === 0) return 0;
+    // 정식명이 블로그 표현보다 긴 경우(예: '국립경주박물관' vs '경주박물관')를 놓치지 않도록
+    // 기관 수식어를 뗀 코어로 매칭한다. 코어는 정식명 언급까지 부분문자열로 포함하므로 더 정확하다.
+    const core = needle.replace(NaverPopularityIndex.INSTITUTION_QUALIFIER, '');
+    const key =
+      core.length >= NaverPopularityIndex.MIN_CORE_LENGTH && core.length < needle.length
+        ? core
+        : needle;
+    return this.countOccurrences(key);
+  }
+
+  private countOccurrences(needle: string): number {
     let count = 0;
     let from = this.compact.indexOf(needle);
     while (from !== -1) {
