@@ -6,6 +6,7 @@ import type { UserDto } from '@tripick/types';
 
 import { removeProfileImage, UserAvatar, uploadProfileImage } from '@/entities/user';
 import { queryKeys } from '@/shared/api/query-keys';
+import { AVATAR_MAX_DIMENSION, downscaleImage } from '@/shared/lib';
 
 import { ProfileImageMenu } from './profile-image-menu';
 
@@ -27,7 +28,10 @@ export function ProfileImageUploader({ me, onError }: Props) {
     queryClient.invalidateQueries({ queryKey: queryKeys.user.me });
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => uploadProfileImage(file),
+    mutationFn: async (file: File) =>
+      uploadProfileImage(
+        await downscaleImage(file, { maxDimension: AVATAR_MAX_DIMENSION }),
+      ),
     onSuccess: () => {
       invalidateMe();
       onError?.(null);

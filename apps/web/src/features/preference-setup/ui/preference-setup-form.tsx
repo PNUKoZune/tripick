@@ -45,6 +45,7 @@ import {
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { startDemoSession } from '@/entities/session/api/auth-api';
 import { queryKeys } from '@/shared/api/query-keys';
+import { downscaleImage, PREFERENCE_MAX_DIMENSION } from '@/shared/lib';
 import { InlineNotice, SegmentedOption } from '@/shared/ui/app-frame';
 import { ConfirmDialog, TimeField, Toast } from '@/shared/ui';
 
@@ -269,7 +270,17 @@ export function PreferenceSetupForm() {
   const analyzePhotosMutation = useMutation({
     mutationFn: async (files: File[]) => {
       const session = getStoredSession() ?? (await startDemoSession());
-      return analyzePreferenceImages(session.tokens.accessToken, files);
+      // vision 분석은 해상도를 쓰므로 표시 크기(80px)보다 큰 1024px 로만 줄인다.
+      // 포맷은 jpeg — 로컬 vision 서버(llama.cpp mtmd=stb_image)가 webp 를 못 읽는다.
+      const downscaled = await Promise.all(
+        files.map((file) =>
+          downscaleImage(file, {
+            maxDimension: PREFERENCE_MAX_DIMENSION,
+            format: 'image/jpeg',
+          }),
+        ),
+      );
+      return analyzePreferenceImages(session.tokens.accessToken, downscaled);
     },
     onSuccess: (job) => {
       setHasSession(true);

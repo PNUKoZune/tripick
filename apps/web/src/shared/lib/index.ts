@@ -8,6 +8,11 @@ export { useFocusTrap } from './use-focus-trap';
 export { useBodyScrollLock } from './use-body-scroll-lock';
 export { useDismissOnEscape } from './use-dismiss-on-escape';
 export { useKakaoPlaceSearch, toResolvedPlace } from './use-kakao-place-search';
+export {
+  downscaleImage,
+  AVATAR_MAX_DIMENSION,
+  PREFERENCE_MAX_DIMENSION,
+} from './downscale-image';
 export type { KakaoResolvedPlace } from './use-kakao-place-search';
 export type {
   KakaoMapInstance,
