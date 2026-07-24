@@ -76,6 +76,7 @@
 
 - [settings/settings-v1.md](settings/settings-v1.md) — 설정 페이지
 - [settings/settings-profile-v1.md](settings/settings-profile-v1.md) — 프로필 도메인 + 페이지 레이아웃 통일
+- [settings/account-withdrawal-v1.md](settings/account-withdrawal-v1.md) — 회원 탈퇴 사유 수집 · 2단계 확인 (hard delete 유지)
 
 ## 디자인 시스템
 

@@ -50,7 +50,7 @@
 - 프로필 이미지 업로드 (Object Storage 연동 후)
 - 데모 계정 → 카카오 계정 마이그레이션 동선
 - `APP_VERSION` 자동 주입 (현재 하드코딩 `'0.1.0'`)
-- 탈퇴 사유 수집 / 30일 grace period (soft delete)
+- 탈퇴 사유 수집 / 30일 grace period (soft delete) → 후속 [account-withdrawal-v1](./account-withdrawal-v1.md): 사유 수집·2단계 확인은 도입, soft delete·grace 는 미채택
 - 디바이스별 푸시 토큰 관리 화면
 
 ## 3. 데이터 모델
@@ -118,7 +118,7 @@ export interface UserDto {
 | ------ | ------------------------------------- | ------------------------------------------- |
 | PATCH  | `/users/me`                           | 닉네임·프로필이미지 업데이트                |
 | PATCH  | `/users/me/notification-preferences`  | 알림 카테고리 부분 업데이트                 |
-| DELETE | `/users/me`                           | 회원 탈퇴 (HTTP 204)                         |
+| DELETE | `/users/me`                           | 회원 탈퇴 (HTTP 204) — **후속 대체**: [account-withdrawal-v1](./account-withdrawal-v1.md) 에서 `POST /users/me/withdrawal` 로 교체 |
 
 전부 `JwtAuthGuard` + `@CurrentUser()` 사용.
 
@@ -187,6 +187,8 @@ src/
 `role="switch"` + `aria-checked` 로 보조 기술에서 토글 의미 노출, mutation pending 중 `disabled` 로 더블 클릭 차단.
 
 ### 회원 탈퇴 확인 다이얼로그
+
+> 이 단일 다이얼로그는 후속 [account-withdrawal-v1](./account-withdrawal-v1.md) 에서 사유 수집 → 확인 문구 입력 2단계로 대체됐다.
 
 - `fixed inset-0 bg-black/45` 오버레이, 배경 클릭 시 닫기(처리 중엔 무시), 모달 클릭은 stopPropagation.
 - 본문: "여행 일정, 친구 목록, 받은 알림이 모두 삭제됩니다. 이 작업은 되돌릴 수 없어요."
