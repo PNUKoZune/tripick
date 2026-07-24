@@ -11,3 +11,10 @@ export const HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /** "YYYY-MM-DD" */
 export const YYYY_MM_DD = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+/**
+ * 저장/취향 사진 URL. 절대 URL(라이브 R2) 과 상대경로(로컬·웹뷰 `/storage` 프록시) 를 모두 받는다.
+ * STORAGE_PUBLIC_URL 이 `/storage` 상대경로로 바뀌면서 `@IsUrl`(절대 URL) 은 통과 못 한다.
+ * 남용은 서버가 "본인 photoUrls 목록에 있는 값인지" 로 따로 막으므로 형식만 느슨히 본다.
+ */
+export const STORAGE_URL = /^(https?:\/\/\S+|\/\S+)$/;
