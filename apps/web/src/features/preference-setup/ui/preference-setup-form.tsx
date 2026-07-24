@@ -47,13 +47,13 @@ import { getStoredSession } from '@/entities/session/model/session-storage';
 import { startDemoSession } from '@/entities/session/api/auth-api';
 import { queryKeys } from '@/shared/api/query-keys';
 import { downscaleImage, PREFERENCE_MAX_DIMENSION } from '@/shared/lib';
-import { InlineNotice, SegmentedOption } from '@/shared/ui/app-frame';
+import { SegmentedOption } from '@/shared/ui/app-frame';
 import { ConfirmDialog, ImageLightbox, TimeField, Toast } from '@/shared/ui';
 
-type Notice = {
+type ToastState = {
   title: string;
-  description: string;
-  tone: 'red' | 'green';
+  message?: string;
+  tone: 'success' | 'error';
 };
 
 type ThemeStance = 'like' | 'dislike';
@@ -74,8 +74,7 @@ export function PreferenceSetupForm() {
   const hydrated = useRef(false);
   const [form, setForm] = useState<PreferenceFormState>(DEFAULT_PREFERENCE_FORM);
   const [hasSession, setHasSession] = useState(() => Boolean(getStoredSession()));
-  const [notice, setNotice] = useState<Notice | null>(null);
-  const [toast, setToast] = useState<{ title: string; message: string } | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [photos, setPhotos] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [analyzedTags, setAnalyzedTags] = useState<TasteTagDto | null>(null);
@@ -125,7 +124,8 @@ export function PreferenceSetupForm() {
 
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 2500);
+    // 에러는 읽을 시간을 더 준다(성공 2.5s / 에러 4s). 둘 다 닫기 버튼으로 즉시 닫을 수 있다.
+    const timer = setTimeout(() => setToast(null), toast.tone === 'error' ? 4000 : 2500);
     return () => clearTimeout(timer);
   }, [toast]);
 
@@ -172,10 +172,10 @@ export function PreferenceSetupForm() {
     queryClient.invalidateQueries({ queryKey: queryKeys.preferences.photoTags });
 
     if (analysisJob.status === 'failed') {
-      setNotice({
+      setToast({
         title: '사진 분석 실패',
-        description: analysisJob.error ?? '사진 분석에 실패했습니다.',
-        tone: 'red',
+        message: analysisJob.error ?? '사진 분석에 실패했습니다.',
+        tone: 'error',
       });
       return;
     }
@@ -185,13 +185,13 @@ export function PreferenceSetupForm() {
     const tags = analysisJob.tasteTags;
     if (tags) setAnalyzedTags(tags);
     const count = tags ? tags.food.length + tags.mood.length + tags.environment.length : 0;
-    setNotice(null);
     setToast({
       title: '사진 분석 완료',
       message:
         count > 0
           ? '사진에서 취향을 분석했어요.'
           : '뚜렷한 취향을 찾지 못했어요. 다른 사진을 올려보세요.',
+      tone: 'success',
     });
   }, [activeJobId, analysisJob, queryClient]);
 
@@ -219,10 +219,10 @@ export function PreferenceSetupForm() {
   useEffect(() => {
     if (preferenceQuery.error instanceof Error) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 쿼리 에러를 안내 토스트로 표시
-      setNotice({
+      setToast({
         title: '불러오기 실패',
-        description: preferenceQuery.error.message,
-        tone: 'red',
+        message: preferenceQuery.error.message,
+        tone: 'error',
       });
     }
   }, [preferenceQuery.error]);
@@ -258,14 +258,13 @@ export function PreferenceSetupForm() {
       queryClient.setQueryData(queryKeys.preferences.me, preference);
       setHasSession(true);
       setSavedForm(variables);
-      setNotice(null);
-      setToast({ title: '저장 완료', message: '취향을 저장했습니다.' });
+      setToast({ title: '저장 완료', message: '취향을 저장했습니다.', tone: 'success' });
     },
     onError: (error) => {
-      setNotice({
+      setToast({
         title: '저장 실패',
-        description: error instanceof Error ? error.message : '취향 저장에 실패했습니다.',
-        tone: 'red',
+        message: error instanceof Error ? error.message : '취향 저장에 실패했습니다.',
+        tone: 'error',
       });
     },
   });
@@ -293,17 +292,17 @@ export function PreferenceSetupForm() {
       setPhotosDirty(false);
       rememberAnalysisJob(job.jobId);
       setActiveJobId(job.jobId);
-      setNotice(null);
       setToast({
         title: '분석을 시작했어요',
         message: '완료되면 알림으로 알려드릴게요. 다른 페이지로 이동해도 괜찮아요.',
+        tone: 'success',
       });
     },
     onError: (error) => {
-      setNotice({
+      setToast({
         title: '사진 분석 실패',
-        description: error instanceof Error ? error.message : '사진 분석에 실패했습니다.',
-        tone: 'red',
+        message: error instanceof Error ? error.message : '사진 분석에 실패했습니다.',
+        tone: 'error',
       });
     },
   });
@@ -331,10 +330,10 @@ export function PreferenceSetupForm() {
       queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
     },
     onError: (error) => {
-      setNotice({
+      setToast({
         title: '태그 변경 실패',
-        description: error instanceof Error ? error.message : '태그를 변경하지 못했습니다.',
-        tone: 'red',
+        message: error instanceof Error ? error.message : '태그를 변경하지 못했습니다.',
+        tone: 'error',
       });
     },
   });
@@ -352,10 +351,10 @@ export function PreferenceSetupForm() {
       queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
     },
     onError: (error) => {
-      setNotice({
+      setToast({
         title: '사진 삭제 실패',
-        description: error instanceof Error ? error.message : '사진 삭제에 실패했습니다.',
-        tone: 'red',
+        message: error instanceof Error ? error.message : '사진 삭제에 실패했습니다.',
+        tone: 'error',
       });
     },
   });
@@ -367,23 +366,21 @@ export function PreferenceSetupForm() {
 
   function handleSubmit() {
     if (!ready) {
-      setNotice({
+      setToast({
         title: '확인 필요',
-        description:
-          '선호 테마와 이동수단을 하나 이상 고르고, 취침·기상 시각을 다르게 설정해주세요.',
-        tone: 'red',
+        message: '선호 테마와 이동수단을 하나 이상 고르고, 취침·기상 시각을 다르게 설정해주세요.',
+        tone: 'error',
       });
       return;
     }
     if (photos.length > 0 && photosDirty) {
-      setNotice({
+      setToast({
         title: '사진 분석 먼저',
-        description: '추가한 사진을 “취향 분석하기”로 먼저 반영한 뒤 저장해주세요.',
-        tone: 'red',
+        message: '추가한 사진을 “취향 분석하기”로 먼저 반영한 뒤 저장해주세요.',
+        tone: 'error',
       });
       return;
     }
-    setNotice(null);
     savePreferenceMutation.mutate(form);
   }
 
@@ -691,14 +688,11 @@ export function PreferenceSetupForm() {
         </SetupBlock>
       </div>
 
-      {notice ? (
-        <InlineNotice title={notice.title} description={notice.description} tone={notice.tone} />
-      ) : null}
       {toast ? (
         <Toast
           title={toast.title}
           message={toast.message}
-          tone="success"
+          tone={toast.tone}
           onClose={() => setToast(null)}
         />
       ) : null}
@@ -743,7 +737,7 @@ export function PreferenceSetupForm() {
     setForm(DEFAULT_PREFERENCE_FORM);
     setPhotos([]);
     setPhotosDirty(false);
-    setNotice(null);
+    setToast(null);
     setResetDialogOpen(false);
   }
 
@@ -763,10 +757,10 @@ export function PreferenceSetupForm() {
       (file) => ACCEPTED_PHOTO_TYPES.includes(file.type) && file.size <= MAX_PHOTO_BYTES,
     );
     if (valid.length < incoming.length) {
-      setNotice({
+      setToast({
         title: '일부 사진 제외',
-        description: 'JPG·PNG·WEBP 형식의 10MB 이하 사진만 올릴 수 있어요.',
-        tone: 'red',
+        message: 'JPG·PNG·WEBP 형식의 10MB 이하 사진만 올릴 수 있어요.',
+        tone: 'error',
       });
     }
     if (valid.length === 0) return;
@@ -777,13 +771,13 @@ export function PreferenceSetupForm() {
     setPhotos((current) => {
       const merged = [...current, ...valid].slice(0, allowance);
       if (merged.length < current.length + valid.length) {
-        setNotice({
+        setToast({
           title: '사진 수 제한',
-          description:
+          message:
             remainingTotal === 0
               ? `취향 사진은 최대 ${MAX_PREFERENCE_PHOTOS}장까지예요. 기존 사진을 지우고 올려주세요.`
               : `한 번에 ${MAX_PREFERENCE_UPLOAD}장까지, 총 ${MAX_PREFERENCE_PHOTOS}장까지 올릴 수 있어요.`,
-          tone: 'red',
+          tone: 'error',
         });
       }
       return merged;
