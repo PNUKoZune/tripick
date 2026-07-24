@@ -1,9 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 
-import { useFocusTrap } from '@/shared/lib';
+import { useBodyScrollLock } from '@/shared/lib/use-body-scroll-lock';
+import { useDismissOnEscape } from '@/shared/lib/use-dismiss-on-escape';
+import { useFocusTrap } from '@/shared/lib/use-focus-trap';
 
 type Phase = 'closed' | 'opening' | 'open' | 'closing';
 
@@ -80,26 +83,17 @@ export function BottomSheet({ open, onClose, children, label, topSlot }: Props) 
     };
   }, [open]);
 
-  useEffect(() => {
-    if (phase === 'closed') return;
-    const original = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.body.style.overflow = original;
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [phase, onClose]);
+  // 시트 패널은 phase 가 closed 를 벗어나야 존재하므로, 잠금·ESC·트랩도 그때만 켠다
+  const mounted = phase !== 'closed';
+  useBodyScrollLock(mounted);
+  useDismissOnEscape(onClose, mounted);
 
   if (phase === 'closed') return null;
 
   const isVisible = phase === 'open';
   const easing = phase === 'closing' ? EASE_IN : EASE_OUT;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label={label}>
       {/* 마우스 전용 닫기 영역 — 키보드는 ESC·시트 안 닫기 버튼으로 닫는다 */}
       <button
@@ -158,7 +152,8 @@ export function BottomSheet({ open, onClose, children, label, topSlot }: Props) 
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

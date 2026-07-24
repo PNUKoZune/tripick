@@ -62,9 +62,14 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(active = tr
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('keydown', onKeyDown);
+      // 위에 다른 모달이 열려 있으면 그쪽이 포커스를 쥐고 있으므로 건드리지 않는다.
+      // (BottomSheet 는 320ms closing 동안 트랩이 살아 있어, 그 사이 다음 모달의 포커스를 뺏을 수 있다)
+      const wasTopmost = trapStack[trapStack.length - 1] === container;
       const at = trapStack.indexOf(container);
       if (at !== -1) trapStack.splice(at, 1);
-      if (restoreTo && document.contains(restoreTo)) restoreTo.focus({ preventScroll: true });
+      if (wasTopmost && restoreTo && document.contains(restoreTo)) {
+        restoreTo.focus({ preventScroll: true });
+      }
     };
   }, [active]);
 

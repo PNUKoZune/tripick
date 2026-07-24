@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 
-import { useFocusTrap } from '@/shared/lib';
+import { useBodyScrollLock } from '@/shared/lib/use-body-scroll-lock';
+import { useDismissOnEscape } from '@/shared/lib/use-dismiss-on-escape';
+import { useFocusTrap } from '@/shared/lib/use-focus-trap';
 
 type Props = {
   /** 스크린리더가 읽을 다이얼로그 이름 */
@@ -33,24 +35,14 @@ export function ModalShell({
 }: Props) {
   const panelRef = useFocusTrap<HTMLDivElement>();
 
-  useEffect(() => {
-    const original = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = original;
-    };
-  }, []);
+  useBodyScrollLock();
+  useDismissOnEscape(onDismiss);
 
-  useEffect(() => {
-    if (!onDismiss) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onDismiss();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onDismiss]);
+  // 조상의 transform·filter 에 fixed 오버레이가 갇히지 않게 body 로 포털.
+  // 모달은 사용자 상호작용(마운트=열림)으로만 뜨므로 SSR 시점엔 렌더되지 않지만, 방어적으로 가드한다.
+  if (typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
       className={`fixed inset-0 z-50 flex justify-center ${
         align === 'bottom' ? 'items-end p-0 sm:items-center sm:p-5' : 'items-center p-5'
@@ -71,6 +63,7 @@ export function ModalShell({
       <div ref={panelRef} tabIndex={-1} className={`relative outline-none ${panelClassName}`}>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
