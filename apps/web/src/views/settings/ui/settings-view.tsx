@@ -68,9 +68,9 @@ function SettingsContent() {
           </Section>
 
           <Section title="약관 및 정책">
-            <LinkRow href="#terms" label="이용약관" />
-            <LinkRow href="#privacy" label="개인정보처리방침" />
-            <LinkRow href="#contact" label="고객센터" />
+            <LinkRow href="/legal/terms" label="이용약관" />
+            <LinkRow href="/legal/privacy" label="개인정보처리방침" />
+            <LinkRow href="/support" label="고객센터" />
           </Section>
 
           <Section title="앱 정보">
