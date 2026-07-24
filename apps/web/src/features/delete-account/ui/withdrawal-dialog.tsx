@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { FiAlertTriangle, FiArrowLeft } from 'react-icons/fi';
 
 import {
@@ -9,6 +9,7 @@ import {
   type WithdrawUserDto,
   type WithdrawalReasonCode,
 } from '@/entities/user';
+import { ModalShell } from '@/shared/ui';
 
 type Props = {
   pending: boolean;
@@ -41,19 +42,6 @@ export function WithdrawalDialog({ pending, error, onClose, onSubmit }: Props) {
   const [detail, setDetail] = useState('');
   const [confirmation, setConfirmation] = useState('');
 
-  useEffect(() => {
-    const original = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !pending) onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.body.style.overflow = original;
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [pending, onClose]);
-
   const submit = () => {
     const dto: WithdrawUserDto = { confirmation: confirmation.trim() };
     if (reason) dto.reason = reason;
@@ -62,42 +50,31 @@ export function WithdrawalDialog({ pending, error, onClose, onSubmit }: Props) {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-5"
-      role="dialog"
-      aria-modal="true"
-      aria-label="회원 탈퇴"
+    <ModalShell
+      label="회원 탈퇴"
+      onDismiss={pending ? undefined : onClose}
+      panelClassName="flex max-h-[86vh] w-full max-w-[400px] flex-col overflow-hidden rounded-[20px] bg-[color:var(--card,#FFFFFF)] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
     >
-      <button
-        type="button"
-        aria-label="닫기"
-        onClick={() => {
-          if (!pending) onClose();
-        }}
-        className="absolute inset-0 bg-black/45"
-      />
-      <div className="relative flex max-h-[86vh] w-full max-w-[400px] flex-col overflow-hidden rounded-[20px] bg-[color:var(--card,#FFFFFF)] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
-        {step === 'reason' ? (
-          <ReasonStep
-            reason={reason}
-            detail={detail}
-            onReasonChange={setReason}
-            onDetailChange={setDetail}
-            onCancel={onClose}
-            onNext={() => setStep('confirm')}
-          />
-        ) : (
-          <ConfirmStep
-            confirmation={confirmation}
-            pending={pending}
-            error={error ?? null}
-            onConfirmationChange={setConfirmation}
-            onBack={() => setStep('reason')}
-            onSubmit={submit}
-          />
-        )}
-      </div>
-    </div>
+      {step === 'reason' ? (
+        <ReasonStep
+          reason={reason}
+          detail={detail}
+          onReasonChange={setReason}
+          onDetailChange={setDetail}
+          onCancel={onClose}
+          onNext={() => setStep('confirm')}
+        />
+      ) : (
+        <ConfirmStep
+          confirmation={confirmation}
+          pending={pending}
+          error={error ?? null}
+          onConfirmationChange={setConfirmation}
+          onBack={() => setStep('reason')}
+          onSubmit={submit}
+        />
+      )}
+    </ModalShell>
   );
 }
 

@@ -123,7 +123,7 @@ export function AlternativeSheet({
   );
 
   return (
-    <BottomSheet open={open} onClose={onClose} topSlot={topSlot}>
+    <BottomSheet open={open} onClose={onClose} topSlot={topSlot} label="AI 추천 대안">
       <div className="min-h-[420px]">
         {controller.state.status === 'loading' || controller.state.status === 'idle' ? (
           <SkeletonBody />

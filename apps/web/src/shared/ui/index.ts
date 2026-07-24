@@ -11,3 +11,4 @@ export { InboxBadgeProvider, useInboxUnreadCount } from './inbox-badge-context';
 export { ChangeScheduleButton } from './change-schedule-button';
 export { TimeField } from './time-field';
 export { ConfirmDialog } from './dialog';
+export { ModalShell } from './modal-shell';
