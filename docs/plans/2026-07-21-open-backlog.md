@@ -91,7 +91,7 @@
 - [ ] 약관/개인정보처리방침/고객센터/라이선스 실 페이지 `[코드확인: 없음]` ([settings](../settings/settings-v1.md#L268)·[settings-profile](../settings/settings-profile-v1.md#L246))
 - [ ] `APP_VERSION` package.json 자동주입 `[코드확인: '0.1.0' 하드코딩]`
 - [ ] 탈퇴 사유 수집 + soft delete(`deletedAt`) + 30일 grace `[코드확인: hard delete]`
-- [ ] 디바이스별 푸시 토큰 관리 UI — 백엔드 `fcm_tokens` 테이블은 완료, 목록/해제 UI만
+- [x] 디바이스별 푸시 토큰 관리 UI `[제외: 실서비스 관행상 불필요]` — 다중 기기 발송은 이미 동작(사용자 1:토큰 N, `listTokens` 가 전 기기 발송)하고, 죽은 토큰은 발송 실패 시 `remove`·로그아웃/탈퇴 시 `removeForUser`/`removeAllForUser` 로 자동 청소돼 사용자가 손댈 게 없음. 실서비스에서 "푸시 기기 목록 관리" 화면은 거의 없고, 있는 건 보안 목적의 세션/로그인 기기 관리(FCM 토큰 관리 아님). 필요해지면 "이 기기에서 알림 받기" 토글 1개로 갈음하고, 다중 로그인 관리가 필요하면 별도 세션/refresh 토큰 관리 기능으로 설계 ([fcm-token.service.ts](../../apps/api/src/notification/fcm-token.service.ts))
 - [x] refresh 토큰 RN SecureStore 이전 `[코드확인]` — WebView localStorage 대신 네이티브 Keychain/Keystore 에 refresh 보관, access 만 웹뷰 유지. 웹=auth HTTP·네이티브=순수 SecureStore, correlation id 브리지 + 타임아웃/확정부재 구분. `pnpm install` + 네이티브 rebuild 후 실기 검증 남음 ([refresh-token-securestore](../auth/refresh-token-securestore-v1.md)·[email-login](../auth/email-login-and-session-v1.md#L163))
 - [ ] 429 응답 한국어 메시지 + 재시도 UI
 - [ ] 이메일 인증/재설정 메일 템플릿 정리
