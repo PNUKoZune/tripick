@@ -91,7 +91,7 @@ export function ReplanModal({
   }
 
   return (
-    <BottomSheet open={open} onClose={onClose}>
+    <BottomSheet open={open} onClose={onClose} label="AI 재계획">
       {/* @MX:NOTE: 목업의 사유 칩·"지금 일정" 비교 블록은 새 폼 상태를 도입하므로
           의도적으로 제외한다(Out of Scope — spec.md §D, REQ-WVR-051). */}
       <div className="wvr-scope px-5 pb-6 pt-2">

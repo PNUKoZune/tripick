@@ -52,7 +52,7 @@ export function PreferenceSetupPrompt() {
   }
 
   return (
-    <BottomSheet open={open} onClose={dismiss}>
+    <BottomSheet open={open} onClose={dismiss} label="취향 설정 안내">
       <div className="flex flex-col items-center px-1 pb-1 pt-4 text-center">
         <span className="flex size-16 items-center justify-center rounded-full bg-[#EAF2FF] text-[#3182F6]">
           <FiCompass className="size-8" aria-hidden />

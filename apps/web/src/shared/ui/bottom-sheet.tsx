@@ -3,12 +3,16 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
+import { useFocusTrap } from '@/shared/lib';
+
 type Phase = 'closed' | 'opening' | 'open' | 'closing';
 
 type Props = {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
+  /** 스크린리더가 읽을 시트 이름 */
+  label: string;
   /** 시트 안쪽 상단에 그릴 컨텐츠 (지도 등). content 와 같은 카드 안에서 함께 슬라이드 업. */
   topSlot?: ReactNode;
 };
@@ -20,11 +24,13 @@ const SHEET_OPEN_MS = 440;
 const EASE_OUT = 'cubic-bezier(0.32, 0.72, 0, 1)';
 const EASE_IN = 'cubic-bezier(0.4, 0, 1, 1)';
 
-export function BottomSheet({ open, onClose, children, topSlot }: Props) {
+export function BottomSheet({ open, onClose, children, label, topSlot }: Props) {
   const [phase, setPhase] = useState<Phase>('closed');
   const [isDesktop, setIsDesktop] = useState(false);
   const closeTimer = useRef<number | null>(null);
   const openRafs = useRef<number[]>([]);
+  // 시트 패널은 phase 가 closed 를 벗어나야 마운트되므로, 트랩도 그때 켜야 ref 를 잡는다
+  const panelRef = useFocusTrap<HTMLDivElement>(phase !== 'closed');
 
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 1024px)');
@@ -94,10 +100,12 @@ export function BottomSheet({ open, onClose, children, topSlot }: Props) {
   const easing = phase === 'closing' ? EASE_IN : EASE_OUT;
 
   return (
-    <div className="fixed inset-0 z-40">
+    <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label={label}>
+      {/* 마우스 전용 닫기 영역 — 키보드는 ESC·시트 안 닫기 버튼으로 닫는다 */}
       <button
         type="button"
-        aria-label="close"
+        tabIndex={-1}
+        aria-hidden
         onClick={onClose}
         className="absolute inset-0 bg-black/45"
         style={{
@@ -128,7 +136,11 @@ export function BottomSheet({ open, onClose, children, topSlot }: Props) {
               }
         }
       >
-        <div className="relative flex max-h-full w-full max-w-[480px] flex-col overflow-hidden rounded-t-[24px] bg-white shadow-[0_-16px_40px_rgba(15,23,42,0.18)] lg:max-w-[560px] lg:rounded-[24px] lg:shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
+        <div
+          ref={panelRef}
+          tabIndex={-1}
+          className="relative flex max-h-full w-full max-w-[480px] flex-col overflow-hidden rounded-t-[24px] bg-white shadow-[0_-16px_40px_rgba(15,23,42,0.18)] outline-none lg:max-w-[560px] lg:rounded-[24px] lg:shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
+        >
           <button
             type="button"
             aria-label="닫기"

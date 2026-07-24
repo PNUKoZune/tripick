@@ -1,0 +1,76 @@
+'use client';
+
+import { useEffect } from 'react';
+import type { ReactNode } from 'react';
+
+import { useFocusTrap } from '@/shared/lib';
+
+type Props = {
+  /** 스크린리더가 읽을 다이얼로그 이름 */
+  label: string;
+  /**
+   * 백드롭 클릭·ESC 로 닫을 때 호출. 생략하면 두 경로 모두 막힌다 —
+   * 처리 중(pending)처럼 닫히면 안 되는 상태에서 `undefined` 를 넘기면 된다.
+   */
+  onDismiss?: (() => void) | undefined;
+  /** 패널 정렬. 'bottom' 은 모바일 하단 시트 → sm 이상에서 중앙 모달 */
+  align?: 'center' | 'bottom';
+  /** 패널(카드) 클래스 — 폭·패딩·라운드·배경은 모달마다 달라 통째로 받는다 */
+  panelClassName?: string;
+  children: ReactNode;
+};
+
+/**
+ * 모달 공통 셸. body 스크롤 락·ESC·백드롭·포커스 트랩을 한곳에 모아둔다.
+ * 열림 여부는 호출부가 조건부 렌더로 정한다(마운트 = 열림).
+ */
+export function ModalShell({
+  label,
+  onDismiss,
+  align = 'center',
+  panelClassName = '',
+  children,
+}: Props) {
+  const panelRef = useFocusTrap<HTMLDivElement>();
+
+  useEffect(() => {
+    const original = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!onDismiss) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onDismiss();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onDismiss]);
+
+  return (
+    <div
+      className={`fixed inset-0 z-50 flex justify-center ${
+        align === 'bottom' ? 'items-end p-0 sm:items-center sm:p-5' : 'items-center p-5'
+      }`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={label}
+    >
+      {/* 마우스 전용 닫기 영역 — 키보드·스크린리더에는 ESC 와 취소 버튼이 있어 탭 순서에서 뺀다 */}
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-hidden
+        onClick={onDismiss}
+        disabled={!onDismiss}
+        className="absolute inset-0 bg-black/45"
+      />
+      <div ref={panelRef} tabIndex={-1} className={`relative outline-none ${panelClassName}`}>
+        {children}
+      </div>
+    </div>
+  );
+}

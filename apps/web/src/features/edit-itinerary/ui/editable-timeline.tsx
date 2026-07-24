@@ -8,6 +8,7 @@ import { move } from '@dnd-kit/helpers';
 import type { PlannerItineraryItemDto } from '@tripick/types';
 
 import { ItineraryItemCard } from '@/entities/itinerary-item';
+import { ModalShell } from '@/shared/ui';
 import { useItineraryItems } from '../model/use-itinerary-items';
 import { ItemEditorSheet, type ItemEditorValues } from './item-editor-sheet';
 
@@ -241,41 +242,38 @@ function DeleteConfirm({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const title = proposalMode ? '이 일정 삭제를 요청할까요?' : '이 일정을 삭제할까요?';
+
   return (
-    <div
-      onClick={(event) => {
-        if (event.target === event.currentTarget && !pending) onCancel();
-      }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-5"
+    <ModalShell
+      label={title}
+      onDismiss={pending ? undefined : onCancel}
+      panelClassName="w-full max-w-[360px] rounded-[20px] bg-[color:var(--card)] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
     >
-      <div className="w-full max-w-[360px] rounded-[20px] bg-[color:var(--card)] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
-        <h2 className="text-[17px] font-bold text-[color:var(--ink)]">
-          {proposalMode ? '이 일정 삭제를 요청할까요?' : '이 일정을 삭제할까요?'}
-        </h2>
-        <p className="mt-2 text-[13px] leading-[20px] text-[color:var(--ink-sub)]">
-          {proposalMode
-            ? `“${name}” 삭제 요청을 여행 관리자에게 보냅니다.`
-            : `“${name}” 항목이 일정에서 제거됩니다.`}
-        </p>
-        <div className="mt-5 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={pending}
-            className="h-11 flex-1 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] text-[14px] font-bold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)] disabled:opacity-50"
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={pending}
-            className="h-11 flex-1 rounded-[12px] bg-[color:var(--danger)] text-[14px] font-bold text-[color:var(--btn-text)] hover:brightness-95 disabled:opacity-50"
-          >
-            {pending ? '처리 중…' : proposalMode ? '삭제 요청' : '삭제'}
-          </button>
-        </div>
+      <h2 className="text-[17px] font-bold text-[color:var(--ink)]">{title}</h2>
+      <p className="mt-2 text-[13px] leading-[20px] text-[color:var(--ink-sub)]">
+        {proposalMode
+          ? `“${name}” 삭제 요청을 여행 관리자에게 보냅니다.`
+          : `“${name}” 항목이 일정에서 제거됩니다.`}
+      </p>
+      <div className="mt-5 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={pending}
+          className="h-11 flex-1 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] text-[14px] font-bold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)] disabled:opacity-50"
+        >
+          취소
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={pending}
+          className="h-11 flex-1 rounded-[12px] bg-[color:var(--danger)] text-[14px] font-bold text-[color:var(--btn-text)] hover:brightness-95 disabled:opacity-50"
+        >
+          {pending ? '처리 중…' : proposalMode ? '삭제 요청' : '삭제'}
+        </button>
       </div>
-    </div>
+    </ModalShell>
   );
 }

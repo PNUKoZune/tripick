@@ -41,7 +41,7 @@ export function DestinationMapPicker({ onSelect }: Props) {
         </span>
         지도
       </button>
-      <BottomSheet open={open} onClose={() => setOpen(false)}>
+      <BottomSheet open={open} onClose={() => setOpen(false)} label="지도에서 여행 지역 선택">
         <MapPickerContent
           hasKey={hasKey}
           onConfirm={(name) => {
