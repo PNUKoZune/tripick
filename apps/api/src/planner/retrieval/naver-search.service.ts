@@ -48,26 +48,60 @@ export class NaverSearchService {
     if (!credentials) return DISABLED_INDEX;
 
     const key = regionSearchStem(destination).toLowerCase() || destination.toLowerCase();
-    const cached = this.cache.get(key);
+    // 서브지역(부산 해운대 등)까지 보존해야 그 지역의 인기 장소가 코퍼스에 잡힌다.
+    const stem = regionSearchStem(destination) || destination;
+    const queries = RECOMMEND_SUFFIXES.map((suffix) => `${stem} ${suffix}`);
+    return this.buildIndex(`region:${key}`, queries, destination, credentials);
+  }
+
+  /**
+   * 이번 달 국내 여행지 추천 코퍼스로 만든 인지도 인덱스. "2026년 7월 국내 여행지 추천" 식
+   * 검색 결과에 어떤 여행지가 얼마나 등장하는지를 세어(역방향 매칭) 시기별 추천 후보를 고른다.
+   * 월 단위로 캐시한다(같은 달 추천 글은 빠르게 바뀌지 않음). 키 없음·조회 실패 시 비활성 인덱스.
+   */
+  async getSeasonalDestinationIndex(now: Date = new Date()): Promise<PopularityIndex> {
+    const credentials = this.credentials();
+    if (!credentials) return DISABLED_INDEX;
+
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const queries = [
+      `${year}년 ${month}월 국내 여행지 추천`,
+      `${month}월 여행지 추천`,
+      `${month}월 국내여행 가볼만한 곳`,
+    ];
+    return this.buildIndex(`seasonal:${year}-${month}`, queries, `${year}년 ${month}월`, credentials);
+  }
+
+  /**
+   * 검색어 목록으로 코퍼스를 모아 인지도 인덱스를 만든다(캐시 경유).
+   * 두 엔드포인트가 모두 실패했거나 결과가 없으면 캐시하지 않고 비활성 반환 —
+   * 다음 조회에서 재시도하도록 둔다(TTL 동안 빈 인덱스를 고정하지 않음).
+   */
+  private async buildIndex(
+    cacheKey: string,
+    queries: string[],
+    label: string,
+    credentials: { id: string; secret: string },
+  ): Promise<PopularityIndex> {
+    const cached = this.cache.get(cacheKey);
     if (cached && cached.expires > Date.now()) return cached.index;
 
     try {
-      const corpus = await this.collectCorpus(destination, credentials);
-      // 두 엔드포인트가 모두 실패했거나 결과가 없으면 캐시하지 않고 비활성 반환 —
-      // 다음 조회에서 재시도하도록 둔다(6h 동안 빈 인덱스를 고정하지 않음).
+      const corpus = await this.collectCorpus(queries, credentials);
       if (corpus.docCount === 0) {
-        this.logger.warn(`네이버 코퍼스가 비어 인지도 보정 건너뜀 ("${destination}")`);
+        this.logger.warn(`네이버 코퍼스가 비어 인지도 보정 건너뜀 ("${label}")`);
         return DISABLED_INDEX;
       }
       const index = new NaverPopularityIndex(corpus.text, corpus.docCount);
-      this.cache.set(key, { index, expires: Date.now() + this.cacheTtlMs() });
+      this.cache.set(cacheKey, { index, expires: Date.now() + this.cacheTtlMs() });
       this.logger.log(
-        `네이버 인지도 인덱스 "${destination}" docs=${corpus.docCount} chars=${corpus.text.length}`,
+        `네이버 인지도 인덱스 "${label}" docs=${corpus.docCount} chars=${corpus.text.length}`,
       );
       return index;
     } catch (error) {
       this.logger.warn(
-        `네이버 검색 실패로 인지도 보정 건너뜀 ("${destination}"): ${error instanceof Error ? error.message : String(error)}`,
+        `네이버 검색 실패로 인지도 보정 건너뜀 ("${label}"): ${error instanceof Error ? error.message : String(error)}`,
       );
       return DISABLED_INDEX;
     }
@@ -75,12 +109,9 @@ export class NaverSearchService {
 
   /** 블로그·카페를 검색어별로 조회해 title+description 을 하나의 코퍼스로 합친다. */
   private async collectCorpus(
-    destination: string,
+    queries: string[],
     credentials: { id: string; secret: string },
   ): Promise<{ text: string; docCount: number }> {
-    // 서브지역(부산 해운대 등)까지 보존해야 그 지역의 인기 장소가 코퍼스에 잡힌다.
-    const stem = regionSearchStem(destination) || destination;
-    const queries = RECOMMEND_SUFFIXES.map((suffix) => `${stem} ${suffix}`);
     const display = this.display();
     const parts: string[] = [];
     let docCount = 0;

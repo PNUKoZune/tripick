@@ -61,39 +61,52 @@
 - 제목·목적지 부분일치 검색 + 정렬(최신순=서버 `createdAt DESC` 유지 / 출발임박순=`startDate` 오름차순). 상태 필터와 조합해 `visible` 로 합성.
 - 여행이 1건 이상일 때만 검색·정렬 바 노출.
 
-## 8. 추천 여행지 — 취향 개인화 (`widgets/destination-suggestions`, `main-planner`)
+## 8. 추천 여행지 — 이번 달 네이버 추천 + 취향 개인화 (`widgets/destination-suggestions`, `main-planner`)
 
-목록 하단에 "이런 여행지 어때요?" 섹션. 취향 벡터로 지역을 랭킹하고, 카드 원탭 시 `/trips/new?destination=` 프리필로 생성에 진입한다.
+목록 하단 "이런 여행지 어때요?" 섹션. 네이버 검색으로 **이번 달 "국내 여행지 추천" 코퍼스**를 모아 그 안에 실제 언급된 여행지만 후보로 추린 뒤(파서), **사용자 취향으로 랭킹**한다. 카드 원탭 시 `/trips/new?destination=` 프리필로 생성에 진입한다.
 
-### 배경 — 이미 있는 인프라 재사용
+### 왜 계절 검색인가
 
-- 취향 임베딩(`preference_embeddings`, `PreferencesService.getPreferenceVector`)과 장소 임베딩(`place_embeddings`)은 **같은 벡터 공간**이며, 취향↔장소 코사인은 이미 CRAG 리트리벌 리랭킹에 쓰인다. 즉 개인화 자체는 새 임베딩 작업이 아니라 **지역 단위 집계 쿼리**만 있으면 된다.
+- 취향 벡터만으로 지역을 랭킹하면(구버전) 시딩 커버리지·밀도 편향에 좌우되고 "지금 갈 만한 곳"이라는 **시의성**이 빠진다. 네이버 추천 글의 언급을 후보 풀로 쓰면 시기성(7월=여름 여행지)이 자연히 반영된다.
+- 이미 있는 `NaverSearchService`(인지도 재랭킹용 블로그·카페 코퍼스)를 재사용 — 새 외부 연동 없음.
 
-### 지역 랭킹 (`PlaceEmbeddingRepository.recommendRegions`)
+### 계절 코퍼스 (`NaverSearchService.getSeasonalDestinationIndex`)
 
-- `(destination_region, region_sigungu)` 조합으로 그룹핑, 지역별 **상위 topK개 장소의 취향 코사인 평균**을 점수로 랭킹(window `ROW_NUMBER`). "내 취향 스팟이 많은 지역"이 상위로.
-- 조합 키라 서로 다른 시도의 동명 시군구('대구 중구' vs '부산 중구')가 안 섞임. 벡터 차원 불일치 등 실패 시 `[]` 반환 → 인기순 폴백.
+- 현재 연·월로 `"2026년 7월 국내 여행지 추천"`·`"7월 여행지 추천"`·`"7월 국내여행 가볼만한 곳"` 3개 검색어를 블로그+카페로 조회해 title+description 코퍼스화. **월 단위 캐시**(같은 달 추천 글은 느리게 변함).
+- `collectCorpus`·`buildIndex` 를 검색어 배열로 일반화해 인지도 인덱스와 배관 공유. 키 없음·코퍼스 빔 시 비활성 인덱스(`docCount=0`) 반환.
 
-### 시/군/구 세분화 (`DestinationsService.recommend`)
+### 파서 — 역방향 매칭 (`DestinationsService.parseSeasonalCandidates`)
 
-- 후보를 넉넉히 받아 **시도별 대표 1개로 접되, 시군구 데이터가 있으면 그 시도의 최고 시/군/구로 대표**(경상북도→경주시, 대구광역시→달서구). 도 단위 중복(경상북도 + 경주시) 노출을 막고 구체적 시를 노출.
-- 밀도가 큰 "시도 전체" 버킷이 개별 시군구를 가리지 않도록 `preferSigungu`(시군구 우선, 같은 급이면 고점수)로 대표 선택.
-- 표기: 카드 제목=시군구(예: '경주시') 또는 시도, 부제=상위 시도로 '중구' 등 모호함 해소. 이모지는 원본 시도명으로 매칭('경상북도'→🏛️).
-- 폴백: 취향 벡터 없음(온보딩 전)·시딩 부족이면 인기 여행지, 추천이 목표 수 미만이면 인기순으로 채움.
+- KTO 시도·시군구 목록 중 **계절 코퍼스에 언급된 것만** 후보로 남긴다. 블로그가 '경주시'가 아닌 '경주'로 쓰므로 행정 접미사를 뗀 어간(`regionSearchStem`)으로 카운트 — 기존 인지도 신호와 동일한 **역방향 매칭**(불안정한 한글 NER 회피).
+- 같은 어간이 여러 행정단위에 겹치면(시도 '부산' vs 시군구 '부산진구') 언급 많은 쪽만 대표. 표시 이름도 어간('강릉')으로 정리해 카드 제목·여행 생성 질의에 그대로 사용.
+
+### 취향 랭킹 (`recommendSeasonal` + `preferenceScoreMap`)
+
+- 후보를 **취향 점수 0.7 + 계절 언급 점수 0.3** 로 결합해 정렬. 취향 점수는 기존 `recommendRegions`(지역별 상위 topK 장소 취향 코사인 평균, `(destination_region, region_sigungu)` 그룹핑·window `ROW_NUMBER`)를 어간 키 맵으로 만들어 대조.
+- 취향 벡터 없으면(온보딩 전) 계절 언급 순으로만 랭킹. 후보가 목표(8개) 미만이면 인기 여행지로 채움.
+
+### 폴백 — 취향/인기 (`recommendByPreference`)
+
+- 네이버 키 없음·코퍼스 빔이면 구버전 경로로 회귀: `recommendRegions` 취향 랭킹 → **시도별 대표 접기**(`preferSigungu`: 시군구 우선, 같은 급이면 고점수, 예 경상북도→경주시) → 인기순 폴백. 지역 랭킹·시군구 세분화 로직은 이 경로에 그대로 보존.
+
+### 지역 라벨 정정 (`SIDO_DISPLAY`)
+
+- 부제(시도명)를 접미사 제거로 만들던 걸 **정식명 → 정규 약칭 매핑**으로 교체. '충청북도'→'충북', '경상남도'→'경남' 등 2글자 약칭 정상화.
+- KTO `ldongCode2` 코드 `12` 는 원본이 `전남광주통합특별시`(광주+전남 병합)로 깨져 와, 접미사만 떼면 '전남광주통합'이 남던 것 → '전남'으로 명시 매핑(하위 시군구가 여수·순천·담양 등 전남 시군 대다수).
 
 ### 커버리지 한계(정직 고지)
 
-- `region_sigungu` 는 현재 **경북·대구에만** 채워짐(전체 236/2135건). 시 단위가 폭넓게 뜨려면 인제스천 시 시군구 커버리지 확대가 필요 — 코드가 아니라 데이터 과제.
-- 밀도가 큰 시도-전체 버킷이 점수상 유리한 경향은 있으나, 시도별 대표 접기로 시군구가 최소한 그 시도의 얼굴로는 항상 노출된다.
+- 취향 점수는 여전히 시딩된 지역(`seoul`/`busan`/`jeju`/`gyeongju`)에만 붙어, 그 외 계절 후보는 중립값(0.5)으로 언급 순만 반영된다. 취향 개인화 실효 확대는 `place_embeddings` 시군구 커버리지 확대(코드가 아니라 데이터 과제)에 달림.
+- 계절 후보가 부족한 달·비수기엔 인기 여행지 채움 비중이 늘어난다.
 
 ## 9. API / 타입
 
 | 메서드 | 경로 | 인증 | 응답 |
 | --- | --- | --- | --- |
-| GET | `/main-planner/destinations/recommended` | 필요 | `DestinationSuggestionDto[]` (취향 랭킹, 폴백 인기순) |
+| GET | `/main-planner/destinations/recommended` | 필요 | `DestinationSuggestionDto[]` (이번 달 네이버 추천 후보 × 취향 랭킹, 폴백 취향/인기순) |
 | POST | `/main-planner/trips` (생성) | 필요 | 실패 시 **롤백 + 503**(`ServiceUnavailableException`) |
 
-- `PlaceEmbeddingRepository` 를 `PlannerModule` 에서 **export** → `MainPlannerModule` 의 `DestinationsService` 가 주입.
+- `PlaceEmbeddingRepository`·`NaverSearchService` 를 `PlannerModule` 에서 **export** → `MainPlannerModule` 의 `DestinationsService` 가 주입.
 - `RegionRecommendation`(`region`/`sigungu`/`score`/`places`) 타입 추가.
 - 프론트: `fetchRecommendedDestinations`, `queryKeys.planner.recommendedDestinations`, `/trips/new` 서버 `searchParams` 로 `?destination=` 프리필(클라 `useSearchParams` 회피).
 - 타입 변경 없음(`DestinationSuggestionDto` 재사용).
@@ -102,11 +115,13 @@
 
 - web·api 타입체크 통과(`tsc --noEmit`), 웹 프로덕션 빌드 통과(`/trips/new` 가 `searchParams` 로 dynamic 전환 확인).
 - API 부팅·DI 그래프 해소 확인, `GET /main-planner/destinations/recommended` 라우트 매핑 확인.
-- 추천 SQL 을 실 DB(2135건/17지역)에서 실행 → 지역이 취향 점수순으로 정상 랭킹, 시도별 대표가 **경상북도→경산시 / 대구광역시→동구** 로 시 단위 접힘 확인.
+- 추천 SQL 을 실 DB(2135건/17지역)에서 실행 → 지역이 취향 점수순으로 정상 랭킹, 시도별 대표가 **경상북도→경산시 / 대구광역시→동구** 로 시 단위 접힘 확인(폴백 경로).
+- 계절 전환 후: `destinations.service`·`naver-search.service` 타입체크·ESLint 통과. KTO `ldongCode2` 시도 목록을 실 API로 조회해 코드 `12`가 `전남광주통합특별시`로 깨져 오는 것 확인 → `SIDO_DISPLAY` 매핑 근거.
 
 ## 11. 후속 작업
 
-- 시군구 `region_sigungu` 인제스천 커버리지 확대(현재 경북·대구만) → 시 단위 추천 실효 확대
+- 시군구 `region_sigungu` 인제스천 커버리지 확대(현재 경북·대구만) → 계절 후보의 취향 점수 실효 확대(현재 시딩 지역 외엔 중립값)
+- 계절 검색어·가중(0.7/0.3) 튜닝, 계절 코퍼스 결과의 LLM 하네스 회귀 편입
 - 히어로 카드 날씨 미리보기(요약 API 기상청 연동)
 - 기존 draft 잔해 일괄 정리 마이그레이션(선택)
-- 추천 여행지 서버 캐시(현재 프론트 `staleTime` 30분만), 밀도 편향 보정 실험
+- 추천 여행지 서버 캐시(현재 프론트 `staleTime` 30분 + 네이버 월 단위 캐시), 밀도 편향 보정 실험

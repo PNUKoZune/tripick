@@ -7,8 +7,9 @@ import { fetchRecommendedDestinations } from '@/entities/trip-plan';
 import { queryKeys } from '@/shared/api/query-keys';
 
 /**
- * 취향 기반 추천 여행지를 카드로 노출해 원탭으로 여행 생성(프리필)에 진입시킨다.
- * 서버가 취향 벡터로 지역을 랭킹하며, 취향 데이터가 없으면 인기순으로 폴백한다.
+ * 추천 여행지를 카드로 노출해 원탭으로 여행 생성(프리필)에 진입시킨다.
+ * 서버가 네이버 검색으로 이번 달 "국내 여행지 추천" 글에 실제로 언급된 여행지만 후보로 추린 뒤
+ * 사용자 취향으로 랭킹한다. 네이버 키가 없거나 취향이 없으면 취향/인기순으로 폴백한다.
  */
 export function DestinationSuggestions() {
   const { data = [] } = useQuery({
@@ -23,7 +24,7 @@ export function DestinationSuggestions() {
     <section className="mt-8">
       <div className="mb-3 flex items-baseline justify-between px-4 lg:px-0">
         <h2 className="text-[15px] font-bold text-[#191F28]">이런 여행지 어때요?</h2>
-        <span className="text-[12px] text-[#8B95A1]">취향·인기 반영</span>
+        <span className="text-[12px] text-[#8B95A1]">이번 달 추천·취향 반영</span>
       </div>
       <div className="flex gap-3 overflow-x-auto px-4 pb-1 lg:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {data.map((d) => (

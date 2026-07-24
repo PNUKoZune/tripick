@@ -52,6 +52,7 @@ import { TripDayEntity } from '../trips/trip-day.entity';
     KakaoLocalService,
     TourApiService,
     TatsCnctrRateService,
+    NaverSearchService,
     RouteHelper,
     WeatherHelper,
   ],
