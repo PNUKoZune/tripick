@@ -60,3 +60,6 @@ web-build
 # Firebase client config
 apps/mobile/android/app/google-services.json
 apps/mobile/ios/TriPick/GoogleService-Info.plist
+
+# 특정 스킬
+.claude/skills/blog-post
