@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 
 import { requestPasswordReset } from '@/entities/session/api/auth-api';
+import { useRetryCountdown } from '@/shared/lib';
 
 export function RequestPasswordResetForm() {
   const [email, setEmail] = useState('');
@@ -13,6 +14,9 @@ export function RequestPasswordResetForm() {
     mutationFn: () => requestPasswordReset(email),
     onSuccess: (res) => setSentEmail(res.email ?? email),
   });
+
+  // 메일 발송은 분당 3회라 429 가 가장 잘 나는 화면. Retry-After 만큼 재시도를 막는다.
+  const retryAfter = useRetryCountdown(mutation.error);
 
   if (sentEmail) {
     return (
@@ -26,7 +30,7 @@ export function RequestPasswordResetForm() {
     );
   }
 
-  const canSubmit = email.trim().length > 0 && !mutation.isPending;
+  const canSubmit = email.trim().length > 0 && !mutation.isPending && retryAfter === 0;
   const errorMessage = mutation.error instanceof Error ? mutation.error.message : null;
 
   return (
@@ -56,7 +60,11 @@ export function RequestPasswordResetForm() {
         disabled={!canSubmit}
         className="mt-2 h-12 w-full rounded-[12px] bg-[#3182F6] text-[15px] font-bold text-white hover:bg-[#1B64DA] disabled:bg-[#E5E8EB] disabled:text-[#B0B8C1]"
       >
-        {mutation.isPending ? '보내는 중…' : '재설정 메일 보내기'}
+        {mutation.isPending
+          ? '보내는 중…'
+          : retryAfter > 0
+            ? `${retryAfter}초 후 다시 시도`
+            : '재설정 메일 보내기'}
       </button>
     </form>
   );

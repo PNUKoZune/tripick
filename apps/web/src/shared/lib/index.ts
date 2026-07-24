@@ -1,5 +1,7 @@
-export { api } from '@/shared/api/client';
+export { api, rateLimitRetrySeconds } from '@/shared/api/client';
+export type { ApiError } from '@/shared/api/client';
 export { firstErrorMessage } from './first-error-message';
+export { useRetryCountdown } from './use-retry-countdown';
 export { loadKakaoMaps, getKakaoKey } from './kakao-loader';
 export { useMediaQuery } from './use-media-query';
 export { useKakaoPlaceSearch, toResolvedPlace } from './use-kakao-place-search';
