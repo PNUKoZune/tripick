@@ -28,6 +28,7 @@ import { UserEntity } from './user.entity';
 import type {
   UpdateNotificationPreferencesDto,
   UpdateUserDto,
+  WithdrawUserDto,
 } from '@tripick/types';
 
 interface UploadedImage {
@@ -115,10 +116,12 @@ export class UsersController {
     return this.usersService.removeProfileImage(user.id);
   }
 
-  @Delete('me')
+  @Post('me/withdrawal')
   @HttpCode(204)
-  @ApiOperation({ summary: '회원 탈퇴 (계정 + 관련 데이터 cascade 삭제)' })
-  remove(@CurrentUser() user: UserEntity) {
-    return this.usersService.remove(user.id);
+  @ApiOperation({
+    summary: '회원 탈퇴 (사유 수집 + 확인 문구 검증 후 계정·관련 데이터 즉시 삭제)',
+  })
+  withdraw(@CurrentUser() user: UserEntity, @Body() dto: WithdrawUserDto) {
+    return this.usersService.withdraw(user.id, dto);
   }
 }

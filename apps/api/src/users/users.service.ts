@@ -13,15 +13,22 @@ import { randomBytes } from 'node:crypto';
 import { StorageService } from '../storage/storage.service';
 import { FcmTokenService } from '../notification/fcm-token.service';
 import { UserEntity } from './user.entity';
+import { WithdrawalReasonEntity } from './withdrawal-reason.entity';
 import { DEFAULT_NOTIFICATION_PREFERENCES } from './notification-preferences.constants';
 import {
+  WITHDRAWAL_CONFIRM_PHRASE,
+  WITHDRAWAL_REASONS,
   type KakaoProfile,
   type NotificationPreferencesDto,
   type UpdateUserDto,
+  type WithdrawUserDto,
+  type WithdrawalReasonCode,
 } from '@tripick/types';
 
 const ALLOWED_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
+const MAX_REASON_DETAIL_LENGTH = 500;
+const WITHDRAWAL_REASON_CODES = new Set<string>(WITHDRAWAL_REASONS.map((r) => r.code));
 
 export type PublicProfile = Omit<
   UserEntity,
@@ -35,6 +42,8 @@ export class UsersService implements OnModuleInit {
   constructor(
     @InjectRepository(UserEntity)
     private readonly repo: Repository<UserEntity>,
+    @InjectRepository(WithdrawalReasonEntity)
+    private readonly withdrawalReasons: Repository<WithdrawalReasonEntity>,
     private readonly storage: StorageService,
     private readonly fcmTokens: FcmTokenService,
   ) {}
@@ -315,6 +324,47 @@ export class UsersService implements OnModuleInit {
     // 사용자 삭제 전에 등록된 모든 FCM 토큰을 정리(orphan row 방지).
     await this.fcmTokens.removeAllForUser(id);
     await this.repo.remove(user);
+  }
+
+  /**
+   * 회원 탈퇴. 확인 문구(WITHDRAWAL_CONFIRM_PHRASE)를 그대로 입력한 요청만 통과시키고,
+   * 익명 사유 row 를 먼저 남긴 뒤 계정을 즉시 물리 삭제한다(soft delete·유예 없음 — 결제
+   * 이력이 없어 데이터 보관 의무가 없고, 삭제 요청은 즉시 이행하는 게 원칙에 맞음).
+   */
+  async withdraw(id: string, dto: WithdrawUserDto): Promise<void> {
+    const user = await this.findById(id);
+    if (!user) throw new NotFoundException(`User ${id} not found`);
+
+    if (dto.confirmation?.trim() !== WITHDRAWAL_CONFIRM_PHRASE) {
+      throw new BadRequestException(`탈퇴하려면 "${WITHDRAWAL_CONFIRM_PHRASE}"를 입력해주세요.`);
+    }
+    if (dto.reason !== undefined && !WITHDRAWAL_REASON_CODES.has(dto.reason)) {
+      throw new BadRequestException(`알 수 없는 탈퇴 사유입니다: ${dto.reason}`);
+    }
+
+    const detail = dto.reasonDetail?.trim().slice(0, MAX_REASON_DETAIL_LENGTH);
+    await this.recordWithdrawalReason(user, dto.reason, detail || undefined);
+    await this.remove(id);
+  }
+
+  /** 사유 적재는 탈퇴 자체를 막지 않는다 — 실패하면 로그만 남기고 삭제를 계속 진행한다. */
+  private async recordWithdrawalReason(
+    user: UserEntity,
+    reason: WithdrawalReasonCode | undefined,
+    detail: string | undefined,
+  ): Promise<void> {
+    const ageMs = Date.now() - new Date(user.createdAt).getTime();
+    try {
+      await this.withdrawalReasons.save(
+        this.withdrawalReasons.create({
+          reason: reason ?? null,
+          detail: detail ?? null,
+          accountAgeDays: Math.max(0, Math.floor(ageMs / 86_400_000)),
+        }),
+      );
+    } catch (error) {
+      this.logger.warn(`탈퇴 사유 기록 실패: ${(error as Error).message}`);
+    }
   }
 }
 
