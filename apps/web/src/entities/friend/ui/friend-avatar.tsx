@@ -28,6 +28,7 @@ export function FriendAvatar({ friend, size = 'md' }: Props) {
     >
       {showImage ? (
         // 이미지 로드 실패 시(만료 URL·403 등) 색상+이니셜 폴백으로 되돌린다.
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={friend.profileImageUrl}
           alt=""
