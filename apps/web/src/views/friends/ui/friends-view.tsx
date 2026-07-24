@@ -69,16 +69,6 @@ function FriendsContent() {
 
   const content = (
     <div className="space-y-4">
-      <div className="rounded-[14px] bg-[#F2F4F6] px-4 py-2.5">
-        <input
-          type="text"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="이름 또는 ID 검색"
-          className="h-7 w-full bg-transparent text-[14px] font-semibold text-[#191F28] outline-none placeholder:text-[#8B95A1]"
-        />
-      </div>
-
       <div className="rounded-[16px] border border-[#E5E8EB] bg-white p-3">
         <div className="flex items-center gap-2">
           <span className="text-[20px]" aria-hidden>
@@ -87,7 +77,7 @@ function FriendsContent() {
           <span className="text-[13px] font-bold text-[#191F28]">친구 추가</span>
         </div>
         <p className="mt-1 text-[12px] text-[#8B95A1]">
-          상대방의 아이디(@)를 입력하면 친구 목록에 저장합니다.
+          상대방의 아이디(@)로 친구 요청을 보냅니다. 상대가 수락하면 친구가 돼요.
         </p>
         <div className="mt-2 flex items-center gap-2">
           <input
@@ -115,6 +105,16 @@ function FriendsContent() {
         {mutationError ? (
           <p className="mt-2 text-[12px] font-semibold text-[#F04452]">{mutationError}</p>
         ) : null}
+      </div>
+
+      <div className="rounded-[14px] bg-[#F2F4F6] px-4 py-2.5">
+        <input
+          type="text"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="이름 또는 ID 검색"
+          className="h-7 w-full bg-transparent text-[14px] font-semibold text-[#191F28] outline-none placeholder:text-[#8B95A1]"
+        />
       </div>
 
       {loadError ? (
