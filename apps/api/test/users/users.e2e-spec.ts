@@ -6,9 +6,12 @@ import type { Repository } from 'typeorm';
 import request from 'supertest';
 import { createE2EApp, TestAuthGuard } from '../e2e/create-e2e-app';
 import { UserEntity } from '../../src/users/user.entity';
+import { WithdrawalReasonEntity } from '../../src/users/withdrawal-reason.entity';
 import { UsersController } from '../../src/users/users.controller';
 import { UsersService } from '../../src/users/users.service';
 import { FcmTokenEntity } from '../../src/notification/fcm-token.entity';
+import { RefreshTokenEntity } from '../../src/auth/entities/refresh-token.entity';
+import { EmailTokenEntity } from '../../src/auth/entities/email-token.entity';
 import { FcmTokenService } from '../../src/notification/fcm-token.service';
 import { StorageService } from '../../src/storage/storage.service';
 import { JwtAuthGuard } from '../../src/auth/guards/jwt-auth.guard';
@@ -18,6 +21,9 @@ describe('Users (e2e)', () => {
   let http: ReturnType<typeof request>;
   let users: Repository<UserEntity>;
   let fcmTokens: Repository<FcmTokenEntity>;
+  let withdrawals: Repository<WithdrawalReasonEntity>;
+  let refreshTokens: Repository<RefreshTokenEntity>;
+  let emailTokens: Repository<EmailTokenEntity>;
   // 스토리지 미설정 상태를 흉내내 업로드 503 경로를 검증한다.
   const storage = {
     isReady: jest.fn().mockReturnValue(false),
@@ -28,7 +34,13 @@ describe('Users (e2e)', () => {
 
   beforeAll(async () => {
     app = await createE2EApp({
-      entities: [UserEntity, FcmTokenEntity],
+      entities: [
+        UserEntity,
+        FcmTokenEntity,
+        WithdrawalReasonEntity,
+        RefreshTokenEntity,
+        EmailTokenEntity,
+      ],
       controllers: [UsersController],
       providers: [
         UsersService,
@@ -40,6 +52,9 @@ describe('Users (e2e)', () => {
     http = request(app.getHttpServer());
     users = app.get(getRepositoryToken(UserEntity));
     fcmTokens = app.get(getRepositoryToken(FcmTokenEntity));
+    withdrawals = app.get(getRepositoryToken(WithdrawalReasonEntity));
+    refreshTokens = app.get(getRepositoryToken(RefreshTokenEntity));
+    emailTokens = app.get(getRepositoryToken(EmailTokenEntity));
   });
 
   afterAll(async () => {
@@ -199,21 +214,122 @@ describe('Users (e2e)', () => {
     });
   });
 
-  describe('DELETE /users/me', () => {
-    it('removes the account', async () => {
+  describe('POST /users/me/withdrawal', () => {
+    it('removes the account when the confirm phrase matches', async () => {
       const uid = await newUser();
-      await http.delete('/users/me').set('x-test-user-id', uid).expect(204);
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: '탈퇴', reason: 'no_plan' })
+        .expect(204);
       expect(await users.findOneBy({ id: uid })).toBeNull();
     });
 
-    it('also clears the user’s fcm tokens', async () => {
+    it('rejects a wrong or missing confirm phrase and keeps the account', async () => {
+      const uid = await newUser();
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: '탈퇴할래요' })
+        .expect(400);
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({})
+        .expect(400);
+
+      expect(await users.findOneBy({ id: uid })).not.toBeNull();
+    });
+
+    it('rejects an unknown reason code', async () => {
+      const uid = await newUser();
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: '탈퇴', reason: 'nope' })
+        .expect(400);
+      expect(await users.findOneBy({ id: uid })).not.toBeNull();
+    });
+
+    it('rejects non-string fields with 400 instead of crashing', async () => {
+      const uid = await newUser();
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: 5 })
+        .expect(400);
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: '탈퇴', reasonDetail: 123 })
+        .expect(400);
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: '탈퇴', reasonDetail: 'a'.repeat(501) })
+        .expect(400);
+
+      expect(await users.findOneBy({ id: uid })).not.toBeNull();
+    });
+
+    it('stores the reason anonymously (no user reference)', async () => {
+      const uid = await newUser();
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: '탈퇴', reason: 'other', reasonDetail: '  앱이 무거워요  ' })
+        .expect(204);
+
+      const rows = await withdrawals.findBy({ reason: 'other' });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.detail).toBe('앱이 무거워요');
+      expect(rows[0]?.accountAgeDays).toBe(0);
+      expect(JSON.stringify(rows[0])).not.toContain(uid);
+    });
+
+    it('allows skipping the reason', async () => {
+      const uid = await newUser();
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: '탈퇴' })
+        .expect(204);
+
+      const rows = await withdrawals.find();
+      expect(rows.some((row) => row.reason === null && row.detail === null)).toBe(true);
+    });
+
+    it('also clears the user’s fcm, refresh and email tokens', async () => {
       const uid = await newUser();
       await fcmTokens.save(fcmTokens.create({ userId: uid, token: 'dev-a' }));
       await fcmTokens.save(fcmTokens.create({ userId: uid, token: 'dev-b' }));
+      // FK 가 없는 테이블들 — 탈퇴가 직접 지우지 않으면 남아서 /auth/refresh 가 계속 발급한다.
+      await refreshTokens.save(
+        refreshTokens.create({
+          userId: uid,
+          tokenHash: `hash-${uid}`,
+          familyId: `fam-${uid}`,
+          expiresAt: new Date(Date.now() + 86_400_000),
+        }),
+      );
+      await emailTokens.save(
+        emailTokens.create({
+          userId: uid,
+          purpose: 'verify_email',
+          tokenHash: `mail-${uid}`,
+          expiresAt: new Date(Date.now() + 86_400_000),
+        }),
+      );
 
-      await http.delete('/users/me').set('x-test-user-id', uid).expect(204);
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: '탈퇴' })
+        .expect(204);
 
       expect(await fcmTokens.findBy({ userId: uid })).toHaveLength(0);
+      expect(await refreshTokens.findBy({ userId: uid })).toHaveLength(0);
+      expect(await emailTokens.findBy({ userId: uid })).toHaveLength(0);
     });
   });
 });

@@ -43,3 +43,28 @@ export interface UpdateNotificationPreferencesDto {
   /** 일부만 보내 부분 갱신 가능 */
   preferences: Partial<NotificationPreferencesDto>;
 }
+
+/** 탈퇴 사유 객관식. 선택은 선택사항(건너뛰기 가능)이고, 'other' 는 자유 입력과 함께 온다. */
+export const WITHDRAWAL_REASONS = [
+  { code: 'not_useful', label: '여행 계획에 별 도움이 안 됐어요' },
+  { code: 'bad_recommendation', label: '추천 장소가 제 취향과 안 맞았어요' },
+  { code: 'hard_to_use', label: '쓰기 불편하고 어려웠어요' },
+  { code: 'too_many_notifications', label: '알림이 너무 많았어요' },
+  { code: 'privacy', label: '위치·사진 등 개인정보 수집이 부담됐어요' },
+  { code: 'no_plan', label: '당분간 여행 계획이 없어요' },
+  { code: 'other', label: '기타' },
+] as const;
+
+export type WithdrawalReasonCode = (typeof WITHDRAWAL_REASONS)[number]['code'];
+
+/** 오탈자·오조작 방지용. 사용자가 이 문자열을 그대로 입력해야 탈퇴가 진행된다. */
+export const WITHDRAWAL_CONFIRM_PHRASE = '탈퇴';
+
+export interface WithdrawUserDto {
+  /** 미선택(건너뛰기) 가능 */
+  reason?: WithdrawalReasonCode;
+  /** 'other' 선택 시 자유 입력, 그 외 사유의 부연 설명. 최대 500자 */
+  reasonDetail?: string;
+  /** WITHDRAWAL_CONFIRM_PHRASE 와 일치해야 함 */
+  confirmation: string;
+}

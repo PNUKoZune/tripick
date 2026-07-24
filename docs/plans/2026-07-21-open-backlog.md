@@ -26,6 +26,7 @@
 - [ ] **iOS 푸시(APNs) 실기기 검증** `[대기: 실기기 + APNs Auth Key]` — Auth Key 업로드 + Xcode capability ([inbox](../notification/inbox-and-trip-invite-v1.md#L450)·[photo-taste](../preference/preference-photo-taste-analysis-v1.md#L152)·[trip-progress](../trips/trip-progress-live-v1.md#L147)·[mobile](../setup/mobile-webview-setup.md#L226))
 - [x] **Web Push (Service Worker + VAPID)** — 브라우저 단독 사용자 푸시 수신 ([web-push](../notification/web-push-service-worker-v1.md)). 자동 권한 프롬프트→옵트인 UI, `platform='web'` 정밀 태깅은 후속
 - [ ] **DB 마이그레이션 인프라** `[코드확인: 없음]` `[대기: 라이브 스키마 반영 결정]` — `synchronize` 의존, 라이브 스키마 반영 미결 ([preferences-enh](../preference/preferences-enhancements-v1.md#L111)·[weighting](../preference/preference-embedding-weighting-v1.md#L94))
+- [ ] **모달 공통 셸(`ModalShell`) 추출 + 포커스 트랩** `[코드확인: 모달마다 각자 구현]` — [shared/ui/dialog.tsx](../../apps/web/src/shared/ui/dialog.tsx) 와 [withdrawal-dialog](../../apps/web/src/features/delete-account/ui/withdrawal-dialog.tsx) 가 body 스크롤 락·ESC 리스너·백드롭 버튼·패널 스타일을 사실상 동일하게 중복 구현. 더 큰 문제는 어느 쪽에도 **포커스 트랩·열 때 초기 포커스 이동이 없어** Tab 이 배경 페이지로 새는 것 — 개별 모달에서 고쳐봐야 반쪽이라 공통 셸로 뽑아 한 번에 해결할 일
 - [x] **지도 폴리라인 동선 시각화** `[코드확인: 없음]` `[제외: 폴리라인 동선은 오히려 UI 상으로 불편할 수 있음]` — 내 위치 이동 버튼 포함 ([main-planner](../planner/main-planner-v1.md#L263)·[planner-enh](../planner/planner-page-enhancements-v1.md#L124))
 
 ## 플래너 · 실시간
@@ -90,7 +91,7 @@
 
 - [ ] 약관/개인정보처리방침/고객센터/라이선스 실 페이지 `[코드확인: 없음]` ([settings](../settings/settings-v1.md#L268)·[settings-profile](../settings/settings-profile-v1.md#L246))
 - [ ] `APP_VERSION` package.json 자동주입 `[코드확인: '0.1.0' 하드코딩]`
-- [ ] 탈퇴 사유 수집 + soft delete(`deletedAt`) + 30일 grace `[코드확인: hard delete]`
+- [x] 탈퇴 사유 수집 + 2단계 확인 `[soft delete·30일 grace 는 제외]` — 결제·거래 이력이 없어 데이터 보관 의무가 없고, soft delete 로 바꾸면 cascade 사슬(여행·친구·인박스·fcm) 정합성 규칙을 새로 정해야 하는 데 비해 얻는 게 없어 hard delete 유지. 대신 오조작 방지를 절차로 옮김 — `POST /users/me/withdrawal` 이 ① 익명 사유(객관식 7 + 자유입력, 건너뛰기 가능) 수집 후 ② 확인 문구 "탈퇴" 일치 검증을 통과해야 삭제한다. 사유는 userId 없는 `withdrawal_reasons` row(가입 후 경과일만 부가)로 남아 재식별 불가 ([users.service.ts](../../apps/api/src/users/users.service.ts)·[withdrawal-dialog.tsx](../../apps/web/src/features/delete-account/ui/withdrawal-dialog.tsx))
 - [x] 디바이스별 푸시 토큰 관리 UI `[제외: 실서비스 관행상 불필요]` — 다중 기기 발송은 이미 동작(사용자 1:토큰 N, `listTokens` 가 전 기기 발송)하고, 죽은 토큰은 발송 실패 시 `remove`·로그아웃/탈퇴 시 `removeForUser`/`removeAllForUser` 로 자동 청소돼 사용자가 손댈 게 없음. 실서비스에서 "푸시 기기 목록 관리" 화면은 거의 없고, 있는 건 보안 목적의 세션/로그인 기기 관리(FCM 토큰 관리 아님). 필요해지면 "이 기기에서 알림 받기" 토글 1개로 갈음하고, 다중 로그인 관리가 필요하면 별도 세션/refresh 토큰 관리 기능으로 설계 ([fcm-token.service.ts](../../apps/api/src/notification/fcm-token.service.ts))
 - [x] refresh 토큰 RN SecureStore 이전 `[코드확인]` — WebView localStorage 대신 네이티브 Keychain/Keystore 에 refresh 보관, access 만 웹뷰 유지. 웹=auth HTTP·네이티브=순수 SecureStore, correlation id 브리지 + 타임아웃/확정부재 구분. `pnpm install` + 네이티브 rebuild 후 실기 검증 남음 ([refresh-token-securestore](../auth/refresh-token-securestore-v1.md)·[email-login](../auth/email-login-and-session-v1.md#L163))
 - [ ] 429 응답 한국어 메시지 + 재시도 UI

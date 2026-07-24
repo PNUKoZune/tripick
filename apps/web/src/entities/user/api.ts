@@ -3,6 +3,7 @@ import type {
   UpdateNotificationPreferencesDto,
   UpdateUserDto,
   UserDto,
+  WithdrawUserDto,
 } from '@tripick/types';
 
 import { api } from '@/shared/lib';
@@ -24,8 +25,9 @@ export function updateNotificationPreferences(dto: UpdateNotificationPreferences
   return api.patch<NotificationPreferencesDto>('/users/me/notification-preferences', dto);
 }
 
-export function deleteMe() {
-  return api.delete<void>('/users/me');
+/** 회원 탈퇴. 확인 문구(WITHDRAWAL_CONFIRM_PHRASE)가 맞아야 서버가 계정을 즉시 삭제한다. */
+export function withdrawMe(dto: WithdrawUserDto) {
+  return api.post<void>('/users/me/withdrawal', dto);
 }
 
 export function updateFcmToken(fcmToken: string, platform?: string) {
