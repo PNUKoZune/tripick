@@ -4,7 +4,9 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 
+import { clearSession } from '@/entities/session';
 import { resetPassword } from '@/entities/session/api/auth-api';
+import { useRetryCountdown } from '@/shared/lib';
 
 type Props = {
   token: string;
@@ -17,8 +19,16 @@ export function ResetPasswordForm({ token }: Props) {
 
   const mutation = useMutation({
     mutationFn: () => resetPassword(token, password),
-    onSuccess: () => setDone(true),
+    onSuccess: () => {
+      // 서버가 비밀번호 변경과 함께 refresh 토큰을 전부 폐기한다. 이 기기에 로그인 상태로
+      // 남아 있으면 이미 죽은 세션이라, 나중에 401 로 튕기기 전에 여기서 비운다.
+      clearSession();
+      setDone(true);
+    },
   });
+
+  // 429 를 맞으면 Retry-After 만큼 재시도를 막는다(서버가 어차피 거절할 요청).
+  const retryAfter = useRetryCountdown(mutation.error);
 
   if (done) {
     return (
@@ -41,7 +51,8 @@ export function ResetPasswordForm({ token }: Props) {
   }
 
   const mismatch = confirm.length > 0 && password !== confirm;
-  const canSubmit = password.length >= 8 && password === confirm && !mutation.isPending;
+  const canSubmit =
+    password.length >= 8 && password === confirm && !mutation.isPending && retryAfter === 0;
   const errorMessage = mutation.error instanceof Error ? mutation.error.message : null;
 
   return (
@@ -88,7 +99,11 @@ export function ResetPasswordForm({ token }: Props) {
         disabled={!canSubmit}
         className="mt-2 h-12 w-full rounded-[12px] bg-[#3182F6] text-[15px] font-bold text-white hover:bg-[#1B64DA] disabled:bg-[#E5E8EB] disabled:text-[#B0B8C1]"
       >
-        {mutation.isPending ? '변경 중…' : '비밀번호 변경'}
+        {mutation.isPending
+          ? '변경 중…'
+          : retryAfter > 0
+            ? `${retryAfter}초 후 다시 시도`
+            : '비밀번호 변경'}
       </button>
     </form>
   );

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 
 import { signupWithEmail } from '@/entities/session/api/auth-api';
+import { useRetryCountdown } from '@/shared/lib';
 
 type Props = {
   onSent?: (email: string) => void;
@@ -19,11 +20,14 @@ export function EmailSignupForm({ onSent }: Props) {
     onSuccess: (res) => onSent?.(res.email ?? email),
   });
 
+  // 429 를 맞으면 Retry-After 만큼 재시도를 막는다(서버가 어차피 거절할 요청).
+  const retryAfter = useRetryCountdown(mutation.error);
   const canSubmit =
     email.trim().length > 0 &&
     password.length >= 8 &&
     nickname.trim().length > 0 &&
-    !mutation.isPending;
+    !mutation.isPending &&
+    retryAfter === 0;
 
   const errorMessage = mutation.error instanceof Error ? mutation.error.message : null;
 
@@ -75,7 +79,7 @@ export function EmailSignupForm({ onSent }: Props) {
         disabled={!canSubmit}
         className="mt-2 h-12 w-full rounded-[12px] bg-[#3182F6] text-[15px] font-bold text-white hover:bg-[#1B64DA] disabled:bg-[#E5E8EB] disabled:text-[#B0B8C1]"
       >
-        {mutation.isPending ? '가입 중…' : '회원가입'}
+        {mutation.isPending ? '가입 중…' : retryAfter > 0 ? `${retryAfter}초 후 다시 시도` : '회원가입'}
       </button>
     </form>
   );

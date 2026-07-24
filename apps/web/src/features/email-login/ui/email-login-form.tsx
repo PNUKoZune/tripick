@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { loginWithEmail } from '@/entities/session/api/auth-api';
+import { useRetryCountdown } from '@/shared/lib';
 
 type Props = {
   /** 로그인 성공 후 이동할 경로. default: '/' */
@@ -26,8 +27,10 @@ export function EmailLoginForm({ next = '/' }: Props) {
     },
   });
 
+  // 429 를 맞으면 Retry-After 만큼 재시도를 막는다(서버가 어차피 거절할 요청).
+  const retryAfter = useRetryCountdown(mutation.error);
   const canSubmit =
-    email.trim().length > 0 && password.length > 0 && !mutation.isPending;
+    email.trim().length > 0 && password.length > 0 && !mutation.isPending && retryAfter === 0;
 
   const errorMessage = mutation.error instanceof Error ? mutation.error.message : null;
 
@@ -71,7 +74,7 @@ export function EmailLoginForm({ next = '/' }: Props) {
         disabled={!canSubmit}
         className="mt-2 h-12 w-full rounded-[12px] bg-[#3182F6] text-[15px] font-bold text-white hover:bg-[#1B64DA] disabled:bg-[#E5E8EB] disabled:text-[#B0B8C1]"
       >
-        {mutation.isPending ? '로그인 중…' : '로그인'}
+        {mutation.isPending ? '로그인 중…' : retryAfter > 0 ? `${retryAfter}초 후 다시 시도` : '로그인'}
       </button>
 
       <div className="flex items-center justify-between pt-1 text-[13px]">
