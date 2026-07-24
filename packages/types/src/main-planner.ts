@@ -12,6 +12,8 @@ export interface PlannerMemberDto {
   id: string;
   initial: string;
   color: string;
+  /** 선택 — 연결된 사용자의 프로필 사진 URL (있으면 아바타로 표시) */
+  profileImageUrl?: string;
   friendId?: string | null;
   nickname?: string;
   role?: 'owner' | 'companion';

@@ -119,7 +119,13 @@ export function TripMembersSheet({
                   }`}
                 >
                   <FriendAvatar
-                    friend={{ color: member.color, initial: member.initial }}
+                    friend={{
+                      color: member.color,
+                      initial: member.initial,
+                      ...(member.profileImageUrl
+                        ? { profileImageUrl: member.profileImageUrl }
+                        : {}),
+                    }}
                     size="md"
                   />
                   <div className="flex-1 text-[14px] font-bold text-[#191F28]">

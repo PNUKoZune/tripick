@@ -71,6 +71,7 @@
 ## 친구 · 멤버 (Friends)
 
 - [friends/friends-and-trip-members-v1.md](friends/friends-and-trip-members-v1.md) — 친구 · 여행 멤버 · 조율 재배치
+- [friends/friends-page-enhancements-v1.md](friends/friends-page-enhancements-v1.md) — 친구 페이지 개선 (프로필 사진 · 미가입 핸들 거부 · 내 아이디 공유 · 친구와 여행 만들기)
 
 ## 설정 (Settings)
 

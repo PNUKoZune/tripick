@@ -14,6 +14,8 @@ export interface FriendDto {
   color: string;
   /** 한 글자 이니셜 (UI 표시용) */
   initial: string;
+  /** 선택 — 연결된 사용자의 프로필 사진 URL (있으면 아바타로 표시) */
+  profileImageUrl?: string;
   /** 선택 — 이모지 프로필 사진 대체 */
   emoji?: string;
   /** 자기소개 한 줄 */

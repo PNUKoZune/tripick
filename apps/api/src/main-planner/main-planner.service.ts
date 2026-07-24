@@ -961,6 +961,7 @@ export class MainPlannerService {
       id: member.id,
       initial: this.memberInitial(member),
       color: member.color,
+      ...(member.profileImageUrl ? { profileImageUrl: member.profileImageUrl } : {}),
       friendId: member.friendId ?? null,
       nickname: member.nickname,
       role: member.role,
