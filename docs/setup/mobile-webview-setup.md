@@ -66,11 +66,39 @@
 
 푸시 사용 시 Xcode `Signing & Capabilities` 에서 **Push Notifications** 추가, `aps-environment` 자동 주입.
 
+### 사진 업로드 (프로필 이미지 · 취향 사진)
+
+웹의 `<input type=file>` 을 react-native-webview 가 Android `onShowFileChooser` / iOS WKWebView 로 직접 처리한다. **네이티브 image-picker 와 브리지를 두지 않는다** — 웹에 이미 있는 업로드 UI 를 네이티브에 다시 구현하는 비용만 든다.
+
+Android 는 **권한을 선언하지 않는 것이 정답이다.**
+
+- 갤러리 선택은 SAF(`ACTION_GET_CONTENT`)로 열려 선택한 파일의 URI 만 넘어온다 → `READ_MEDIA_IMAGES`·`READ_EXTERNAL_STORAGE` 불필요
+- `CAMERA` 를 선언하면 오히려 촬영이 막힌다. `RNCWebViewModuleImpl.needsCameraPermission()` 이 "매니페스트에 선언됐는데 런타임 미승인" 을 감지하면 촬영 인텐트를 시트에서 빼고, `capture` 속성이 붙은 input 은 시트 자체가 안 뜬다. 미선언이면 시스템 카메라 앱에 위임돼 권한 없이 동작한다
+- 단 Android 11+ 패키지 가시성 때문에 `<queries>` 는 필요하다
+
+```xml
+<!-- 파일 선택 시트에 카메라 앱 항목이 보이려면 필요 (권한 아님) -->
+<queries>
+  <intent>
+    <action android:name="android.media.action.IMAGE_CAPTURE" />
+  </intent>
+</queries>
+```
+
+iOS 는 반대로 사용 설명 문구가 없으면 접근하는 순간 크래시하므로 둘 다 필수다.
+
+```xml
+<key>NSCameraUsageDescription</key>
+<string>취향 사진이나 프로필 사진을 찍어서 바로 올릴 때 카메라를 사용해요.</string>
+<key>NSPhotoLibraryUsageDescription</key>
+<string>취향 분석용 사진과 프로필 사진을 올리기 위해 사진 보관함을 사용해요.</string>
+```
+
+실기기 검증 전까지는 미확정이다 — 갤러리 선택·촬영 항목 노출·취향 사진 다중 선택·webp accept 4가지를 확인하고, 막히는 게 있으면 그때만 image-picker 폴백을 붙인다.
+
 ## 3. v1 에서 아직 추가하지 않는 권한 (backlog)
 
 - `ACCESS_BACKGROUND_LOCATION` (Android) / `NSLocationAlwaysAndWhenInUseUsageDescription` (iOS) — 백그라운드 경로 이탈 감지
-- `CAMERA` / `NSCameraUsageDescription` — 추후 preference-analyzer 사진 업로드
-- `READ_MEDIA_IMAGES` (Android 13+) / `NSPhotoLibraryUsageDescription` (iOS) — 동일
 
 ## 4. App.tsx 동작 요약
 
@@ -222,6 +250,7 @@ pnpm dev:android
 3. Android 백버튼 / iOS 좌측 스와이프 → WebView 히스토리 이동
 4. 외부 도메인 링크 탭 시 시스템 브라우저로 이동
 5. Firebase 자격 미배치 상태에선 Metro 로그에 `[TriPick] FCM 초기화 생략` 만 찍히고 앱은 정상 동작
+6. 설정 → 프로필 이미지, 취향 설정 → 사진 추가에서 파일 선택 시트가 뜨고 갤러리·촬영 양쪽으로 업로드되는지 (§2 사진 업로드)
 
 ## 11. 후속 작업 (backlog)
 
@@ -231,6 +260,6 @@ pnpm dev:android
 - Android `applicationId` 도메인 확정 (`com.tripick` → 실제)
 - release keystore 분리 (현재 release 가 debug keystore 로 fallback)
 - 백그라운드 위치/이탈 감지 단계에서 권한 확장
-- preference-analyzer 사진 업로드 시 카메라/사진 권한 추가
+- 사진 업로드 실기기 검증 (§2 사진 업로드 — 안 되면 image-picker 폴백)
 - iOS 푸시 인증서 + APNs 토큰 페어링 + `@notifee/react-native` 채널 정의
 - WebView 첫 로드 실패 시 retry UI

@@ -114,7 +114,7 @@ function buildEmailHtml(params: {
 }): string {
   return `<!doctype html><html><body style="margin:0;padding:24px;background:#F7F8FA;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',Segoe UI,Roboto,sans-serif;color:#191F28;">
   <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;padding:32px;">
-    <div style="font-weight:800;color:#3182F6;font-size:14px;">Tripick</div>
+    <div style="font-weight:800;color:#3182F6;font-size:14px;">TriPick</div>
     <h1 style="font-size:22px;margin:8px 0 16px;">${escapeHtml(params.title)}</h1>
     <p style="font-size:14px;line-height:22px;color:#4E5968;">${escapeHtml(params.message)}</p>
     <p style="margin:24px 0;"><a href="${params.ctaUrl}" style="display:inline-block;background:#3182F6;color:#fff;text-decoration:none;padding:14px 24px;border-radius:12px;font-weight:700;">${escapeHtml(params.ctaLabel)}</a></p>
