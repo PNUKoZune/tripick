@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const backendOrigin = process.env.TRIPICK_API_ORIGIN ?? 'http://127.0.0.1:4000';
+// 객체 스토리지(로컬 MinIO)도 API 와 같은 상대경로 프록시를 태운다. 절대 URL(localhost:9000)은
+// 웹뷰에서 기기 자신을 가리켜 이미지가 안 떴다. 라이브(R2)는 STORAGE_PUBLIC_URL 을 절대 URL 로
+// 두면 이 프록시가 안 쓰인다.
+const storageOrigin = process.env.TRIPICK_STORAGE_ORIGIN ?? 'http://127.0.0.1:9000/tripick';
 
 const nextConfig = {
   transpilePackages: ['@tripick/types'],
@@ -17,6 +21,10 @@ const nextConfig = {
       {
         source: '/api/v1/:path*',
         destination: `${backendOrigin}/api/v1/:path*`,
+      },
+      {
+        source: '/storage/:path*',
+        destination: `${storageOrigin}/:path*`,
       },
     ];
   },
