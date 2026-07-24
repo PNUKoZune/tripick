@@ -1,4 +1,9 @@
+import { createRequire } from 'node:module';
+
 /** @type {import('next').NextConfig} */
+const require = createRequire(import.meta.url);
+// 화면에 노출하는 앱 버전의 단일 출처. 하드코딩하면 package.json 이 올라도 따로 논다.
+const { version: appVersion } = require('./package.json');
 const backendOrigin = process.env.TRIPICK_API_ORIGIN ?? 'http://127.0.0.1:4000';
 // 객체 스토리지(로컬 MinIO)도 API 와 같은 상대경로 프록시를 태운다. 절대 URL(localhost:9000)은
 // 웹뷰에서 기기 자신을 가리켜 이미지가 안 떴다. 라이브(R2)는 STORAGE_PUBLIC_URL 을 절대 URL 로
@@ -15,6 +20,7 @@ const nextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? '/api/v1',
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL ?? '',
     NEXT_PUBLIC_KAKAO_MAP_KEY: process.env.NEXT_PUBLIC_KAKAO_MAP_KEY ?? '',
+    NEXT_PUBLIC_APP_VERSION: appVersion,
   },
   async rewrites() {
     return [
