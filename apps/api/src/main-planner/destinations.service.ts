@@ -6,6 +6,9 @@ import {
   PlaceEmbeddingRepository,
   type RegionRecommendation,
 } from '../planner/retrieval/place-embedding.repository';
+import { NaverSearchService } from '../planner/retrieval/naver-search.service';
+import type { PopularityIndex } from '../planner/retrieval/types';
+import { regionSearchStem } from '../planner/retrieval/place-seeds';
 import { PreferencesService } from '../preferences/preferences.service';
 
 /** place_embeddings 에 정규화 슬러그로 저장된 지역 → 표시용 한글명 */
@@ -17,17 +20,50 @@ const SLUG_TO_KO: Record<string, string> = {
 };
 
 /**
+ * KTO ldongCode2 시도 원본명 → 표시용 짧은 라벨.
+ * 접미사 제거만으론 '충청북도'→'충청북' 처럼 정식 약칭('충북')을 못 만들고,
+ * 특히 코드 12 는 원본이 '전남광주통합특별시'(광주+전남 병합)로 깨져 와
+ * 접미사만 떼면 '전남광주통합' 이 남는다 — 정식명은 명시적으로 매핑한다.
+ */
+const SIDO_DISPLAY: Record<string, string> = {
+  서울특별시: '서울',
+  부산광역시: '부산',
+  대구광역시: '대구',
+  인천광역시: '인천',
+  광주광역시: '광주',
+  대전광역시: '대전',
+  울산광역시: '울산',
+  세종특별자치시: '세종',
+  경기도: '경기',
+  강원도: '강원',
+  강원특별자치도: '강원',
+  충청북도: '충북',
+  충청남도: '충남',
+  전라북도: '전북',
+  전북특별자치도: '전북',
+  전라남도: '전남',
+  경상북도: '경북',
+  경상남도: '경남',
+  제주특별자치도: '제주',
+  // 코드 12 병합 버킷: 여수·순천·담양 등 전남 시군이 대다수라 '전남'으로 표시한다.
+  전남광주통합특별시: '전남',
+};
+
+/**
  * destination_region 원본값(시도명 or 슬러그) → 표시용 지역명. 'default' 등은 제외(null).
  * 표시용은 매칭용 regionStem 과 달리 도·시까지 모두 떼어 짧은 라벨로 만든다.
  * (슬러그 'jeju'→'제주' 와 시도명 '제주특별자치도'→'제주' 를 같은 라벨로 맞춰
  *  후보 그룹이 '제주'/'제주도' 로 갈리지 않게 한다.)
- * 예: '부산광역시'→'부산', '제주특별자치도'→'제주', '경기도'→'경기'
+ * 정식 시도명은 SIDO_DISPLAY 로 정규 약칭(충북·경남 등)을 주고, 그 외에만 접미사 제거로 폴백한다.
+ * 예: '부산광역시'→'부산', '충청북도'→'충북', '경기도'→'경기'
  */
 function displayRegionName(raw: string): string | null {
-  const key = raw.trim().toLowerCase();
-  if (!key || key === 'default') return null;
+  const trimmed = raw.trim();
+  const key = trimmed.toLowerCase();
+  if (!trimmed || key === 'default') return null;
   if (SLUG_TO_KO[key]) return SLUG_TO_KO[key];
-  const label = (raw.trim().split(/\s+/)[0] ?? '').replace(
+  if (SIDO_DISPLAY[trimmed]) return SIDO_DISPLAY[trimmed];
+  const label = (trimmed.split(/\s+/)[0] ?? '').replace(
     /(특별자치도|특별자치시|특별시|광역시|자치도|자치시|도|시|군|구)$/,
     '',
   );
@@ -40,6 +76,20 @@ function preferSigungu(cur: RegionRecommendation, next: RegionRecommendation): b
   const nextHas = !!next.sigungu?.trim();
   if (curHas !== nextHas) return nextHas;
   return next.score > cur.score;
+}
+
+/** 취향 점수 맵과 후보를 같은 어간 키로 맞추기 위한 정규화(어간·공백 제거·소문자). */
+function prefKey(name: string): string {
+  return (regionSearchStem(name) || name).replace(/\s+/g, '').toLowerCase();
+}
+
+/** 계절 코퍼스에서 파싱한 추천 후보 1건 (표시용 DTO + 취향 매칭 키 + 언급 점수). */
+interface SeasonalCandidate {
+  dto: DestinationSuggestionDto;
+  /** preferenceScoreMap 과 대조할 어간 키 */
+  key: string;
+  /** 이번 달 추천 글 언급 빈도 점수 (0~1) */
+  seasonalScore: number;
 }
 
 /** ldongCode2 응답 아이템 (법정동 시도 / 시군구 공통). code=lDongRegnCd/lDongSignguCd */
@@ -95,10 +145,17 @@ export class DestinationsService {
   /** 시도별 대표로 접기 전에 받아둘 후보(시도·시군구) 수 */
   private static readonly REC_CANDIDATES = 100;
 
+  /** 계절 후보를 취향으로 랭킹할 때의 가중: 취향 우선, 계절 언급 보조. */
+  private static readonly PREF_WEIGHT = 0.7;
+  private static readonly SEASONAL_WEIGHT = 0.3;
+  /** 취향 점수가 없는(시딩 안 된) 지역에 주는 중립값. */
+  private static readonly NEUTRAL_PREF = 0.5;
+
   constructor(
     private readonly config: ConfigService,
     private readonly preferences: PreferencesService,
     private readonly placeEmbeddings: PlaceEmbeddingRepository,
+    private readonly naver: NaverSearchService,
   ) {}
 
   async search(query: string): Promise<DestinationSuggestionDto[]> {
@@ -113,11 +170,139 @@ export class DestinationsService {
   }
 
   /**
-   * 취향 벡터로 랭킹한 추천 여행지. 취향 벡터가 없거나(온보딩 전) 시딩된 지역이
-   * 부족하면 인기 여행지로 폴백하고, 추천이 모자라면 인기순으로 채운다.
+   * 메인 노출용 추천 여행지. 네이버 검색으로 이번 달 "국내 여행지 추천" 코퍼스를 모아
+   * 그 안에 실제로 언급된 여행지만 후보로 추린 뒤(파서), 사용자 취향으로 랭킹한다.
+   * 네이버 키가 없거나 코퍼스가 비면 기존 취향/인기 로직으로 폴백한다.
    */
   async recommend(userId: string): Promise<DestinationSuggestionDto[]> {
     const all = await this.getAll();
+    const seasonal = await this.naver.getSeasonalDestinationIndex();
+    if (seasonal.docCount > 0) {
+      const picked = await this.recommendSeasonal(all, userId, seasonal);
+      if (picked.length > 0) return picked;
+    }
+    return this.recommendByPreference(all, userId);
+  }
+
+  /**
+   * 이번 달 추천 코퍼스에 언급된 여행지를 취향으로 랭킹한다.
+   * 취향 점수(있으면)를 주 신호로, 계절 언급 빈도를 보조 신호로 결합한다.
+   * 취향 벡터가 없으면(온보딩 전) 계절 언급 순으로만 랭킹한다.
+   * 후보가 목표 개수보다 적으면 인기 여행지로 채운다.
+   */
+  private async recommendSeasonal(
+    all: DestinationSuggestionDto[],
+    userId: string,
+    seasonal: PopularityIndex,
+  ): Promise<DestinationSuggestionDto[]> {
+    const candidates = this.parseSeasonalCandidates(all, seasonal);
+    if (candidates.length === 0) return [];
+
+    const prefScore = await this.preferenceScoreMap(userId);
+    const hasPreference = prefScore.size > 0;
+    const ranked = candidates
+      .map((c) => {
+        const pref = prefScore.get(c.key) ?? DestinationsService.NEUTRAL_PREF;
+        const combined = hasPreference
+          ? pref * DestinationsService.PREF_WEIGHT +
+            c.seasonalScore * DestinationsService.SEASONAL_WEIGHT
+          : c.seasonalScore;
+        return { dto: c.dto, combined };
+      })
+      .sort((a, b) => b.combined - a.combined);
+
+    const picked: DestinationSuggestionDto[] = [];
+    const seen = new Set<string>();
+    for (const r of ranked) {
+      if (picked.length >= DestinationsService.REC_LIMIT) break;
+      if (seen.has(r.dto.name)) continue;
+      seen.add(r.dto.name);
+      picked.push(r.dto);
+    }
+    // 계절 후보가 목표 개수보다 적으면 인기 여행지로 채운다 (중복 제외).
+    if (picked.length < DestinationsService.REC_LIMIT) {
+      for (const d of this.popular(all)) {
+        if (picked.length >= DestinationsService.REC_LIMIT) break;
+        if (seen.has(d.name)) continue;
+        seen.add(d.name);
+        picked.push(d);
+      }
+    }
+    return picked;
+  }
+
+  /**
+   * 파서: 알려진 여행지(KTO 시도·시군구) 중 이번 달 추천 코퍼스에 언급된 것만 후보로 남긴다.
+   * 블로그는 '경주시'가 아니라 '경주'로 쓰므로 행정 접미사를 뗀 어간으로 역방향 매칭하고,
+   * 같은 어간이 여러 행정단위에 걸치면(시도 '부산' vs 시군구 '부산진구') 언급 많은 쪽만 남긴다.
+   * 표시 이름도 어간(예: '강릉')으로 정리해 카드 제목·여행 생성 질의에 그대로 쓴다.
+   */
+  private parseSeasonalCandidates(
+    all: DestinationSuggestionDto[],
+    seasonal: PopularityIndex,
+  ): SeasonalCandidate[] {
+    const byName = new Map<string, SeasonalCandidate>();
+    for (const d of all) {
+      const label = regionSearchStem(d.name) || d.name;
+      // 1글자 어간('시' 등 비정상)은 코퍼스 오탐이 심해 제외한다.
+      if (label.length < 2) continue;
+      const mentions = seasonal.mentions(label);
+      if (mentions === 0) continue;
+
+      const region = displayRegionName(d.region) ?? label;
+      const candidate: SeasonalCandidate = {
+        dto: { id: `seasonal-${d.id}`, name: label, region },
+        key: prefKey(d.name),
+        seasonalScore: seasonal.score(label),
+      };
+      const existing = byName.get(label);
+      // 같은 표시 이름이면 언급 많은 쪽(시도 vs 시군구)을 대표로.
+      if (!existing || mentions > seasonal.mentions(existing.dto.name)) {
+        byName.set(label, candidate);
+      }
+    }
+    return [...byName.values()];
+  }
+
+  /**
+   * 취향 벡터로 시도·시군구 취향 점수를 조회해 어간 키 → 점수 맵으로 만든다.
+   * 시군구·시도를 각각 어간 키로 등록(중복이면 최고 점수 유지)해 계절 후보와 대조한다.
+   * 취향 벡터가 없으면 빈 맵(계절 언급 순 랭킹으로 폴백).
+   */
+  private async preferenceScoreMap(userId: string): Promise<Map<string, number>> {
+    const map = new Map<string, number>();
+    const vector = await this.preferences.getPreferenceVector(userId);
+    if (!vector || vector.length === 0) return map;
+
+    const ranked = await this.placeEmbeddings.recommendRegions(
+      vector,
+      DestinationsService.REC_TOP_K,
+      DestinationsService.REC_MIN_PLACES,
+      DestinationsService.REC_CANDIDATES,
+    );
+    const putMax = (rawKey: string | null, score: number) => {
+      if (!rawKey) return;
+      const key = prefKey(rawKey);
+      if (!key) return;
+      const prev = map.get(key);
+      if (prev === undefined || score > prev) map.set(key, score);
+    };
+    for (const r of ranked) {
+      putMax(displayRegionName(r.region), r.score);
+      putMax(r.sigungu, r.score);
+    }
+    return map;
+  }
+
+  /**
+   * 취향 벡터로 랭킹한 추천 여행지. 취향 벡터가 없거나(온보딩 전) 시딩된 지역이
+   * 부족하면 인기 여행지로 폴백하고, 추천이 모자라면 인기순으로 채운다.
+   * (네이버 계절 코퍼스를 쓸 수 없을 때의 폴백 경로.)
+   */
+  private async recommendByPreference(
+    all: DestinationSuggestionDto[],
+    userId: string,
+  ): Promise<DestinationSuggestionDto[]> {
     const vector = await this.preferences.getPreferenceVector(userId);
     if (!vector || vector.length === 0) return this.popular(all);
 
