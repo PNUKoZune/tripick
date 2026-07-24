@@ -28,6 +28,7 @@ export class FriendsService {
   async list(ownerId: string): Promise<FriendDto[]> {
     const friends = await this.friendsRepo.find({
       where: { ownerId },
+      relations: { friendUser: true },
       order: { pinned: 'DESC', status: 'ASC', createdAt: 'ASC' },
     });
     return friends.map((friend) => this.toDto(friend));
@@ -68,6 +69,8 @@ export class FriendsService {
       await this.createIncomingRequest(friendUser, owner);
     }
 
+    // save() 결과엔 관계가 안 실리므로, 이미 조회한 friendUser 를 붙여 프로필 사진을 즉시 반영한다.
+    saved.friendUser = friendUser ?? null;
     return this.toDto(saved);
   }
 
@@ -166,7 +169,10 @@ export class FriendsService {
   }
 
   private async findOwned(id: string, ownerId: string): Promise<FriendEntity> {
-    const friend = await this.friendsRepo.findOneBy({ id });
+    const friend = await this.friendsRepo.findOne({
+      where: { id },
+      relations: { friendUser: true },
+    });
     if (!friend) {
       throw new NotFoundException('friend not found');
     }
@@ -228,6 +234,9 @@ export class FriendsService {
       handle: friend.handle,
       color: friend.color,
       initial: friend.initial,
+      ...(friend.friendUser?.profileImageUrl
+        ? { profileImageUrl: friend.friendUser.profileImageUrl }
+        : {}),
       ...(friend.emoji ? { emoji: friend.emoji } : {}),
       ...(friend.statusMessage ? { statusMessage: friend.statusMessage } : {}),
       status: friend.status,
