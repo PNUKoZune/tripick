@@ -6,6 +6,7 @@ import {
   FiCheck,
   FiImage,
   FiLoader,
+  FiLock,
   FiPlus,
   FiThumbsDown,
   FiThumbsUp,
@@ -682,6 +683,11 @@ export function PreferenceSetupForm() {
               </div>
             </div>
           ) : null}
+
+          <p className="mt-3 flex items-start gap-1.5 text-[12px] font-medium leading-5 text-[color:var(--ink-faint)]">
+            <FiLock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            <span>올린 사진은 취향 분석 용도로만 저장·사용돼요. 언제든 사진을 지우면 함께 삭제돼요.</span>
+          </p>
         </SetupBlock>
       </div>
 
