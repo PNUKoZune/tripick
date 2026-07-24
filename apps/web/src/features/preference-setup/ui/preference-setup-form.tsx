@@ -47,7 +47,7 @@ import { startDemoSession } from '@/entities/session/api/auth-api';
 import { queryKeys } from '@/shared/api/query-keys';
 import { downscaleImage, PREFERENCE_MAX_DIMENSION } from '@/shared/lib';
 import { InlineNotice, SegmentedOption } from '@/shared/ui/app-frame';
-import { ConfirmDialog, TimeField, Toast } from '@/shared/ui';
+import { ConfirmDialog, ImageLightbox, TimeField, Toast } from '@/shared/ui';
 
 type Notice = {
   title: string;
@@ -82,6 +82,8 @@ export function PreferenceSetupForm() {
   const [savedPhotoUrls, setSavedPhotoUrls] = useState<string[]>([]);
   // 추가/삭제 후 아직 분석에 반영되지 않은 사진이 있는지
   const [photosDirty, setPhotosDirty] = useState(false);
+  // 확대 보기(라이트박스)로 띄운 이미지 URL. null 이면 닫힘.
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   // 진행 중인 분석 잡. 페이지를 떠났다 돌아와도 localStorage 에서 복원한다.
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -540,6 +542,7 @@ export function PreferenceSetupForm() {
                         togglePhotoTagMutation.mutate({ url, tag, enabled })
                       }
                       onDelete={() => deletePhotoMutation.mutate(url)}
+                      onZoom={() => setLightboxUrl(url)}
                     />
                   );
                 })}
@@ -572,8 +575,15 @@ export function PreferenceSetupForm() {
             <div className="flex flex-wrap gap-2">
               {previews.map((url, index) => (
                 <div key={url} className="relative size-20 overflow-hidden rounded-[16px]">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt="" className="size-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setLightboxUrl(url)}
+                    aria-label="사진 크게 보기"
+                    className="size-full"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt="" className="size-full object-cover" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => removePhoto(index)}
@@ -716,6 +726,10 @@ export function PreferenceSetupForm() {
         onConfirm={resetToDefaults}
         onCancel={() => setResetDialogOpen(false)}
       />
+
+      {lightboxUrl ? (
+        <ImageLightbox src={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+      ) : null}
     </div>
   );
 
@@ -842,6 +856,7 @@ function SavedPhotoRow({
   busy,
   onToggle,
   onDelete,
+  onZoom,
 }: {
   url: string;
   tags: Array<{ tag: TasteTagValue; enabled: boolean }>;
@@ -849,13 +864,19 @@ function SavedPhotoRow({
   busy: boolean;
   onToggle: (tag: TasteTagValue, enabled: boolean) => void;
   onDelete: () => void;
+  onZoom: () => void;
 }) {
   return (
     <li className="flex gap-3 rounded-[14px] border border-[color:var(--line)] p-2">
-      <div className="relative size-16 shrink-0 overflow-hidden rounded-[12px]">
+      <button
+        type="button"
+        onClick={onZoom}
+        aria-label="사진 크게 보기"
+        className="relative size-16 shrink-0 overflow-hidden rounded-[12px] transition hover:opacity-90"
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={url} alt="" className="size-full object-cover" />
-      </div>
+      </button>
       <div className="min-w-0 flex-1">
         {tags.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">
