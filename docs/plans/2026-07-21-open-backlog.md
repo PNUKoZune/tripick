@@ -97,7 +97,6 @@
 - [x] 429 응답 한국어 메시지 + 재시도 UI `[코드확인]` — throttler 기본 본문이 영문(`ThrottlerException: Too many requests`)이라 사용자에게 그대로 노출되던 걸 한국어로 대체([client.ts](../../apps/web/src/shared/api/client.ts)). **남은 초는 메시지에 굽지 않는다** — 카운트다운이 도는 동안 문구가 낡기 때문에, 메시지는 고정하고 `useRetryCountdown`(데드라인 역산이라 인터벌 지연·백그라운드 탭에도 안 밀림)이 초를 세서 로그인·가입·재설정 메일·비밀번호 변경 4개 폼의 제출을 막고 "N초 후 다시 시도" 라벨을 띄운다. `Retry-After` 는 CORS 기본 노출 헤더가 아니라 [main.ts](../../apps/api/src/main.ts) `exposedHeaders` 에 명시해야 크로스 오리진에서 읽힌다 — 빠지면 카운트다운이 조용히 죽음
 - [ ] 이메일 인증/재설정 메일 템플릿 정리
 - [ ] 프로필 이미지 webp 변환 + 썸네일
-- [ ] RN 모바일 프로필 이미지 업로드 동선(image-picker + 브릿지)
 - [x] 미로그인 공통 가드(모든 nav 페이지) `[코드확인]` — 이미 구현돼 있던 항목. [session-guard.tsx](../../apps/web/src/entities/session/ui/session-guard.tsx) 의 `SessionGuard` 가 nav 5페이지(홈·취향·친구·알림·설정) + planner·trip-create·trip-progress 를, `GuestGuard` 가 login·signup·forgot-password 를 감싼다. [use-session-guard.ts](../../apps/web/src/entities/session/lib/use-session-guard.ts) `redirectWithFallback`(100ms 뒤 URL 미변경이면 하드 네비게이션)이 settings-profile 백로그의 "데스크탑 PC 미로그인 동선 — RN WebView 에서 `router.replace` silently fail" 도 같이 해소. **/reset-password 는 의도적으로 가드 없음** — 로그인 상태로 메일 링크를 눌러도 유효한 일회성 토큰과 명시적 의도를 살려야 해서 `GuestGuard` 를 붙이지 않고, 대신 재설정 성공 시 `clearSession()` 으로 서버가 이미 폐기한(`revokeAllRefreshTokens`) 죽은 로컬 세션을 비운다
 - [ ] `Section`/`LinkRow`/`InfoRow` shared/ui 승격 `[보류: 유일 사용처]` `[코드확인]` — 원 문서의 승격 조건이 "다른 페이지에서도 쓰이면"인데 실사용처는 [settings-view.tsx](../../apps/web/src/views/settings/ui/settings-view.tsx) 하나뿐(friends-view·trip-info-panel 의 비슷한 이름은 `SectionLabel` 로 다른 컴포넌트). 순서 문제도 있다 — `LinkRow` 가 가리키는 `#terms`·`#privacy`·`#contact` 가 전부 스텁이라, 위 "약관/개인정보처리방침 실 페이지" 항목이 처리되면 시그니처(내부/외부 링크 구분)가 바뀐다. 지금 승격하면 shared 계약을 두 번 고치는 셈. §친구·멤버의 `FriendMemberPicker` floating 항목과 같은 판단
 
@@ -117,7 +116,7 @@
 - [ ] iOS/Android 번들 ID·applicationId 실도메인 확정 `[대기: 서비스 도메인 확정]` ([mobile](../setup/mobile-webview-setup.md#L226))
 - [ ] release keystore 분리(현재 debug fallback) `[대기: 라이브 배포]`
 - [ ] WebView 첫 로드 실패 시 retry UI
-- [ ] 카메라/사진 권한(사진 업로드)
+- [ ] 웹뷰 파일 선택 사진 업로드 — 실기 확인만 남음 `[대기: 실기기]` — 프로필 이미지·취향 사진이 같은 `<input type=file>` 경로(둘 다 `accept="image/jpeg,image/png,image/webp"`, 취향은 `multiple`)라 하나로 묶음. 취향 사진이 막히면 온보딩 핵심 플로우가 앱에서 끊긴다. **원안(image-picker + 브리지 + data: URL 전송)은 폐기** — 웹 업로드 UI 를 네이티브에 이중 구현하는 비용인데 react-native-webview 가 Android `onShowFileChooser`·iOS WKWebView 파일 입력을 이미 처리한다. 네이티브 설정만 채웠고([manifest](../../apps/mobile/android/app/src/main/AndroidManifest.xml)·[Info.plist](../../apps/mobile/ios/TriPick/Info.plist)) 브리지 코드는 넣지 않았다. **Android 는 권한 선언이 오히려 해가 된다** — 갤러리 선택은 SAF(`ACTION_GET_CONTENT`)라 `READ_MEDIA_IMAGES` 없이 동작하고, `CAMERA` 를 선언하면 `RNCWebViewModuleImpl.needsCameraPermission()` 이 "선언됐는데 미승인" 을 감지해 촬영 항목을 시트에서 빼버린다(미선언 시 시스템 카메라 앱 위임으로 그냥 됨). 대신 Android 11+ 패키지 가시성 때문에 `IMAGE_CAPTURE` `<queries>` 만 추가. iOS 는 사용 설명 문구가 없으면 접근 순간 크래시라 `NSCameraUsageDescription`·`NSPhotoLibraryUsageDescription` 추가. 실기 확인 항목 — ① 갤러리 선택 ② 촬영 항목 노출·촬영 ③ 취향 사진 다중 선택 ④ webp accept 동작. 하나라도 안 되면 그때 image-picker 폴백
 
 ## 테스트 · 운영
 
