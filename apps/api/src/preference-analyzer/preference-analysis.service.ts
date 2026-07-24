@@ -11,7 +11,7 @@ import { VisionAnalyzer } from './vision.analyzer';
 import { PreferencesService } from '../preferences/preferences.service';
 import { effectivePhotoTags, pruneToPhotos } from '../preferences/photo-taste';
 import { StorageService } from '../storage/storage.service';
-import { NotificationService } from '../notification/notification.service';
+import { InboxService } from '../inbox/inbox.service';
 import {
   ANALYZE_PHOTOS_JOB,
   ENQUEUE_TIMEOUT_MS,
@@ -30,7 +30,7 @@ export class PreferenceAnalysisService {
     private readonly visionAnalyzer: VisionAnalyzer,
     private readonly preferencesService: PreferencesService,
     private readonly storage: StorageService,
-    private readonly notifications: NotificationService,
+    private readonly inbox: InboxService,
   ) {}
 
   /**
@@ -140,7 +140,14 @@ export class PreferenceAnalysisService {
       throw new Error(`사진 ${failed.length}장 분석 실패 (vision 서버 응답 없음)`);
     }
 
-    await this.notifyDone(userId, await this.currentTasteTags(userId));
+    // 알림 실패로 잡을 실패시키지 않는다 — 분석 결과는 이미 저장됐고, 실패하면 재분석만 도돌이된다.
+    try {
+      await this.notifyDone(userId, await this.currentTasteTags(userId));
+    } catch (err) {
+      this.logger.warn(
+        `취향 분석 완료 알림 실패 (user=${userId}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
 
     return { analyzed: Object.keys(analyzed).length, photoUrls: livePhotoUrls };
   }
@@ -187,28 +194,30 @@ export class PreferenceAnalysisService {
   }
 
   private async notifyFailed(userId: string, count: number): Promise<void> {
-    await this.notifications.sendToUser({
+    // create 가 인박스 row 저장 + 수신 토글 확인 + FCM + WS 실시간 갱신까지 담당한다.
+    // sendToUser 직접 호출은 FCM 전용이라 인박스에 안 남고 Firebase 미설정이면 무음이었다.
+    await this.inbox.create({
       userId,
-      type: 'general',
+      // 전용 알림 키를 새로 파면 사용자 알림 설정·기본값까지 건드려야 해서 general 로 보낸다.
+      category: 'general',
       title: '취향 분석 실패',
       body: `사진 ${count}장을 분석하지 못했어요. 잠시 후 다시 올려주세요.`,
-      data: { type: 'preference-analysis', route: '/preferences' },
+      payload: { route: '/preferences' },
     });
   }
 
   private async notifyDone(userId: string, tasteTags: TasteTagDto): Promise<void> {
     const count = tasteTags.food.length + tasteTags.mood.length + tasteTags.environment.length;
-    // 푸시는 부수효과 — 실패해도 분석 결과는 이미 저장됐으므로 잡을 실패시키지 않는다.
-    await this.notifications.sendToUser({
+    // 알림은 부수효과 — 실패해도 분석 결과는 이미 저장됐으므로 잡을 실패시키지 않는다.
+    await this.inbox.create({
       userId,
-      // 전용 알림 키를 새로 파면 사용자 알림 설정·기본값까지 건드려야 해서 general 로 보낸다.
-      type: 'general',
+      category: 'general',
       title: '취향 분석 완료',
       body:
         count > 0
           ? '사진에서 취향을 찾았어요. 확인해보세요.'
           : '뚜렷한 취향을 찾지 못했어요. 다른 사진을 올려보세요.',
-      data: { type: 'preference-analysis', route: '/preferences' },
+      payload: { route: '/preferences' },
     });
   }
 
