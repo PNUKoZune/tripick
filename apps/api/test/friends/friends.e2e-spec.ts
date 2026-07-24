@@ -45,6 +45,11 @@ describe('Friends (e2e)', () => {
   const list = async (userId: string): Promise<FriendDto[]> =>
     (await http.get('/friends').set('x-test-user-id', userId).expect(200)).body;
 
+  const registerUser = async (nickname: string, handle: string): Promise<string> => {
+    const users = app.get<Repository<UserEntity>>(getRepositoryToken(UserEntity));
+    return (await users.save(users.create({ nickname, handle }))).id;
+  };
+
   describe('POST /friends', () => {
     it('adding a registered user creates a pending link and an incoming request on the other side', async () => {
       notifyFriendRequest.mockClear();
@@ -68,13 +73,12 @@ describe('Friends (e2e)', () => {
       expect(pushInboxRefresh).toHaveBeenCalledWith(bob);
     });
 
-    it('adding an unregistered handle registers it directly as accepted', async () => {
-      const res = await http
+    it('rejects an unregistered handle (404)', async () => {
+      await http
         .post('/friends')
         .set('x-test-user-id', alice)
         .send({ handle: '@ghost' })
-        .expect(201);
-      expect(res.body).toMatchObject({ handle: '@ghost', status: 'accepted' });
+        .expect(404);
     });
 
     it('rejects adding yourself (400)', async () => {
@@ -82,6 +86,7 @@ describe('Friends (e2e)', () => {
     });
 
     it('rejects a duplicate friend (409)', async () => {
+      await registerUser('듀프', 'dupe');
       await http.post('/friends').set('x-test-user-id', bob).send({ handle: '@dupe' }).expect(201);
       await http.post('/friends').set('x-test-user-id', bob).send({ handle: '@dupe' }).expect(409);
     });
@@ -109,25 +114,30 @@ describe('Friends (e2e)', () => {
     });
 
     it('rejects accepting a non-incoming friend (400)', async () => {
-      const res = await http.post('/friends').set('x-test-user-id', bob).send({ handle: '@offline' }).expect(201);
-      // @offline 은 미등록 → accepted 상태라 수락 대상이 아니다.
+      await registerUser('프랭크', 'frank');
+      // bob 이 보낸 요청은 pending — incoming 이 아니라 수락 대상이 아니다.
+      const res = await http.post('/friends').set('x-test-user-id', bob).send({ handle: '@frank' }).expect(201);
+      expect(res.body.status).toBe('pending');
       await http.patch(`/friends/${res.body.id}/accept`).set('x-test-user-id', bob).expect(400);
     });
   });
 
   describe('PATCH /friends/:id/pin & DELETE', () => {
     it('toggles the pinned flag', async () => {
+      await registerUser('핀미', 'pinme');
       const res = await http.post('/friends').set('x-test-user-id', alice).send({ handle: '@pinme' }).expect(201);
       const pinned = await http.patch(`/friends/${res.body.id}/pin`).set('x-test-user-id', alice).expect(200);
       expect(pinned.body.pinned).toBe(true);
     });
 
     it('forbids operating on another user’s friend (403)', async () => {
+      await registerUser('마인', 'mine');
       const res = await http.post('/friends').set('x-test-user-id', alice).send({ handle: '@mine' }).expect(201);
       await http.delete(`/friends/${res.body.id}`).set('x-test-user-id', bob).expect(403);
     });
 
     it('removes an owned friend (204)', async () => {
+      await registerUser('바이', 'bye');
       const res = await http.post('/friends').set('x-test-user-id', alice).send({ handle: '@bye' }).expect(201);
       await http.delete(`/friends/${res.body.id}`).set('x-test-user-id', alice).expect(204);
       const remaining = await list(alice);

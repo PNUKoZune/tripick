@@ -10,7 +10,7 @@ import { Repository } from 'typeorm';
 import { InboxService } from '../inbox/inbox.service';
 import { UserEntity } from '../users/user.entity';
 import { FriendEntity } from './friend.entity';
-import type { AddFriendRequestDto, FriendDto, FriendStatus } from '@tripick/types';
+import type { AddFriendRequestDto, FriendDto } from '@tripick/types';
 
 const FRIEND_COLORS = ['#3182F6', '#00A86B', '#FF8A00', '#6B7684', '#191F28', '#7C3AED', '#F04452'];
 export type ResolvedFriendDto = FriendDto & { friendUserId?: string | null };
@@ -49,28 +49,30 @@ export class FriendsService {
       throw new ConflictException('이미 친구 목록에 있는 사용자입니다.');
     }
 
+    // 가입 유저만 친구로 추가할 수 있다 — 미가입 핸들/오타를 조용히 친구로 저장하지 않는다.
     const friendUser = await this.findUserByHandle(handleKey);
-    const status: FriendStatus = friendUser ? 'pending' : 'accepted';
+    if (!friendUser) {
+      throw new NotFoundException('존재하지 않는 아이디예요.');
+    }
+
     const saved = await this.friendsRepo.save(
       this.friendsRepo.create({
         ownerId: owner.id,
-        friendUserId: friendUser?.id ?? null,
-        nickname: friendUser?.nickname ?? this.nicknameFromHandle(handle),
+        friendUserId: friendUser.id,
+        nickname: friendUser.nickname,
         handle,
         color: this.colorFromString(handle),
-        initial: this.initialFromName(friendUser?.nickname ?? handleKey),
-        status,
+        initial: this.initialFromName(friendUser.nickname),
+        status: 'pending',
         pinned: false,
-        statusMessage: friendUser ? '친구 요청을 보냈어요.' : '직접 등록한 여행 친구',
+        statusMessage: '친구 요청을 보냈어요.',
       }),
     );
 
-    if (friendUser) {
-      await this.createIncomingRequest(friendUser, owner);
-    }
+    await this.createIncomingRequest(friendUser, owner);
 
     // save() 결과엔 관계가 안 실리므로, 이미 조회한 friendUser 를 붙여 프로필 사진을 즉시 반영한다.
-    saved.friendUser = friendUser ?? null;
+    saved.friendUser = friendUser;
     return this.toDto(saved);
   }
 
@@ -196,15 +198,6 @@ export class FriendsService {
       throw new BadRequestException('상대방 아이디를 입력해주세요.');
     }
     return trimmed.startsWith('@') ? trimmed : `@${trimmed}`;
-  }
-
-  private nicknameFromHandle(handle: string): string {
-    return (
-      handle
-        .replace(/^@/, '')
-        .replace(/[._-]+/g, ' ')
-        .trim() || handle
-    );
   }
 
   private initialFromName(name: string): string {
