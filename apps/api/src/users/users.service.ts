@@ -12,23 +12,23 @@ import { IsNull, Repository } from 'typeorm';
 import { randomBytes } from 'node:crypto';
 import { StorageService } from '../storage/storage.service';
 import { FcmTokenService } from '../notification/fcm-token.service';
+import { RefreshTokenEntity } from '../auth/entities/refresh-token.entity';
+import { EmailTokenEntity } from '../auth/entities/email-token.entity';
 import { UserEntity } from './user.entity';
 import { WithdrawalReasonEntity } from './withdrawal-reason.entity';
+import { WithdrawUserDto } from './dto/withdraw-user.dto';
 import { DEFAULT_NOTIFICATION_PREFERENCES } from './notification-preferences.constants';
 import {
   WITHDRAWAL_CONFIRM_PHRASE,
-  WITHDRAWAL_REASONS,
   type KakaoProfile,
   type NotificationPreferencesDto,
   type UpdateUserDto,
-  type WithdrawUserDto,
   type WithdrawalReasonCode,
 } from '@tripick/types';
 
 const ALLOWED_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
 const MAX_REASON_DETAIL_LENGTH = 500;
-const WITHDRAWAL_REASON_CODES = new Set<string>(WITHDRAWAL_REASONS.map((r) => r.code));
 
 export type PublicProfile = Omit<
   UserEntity,
@@ -44,6 +44,10 @@ export class UsersService implements OnModuleInit {
     private readonly repo: Repository<UserEntity>,
     @InjectRepository(WithdrawalReasonEntity)
     private readonly withdrawalReasons: Repository<WithdrawalReasonEntity>,
+    @InjectRepository(RefreshTokenEntity)
+    private readonly refreshTokens: Repository<RefreshTokenEntity>,
+    @InjectRepository(EmailTokenEntity)
+    private readonly emailTokens: Repository<EmailTokenEntity>,
     private readonly storage: StorageService,
     private readonly fcmTokens: FcmTokenService,
   ) {}
@@ -321,15 +325,14 @@ export class UsersService implements OnModuleInit {
   async remove(id: string): Promise<void> {
     const user = await this.findById(id);
     if (!user) throw new NotFoundException(`User ${id} not found`);
-    // 사용자 삭제 전에 등록된 모든 FCM 토큰을 정리(orphan row 방지).
-    await this.fcmTokens.removeAllForUser(id);
-    await this.repo.remove(user);
+    await this.removeUser(user);
   }
 
   /**
    * 회원 탈퇴. 확인 문구(WITHDRAWAL_CONFIRM_PHRASE)를 그대로 입력한 요청만 통과시키고,
-   * 익명 사유 row 를 먼저 남긴 뒤 계정을 즉시 물리 삭제한다(soft delete·유예 없음 — 결제
-   * 이력이 없어 데이터 보관 의무가 없고, 삭제 요청은 즉시 이행하는 게 원칙에 맞음).
+   * 계정을 즉시 물리 삭제한다(soft delete·유예 없음 — 결제 이력이 없어 데이터 보관 의무가
+   * 없고, 삭제 요청은 즉시 이행하는 게 원칙에 맞음). 사유는 삭제가 끝난 뒤 익명 row 로 남긴다
+   * — 삭제가 실패했는데 사유만 쌓여 집계가 부풀지 않도록.
    */
   async withdraw(id: string, dto: WithdrawUserDto): Promise<void> {
     const user = await this.findById(id);
@@ -338,34 +341,49 @@ export class UsersService implements OnModuleInit {
     if (dto.confirmation?.trim() !== WITHDRAWAL_CONFIRM_PHRASE) {
       throw new BadRequestException(`탈퇴하려면 "${WITHDRAWAL_CONFIRM_PHRASE}"를 입력해주세요.`);
     }
-    if (dto.reason !== undefined && !WITHDRAWAL_REASON_CODES.has(dto.reason)) {
-      throw new BadRequestException(`알 수 없는 탈퇴 사유입니다: ${dto.reason}`);
-    }
 
+    const accountAgeDays = daysSince(user.createdAt);
     const detail = dto.reasonDetail?.trim().slice(0, MAX_REASON_DETAIL_LENGTH);
-    await this.recordWithdrawalReason(user, dto.reason, detail || undefined);
-    await this.remove(id);
+    await this.removeUser(user);
+    await this.recordWithdrawalReason(dto.reason, detail || undefined, accountAgeDays);
   }
 
-  /** 사유 적재는 탈퇴 자체를 막지 않는다 — 실패하면 로그만 남기고 삭제를 계속 진행한다. */
+  /**
+   * 계정 + 세션 흔적 삭제. FK cascade 가 걸린 테이블은 자동으로 지워지지만, FK 없이 userId
+   * 컬럼만 가진 테이블(fcm_tokens·refresh_tokens·email_tokens)은 여기서 직접 지운다 —
+   * 특히 refresh 토큰이 남으면 탈퇴 후에도 /auth/refresh 가 계속 새 토큰을 발급한다.
+   */
+  private async removeUser(user: UserEntity): Promise<void> {
+    await this.fcmTokens.removeAllForUser(user.id);
+    await this.refreshTokens.delete({ userId: user.id });
+    await this.emailTokens.delete({ userId: user.id });
+    await this.repo.remove(user);
+  }
+
+  /** 사유 적재는 탈퇴 자체를 막지 않는다 — 실패하면 로그만 남긴다(계정은 이미 삭제됨). */
   private async recordWithdrawalReason(
-    user: UserEntity,
     reason: WithdrawalReasonCode | undefined,
     detail: string | undefined,
+    accountAgeDays: number,
   ): Promise<void> {
-    const ageMs = Date.now() - new Date(user.createdAt).getTime();
     try {
       await this.withdrawalReasons.save(
         this.withdrawalReasons.create({
           reason: reason ?? null,
           detail: detail ?? null,
-          accountAgeDays: Math.max(0, Math.floor(ageMs / 86_400_000)),
+          accountAgeDays,
         }),
       );
     } catch (error) {
       this.logger.warn(`탈퇴 사유 기록 실패: ${(error as Error).message}`);
     }
   }
+}
+
+/** 가입 후 경과일(음수 방지). 탈퇴 사유 해석용 부가 정보. */
+function daysSince(date: Date): number {
+  const ageMs = Date.now() - new Date(date).getTime();
+  return Math.max(0, Math.floor(ageMs / 86_400_000));
 }
 
 function extForMime(mime: string): string {

@@ -19,12 +19,16 @@ type Props = {
 
 const DETAIL_MAX_LENGTH = 500;
 
-/** 탈퇴가 지우는 것들. 확인 단계에서 그대로 보여준다. */
+/**
+ * 탈퇴가 지우는 것들. 확인 단계에서 그대로 보여준다.
+ * 내 계정에 딸린 데이터 기준 — 친구·멤버 행은 상대방 쪽 데이터라 내 연결만 끊기고
+ * 상대 목록에는 남는다(지우면 상대 여행의 멤버 구성이 깨짐). 문구도 그대로 적는다.
+ */
 const LOSS_ITEMS = [
-  '여행 일정과 지도에 저장한 장소',
+  '내가 만든 여행 일정과 지도에 저장한 장소',
   '사진으로 학습한 취향 태그와 추천 기록',
-  '친구 목록, 함께하는 여행의 멤버 자격',
-  '받은 알림과 인박스 내역',
+  '받은 알림과 인박스 내역, 로그인 세션',
+  '내 친구 목록 (상대방 목록에는 지난 표시 이름이 남아요)',
 ];
 
 /**
@@ -242,11 +246,15 @@ function ConfirmStep({
         </ul>
       </div>
 
-      <label className="mt-4 block shrink-0 text-[13px] font-bold text-[color:var(--ink,#191F28)]">
+      <label
+        htmlFor="withdrawal-confirmation"
+        className="mt-4 block shrink-0 text-[13px] font-bold text-[color:var(--ink,#191F28)]"
+      >
         계속하려면 <span className="text-[color:var(--danger,#F04452)]">{WITHDRAWAL_CONFIRM_PHRASE}</span>
         를 입력해주세요
       </label>
       <input
+        id="withdrawal-confirmation"
         value={confirmation}
         onChange={(event) => onConfirmationChange(event.target.value)}
         disabled={pending}

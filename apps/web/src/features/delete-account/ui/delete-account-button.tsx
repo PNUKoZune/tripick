@@ -29,15 +29,18 @@ export function DeleteAccountButton({ onError }: Props) {
     onError: (err) => onError?.(err instanceof Error ? err : null),
   });
 
+  /** 다이얼로그를 여닫을 때 남은 에러까지 치운다 — 설정 페이지 배너에 그대로 남지 않도록. */
+  const setDialog = (next: boolean) => {
+    mutation.reset();
+    onError?.(null);
+    setOpen(next);
+  };
+
   return (
     <>
       <button
         type="button"
-        onClick={() => {
-          mutation.reset();
-          onError?.(null);
-          setOpen(true);
-        }}
+        onClick={() => setDialog(true)}
         className="mt-2 flex h-12 w-full items-center justify-between rounded-[12px] border border-[color:var(--danger-border,#FECDD3)] bg-[color:var(--card,#FFFFFF)] px-4 text-left text-[14px] font-bold text-[color:var(--danger,#F04452)] hover:bg-[color:var(--danger-tint,#FFECEE)]"
       >
         <span className="flex items-center gap-2">
@@ -50,7 +53,7 @@ export function DeleteAccountButton({ onError }: Props) {
         <WithdrawalDialog
           pending={mutation.isPending}
           error={mutation.error instanceof Error ? mutation.error.message : null}
-          onClose={() => setOpen(false)}
+          onClose={() => setDialog(false)}
           onSubmit={(dto) => mutation.mutate(dto)}
         />
       ) : null}

@@ -10,6 +10,8 @@ import { WithdrawalReasonEntity } from '../../src/users/withdrawal-reason.entity
 import { UsersController } from '../../src/users/users.controller';
 import { UsersService } from '../../src/users/users.service';
 import { FcmTokenEntity } from '../../src/notification/fcm-token.entity';
+import { RefreshTokenEntity } from '../../src/auth/entities/refresh-token.entity';
+import { EmailTokenEntity } from '../../src/auth/entities/email-token.entity';
 import { FcmTokenService } from '../../src/notification/fcm-token.service';
 import { StorageService } from '../../src/storage/storage.service';
 import { JwtAuthGuard } from '../../src/auth/guards/jwt-auth.guard';
@@ -20,6 +22,8 @@ describe('Users (e2e)', () => {
   let users: Repository<UserEntity>;
   let fcmTokens: Repository<FcmTokenEntity>;
   let withdrawals: Repository<WithdrawalReasonEntity>;
+  let refreshTokens: Repository<RefreshTokenEntity>;
+  let emailTokens: Repository<EmailTokenEntity>;
   // 스토리지 미설정 상태를 흉내내 업로드 503 경로를 검증한다.
   const storage = {
     isReady: jest.fn().mockReturnValue(false),
@@ -30,7 +34,13 @@ describe('Users (e2e)', () => {
 
   beforeAll(async () => {
     app = await createE2EApp({
-      entities: [UserEntity, FcmTokenEntity, WithdrawalReasonEntity],
+      entities: [
+        UserEntity,
+        FcmTokenEntity,
+        WithdrawalReasonEntity,
+        RefreshTokenEntity,
+        EmailTokenEntity,
+      ],
       controllers: [UsersController],
       providers: [
         UsersService,
@@ -43,6 +53,8 @@ describe('Users (e2e)', () => {
     users = app.get(getRepositoryToken(UserEntity));
     fcmTokens = app.get(getRepositoryToken(FcmTokenEntity));
     withdrawals = app.get(getRepositoryToken(WithdrawalReasonEntity));
+    refreshTokens = app.get(getRepositoryToken(RefreshTokenEntity));
+    emailTokens = app.get(getRepositoryToken(EmailTokenEntity));
   });
 
   afterAll(async () => {
@@ -239,6 +251,27 @@ describe('Users (e2e)', () => {
       expect(await users.findOneBy({ id: uid })).not.toBeNull();
     });
 
+    it('rejects non-string fields with 400 instead of crashing', async () => {
+      const uid = await newUser();
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: 5 })
+        .expect(400);
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: '탈퇴', reasonDetail: 123 })
+        .expect(400);
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: '탈퇴', reasonDetail: 'a'.repeat(501) })
+        .expect(400);
+
+      expect(await users.findOneBy({ id: uid })).not.toBeNull();
+    });
+
     it('stores the reason anonymously (no user reference)', async () => {
       const uid = await newUser();
       await http
@@ -266,10 +299,27 @@ describe('Users (e2e)', () => {
       expect(rows.some((row) => row.reason === null && row.detail === null)).toBe(true);
     });
 
-    it('also clears the user’s fcm tokens', async () => {
+    it('also clears the user’s fcm, refresh and email tokens', async () => {
       const uid = await newUser();
       await fcmTokens.save(fcmTokens.create({ userId: uid, token: 'dev-a' }));
       await fcmTokens.save(fcmTokens.create({ userId: uid, token: 'dev-b' }));
+      // FK 가 없는 테이블들 — 탈퇴가 직접 지우지 않으면 남아서 /auth/refresh 가 계속 발급한다.
+      await refreshTokens.save(
+        refreshTokens.create({
+          userId: uid,
+          tokenHash: `hash-${uid}`,
+          familyId: `fam-${uid}`,
+          expiresAt: new Date(Date.now() + 86_400_000),
+        }),
+      );
+      await emailTokens.save(
+        emailTokens.create({
+          userId: uid,
+          purpose: 'verify_email',
+          tokenHash: `mail-${uid}`,
+          expiresAt: new Date(Date.now() + 86_400_000),
+        }),
+      );
 
       await http
         .post('/users/me/withdrawal')
@@ -278,6 +328,8 @@ describe('Users (e2e)', () => {
         .expect(204);
 
       expect(await fcmTokens.findBy({ userId: uid })).toHaveLength(0);
+      expect(await refreshTokens.findBy({ userId: uid })).toHaveLength(0);
+      expect(await emailTokens.findBy({ userId: uid })).toHaveLength(0);
     });
   });
 });

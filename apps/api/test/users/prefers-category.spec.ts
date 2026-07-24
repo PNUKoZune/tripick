@@ -5,7 +5,14 @@ import type { UserEntity } from '../../src/users/user.entity';
 import type { NotificationPreferencesDto } from '@tripick/types';
 
 // prefersCategory 는 전달된 user 만 읽는 순수 판정이라, I/O 의존성은 주입하지 않고 캐스팅으로 만든다.
-const service = new UsersService(null as any, null as any, null as any, null as any);
+const service = new UsersService(
+  null as any,
+  null as any,
+  null as any,
+  null as any,
+  null as any,
+  null as any,
+);
 
 function user(prefs?: Partial<NotificationPreferencesDto>): UserEntity {
   return { notificationPreferences: prefs } as UserEntity;

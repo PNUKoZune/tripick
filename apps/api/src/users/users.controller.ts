@@ -25,10 +25,10 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { FcmTokenService } from '../notification/fcm-token.service';
 import { UsersService } from './users.service';
 import { UserEntity } from './user.entity';
+import { WithdrawUserDto } from './dto/withdraw-user.dto';
 import type {
   UpdateNotificationPreferencesDto,
   UpdateUserDto,
-  WithdrawUserDto,
 } from '@tripick/types';
 
 interface UploadedImage {
