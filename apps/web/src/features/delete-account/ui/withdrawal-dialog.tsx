@@ -126,7 +126,7 @@ function ReasonStep({
         {WITHDRAWAL_REASONS.map(({ code, label }) => (
           <label
             key={code}
-            className={`flex shrink-0 cursor-pointer items-center gap-3 rounded-[12px] border px-4 py-3 text-[14px] leading-[20px] transition focus-within:ring-2 focus-within:ring-[color:var(--blue-600,#3182F6)] ${
+            className={`flex shrink-0 cursor-pointer items-center gap-3 rounded-[12px] border px-4 py-3 text-[14px] leading-[20px] transition focus-within:ring-2 focus-within:ring-[color:var(--blue-600,#3182F6)] focus-within:ring-inset ${
               reason === code
                 ? 'border-[color:var(--blue-600,#3182F6)] bg-[color:var(--blue-50,#EEF6FF)] font-bold text-[color:var(--ink,#191F28)]'
                 : 'border-[color:var(--line,#E5E8EB)] text-[color:var(--ink-sub,#4E5968)] hover:bg-[color:var(--card-soft,#FAFBFC)]'
