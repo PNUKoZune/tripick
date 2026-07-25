@@ -26,7 +26,7 @@ function makeService(overrides: {
   findByUser?: jest.Mock;
   upsert?: jest.Mock;
   getObject?: jest.Mock;
-  sendToUser?: jest.Mock;
+  inboxCreate?: jest.Mock;
   queue?: Partial<{ add: jest.Mock; getJob: jest.Mock }>;
 } = {}) {
   // aggregate 는 실제 구현을 쓴다 — 재집계 결과가 이 서비스의 핵심 산출물이라서.
@@ -42,7 +42,8 @@ function makeService(overrides: {
       overrides.getObject ??
       jest.fn().mockResolvedValue({ body: Buffer.from('img'), contentType: 'image/png' }),
   };
-  const notifications = { sendToUser: overrides.sendToUser ?? jest.fn().mockResolvedValue(undefined) };
+  // 알림은 InboxService.create 로 발송한다 (구 FCM sendToUser 직접 호출에서 이관).
+  const inbox = { create: overrides.inboxCreate ?? jest.fn().mockResolvedValue(undefined) };
   const queue = { add: jest.fn(), getJob: jest.fn(), ...overrides.queue };
 
   const service = new PreferenceAnalysisService(
@@ -50,10 +51,10 @@ function makeService(overrides: {
     visionAnalyzer,
     preferencesService as any,
     storage as any,
-    notifications as any,
+    inbox as any,
   );
 
-  return { service, preferencesService, storage, notifications, queue, visionAnalyzer };
+  return { service, preferencesService, storage, inbox, queue, visionAnalyzer };
 }
 
 function makeJob(
@@ -210,12 +211,12 @@ describe('PreferenceAnalysisService.runJob', () => {
   });
 
   it('notifies only on the final failed attempt', async () => {
-    const sendToUser = jest.fn().mockResolvedValue(undefined);
+    const inboxCreate = jest.fn().mockResolvedValue(undefined);
     const build = (attemptsMade: number) =>
       makeService({
         analyzePhoto: jest.fn().mockResolvedValue(failed()),
         findByUser: jest.fn().mockResolvedValue({ photoUrls: ['http://s/1.png'], photoTags: {} }),
-        sendToUser,
+        inboxCreate,
       }).service.runJob(
         makeJob(
           { userId: 'u1', photoUrls: ['http://s/1.png'], storageKeys: ['k/1.png'] },
@@ -225,28 +226,28 @@ describe('PreferenceAnalysisService.runJob', () => {
 
     // 중간 재시도에서는 조용히 다시 던지기만 한다
     await expect(build(0)).rejects.toThrow();
-    expect(sendToUser).not.toHaveBeenCalled();
+    expect(inboxCreate).not.toHaveBeenCalled();
 
     await expect(build(2)).rejects.toThrow();
-    expect(sendToUser).toHaveBeenCalledWith(
-      expect.objectContaining({ title: '취향 분석 실패' }),
+    expect(inboxCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ category: 'general', title: '취향 분석 실패' }),
     );
   });
 
   it('notifies the user when analysis finishes', async () => {
-    const sendToUser = jest.fn().mockResolvedValue(undefined);
+    const inboxCreate = jest.fn().mockResolvedValue(undefined);
     const { service } = makeService({
       analyzePhoto: jest.fn().mockResolvedValue(ok({ food: ['cafe'], confidence: 0.8 })),
       findByUser: jest.fn().mockResolvedValue({ photoUrls: ['http://s/1.png'], photoTags: {} }),
-      sendToUser,
+      inboxCreate,
     });
 
     await service.runJob(
       makeJob({ userId: 'u1', photoUrls: ['http://s/1.png'], storageKeys: ['k/1.png'] }),
     );
 
-    expect(sendToUser).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 'u1', type: 'general', title: '취향 분석 완료' }),
+    expect(inboxCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'u1', category: 'general', title: '취향 분석 완료' }),
     );
   });
 });
