@@ -23,7 +23,7 @@
 ## 공통 · 여러 문서에 반복 (우선순위 후보)
 
 - [ ] **"수락 → 재계획" 배선** `[코드확인: 없음]` — `deviation`/`weather` 트리거 타입·프롬프트·결과분기는 준비됨. 알림 탭 → planner 이동 후 재계획 진입점만 없음 ([arrival](../alerts/arrival-check-alert-v1.md#L142)·[crowd](../alerts/crowd-alert-scheduler-v1.md#L143)·[mid-term](../alerts/mid-term-forecast-v1.md#L113))
-- [ ] **iOS 푸시(APNs) 실기기 검증** `[대기: 실기기 + APNs Auth Key]` — Auth Key 업로드 + Xcode capability ([inbox](../notification/inbox-and-trip-invite-v1.md#L450)·[photo-taste](../preference/preference-photo-taste-analysis-v1.md#L152)·[trip-progress](../trips/trip-progress-live-v1.md#L147)·[mobile](../setup/mobile-webview-setup.md#L226))
+- [ ] **iOS 푸시(APNs) 실기기 검증** `[대기: 실기기 + APNs Auth Key]` — iPhone 17 Pro 시뮬레이터 Debug 빌드·설치·실행과 Firebase plist 번들 포함은 확인(2026-07-22). Auth Key 업로드 + Xcode capability 및 APNs 수신은 실기기에서 검증 ([inbox](../notification/inbox-and-trip-invite-v1.md#L450)·[photo-taste](../preference/preference-photo-taste-analysis-v1.md#L152)·[trip-progress](../trips/trip-progress-live-v1.md#L147)·[mobile](../setup/mobile-webview-setup.md#L226))
 - [x] **Web Push (Service Worker + VAPID)** — 브라우저 단독 사용자 푸시 수신 ([web-push](../notification/web-push-service-worker-v1.md)). 자동 권한 프롬프트→옵트인 UI, `platform='web'` 정밀 태깅은 후속
 - [ ] **DB 마이그레이션 인프라** `[코드확인: 없음]` `[대기: 라이브 스키마 반영 결정]` — `synchronize` 의존, 라이브 스키마 반영 미결 ([preferences-enh](../preference/preferences-enhancements-v1.md#L111)·[weighting](../preference/preference-embedding-weighting-v1.md#L94))
 - [x] **모달 공통 셸(`ModalShell`) 추출 + 포커스 트랩** `[코드확인]` — [modal-shell.tsx](../../apps/web/src/shared/ui/modal-shell.tsx) 가 body 스크롤 락·ESC·백드롭·포커스 트랩을 전담하고 확인 다이얼로그 6종이 패널 클래스만 넘긴다. 트랩은 [use-focus-trap.ts](../../apps/web/src/shared/lib/use-focus-trap.ts) 로 분리해 자체 애니메이션 phase 를 가진 [BottomSheet](../../apps/web/src/shared/ui/bottom-sheet.tsx) 도 훅만 재사용. `onDismiss` 를 `undefined` 로 넘기면 처리 중 닫힘을 막는다
@@ -61,7 +61,7 @@
 
 ## 취향 · 임베딩
 
-- [ ] confidence 활용(CRAG 보정/임계 필터) ([photo-taste](../preference/preference-photo-taste-analysis-v1.md#L152))
+- [x] confidence 활용(CRAG 보정/임계 필터) `[코드확인]` — confidence 0.35 미만 태그는 검색·CRAG 매칭에서 제외하고, 유효 태그 점수는 confidence 만큼 중립값에서 보정 ([photo-taste](../preference/preference-photo-taste-analysis-v1.md#L152))
 - [ ] 미분석 사진 전용 재분석 버튼
 - [ ] 검색 품질 평가 하네스(golden set) → blend weight·radius 튜닝 ([enrichment](../preference/place-embedding-enrichment-v1.md#L149))
 - [ ] ANN 스케일 region 코드 pre-filter
@@ -72,7 +72,7 @@
 
 - [x] 관광공사 `areaBasedList2` — 전국 일정 카탈로그 `[코드확인]` — 이미 적재 파이프라인에 연결(`TourApiService.fetchByArea`→`areaBasedList2`→pgvector 적재, [tour-api.service.ts](../../apps/api/src/planner/retrieval/tour-api.service.ts#L479)). 리트리벌은 pgvector 우선·seed 폴백. "연동"은 done, 남은 건 적재 커버리지(아래 §시군구 인제스천) ([destination](../trips/destination-tour-api-v1.md#L81))
 - [x] 관광공사 `locationBasedList2` — 대안 후보(현재 좌표 주변) `[제외: 카카오+pgvector 로 대체]` `[코드확인]` — "현재 좌표 주변 대안 후보"는 이미 구현됨. `ReplanRequestDto.currentLocation` → `RetrievalContext` → [kakao-local.service.ts](../../apps/api/src/planner/retrieval/kakao-local.service.ts#L75) `search` 가 좌표를 center+radius 로 카카오 주변 검색, [crag-evaluator.service.ts](../../apps/api/src/planner/retrieval/crag-evaluator.service.ts#L141) 가 거리 점수 가점. KTO `locationBasedList2` 는 불필요(CLAUDE.md "대안 후보는 pgvector 취향 유사도로 대체" 방침 일치)
-- [ ] 영업시간 화면 배지 노출(`PlannerItineraryItemDto.openingHours`) ([opening-hours](../trips/tour-api-opening-hours-v1.md#L147))
+- [x] 영업시간 화면 배지 노출(`PlannerItineraryItemDto.openingHours`) `[코드확인]` — API 응답에 영업시간을 연결하고 일정 카드에 시계 아이콘과 함께 노출 ([opening-hours](../trips/tour-api-opening-hours-v1.md#L147))
 - [x] 카카오 전용 장소 영업시간 소스(구글 Places 등) 검토 `[제외: 비용]` — 구글 Places 는 호출 비용이 붙어 도입 안 함. KTO 미등록 카카오 전용 장소(카페·프랜차이즈) 영업시간은 빈 채로 유지(문서 §7 한계 그대로)
 - [ ] backfill 스테일 처리(KTO가 영업시간 내린 경우) `[보류: 빈도 낮음·실익 미미]` — 현재 "마지막 확보값 유지". KTO 가 영업시간 필드를 내리는 빈도가 낮아 후순위
 - [x] 히어로 카드 날씨 미리보기 `[제외: 불필요]` — 요약 API 마다 격자 변환+예보 조회가 붙어 응답이 무거워지는 데 비해 목록 화면 날씨 미리보기 가치가 낮음 ([main-page](../trips/main-page-filters-card-v1.md#L107))
@@ -115,7 +115,7 @@
 
 - [ ] iOS/Android 번들 ID·applicationId 실도메인 확정 `[대기: 서비스 도메인 확정]` ([mobile](../setup/mobile-webview-setup.md#L226))
 - [ ] release keystore 분리(현재 debug fallback) `[대기: 라이브 배포]`
-- [ ] WebView 첫 로드 실패 시 retry UI
+- [x] WebView 첫 로드 실패 시 retry UI `[코드확인]` — 첫 네트워크/HTTP 오류에 안내와 재시도 버튼을 표시하고 WebView remount 로 복구
 - [ ] 웹뷰 파일 선택 사진 업로드 — 실기 확인만 남음 `[대기: 실기기]` — 프로필 이미지·취향 사진이 같은 `<input type=file>` 경로(둘 다 `accept="image/jpeg,image/png,image/webp"`, 취향은 `multiple`)라 하나로 묶음. 취향 사진이 막히면 온보딩 핵심 플로우가 앱에서 끊긴다. **원안(image-picker + 브리지 + data: URL 전송)은 폐기** — 웹 업로드 UI 를 네이티브에 이중 구현하는 비용인데 react-native-webview 가 Android `onShowFileChooser`·iOS WKWebView 파일 입력을 이미 처리한다. 네이티브 설정만 채웠고([manifest](../../apps/mobile/android/app/src/main/AndroidManifest.xml)·[Info.plist](../../apps/mobile/ios/TriPick/Info.plist)) 브리지 코드는 넣지 않았다. **Android 는 권한 선언이 오히려 해가 된다** — 갤러리 선택은 SAF(`ACTION_GET_CONTENT`)라 `READ_MEDIA_IMAGES` 없이 동작하고, `CAMERA` 를 선언하면 `RNCWebViewModuleImpl.needsCameraPermission()` 이 "선언됐는데 미승인" 을 감지해 촬영 항목을 시트에서 빼버린다(미선언 시 시스템 카메라 앱 위임으로 그냥 됨). 대신 Android 11+ 패키지 가시성 때문에 `IMAGE_CAPTURE` `<queries>` 만 추가. iOS 는 사용 설명 문구가 없으면 접근 순간 크래시라 `NSCameraUsageDescription`·`NSPhotoLibraryUsageDescription` 추가. 실기 확인 항목 — ① 갤러리 선택 ② 촬영 항목 노출·촬영 ③ 취향 사진 다중 선택 ④ webp accept 동작. 하나라도 안 되면 그때 image-picker 폴백
 
 ## 테스트 · 운영
