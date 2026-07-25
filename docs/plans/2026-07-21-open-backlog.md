@@ -121,7 +121,7 @@
 ## 테스트 · 운영
 
 - [x] realtime 게이트웨이 인증/인가 e2e `[코드확인]` — 실 socket.io 서버를 임의 포트로 띄우고 진짜 클라이언트로 붙어 게이트웨이 인증/인가 왕복을 검증([realtime-gateway.e2e-spec.ts](../../apps/api/test/realtime/realtime-gateway.e2e-spec.ts)). JWT 는 실제 `JwtModule` 로 서명/검증, 멤버십(`canAccessTrip`)만 목킹해 DB 없이 분기 제어. 6케이스 — 무토큰/무효토큰 즉시 절단·유효토큰 유지+인박스 room 자동합류·`join-trip` 멤버 joined/비멤버 join-denied(+room 방송 미도달)·`evictFromTrip` 회수 시 `trip-access-revoked` 통지+room 방송 절단. 기존 e2e(happy path 1케이스)가 못 덮던 부정경로·인가 회수를 채움
-- [ ] preferences 서비스 CRUD 커버리지
+- [x] preferences 서비스 CRUD 커버리지 `[코드확인]` — 기존 spec 이 `upsert` 기상/취침 검증만 덮던 걸 전 메서드로 확장([preferences.service.spec.ts](../../apps/api/test/preferences/preferences.service.spec.ts), 3→12케이스). `findByUser`(조회·null), `getPreferenceVector`(위임), `setPhotoUrls`(행 없으면 기본값 생성·재임베딩 스킵/사진 삭제 시 photoTags·disabledPhotoTags 정리), `upsert`(신규 생성·배열 dedup/부분 dto 병합/취향 신호 유무에 따른 임베딩 호출·embeddingId 반영) 커버
 - [ ] main-planner swap/reorder/alternatives 커버리지
 
 ---
