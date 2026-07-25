@@ -1,0 +1,20 @@
+# 의존성·빌드 산출물 — 이미지 안에서 새로 설치·빌드한다 (호스트 것 복사 금지)
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+.turbo
+
+# VCS·로그·에디터
+.git
+.gitignore
+**/*.log
+.vscode
+
+# 로컬 환경파일 — 런타임 env 는 배포 플랫폼(Railway)이 주입한다
+**/.env
+**/.env.*
+
+# 빌드에 불필요한 것
+docker-compose.yml
+docs

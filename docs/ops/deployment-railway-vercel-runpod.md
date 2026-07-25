@@ -92,9 +92,14 @@ Railway Redis 애드온을 사용한다. 단 접속 정보가 비밀번호를 �
 ### 4-3. API 서비스
 
 - 레포 연결 후 Dockerfile 빌드 방식으로 배포
-- 현재 **Dockerfile 이 존재하지 않아 신규 작성이 필요**하다
-- pnpm workspace + Turborepo 구조이므로 `packages/types`, `packages/utils` 가 함께 빌드되어야 한다
-- 빌드: `pnpm turbo run build --filter=@tripick/api` / 실행: `node dist/main`
+- **Dockerfile: `apps/api/Dockerfile`** (작성 완료). 빌드 컨텍스트는 **모노레포 루트**여야 한다
+  (pnpm-lock·`packages/*` 접근 필요). Railway 설정에서 Root Directory 는 레포 루트,
+  Dockerfile Path 는 `apps/api/Dockerfile` 로 지정한다
+- 로컬 빌드 예: `docker build -f apps/api/Dockerfile -t tripick-api .`
+- 멀티스테이지: 전체 워크스페이스 의존성 설치 → `turbo run build --filter=@tripick/api`
+  (types·utils 먼저 빌드) → `pnpm deploy --prod` 로 dist + 프로덕션 node_modules +
+  워크스페이스 빌드 산출물을 주입한 자립 번들 생성 → 경량 runner 스테이지가 그것만 담아 실행
+- 런타임: `node:20-slim` 비루트(`node`) 실행, `CMD node dist/main.js`, `PORT` 환경변수 우선
 - **replica 는 1개로 고정한다** (사유는 5-3 참조)
 
 ---
@@ -219,7 +224,7 @@ Geolocation 은 HTTPS 환경에서만 동작하나, Vercel 은 기본 HTTPS 이�
 ## 8. 배포 순서
 
 1. **선행 코드 작업** — 5-1(Redis URL 통합), 5-5(헬스체크), 5-4(CORS 제한)
-2. **Dockerfile 작성** — pnpm workspace 대응 멀티스테이지 빌드
+2. **Dockerfile** — `apps/api/Dockerfile` 작성 완료 (컨텍스트=레포 루트)
 3. **Railway**
    1. Postgres 서비스 배포 (`pgvector/pgvector:pg16`)
    2. `init.sql` 수동 적용
