@@ -41,6 +41,8 @@ declare const require: <TModule>(moduleName: string) => TModule;
  * - Geolocation 은 HTTPS 또는 localhost 환경에서만 동작 (Android WebView 제약)
  * - Android 13+ 는 POST_NOTIFICATIONS 런타임 권한 필요
  * - iOS 는 Info.plist 에 NSLocationWhenInUseUsageDescription / aps-environment 필수
+ * - 사진 업로드(취향 사진·프로필)는 웹의 <input type=file> 을 react-native-webview 가
+ *   Android onShowFileChooser / iOS WKWebView 로 직접 처리한다. 네이티브 picker 브리지 없음
  */
 
 type BridgeMessage =
@@ -251,6 +253,7 @@ export default function App() {
       // Firebase 자격 파일(google-services.json / GoogleService-Info.plist) 미배치 시 정상적으로 건너뛴다.
       console.warn('[TriPick] FCM 초기화 생략:', error instanceof Error ? error.message : error);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dispatchNotificationTap 은 postToWeb(webviewRef) 만 쓰는 안정 함수라, 재구독을 막으려 빈 deps 를 의도적으로 유지
   }, []);
 
   // 단발 위치 조회 (이전 호환용 — 웹은 현재 START_LOCATION_TRACKING 을 보낸다)
@@ -482,7 +485,7 @@ export default function App() {
         // Kakao Maps 가 https 리소스를 요청하므로 mixed content 는 허용 X
         mixedContentMode="never"
         allowsBackForwardNavigationGestures
-        // 카메라/마이크는 v1에서 사용 안 함. 추후 preference-analyzer 단계에서 활성화
+        // 사진은 <input type=file> → 네이티브 파일 선택 시트로만 올린다(getUserMedia 미사용)
         mediaPlaybackRequiresUserAction={false}
         // Geolocation + Android 전용 권한 brige
         geolocationEnabled

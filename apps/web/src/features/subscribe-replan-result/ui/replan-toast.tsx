@@ -41,10 +41,12 @@ export function ReplanToast({
   const { latest, dismiss, accessDenied } = subscription ?? own;
   const [deniedDismissed, setDeniedDismissed] = useState(false);
 
-  // 여행이 바뀌면 거부 안내 닫힘 상태를 초기화
-  useEffect(() => {
+  // 여행이 바뀌면 거부 안내 닫힘 상태를 초기화 (effect 대신 렌더 단계 조정).
+  const [prevTripId, setPrevTripId] = useState(tripId);
+  if (prevTripId !== tripId) {
+    setPrevTripId(tripId);
     setDeniedDismissed(false);
-  }, [tripId]);
+  }
 
   // 완료 결과는 6초 뒤 자동으로 닫는다 (실패·거부는 사용자가 직접 닫도록 유지)
   useEffect(() => {

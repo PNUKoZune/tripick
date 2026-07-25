@@ -24,6 +24,7 @@ export function PreferenceSetupPrompt() {
   const [dismissed, setDismissed] = useState(true);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorage 닫힘 플래그를 마운트 후 반영(SSR-safe)
     setDismissed(sessionStorage.getItem(DISMISS_KEY) === '1');
   }, []);
 
@@ -51,7 +52,7 @@ export function PreferenceSetupPrompt() {
   }
 
   return (
-    <BottomSheet open={open} onClose={dismiss}>
+    <BottomSheet open={open} onClose={dismiss} label="취향 설정 안내">
       <div className="flex flex-col items-center px-1 pb-1 pt-4 text-center">
         <span className="flex size-16 items-center justify-center rounded-full bg-[#EAF2FF] text-[#3182F6]">
           <FiCompass className="size-8" aria-hidden />

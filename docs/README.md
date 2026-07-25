@@ -35,6 +35,7 @@
 
 - [planner/main-planner-v1.md](planner/main-planner-v1.md) — Screen 3 메인 플래너 / Screen 4 대안 팝업
 - [planner/rag-crag-v1.md](planner/rag-crag-v1.md) — RAG / CRAG 플래너 파이프라인
+- [planner/naver-popularity-signal-v1.md](planner/naver-popularity-signal-v1.md) — 네이버 추천 글 대중 인지도 신호 (마이너 장소 소프트 재랭킹)
 - [planner/alternative-place-picker-v1.md](planner/alternative-place-picker-v1.md) — 대안 장소 선택(Alternative Popup) · swap · 재계획
 - [planner/planner-page-enhancements-v1.md](planner/planner-page-enhancements-v1.md) — 여행 일정 페이지 개편
 - [planner/routing-external-api-v1.md](planner/routing-external-api-v1.md) — 길찾기 외부 API 전환(카카오 모빌리티 · ODsay)
@@ -70,11 +71,13 @@
 ## 친구 · 멤버 (Friends)
 
 - [friends/friends-and-trip-members-v1.md](friends/friends-and-trip-members-v1.md) — 친구 · 여행 멤버 · 조율 재배치
+- [friends/friends-page-enhancements-v1.md](friends/friends-page-enhancements-v1.md) — 친구 페이지 개선 (프로필 사진 · 미가입 핸들 거부 · 내 아이디 공유 · 친구와 여행 만들기)
 
 ## 설정 (Settings)
 
 - [settings/settings-v1.md](settings/settings-v1.md) — 설정 페이지
 - [settings/settings-profile-v1.md](settings/settings-profile-v1.md) — 프로필 도메인 + 페이지 레이아웃 통일
+- [settings/account-withdrawal-v1.md](settings/account-withdrawal-v1.md) — 회원 탈퇴 사유 수집 · 2단계 확인 (hard delete 유지)
 
 ## 디자인 시스템
 
@@ -85,6 +88,7 @@
 - [ops/deployment-railway-vercel-runpod.md](ops/deployment-railway-vercel-runpod.md) — 배포(Railway · Vercel · RunPod)
 - [ops/production-ai-long-term-readiness.md](ops/production-ai-long-term-readiness.md) — production AI 장기 운영 준비
 - [ops/test-coverage-expansion-v1.md](ops/test-coverage-expansion-v1.md) — API 테스트 커버리지 확장
+- [ops/eslint-flat-config-v1.md](ops/eslint-flat-config-v1.md) — ESLint 9 flat config 워크스페이스 세팅 + react-hooks 오류 해소
 
 ## 수정 기록 (Fix)
 

@@ -166,12 +166,46 @@ const TAG_HINTS: Array<[string | RegExp, string[]]> = [
 
 /**
  * 목적지 문자열에서 행정구역 접미사를 떼어 매칭용 어간을 만든다.
- * 예: '서울특별시'→'서울', '경상북도'→'경상북', '경주시'→'경주', '해운대구'→'해운대'.
+ * 시·군·구 계열은 어간화(예: '서울특별시'→'서울', '경주시'→'경주', '해운대구'→'해운대')하되,
+ * 도는 그대로 남긴다(예: '경상북도'→'경상북도', '경기도'→'경기도').
+ * 단 '특별자치도'는 '도'로 정규화해 주소('강원도')와 관광공사 정식명('강원특별자치도')이
+ * 같은 어간('강원도')으로 맞도록 한다(집중률 시도 인덱스 매칭).
  * 첫 토큰만 사용해 '부산 해운대' 같은 다중 토큰도 시도 어간으로 정규화.
  */
+/** 한 토큰의 행정구역 접미사를 어간화. 도는 유지, 특별자치도만 도로 정규화. */
+function stemRegionToken(token: string): string {
+  return token
+    .replace(/특별자치도$/, '도')
+    .replace(/(특별자치시|특별시|광역시|자치시|시|군|구)$/, '');
+}
+
 export function regionStem(destination: string): string {
   const first = destination.trim().split(/\s+/)[0] ?? '';
-  return first.replace(/(특별자치도|특별자치시|특별시|광역시|자치도|자치시|도|시|군|구)$/, '');
+  return stemRegionToken(first);
+}
+
+/**
+ * 목적지의 모든 토큰을 어간화해 합친다. regionStem 이 첫 토큰(시도)만 보는 것과 달리
+ * 서브지역까지 보존한다. 예: '부산광역시 해운대구'→'부산 해운대', '경주시'→'경주'.
+ * 네이버 검색 질의처럼 목적지 전체 특이성이 필요할 때 쓴다.
+ */
+export function regionSearchStem(destination: string): string {
+  return destination
+    .trim()
+    .split(/\s+/)
+    .map(stemRegionToken)
+    .filter(Boolean)
+    .join(' ');
+}
+
+/**
+ * LIKE 프리픽스 매칭용 최단 어간. regionStem 에서 끝의 '도'까지 마저 떼어
+ * place_embeddings 에 섞여 있는 짧은 라벨('경기')과 풀네임('경기도')을 '경기%' 로 함께 잡는다.
+ * (regionStem 은 도를 유지하지만 그 값은 사용자에게 노출되지 않고, 프리픽스는 최단 어간이 필요.)
+ * 예: '경기도'→'경기', '경상북도'→'경상북', '강원특별자치도'→'강원', '경주시'→'경주'.
+ */
+export function regionPrefixStem(destination: string): string {
+  return regionStem(destination).replace(/도$/, '');
 }
 
 /**

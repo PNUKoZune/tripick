@@ -2,12 +2,12 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { DayPicker, type DateRange } from 'react-day-picker';
 import { ko } from 'react-day-picker/locale';
 import { format } from 'date-fns';
 import { LuChevronDown, LuPlus, LuX } from 'react-icons/lu';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   PlannerMemberDto,
   ReplanBudget,
@@ -15,6 +15,7 @@ import type {
   ReplanPlaceDto,
 } from '@tripick/types';
 
+import { fetchFriends } from '@/entities/friend';
 import { SessionGuard } from '@/entities/session';
 import { createTrip } from '@/entities/trip-plan';
 import { DestinationSearchInput, DestinationMapPicker } from '@/features/destination-search';
@@ -22,7 +23,7 @@ import { queryKeys } from '@/shared/api/query-keys';
 import { PlaceSearchPicker, SegmentToggle, TimeField } from '@/shared/ui';
 import { AppFrame } from '@/shared/ui/app-frame';
 
-import { FriendMemberPicker } from './friend-member-picker';
+import { FriendMemberPicker, friendIdToMemberId } from './friend-member-picker';
 import { TripCreateLoading } from './trip-create-loading';
 
 import 'react-day-picker/style.css';
@@ -52,15 +53,27 @@ function toIsoDate(date: Date) {
   return format(date, 'yyyy-MM-dd');
 }
 
-export function TripCreateView({ initialDestination }: { initialDestination?: string } = {}) {
+export function TripCreateView({
+  initialDestination,
+  initialFriendId,
+}: { initialDestination?: string; initialFriendId?: string } = {}) {
   return (
     <SessionGuard>
-      <TripCreateContent {...(initialDestination ? { initialDestination } : {})} />
+      <TripCreateContent
+        {...(initialDestination ? { initialDestination } : {})}
+        {...(initialFriendId ? { initialFriendId } : {})}
+      />
     </SessionGuard>
   );
 }
 
-function TripCreateContent({ initialDestination }: { initialDestination?: string }) {
+function TripCreateContent({
+  initialDestination,
+  initialFriendId,
+}: {
+  initialDestination?: string;
+  initialFriendId?: string;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -78,6 +91,38 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
   const [members, setMembers] = useState<DraftMember[]>([
     { id: 'me', initial: '나', color: 'var(--primary)' },
   ]);
+
+  // 친구 페이지에서 "여행 만들기" 로 들어온 경우, 해당 친구를 동행자로 미리 넣어둔다.
+  const { data: seedFriends } = useQuery({
+    queryKey: queryKeys.friends.list,
+    queryFn: fetchFriends,
+    staleTime: 60 * 1000,
+    enabled: Boolean(initialFriendId),
+  });
+  // async 로 도착한 친구를 렌더 단계에서 1회만 동행자로 시드한다 (아래 sizingKey 조정과 동일 패턴, effect 불필요).
+  const [seededFriendId, setSeededFriendId] = useState<string | null>(null);
+  if (initialFriendId && seededFriendId !== initialFriendId && seedFriends) {
+    setSeededFriendId(initialFriendId); // 데이터 도착 시 처리 확정 — 친구가 없어도 재시도 안 함
+    const friend = seedFriends.find((f) => f.id === initialFriendId && f.status === 'accepted');
+    if (friend) {
+      const memberId = friendIdToMemberId(friend.id);
+      setMembers((prev) =>
+        prev.some((m) => m.id === memberId)
+          ? prev
+          : [
+              ...prev,
+              {
+                id: memberId,
+                friendId: friend.id,
+                nickname: friend.nickname,
+                role: 'companion',
+                initial: friend.initial,
+                color: friend.color,
+              },
+            ],
+      );
+    }
+  }
   const [mustPlaces, setMustPlaces] = useState<ReplanPlaceDto[]>([]);
   const [pace, setPace] = useState<ReplanPace>('balanced');
   const [budget, setBudget] = useState<ReplanBudget>('normal');
@@ -122,11 +167,16 @@ function TripCreateContent({ initialDestination }: { initialDestination?: string
   }, [startDate, endDate]);
 
   // 일자별 모드에서 기간이 바뀌면 일차 수에 맞춰 지역 리스트 길이를 재조정(기존 선택 보존).
-  useEffect(() => {
-    if (sameRegion || dayCount === 0) return;
-    setDayRegionsList((prev) => Array.from({ length: dayCount }, (_, i) => prev[i] ?? []));
-    setExpandedDay((prev) => (prev >= dayCount ? 0 : prev));
-  }, [dayCount, sameRegion]);
+  // effect 대신 렌더 단계에서 (dayCount, sameRegion) 변화를 감지해 조정한다.
+  const sizingKey = `${dayCount}|${sameRegion}`;
+  const [prevSizingKey, setPrevSizingKey] = useState(sizingKey);
+  if (prevSizingKey !== sizingKey) {
+    setPrevSizingKey(sizingKey);
+    if (!sameRegion && dayCount > 0) {
+      setDayRegionsList((prev) => Array.from({ length: dayCount }, (_, i) => prev[i] ?? []));
+      setExpandedDay((prev) => (prev >= dayCount ? 0 : prev));
+    }
+  }
 
   const addDayRegion = (dayIndex: number, region: string) => {
     const value = region.trim();

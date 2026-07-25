@@ -7,7 +7,7 @@ import {
   getSeedPlaces,
   inferPlaceTags,
   normalizeDestinationRegion,
-  regionStem,
+  regionPrefixStem,
 } from './place-seeds';
 import type { RawPlaceCandidate } from './types';
 
@@ -87,9 +87,10 @@ export class PlaceEmbeddingRepository {
     limit: number,
     preferenceVector?: number[],
   ): Promise<RawPlaceCandidate[]> {
-    // 목적지 어간(접미사 제거)으로 시도/시군구를 매칭한다.
-    // 예: '경주' → region_sigungu '경주시' 프리픽스 매칭, '부산' → destination_region '부산' 매칭.
-    const stem = regionStem(destination);
+    // 목적지 최단 어간(접미사·도 제거)으로 시도/시군구를 매칭한다.
+    // 예: '경주' → region_sigungu '경주시' 프리픽스 매칭, '부산' → destination_region '부산',
+    //     '경기도' → '경기%' 로 짧은 라벨 '경기'·풀네임 '경기도' 모두 매칭.
+    const stem = regionPrefixStem(destination);
     const stemLike = stem ? `${stem}%` : '';
     const destinationLike = `%${destination}%`;
     const vector = `[${embedding.join(',')}]`;
@@ -422,7 +423,7 @@ export class PlaceEmbeddingRepository {
   async deleteRegion(region: string): Promise<number> {
     const raw = region.toLowerCase();
     const normalized = normalizeDestinationRegion(region);
-    const stem = regionStem(region).toLowerCase();
+    const stem = regionPrefixStem(region).toLowerCase();
     const stemLike = stem ? `${stem}%` : null; // 어간이 비면(비정상 입력) 전체 삭제 방지 위해 미적용
     // CTE 로 삭제 후 개수를 SELECT 한다. DELETE ... RETURNING 을 dataSource.query 로 직접 받으면
     // 드라이버가 [rows, affected] 형태를 돌려줘 rows.length 가 실제 삭제 수와 어긋난다.

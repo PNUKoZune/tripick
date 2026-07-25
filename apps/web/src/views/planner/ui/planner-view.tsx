@@ -219,6 +219,7 @@ function PlannerContent({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   useEffect(() => {
     const stored = readJson<boolean>(SIDEBAR_COLLAPSED_KEY);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 접힘 상태를 마운트 후 복원(SSR-safe)
     if (stored !== null) setSidebarCollapsed(stored);
   }, []);
   useEffect(() => {
@@ -260,13 +261,11 @@ function PlannerContent({
     staleTime: 5 * 60 * 1000,
   });
 
-  useEffect(() => {
-    if (trip) {
-      setDay((current) =>
-        trip.days.some((item) => item.day === current) ? current : (trip.days[0]?.day ?? 1),
-      );
-    }
-  }, [trip]);
+  // 선택한 일차가 새 여행 데이터에 없으면 첫 일차로 보정 (effect 대신 렌더 단계 조정 —
+  // 보정 후 조건이 거짓이 되어 무한 루프가 없다).
+  if (trip && !trip.days.some((item) => item.day === day)) {
+    setDay(trip.days[0]?.day ?? 1);
+  }
 
   const loadError =
     error instanceof Error

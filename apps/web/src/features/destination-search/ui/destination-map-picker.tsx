@@ -41,7 +41,7 @@ export function DestinationMapPicker({ onSelect }: Props) {
         </span>
         지도
       </button>
-      <BottomSheet open={open} onClose={() => setOpen(false)}>
+      <BottomSheet open={open} onClose={() => setOpen(false)} label="지도에서 여행 지역 선택">
         <MapPickerContent
           hasKey={hasKey}
           onConfirm={(name) => {
@@ -126,6 +126,7 @@ function MapPickerContent({
   // 시트가 열리면 지도 1회 초기화 + 클릭 리스너 바인딩
   useEffect(() => {
     if (!hasKey) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 지도 초기화 effect: 카카오 키 없음을 실패 상태로 표시
       setFailed(true);
       return;
     }

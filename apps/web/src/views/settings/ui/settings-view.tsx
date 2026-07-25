@@ -14,7 +14,8 @@ import { firstErrorMessage } from '@/shared/lib';
 import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
 import { SettingsProfileHero } from '@/widgets/settings-profile-hero';
 
-const APP_VERSION = '0.1.0';
+// next.config 가 package.json version 을 주입한다(단일 출처). 빌드 시 인라인.
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0';
 
 export function SettingsView() {
   return (
@@ -67,9 +68,9 @@ function SettingsContent() {
           </Section>
 
           <Section title="약관 및 정책">
-            <LinkRow href="#terms" label="이용약관" />
-            <LinkRow href="#privacy" label="개인정보처리방침" />
-            <LinkRow href="#contact" label="고객센터" />
+            <LinkRow href="/legal/terms" label="이용약관" />
+            <LinkRow href="/legal/privacy" label="개인정보처리방침" />
+            <LinkRow href="/support" label="고객센터" />
           </Section>
 
           <Section title="앱 정보">

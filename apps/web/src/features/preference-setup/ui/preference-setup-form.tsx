@@ -6,6 +6,7 @@ import {
   FiCheck,
   FiImage,
   FiLoader,
+  FiLock,
   FiPlus,
   FiThumbsDown,
   FiThumbsUp,
@@ -45,13 +46,14 @@ import {
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { startDemoSession } from '@/entities/session/api/auth-api';
 import { queryKeys } from '@/shared/api/query-keys';
-import { InlineNotice, SegmentedOption } from '@/shared/ui/app-frame';
-import { ConfirmDialog, TimeField, Toast } from '@/shared/ui';
+import { downscaleImage, PREFERENCE_MAX_DIMENSION } from '@/shared/lib';
+import { SegmentedOption } from '@/shared/ui/app-frame';
+import { ConfirmDialog, ImageLightbox, TimeField, Toast } from '@/shared/ui';
 
-type Notice = {
+type ToastState = {
   title: string;
-  description: string;
-  tone: 'red' | 'green';
+  message?: string;
+  tone: 'success' | 'error';
 };
 
 type ThemeStance = 'like' | 'dislike';
@@ -72,8 +74,7 @@ export function PreferenceSetupForm() {
   const hydrated = useRef(false);
   const [form, setForm] = useState<PreferenceFormState>(DEFAULT_PREFERENCE_FORM);
   const [hasSession, setHasSession] = useState(() => Boolean(getStoredSession()));
-  const [notice, setNotice] = useState<Notice | null>(null);
-  const [toast, setToast] = useState<{ title: string; message: string } | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [photos, setPhotos] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [analyzedTags, setAnalyzedTags] = useState<TasteTagDto | null>(null);
@@ -81,6 +82,8 @@ export function PreferenceSetupForm() {
   const [savedPhotoUrls, setSavedPhotoUrls] = useState<string[]>([]);
   // 추가/삭제 후 아직 분석에 반영되지 않은 사진이 있는지
   const [photosDirty, setPhotosDirty] = useState(false);
+  // 확대 보기(라이트박스)로 띄운 이미지 URL. null 이면 닫힘.
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   // 진행 중인 분석 잡. 페이지를 떠났다 돌아와도 localStorage 에서 복원한다.
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -113,6 +116,7 @@ export function PreferenceSetupForm() {
     // 이미 사진 분석으로 저장된 취향 태그가 있으면 그대로 노출
     const tags = preferenceQuery.data.tasteTags;
     if (tags && tags.food.length + tags.mood.length + tags.environment.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 서버 취향 데이터로 폼을 1회 하이드레이트
       setAnalyzedTags(tags);
     }
     setSavedPhotoUrls(preferenceQuery.data.photoUrls ?? []);
@@ -120,13 +124,15 @@ export function PreferenceSetupForm() {
 
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 2500);
+    // 에러는 읽을 시간을 더 준다(성공 2.5s / 에러 4s). 둘 다 닫기 버튼으로 즉시 닫을 수 있다.
+    const timer = setTimeout(() => setToast(null), toast.tone === 'error' ? 4000 : 2500);
     return () => clearTimeout(timer);
   }, [toast]);
 
   // 새로고침·페이지 이동으로 돌아왔을 때 진행 중이던 분석을 다시 따라간다.
   useEffect(() => {
     const stored = readAnalysisJob();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 마운트 시 진행 중이던 분석 잡을 localStorage 에서 복원
     if (stored) setActiveJobId(stored);
   }, []);
 
@@ -158,6 +164,7 @@ export function PreferenceSetupForm() {
     if (!activeJobId || !analysisJob) return;
     if (analysisJob.status === 'queued' || analysisJob.status === 'running') return;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 분석 완료 시 잡 추적 종료(쿼리 무효화 side-effect 동반)
     setActiveJobId(null);
     forgetAnalysisJob();
     queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
@@ -165,10 +172,10 @@ export function PreferenceSetupForm() {
     queryClient.invalidateQueries({ queryKey: queryKeys.preferences.photoTags });
 
     if (analysisJob.status === 'failed') {
-      setNotice({
+      setToast({
         title: '사진 분석 실패',
-        description: analysisJob.error ?? '사진 분석에 실패했습니다.',
-        tone: 'red',
+        message: analysisJob.error ?? '사진 분석에 실패했습니다.',
+        tone: 'error',
       });
       return;
     }
@@ -178,13 +185,13 @@ export function PreferenceSetupForm() {
     const tags = analysisJob.tasteTags;
     if (tags) setAnalyzedTags(tags);
     const count = tags ? tags.food.length + tags.mood.length + tags.environment.length : 0;
-    setNotice(null);
     setToast({
       title: '사진 분석 완료',
       message:
         count > 0
           ? '사진에서 취향을 분석했어요.'
           : '뚜렷한 취향을 찾지 못했어요. 다른 사진을 올려보세요.',
+      tone: 'success',
     });
   }, [activeJobId, analysisJob, queryClient]);
 
@@ -195,6 +202,7 @@ export function PreferenceSetupForm() {
    */
   useEffect(() => {
     if (!isJobGone(analysisJobQuery.error)) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 잡 만료(404) 시 추적 종료(쿼리 무효화 동반)
     setActiveJobId(null);
     forgetAnalysisJob();
     queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
@@ -203,16 +211,18 @@ export function PreferenceSetupForm() {
   // 선택한 사진의 미리보기 URL 생성/해제
   useEffect(() => {
     const urls = photos.map((file) => URL.createObjectURL(file));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 미리보기 objectURL 생성/해제(cleanup 동반 effect)
     setPreviews(urls);
     return () => urls.forEach((url) => URL.revokeObjectURL(url));
   }, [photos]);
 
   useEffect(() => {
     if (preferenceQuery.error instanceof Error) {
-      setNotice({
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 쿼리 에러를 안내 토스트로 표시
+      setToast({
         title: '불러오기 실패',
-        description: preferenceQuery.error.message,
-        tone: 'red',
+        message: preferenceQuery.error.message,
+        tone: 'error',
       });
     }
   }, [preferenceQuery.error]);
@@ -248,14 +258,13 @@ export function PreferenceSetupForm() {
       queryClient.setQueryData(queryKeys.preferences.me, preference);
       setHasSession(true);
       setSavedForm(variables);
-      setNotice(null);
-      setToast({ title: '저장 완료', message: '취향을 저장했습니다.' });
+      setToast({ title: '저장 완료', message: '취향을 저장했습니다.', tone: 'success' });
     },
     onError: (error) => {
-      setNotice({
+      setToast({
         title: '저장 실패',
-        description: error instanceof Error ? error.message : '취향 저장에 실패했습니다.',
-        tone: 'red',
+        message: error instanceof Error ? error.message : '취향 저장에 실패했습니다.',
+        tone: 'error',
       });
     },
   });
@@ -263,7 +272,17 @@ export function PreferenceSetupForm() {
   const analyzePhotosMutation = useMutation({
     mutationFn: async (files: File[]) => {
       const session = getStoredSession() ?? (await startDemoSession());
-      return analyzePreferenceImages(session.tokens.accessToken, files);
+      // vision 분석은 해상도를 쓰므로 표시 크기(80px)보다 큰 1024px 로만 줄인다.
+      // 포맷은 jpeg — 로컬 vision 서버(llama.cpp mtmd=stb_image)가 webp 를 못 읽는다.
+      const downscaled = await Promise.all(
+        files.map((file) =>
+          downscaleImage(file, {
+            maxDimension: PREFERENCE_MAX_DIMENSION,
+            format: 'image/jpeg',
+          }),
+        ),
+      );
+      return analyzePreferenceImages(session.tokens.accessToken, downscaled);
     },
     onSuccess: (job) => {
       setHasSession(true);
@@ -273,17 +292,17 @@ export function PreferenceSetupForm() {
       setPhotosDirty(false);
       rememberAnalysisJob(job.jobId);
       setActiveJobId(job.jobId);
-      setNotice(null);
       setToast({
         title: '분석을 시작했어요',
         message: '완료되면 알림으로 알려드릴게요. 다른 페이지로 이동해도 괜찮아요.',
+        tone: 'success',
       });
     },
     onError: (error) => {
-      setNotice({
+      setToast({
         title: '사진 분석 실패',
-        description: error instanceof Error ? error.message : '사진 분석에 실패했습니다.',
-        tone: 'red',
+        message: error instanceof Error ? error.message : '사진 분석에 실패했습니다.',
+        tone: 'error',
       });
     },
   });
@@ -311,10 +330,10 @@ export function PreferenceSetupForm() {
       queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
     },
     onError: (error) => {
-      setNotice({
+      setToast({
         title: '태그 변경 실패',
-        description: error instanceof Error ? error.message : '태그를 변경하지 못했습니다.',
-        tone: 'red',
+        message: error instanceof Error ? error.message : '태그를 변경하지 못했습니다.',
+        tone: 'error',
       });
     },
   });
@@ -332,10 +351,10 @@ export function PreferenceSetupForm() {
       queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
     },
     onError: (error) => {
-      setNotice({
+      setToast({
         title: '사진 삭제 실패',
-        description: error instanceof Error ? error.message : '사진 삭제에 실패했습니다.',
-        tone: 'red',
+        message: error instanceof Error ? error.message : '사진 삭제에 실패했습니다.',
+        tone: 'error',
       });
     },
   });
@@ -347,23 +366,21 @@ export function PreferenceSetupForm() {
 
   function handleSubmit() {
     if (!ready) {
-      setNotice({
+      setToast({
         title: '확인 필요',
-        description:
-          '선호 테마와 이동수단을 하나 이상 고르고, 취침·기상 시각을 다르게 설정해주세요.',
-        tone: 'red',
+        message: '선호 테마와 이동수단을 하나 이상 고르고, 취침·기상 시각을 다르게 설정해주세요.',
+        tone: 'error',
       });
       return;
     }
     if (photos.length > 0 && photosDirty) {
-      setNotice({
+      setToast({
         title: '사진 분석 먼저',
-        description: '추가한 사진을 “취향 분석하기”로 먼저 반영한 뒤 저장해주세요.',
-        tone: 'red',
+        message: '추가한 사진을 “취향 분석하기”로 먼저 반영한 뒤 저장해주세요.',
+        tone: 'error',
       });
       return;
     }
-    setNotice(null);
     savePreferenceMutation.mutate(form);
   }
 
@@ -523,6 +540,7 @@ export function PreferenceSetupForm() {
                         togglePhotoTagMutation.mutate({ url, tag, enabled })
                       }
                       onDelete={() => deletePhotoMutation.mutate(url)}
+                      onZoom={() => setLightboxUrl(url)}
                     />
                   );
                 })}
@@ -555,8 +573,15 @@ export function PreferenceSetupForm() {
             <div className="flex flex-wrap gap-2">
               {previews.map((url, index) => (
                 <div key={url} className="relative size-20 overflow-hidden rounded-[16px]">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt="" className="size-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setLightboxUrl(url)}
+                    aria-label="사진 크게 보기"
+                    className="size-full"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt="" className="size-full object-cover" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => removePhoto(index)}
@@ -655,17 +680,19 @@ export function PreferenceSetupForm() {
               </div>
             </div>
           ) : null}
+
+          <p className="mt-3 flex items-start gap-1.5 text-[12px] font-medium leading-5 text-[color:var(--ink-faint)]">
+            <FiLock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            <span>올린 사진은 취향 분석 용도로만 저장·사용돼요. 언제든 사진을 지우면 함께 삭제돼요.</span>
+          </p>
         </SetupBlock>
       </div>
 
-      {notice ? (
-        <InlineNotice title={notice.title} description={notice.description} tone={notice.tone} />
-      ) : null}
       {toast ? (
         <Toast
           title={toast.title}
           message={toast.message}
-          tone="success"
+          tone={toast.tone}
           onClose={() => setToast(null)}
         />
       ) : null}
@@ -699,6 +726,10 @@ export function PreferenceSetupForm() {
         onConfirm={resetToDefaults}
         onCancel={() => setResetDialogOpen(false)}
       />
+
+      {lightboxUrl ? (
+        <ImageLightbox src={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+      ) : null}
     </div>
   );
 
@@ -706,7 +737,7 @@ export function PreferenceSetupForm() {
     setForm(DEFAULT_PREFERENCE_FORM);
     setPhotos([]);
     setPhotosDirty(false);
-    setNotice(null);
+    setToast(null);
     setResetDialogOpen(false);
   }
 
@@ -726,10 +757,10 @@ export function PreferenceSetupForm() {
       (file) => ACCEPTED_PHOTO_TYPES.includes(file.type) && file.size <= MAX_PHOTO_BYTES,
     );
     if (valid.length < incoming.length) {
-      setNotice({
+      setToast({
         title: '일부 사진 제외',
-        description: 'JPG·PNG·WEBP 형식의 10MB 이하 사진만 올릴 수 있어요.',
-        tone: 'red',
+        message: 'JPG·PNG·WEBP 형식의 10MB 이하 사진만 올릴 수 있어요.',
+        tone: 'error',
       });
     }
     if (valid.length === 0) return;
@@ -740,13 +771,13 @@ export function PreferenceSetupForm() {
     setPhotos((current) => {
       const merged = [...current, ...valid].slice(0, allowance);
       if (merged.length < current.length + valid.length) {
-        setNotice({
+        setToast({
           title: '사진 수 제한',
-          description:
+          message:
             remainingTotal === 0
               ? `취향 사진은 최대 ${MAX_PREFERENCE_PHOTOS}장까지예요. 기존 사진을 지우고 올려주세요.`
               : `한 번에 ${MAX_PREFERENCE_UPLOAD}장까지, 총 ${MAX_PREFERENCE_PHOTOS}장까지 올릴 수 있어요.`,
-          tone: 'red',
+          tone: 'error',
         });
       }
       return merged;
@@ -825,6 +856,7 @@ function SavedPhotoRow({
   busy,
   onToggle,
   onDelete,
+  onZoom,
 }: {
   url: string;
   tags: Array<{ tag: TasteTagValue; enabled: boolean }>;
@@ -832,13 +864,19 @@ function SavedPhotoRow({
   busy: boolean;
   onToggle: (tag: TasteTagValue, enabled: boolean) => void;
   onDelete: () => void;
+  onZoom: () => void;
 }) {
   return (
     <li className="flex gap-3 rounded-[14px] border border-[color:var(--line)] p-2">
-      <div className="relative size-16 shrink-0 overflow-hidden rounded-[12px]">
+      <button
+        type="button"
+        onClick={onZoom}
+        aria-label="사진 크게 보기"
+        className="relative size-16 shrink-0 overflow-hidden rounded-[12px] transition hover:opacity-90"
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={url} alt="" className="size-full object-cover" />
-      </div>
+      </button>
       <div className="min-w-0 flex-1">
         {tags.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">

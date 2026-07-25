@@ -5,7 +5,7 @@ import { LuArrowRight } from 'react-icons/lu';
 import type { PlannerItineraryItemDto, ScheduleChangePayload } from '@tripick/types';
 
 import { useScheduleChange } from '@/entities/schedule-change';
-import { Button } from '@/shared/ui';
+import { Button, ModalShell } from '@/shared/ui';
 import { useScheduleChangeActions } from '../model/use-schedule-change-actions';
 
 type Props = {
@@ -28,73 +28,70 @@ export function ScheduleChangePreviewModal({ proposalId, tripItems, onClose }: P
   const resolved = proposal && proposal.status !== 'pending';
 
   return (
-    <div
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !submitting) onClose();
-      }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-5"
+    <ModalShell
+      label="일정 변경 요청 검토"
+      onDismiss={submitting ? undefined : onClose}
+      panelClassName="w-full max-w-[420px] rounded-[20px] bg-white p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
     >
-      <div className="w-full max-w-[420px] rounded-[20px] bg-white p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
-        <h2 className="text-[17px] font-bold text-[#191F28]">일정 변경 요청 검토</h2>
+      <h2 className="text-[17px] font-bold text-[#191F28]">일정 변경 요청 검토</h2>
 
-        {isPending ? (
-          <p className="mt-4 text-[14px] text-[#8B95A1]">불러오는 중…</p>
-        ) : !proposal ? (
-          <p className="mt-4 text-[14px] text-[#F04452]">요청을 찾을 수 없어요.</p>
-        ) : (
-          <>
-            <p className="mt-1.5 text-[13px] text-[#6B7684]">
-              <span className="font-semibold text-[#191F28]">{proposal.requester.nickname}</span>
-              님의 요청 · {proposal.summary}
+      {isPending ? (
+        <p className="mt-4 text-[14px] text-[#8B95A1]">불러오는 중…</p>
+      ) : !proposal ? (
+        <p className="mt-4 text-[14px] text-[#F04452]">요청을 찾을 수 없어요.</p>
+      ) : (
+        <>
+          <p className="mt-1.5 text-[13px] text-[#6B7684]">
+            <span className="font-semibold text-[#191F28]">{proposal.requester.nickname}</span>
+            님의 요청 · {proposal.summary}
+          </p>
+          {resolved ? (
+            <p className="mt-3 rounded-[12px] bg-[#F2F4F6] px-3 py-2 text-[13px] font-semibold text-[#6B7684]">
+              이미 처리된 요청이에요.
             </p>
-            {resolved ? (
-              <p className="mt-3 rounded-[12px] bg-[#F2F4F6] px-3 py-2 text-[13px] font-semibold text-[#6B7684]">
-                이미 처리된 요청이에요.
-              </p>
-            ) : (
-              <div className="mt-4">
-                <ProposalDiff payload={proposal.payload} byId={byId} />
-              </div>
-            )}
-
-            {approve.error || reject.error ? (
-              <p className="mt-3 rounded-[12px] border border-[#FECDD3] bg-[#FFECEE] px-3 py-2 text-[13px] text-[#F04452]">
-                {((approve.error ?? reject.error) as Error).message}
-              </p>
-            ) : null}
-
-            <div className="mt-5 flex gap-2">
-              {resolved ? (
-                <Button variant="primary" size="lg" className="flex-1" onClick={onClose}>
-                  닫기
-                </Button>
-              ) : (
-                <>
-                  <Button
-                    variant="secondary"
-                    size="lg"
-                    className="flex-1"
-                    disabled={submitting}
-                    onClick={() => reject.mutate(proposal.id, { onSuccess: onClose })}
-                  >
-                    {reject.isPending ? '처리 중…' : '거절'}
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="lg"
-                    className="flex-1"
-                    disabled={submitting}
-                    onClick={() => approve.mutate(proposal.id, { onSuccess: onClose })}
-                  >
-                    {approve.isPending ? '반영 중…' : '승인'}
-                  </Button>
-                </>
-              )}
+          ) : (
+            <div className="mt-4">
+              <ProposalDiff payload={proposal.payload} byId={byId} />
             </div>
-          </>
-        )}
-      </div>
-    </div>
+          )}
+
+          {approve.error || reject.error ? (
+            <p className="mt-3 rounded-[12px] border border-[#FECDD3] bg-[#FFECEE] px-3 py-2 text-[13px] text-[#F04452]">
+              {((approve.error ?? reject.error) as Error).message}
+            </p>
+          ) : null}
+
+          <div className="mt-5 flex gap-2">
+            {resolved ? (
+              <Button variant="primary" size="lg" className="flex-1" onClick={onClose}>
+                닫기
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  className="flex-1"
+                  disabled={submitting}
+                  onClick={() => reject.mutate(proposal.id, { onSuccess: onClose })}
+                >
+                  {reject.isPending ? '처리 중…' : '거절'}
+                </Button>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  className="flex-1"
+                  disabled={submitting}
+                  onClick={() => approve.mutate(proposal.id, { onSuccess: onClose })}
+                >
+                  {approve.isPending ? '반영 중…' : '승인'}
+                </Button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </ModalShell>
   );
 }
 

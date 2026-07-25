@@ -53,6 +53,7 @@ export function AlternativeSheet({
   // 시트를 새로 열 때마다 입력 초기화
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 시트가 열릴 때 입력 초기화
       setKeepOriginal(false);
       setRequestText('');
       setPlaceName('');
@@ -122,7 +123,7 @@ export function AlternativeSheet({
   );
 
   return (
-    <BottomSheet open={open} onClose={onClose} topSlot={topSlot}>
+    <BottomSheet open={open} onClose={onClose} topSlot={topSlot} label="AI 추천 대안">
       <div className="min-h-[420px]">
         {controller.state.status === 'loading' || controller.state.status === 'idle' ? (
           <SkeletonBody />

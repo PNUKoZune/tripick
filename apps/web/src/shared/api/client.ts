@@ -9,6 +9,19 @@ import { isNativeShell, requestNativeRefreshToken } from '@/shared/rn-bridge/nat
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api/v1';
 
 const FALLBACK_ERROR = '요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.';
+const RATE_LIMIT_ERROR = '요청이 너무 잦아요. 잠시 후 다시 시도해주세요.';
+
+/**
+ * fetcher 가 던지는 에러. `status` 로 분기하고, 429 면 `retryAfterSeconds` 로 재시도 UI 를 만든다.
+ * (남은 초를 메시지에 굽지 않는 건 카운트다운이 도는 동안 문구가 낡기 때문 — 초는 UI 가 직접 센다)
+ */
+export type ApiError = Error & {
+  status?: number;
+  payload?: unknown;
+  /** 429 응답 `Retry-After` 헤더의 초. 헤더가 없거나 429 가 아니면 undefined. */
+  // exactOptionalPropertyTypes 라 "키는 있고 값이 undefined" 케이스를 명시해야 한다.
+  retryAfterSeconds?: number | undefined;
+};
 
 // 401 시 백엔드에 refresh 시도 — 다발성 호출을 1회로 합치기 위해 공유 Promise.
 // 같은 시점에 여러 API 호출이 401 받으면 모두 같은 refresh 결과를 기다린다.
@@ -64,10 +77,13 @@ async function fetcher<T>(path: string, init?: RequestInit, attempt = 0): Promis
     if (res.status === 401 && !isAuthEndpoint) {
       clearStoredSession();
     }
-    throw Object.assign(new Error(normalizeErrorMessage(payload, res.status, isAuthEndpoint)), {
-      payload,
-      status: res.status,
-    });
+    const retryAfterSeconds =
+      res.status === 429 ? parseRetryAfter(res.headers.get('Retry-After')) : undefined;
+    const error: ApiError = Object.assign(
+      new Error(normalizeErrorMessage(payload, res.status, isAuthEndpoint)),
+      { payload, status: res.status, retryAfterSeconds },
+    );
+    throw error;
   }
 
   return payload as T;
@@ -114,10 +130,35 @@ async function parseResponse(res: Response): Promise<unknown> {
   return text || null;
 }
 
+/**
+ * `Retry-After` 파싱. 스펙상 delta-seconds 또는 HTTP-date 두 형식이라 둘 다 받는다.
+ * (NestJS throttler 는 초를 주지만 프록시가 날짜로 바꿔 줄 수 있음)
+ */
+function parseRetryAfter(header: string | null): number | undefined {
+  if (!header) return undefined;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) return Math.max(0, Math.ceil(seconds));
+  const at = Date.parse(header);
+  if (Number.isNaN(at)) return undefined;
+  return Math.max(0, Math.ceil((at - Date.now()) / 1000));
+}
+
+/** 429 에러면 남은 대기 초(헤더 없으면 0), 아니면 0. 재시도 UI 가 쓰는 진입점. */
+export function rateLimitRetrySeconds(error: unknown): number {
+  if (!(error instanceof Error)) return 0;
+  const { status, retryAfterSeconds } = error as ApiError;
+  if (status !== 429) return 0;
+  return retryAfterSeconds ?? 0;
+}
+
 function normalizeErrorMessage(payload: unknown, status: number, isAuthEndpoint = false): string {
   // 세션 만료 안내는 인증된 요청에만. 로그인/가입 같은 /auth/* 401 은 서버 메시지를 그대로 노출.
   if (status === 401 && !isAuthEndpoint) {
     return '로그인이 만료됐어요. 다시 로그인해주세요.';
+  }
+  // throttler 기본 본문이 영문("ThrottlerException: Too many requests") 이라 서버 메시지를 안 쓴다.
+  if (status === 429) {
+    return RATE_LIMIT_ERROR;
   }
 
   const candidates = extractMessages(payload)

@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { getStoredSession } from '@/entities/session/model/session-storage';
+import { useHasSession } from '@/entities/session';
 import { queryKeys } from '@/shared/api/query-keys';
 
 import { fetchPlannerTrips } from '../api';
@@ -15,11 +15,7 @@ import { splitTripSchedule } from './select-active-trip';
  * 이 FAB와 겹치는 UI가 존재 여부에 맞춰 위치를 조정할 수 있게 한다.
  */
 export function useActiveTrip() {
-  const [hasSession, setHasSession] = useState(false);
-
-  useEffect(() => {
-    setHasSession(Boolean(getStoredSession()));
-  }, []);
+  const hasSession = useHasSession();
 
   const { data: trips = [] } = useQuery({
     queryKey: queryKeys.planner.trips,

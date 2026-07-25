@@ -67,6 +67,7 @@ export function ItemEditorSheet({
   useEffect(() => {
     if (!open) return;
     if (mode === 'edit' && item) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 시트가 열릴 때 편집 대상 값으로 폼 초기화
       setValues({
         name: item.name,
         type: item.type,
@@ -84,7 +85,7 @@ export function ItemEditorSheet({
   const canSubmit = placePicked && /^\d{2}:\d{2}$/.test(values.scheduledAt);
 
   return (
-    <BottomSheet open={open} onClose={onClose}>
+    <BottomSheet open={open} onClose={onClose} label={mode === 'add' ? '일정 추가' : '일정 수정'}>
       <div className="px-5 pb-6 pt-2">
         <h2 className="text-[18px] font-bold text-[color:var(--ink)]">
           {mode === 'add' ? '일정 추가' : '일정 수정'}

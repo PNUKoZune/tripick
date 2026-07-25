@@ -1,7 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
+
+import { useBodyScrollLock } from '@/shared/lib/use-body-scroll-lock';
+import { useDismissOnEscape } from '@/shared/lib/use-dismiss-on-escape';
+import { useFocusTrap } from '@/shared/lib/use-focus-trap';
 
 type Phase = 'closed' | 'opening' | 'open' | 'closing';
 
@@ -9,6 +14,8 @@ type Props = {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
+  /** 스크린리더가 읽을 시트 이름 */
+  label: string;
   /** 시트 안쪽 상단에 그릴 컨텐츠 (지도 등). content 와 같은 카드 안에서 함께 슬라이드 업. */
   topSlot?: ReactNode;
 };
@@ -20,11 +27,13 @@ const SHEET_OPEN_MS = 440;
 const EASE_OUT = 'cubic-bezier(0.32, 0.72, 0, 1)';
 const EASE_IN = 'cubic-bezier(0.4, 0, 1, 1)';
 
-export function BottomSheet({ open, onClose, children, topSlot }: Props) {
+export function BottomSheet({ open, onClose, children, label, topSlot }: Props) {
   const [phase, setPhase] = useState<Phase>('closed');
   const [isDesktop, setIsDesktop] = useState(false);
   const closeTimer = useRef<number | null>(null);
   const openRafs = useRef<number[]>([]);
+  // 시트 패널은 phase 가 closed 를 벗어나야 마운트되므로, 트랩도 그때 켜야 ref 를 잡는다
+  const panelRef = useFocusTrap<HTMLDivElement>(phase !== 'closed');
 
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 1024px)');
@@ -49,6 +58,7 @@ export function BottomSheet({ open, onClose, children, topSlot }: Props) {
     if (open) {
       clearCloseTimer();
       // 첫 페인트는 'opening'(translate-y-full)로 마운트한 뒤, 두 번째 rAF에서 'open'으로 전환해야 transition 이 보장된다.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- rAF 트랜지션 보장을 위한 애니메이션 phase 전환
       setPhase((current) => (current === 'open' ? 'open' : 'opening'));
       openRafs.current.push(
         requestAnimationFrame(() => {
@@ -73,30 +83,23 @@ export function BottomSheet({ open, onClose, children, topSlot }: Props) {
     };
   }, [open]);
 
-  useEffect(() => {
-    if (phase === 'closed') return;
-    const original = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.body.style.overflow = original;
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [phase, onClose]);
+  // 시트 패널은 phase 가 closed 를 벗어나야 존재하므로, 잠금·ESC·트랩도 그때만 켠다
+  const mounted = phase !== 'closed';
+  useBodyScrollLock(mounted);
+  useDismissOnEscape(onClose, mounted);
 
   if (phase === 'closed') return null;
 
   const isVisible = phase === 'open';
   const easing = phase === 'closing' ? EASE_IN : EASE_OUT;
 
-  return (
-    <div className="fixed inset-0 z-40">
+  return createPortal(
+    <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label={label}>
+      {/* 마우스 전용 닫기 영역 — 키보드는 ESC·시트 안 닫기 버튼으로 닫는다 */}
       <button
         type="button"
-        aria-label="close"
+        tabIndex={-1}
+        aria-hidden
         onClick={onClose}
         className="absolute inset-0 bg-black/45"
         style={{
@@ -127,7 +130,11 @@ export function BottomSheet({ open, onClose, children, topSlot }: Props) {
               }
         }
       >
-        <div className="relative flex max-h-full w-full max-w-[480px] flex-col overflow-hidden rounded-t-[24px] bg-white shadow-[0_-16px_40px_rgba(15,23,42,0.18)] lg:max-w-[560px] lg:rounded-[24px] lg:shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
+        <div
+          ref={panelRef}
+          tabIndex={-1}
+          className="relative flex max-h-full w-full max-w-[480px] flex-col overflow-hidden rounded-t-[24px] bg-white shadow-[0_-16px_40px_rgba(15,23,42,0.18)] outline-none lg:max-w-[560px] lg:rounded-[24px] lg:shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
+        >
           <button
             type="button"
             aria-label="닫기"
@@ -145,7 +152,8 @@ export function BottomSheet({ open, onClose, children, topSlot }: Props) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

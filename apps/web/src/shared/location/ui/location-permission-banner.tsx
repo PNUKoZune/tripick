@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 type PermissionState = 'unknown' | 'granted' | 'denied' | 'unavailable';
 
@@ -26,10 +26,13 @@ const COPY: Record<'denied' | 'unavailable', { title: string; message: string }>
 export function LocationPermissionBanner({ permission }: Props) {
   const [dismissed, setDismissed] = useState(false);
 
-  // 권한 상태가 정상으로 회복되면 닫힘 상태를 초기화 (이후 다시 막히면 또 안내)
-  useEffect(() => {
+  // 권한 상태가 정상으로 회복되면 닫힘 상태를 초기화 (이후 다시 막히면 또 안내).
+  // effect 대신 렌더 단계에서 이전 권한과 비교해 조정한다.
+  const [prevPermission, setPrevPermission] = useState(permission);
+  if (prevPermission !== permission) {
+    setPrevPermission(permission);
     if (permission === 'granted' || permission === 'unknown') setDismissed(false);
-  }, [permission]);
+  }
 
   if (permission !== 'denied' && permission !== 'unavailable') return null;
   if (dismissed) return null;

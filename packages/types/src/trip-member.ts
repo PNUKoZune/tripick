@@ -19,6 +19,8 @@ export interface TripMemberDto {
   userId?: string | null;
   friendId?: string | null;
   nickname: string;
+  /** 선택 — 연결된 사용자의 프로필 사진 URL */
+  profileImageUrl?: string;
   contact?: string | null;
   kakaoId?: string | null;
   relation?: string | null;

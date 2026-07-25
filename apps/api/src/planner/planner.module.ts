@@ -9,6 +9,7 @@ import { ConstraintEngine } from './constraint/constraint.engine';
 import { CragEvaluatorService } from './retrieval/crag-evaluator.service';
 import { IngestCursorRepository } from './retrieval/ingest-cursor.repository';
 import { KakaoLocalService } from './retrieval/kakao-local.service';
+import { NaverSearchService } from './retrieval/naver-search.service';
 import { PlaceEmbeddingRepository } from './retrieval/place-embedding.repository';
 import { PlaceRetrievalService } from './retrieval/place-retrieval.service';
 import { TourApiService } from './retrieval/tour-api.service';
@@ -37,6 +38,7 @@ import { TripDayEntity } from '../trips/trip-day.entity';
     PlaceEmbeddingRepository,
     IngestCursorRepository,
     KakaoLocalService,
+    NaverSearchService,
     CragEvaluatorService,
     PlaceRetrievalService,
     TourApiService,
@@ -50,6 +52,7 @@ import { TripDayEntity } from '../trips/trip-day.entity';
     KakaoLocalService,
     TourApiService,
     TatsCnctrRateService,
+    NaverSearchService,
     RouteHelper,
     WeatherHelper,
   ],

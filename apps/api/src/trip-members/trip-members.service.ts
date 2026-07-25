@@ -141,6 +141,7 @@ export class TripMembersService {
     }
     const members = await this.membersRepo.find({
       where: { tripId },
+      relations: { user: true },
       order: { role: 'DESC', createdAt: 'ASC' },
     });
     return members.map((member) => this.toDto(member));
@@ -500,6 +501,7 @@ export class TripMembersService {
       userId: member.userId ?? null,
       friendId: member.friendId ?? null,
       nickname: member.nickname,
+      ...(member.user?.profileImageUrl ? { profileImageUrl: member.user.profileImageUrl } : {}),
       contact: member.contact ?? null,
       kakaoId: member.kakaoId ?? null,
       relation: member.relation ?? null,

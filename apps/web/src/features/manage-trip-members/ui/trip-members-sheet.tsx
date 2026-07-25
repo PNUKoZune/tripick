@@ -83,7 +83,7 @@ export function TripMembersSheet({
   }, [friends, memberFriendIdSet, memberIdSet, search]);
 
   return (
-    <BottomSheet open={open} onClose={onClose}>
+    <BottomSheet open={open} onClose={onClose} label="여행 멤버">
       <div className="px-5 pt-2">
         <div className="text-[12px] font-semibold text-[#3182F6]">{tripTitle}</div>
         <h2 className="mt-0.5 text-[20px] font-bold text-[#191F28]">여행 멤버</h2>
@@ -119,7 +119,13 @@ export function TripMembersSheet({
                   }`}
                 >
                   <FriendAvatar
-                    friend={{ color: member.color, initial: member.initial }}
+                    friend={{
+                      color: member.color,
+                      initial: member.initial,
+                      ...(member.profileImageUrl
+                        ? { profileImageUrl: member.profileImageUrl }
+                        : {}),
+                    }}
                     size="md"
                   />
                   <div className="flex-1 text-[14px] font-bold text-[#191F28]">

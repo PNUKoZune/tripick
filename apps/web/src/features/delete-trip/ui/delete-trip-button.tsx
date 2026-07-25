@@ -7,6 +7,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { deleteTrip } from '@/entities/trip-plan';
 import { queryKeys } from '@/shared/api/query-keys';
+import { ModalShell } from '@/shared/ui';
 
 type Props = {
   tripId: string;
@@ -84,37 +85,34 @@ function ConfirmDialog({
   onConfirm: () => void;
 }) {
   return (
-    <div
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onCancel();
-      }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-5"
+    <ModalShell
+      label="이 여행을 삭제할까요?"
+      onDismiss={pending ? undefined : onCancel}
+      panelClassName="w-full max-w-[400px] rounded-[20px] bg-[color:var(--card,#FFFFFF)] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
     >
-      <div className="w-full max-w-[400px] rounded-[20px] bg-[color:var(--card,#FFFFFF)] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
-        <h2 className="text-[18px] font-bold text-[color:var(--ink,#191F28)]">이 여행을 삭제할까요?</h2>
-        <p className="mt-2 text-[13px] leading-[20px] text-[color:var(--ink-sub,#4E5968)]">
-          &ldquo;{tripTitle}&rdquo; 의 일정, 지도, 취향 조율 결과가 모두 삭제됩니다. 이 작업은 되돌릴
-          수 없어요.
-        </p>
-        <div className="mt-5 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={pending}
-            className="h-11 flex-1 rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#FFFFFF)] text-[14px] font-bold text-[color:var(--ink-sub,#6B7684)] hover:bg-[color:var(--card-soft,#FAFBFC)] disabled:opacity-50"
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={pending}
-            className="h-11 flex-1 rounded-[12px] bg-[color:var(--danger,#F04452)] text-[14px] font-bold text-[color:var(--btn-text,#FFFFFF)] hover:brightness-95 disabled:opacity-50"
-          >
-            {pending ? '삭제 중…' : '삭제하기'}
-          </button>
-        </div>
+      <h2 className="text-[18px] font-bold text-[color:var(--ink,#191F28)]">이 여행을 삭제할까요?</h2>
+      <p className="mt-2 text-[13px] leading-[20px] text-[color:var(--ink-sub,#4E5968)]">
+        &ldquo;{tripTitle}&rdquo; 의 일정, 지도, 취향 조율 결과가 모두 삭제됩니다. 이 작업은 되돌릴
+        수 없어요.
+      </p>
+      <div className="mt-5 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={pending}
+          className="h-11 flex-1 rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#FFFFFF)] text-[14px] font-bold text-[color:var(--ink-sub,#6B7684)] hover:bg-[color:var(--card-soft,#FAFBFC)] disabled:opacity-50"
+        >
+          취소
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={pending}
+          className="h-11 flex-1 rounded-[12px] bg-[color:var(--danger,#F04452)] text-[14px] font-bold text-[color:var(--btn-text,#FFFFFF)] hover:brightness-95 disabled:opacity-50"
+        >
+          {pending ? '삭제 중…' : '삭제하기'}
+        </button>
       </div>
-    </div>
+    </ModalShell>
   );
 }

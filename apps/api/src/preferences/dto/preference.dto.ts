@@ -7,7 +7,6 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
   Matches,
   Max,
   Min,
@@ -32,7 +31,7 @@ import {
   type TravelPace,
   type UpdatePreferenceDto,
 } from '@tripick/types';
-import { HH_MM } from '../../common/validation/patterns';
+import { HH_MM, STORAGE_URL } from '../../common/validation/patterns';
 
 // 어휘는 @tripick/types 가 정본 — 여기에 다시 적으면 어휘를 늘릴 때 조용히 뒤처진다.
 const FOOD = FOOD_PREFERENCES;
@@ -153,13 +152,13 @@ export class UpdatePreferenceBodyDto implements UpdatePreferenceDto {
   @IsArray()
   @ArrayMaxSize(MAX_PHOTO_URLS)
   @IsString({ each: true })
-  @IsUrl({ require_tld: false }, { each: true })
+  @Matches(STORAGE_URL, { each: true })
   photoUrls?: string[];
 }
 
 export class TogglePhotoTagBodyDto implements TogglePhotoTagDto {
   @IsString()
-  @IsUrl({ require_tld: false })
+  @Matches(STORAGE_URL)
   url!: string;
 
   @IsIn(ALL_TASTE_TAGS)

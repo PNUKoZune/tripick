@@ -105,7 +105,7 @@ export function ShareTripSheet({
   const canShareNative = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
   return (
-    <BottomSheet open={open} onClose={onClose}>
+    <BottomSheet open={open} onClose={onClose} label="일정 공유">
       <div className="px-5 pb-6 pt-2">
         <h2 className="text-[18px] font-bold text-[#191F28]">일정 공유</h2>
         <p className="mt-1 text-[13px] text-[#8B95A1]">

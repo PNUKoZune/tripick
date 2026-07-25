@@ -78,6 +78,7 @@ export function useCurrentLocation({ enabled = true }: { enabled?: boolean } = {
 
     // 브라우저 폴백
     if (!('geolocation' in navigator)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- geolocation 미지원 감지 시 상태 반영(feature detection)
       setPermission('unavailable');
       setError({ code: 2, message: '이 브라우저는 위치를 지원하지 않아요.' });
       return;

@@ -570,6 +570,7 @@ export class PlannerService {
           context: 1,
           availability: 1,
           dataQuality: 1,
+          popularity: 1,
           matchedTags: [],
           penalties: [],
         },

@@ -1,7 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { LuCheck, LuCopy, LuPlane } from 'react-icons/lu';
 import type { FriendDto } from '@tripick/types';
 
 import {
@@ -12,7 +14,7 @@ import {
   removeFriend,
   togglePinFriend,
 } from '@/entities/friend';
-import { SessionGuard } from '@/entities/session';
+import { getStoredSession, SessionGuard } from '@/entities/session';
 import { queryKeys } from '@/shared/api/query-keys';
 import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
 
@@ -24,10 +26,19 @@ export function FriendsView() {
   );
 }
 
+// 서버 스냅샷 null → 하이드레이션 불일치 없이 마운트 후 실제 핸들로 재렌더 (useHasSession 과 동일 패턴).
+const noopSubscribe = () => () => {};
+
 function FriendsContent() {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [addInput, setAddInput] = useState('');
+  const myHandle = useSyncExternalStore(
+    noopSubscribe,
+    () => getStoredSession()?.user.handle ?? null,
+    () => null,
+  );
 
   const { data: friends = [], error } = useQuery({
     queryKey: queryKeys.friends.list,
@@ -67,17 +78,11 @@ function FriendsContent() {
     addMutation.mutate({ handle }, { onSuccess: () => setAddInput('') });
   }
 
+  const goCreateTrip = (friendId: string) => router.push(`/trips/new?friendId=${friendId}`);
+
   const content = (
     <div className="space-y-4">
-      <div className="rounded-[14px] bg-[#F2F4F6] px-4 py-2.5">
-        <input
-          type="text"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="이름 또는 ID 검색"
-          className="h-7 w-full bg-transparent text-[14px] font-semibold text-[#191F28] outline-none placeholder:text-[#8B95A1]"
-        />
-      </div>
+      {myHandle ? <MyHandleShare handle={myHandle} /> : null}
 
       <div className="rounded-[16px] border border-[#E5E8EB] bg-white p-3">
         <div className="flex items-center gap-2">
@@ -87,7 +92,7 @@ function FriendsContent() {
           <span className="text-[13px] font-bold text-[#191F28]">친구 추가</span>
         </div>
         <p className="mt-1 text-[12px] text-[#8B95A1]">
-          상대방의 아이디(@)를 입력하면 친구 목록에 저장합니다.
+          상대방의 아이디(@)로 친구 요청을 보냅니다. 상대가 수락하면 친구가 돼요.
         </p>
         <div className="mt-2 flex items-center gap-2">
           <input
@@ -115,6 +120,16 @@ function FriendsContent() {
         {mutationError ? (
           <p className="mt-2 text-[12px] font-semibold text-[#F04452]">{mutationError}</p>
         ) : null}
+      </div>
+
+      <div className="rounded-[14px] bg-[#F2F4F6] px-4 py-2.5">
+        <input
+          type="text"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="이름 또는 ID 검색"
+          className="h-7 w-full bg-transparent text-[14px] font-semibold text-[#191F28] outline-none placeholder:text-[#8B95A1]"
+        />
       </div>
 
       {loadError ? (
@@ -190,6 +205,7 @@ function FriendsContent() {
                   friend={friend}
                   onPin={pinMutation.mutate}
                   onRemove={removeMutation.mutate}
+                  onCreateTrip={goCreateTrip}
                 />
               }
             />
@@ -212,6 +228,7 @@ function FriendsContent() {
                   friend={friend}
                   onPin={pinMutation.mutate}
                   onRemove={removeMutation.mutate}
+                  onCreateTrip={goCreateTrip}
                 />
               }
             />
@@ -264,13 +281,23 @@ function FriendRowMenu({
   friend,
   onPin,
   onRemove,
+  onCreateTrip,
 }: {
   friend: FriendDto;
   onPin: (id: string) => void;
   onRemove: (id: string) => void;
+  onCreateTrip: (id: string) => void;
 }) {
   return (
     <div className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => onCreateTrip(friend.id)}
+        aria-label={`${friend.nickname}와(과) 여행 만들기`}
+        className="flex size-9 items-center justify-center rounded-[10px] text-[#B0B8C1] transition hover:bg-[#EAF2FF] hover:text-[#3182F6]"
+      >
+        <LuPlane className="size-4" />
+      </button>
       <button
         type="button"
         onClick={() => onPin(friend.id)}
@@ -301,6 +328,46 @@ function FriendRowMenu({
             strokeLinecap="round"
           />
         </svg>
+      </button>
+    </div>
+  );
+}
+
+function MyHandleShare({ handle }: { handle: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(`@${handle}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // 클립보드 미지원/거부 시 조용히 무시 (사용자는 텍스트를 직접 복사 가능)
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-3 rounded-[16px] border border-[#E5E8EB] bg-white px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="text-[12px] font-semibold text-[#8B95A1]">내 아이디</div>
+        <div className="truncate text-[15px] font-bold text-[#191F28]">@{handle}</div>
+      </div>
+      <button
+        type="button"
+        onClick={copy}
+        className="flex h-9 items-center gap-1.5 rounded-[10px] bg-[#F2F4F6] px-3 text-[12px] font-bold text-[#4E5968] transition hover:bg-[#E5E8EB]"
+      >
+        {copied ? (
+          <>
+            <LuCheck className="size-4 text-[#00A86B]" />
+            복사됨
+          </>
+        ) : (
+          <>
+            <LuCopy className="size-4" />
+            복사
+          </>
+        )}
       </button>
     </div>
   );
