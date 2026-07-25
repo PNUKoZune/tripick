@@ -6,7 +6,9 @@ import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { Redis } from 'ioredis';
+import { redisConnection } from './common/redis.config';
 import { HttpThrottlerGuard } from './common/guards/http-throttler.guard';
+import { HealthController } from './health/health.controller';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { TripsModule } from './trips/trips.module';
@@ -38,12 +40,7 @@ import { InboxModule } from './inbox/inbox.module';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         throttlers: [{ ttl: 60_000, limit: 120 }],
-        storage: new ThrottlerStorageRedisService(
-          new Redis({
-            host: config.get<string>('REDIS_HOST', 'localhost'),
-            port: config.get<number>('REDIS_PORT', 6379),
-          }),
-        ),
+        storage: new ThrottlerStorageRedisService(new Redis(redisConnection(config))),
       }),
     }),
 
@@ -63,10 +60,7 @@ import { InboxModule } from './inbox/inbox.module';
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        connection: {
-          host: config.get<string>('REDIS_HOST', 'localhost'),
-          port: config.get<number>('REDIS_PORT', 6379),
-        },
+        connection: redisConnection(config),
         defaultJobOptions: {
           attempts: 3,
           backoff: { type: 'fixed', delay: 2000 },
@@ -95,6 +89,7 @@ import { InboxModule } from './inbox/inbox.module';
     FriendsModule,
     InboxModule,
   ],
+  controllers: [HealthController],
   providers: [
     // 전역 가드로 모든 HTTP 라우트에 throttler 적용 (WS 는 통과)
     { provide: APP_GUARD, useClass: HttpThrottlerGuard },

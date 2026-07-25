@@ -101,21 +101,26 @@ Railway Redis 애드온을 사용한다. 단 접속 정보가 비밀번호를 �
 
 ## 5. 선행 코드 작업 (배포 전 필수)
 
-현재 `develop` 상태로는 그대로 배포되지 않는다. 아래 항목을 먼저 처리한다.
+현재 `develop` 상태로는 그대로 배포되지 않는다. 아래 항목을 처리한다.
+`chore/production-deploy-prep` 브랜치에서 **5-1·5-4·5-5 를 구현 완료**했다.
+5-2 는 배포 절차(수동 적용), 5-3 은 MVP 운영 제약으로 남긴다.
 
-### 5-1. Redis 접속에 비밀번호·TLS 지원 없음 — 필수
+### 5-1. Redis 접속에 비밀번호·TLS 지원 없음 — 필수 ✅ 구현 완료
 
-아래 4곳이 `REDIS_HOST`/`REDIS_PORT` 만 읽고 있어 인증이 필요한 매니지드 Redis 에 접속할 수 없다.
+`REDIS_HOST`/`REDIS_PORT` 만 읽던 아래 8곳이 인증이 필요한 매니지드 Redis 에 접속할 수 없었다.
 
-- `apps/api/src/app.module.ts:38` — Throttler 스토리지
-- `apps/api/src/app.module.ts:62` — BullMQ 커넥션
-- `apps/api/src/planner/helpers/route.helper.ts:62`
-- `apps/api/src/planner/helpers/weather.helper.ts:35`
+- `apps/api/src/app.module.ts` — Throttler 스토리지, BullMQ 커넥션 (2곳)
+- `apps/api/src/planner/helpers/route.helper.ts`
+- `apps/api/src/planner/helpers/weather.helper.ts`
+- `apps/api/src/weather-alert/weather-alert.service.ts`
+- `apps/api/src/crowd-alert/crowd-alert.service.ts`
+- `apps/api/src/arrival-alert/live-location.service.ts`
+- `apps/api/src/notification-scheduler/trip-reminder.service.ts`
 
-공통 Redis 옵션 팩토리를 도입해 `REDIS_URL` 우선 → 미설정 시 host/port 폴백으로 4곳을 통일한다.
-
-> `feat/weather-alert-scheduler` 브랜치의 `weather-alert.service.ts` 도 동일 패턴을 사용하므로,
-> 해당 브랜치 병합 후에는 대상이 5곳이 된다.
+**조치**: 공통 팩토리 `apps/api/src/common/redis.config.ts` (`redisConnection`) 도입.
+`REDIS_URL`(`rediss://` 이면 TLS) 우선 → 미설정 시 host/port 폴백. 인스턴스별 옵션
+(`lazyConnect`·`maxRetriesPerRequest` 등)은 `extra` 인자로 병합한다.
+파싱 검증은 `apps/api/test/common/redis.config.spec.ts`.
 
 ### 5-2. 프로덕션에서 스키마가 생성되지 않음 — 필수
 
@@ -135,14 +140,19 @@ CLAUDE.md 아키텍처에 "Redis Adapter / Pub-Sub Sync" 가 명시되어 있으
 따라서 **API 인스턴스를 2개 이상으로 확장하면 WebSocket 브로드캐스트가 인스턴스 간에 전파되지 않아
 재계획 결과 push 가 유실된다.** MVP 는 replica 1개로 운영하고, 수평 확장이 필요해지는 시점에 어댑터를 도입한다.
 
-### 5-4. WebSocket 게이트웨이 CORS 와일드카드 — 권장
+### 5-4. WebSocket 게이트웨이 CORS 와일드카드 — 권장 ✅ 구현 완료
 
-`apps/api/src/realtime/realtime.gateway.ts:37` 이 `origin: '*'` 이다.
-핸드셰이크 JWT 검증은 수행하나, 프로덕션에서는 Vercel 도메인으로 제한한다.
+`realtime.gateway.ts` 가 `origin: '*'` 였다.
 
-### 5-5. 헬스체크 엔드포인트 부재 — 권장
+**조치**: 공통 헬퍼 `apps/api/src/common/cors.ts` (`corsOrigins`) 도입. `CORS_ORIGIN`
+환경변수(쉼표 구분) → 미설정 시 로컬 기본값. HTTP(`main.ts`)·WebSocket(게이트웨이)이 공유한다.
+프로덕션은 `CORS_ORIGIN` 에 Vercel 도메인을 지정한다.
 
-`GET /api/v1/health` 를 추가한다. Railway 헬스체크 대상이 없으면 배포 성공 판정이 부정확해진다.
+### 5-5. 헬스체크 엔드포인트 부재 — 권장 ✅ 구현 완료
+
+**조치**: `apps/api/src/health/health.controller.ts` 추가 → `GET /api/v1/health` 가
+`{ status: 'ok' }` 반환. 레이트리밋 면제(`@SkipThrottle`), 의존성 상태는 확인하지 않는
+라이브니스(의존성 일시 장애로 인한 재시작 플래핑 방지). Railway 헬스체크 경로로 지정한다.
 
 ---
 

@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Redis } from 'ioredis';
+import { redisConnection } from '../common/redis.config';
 import { In, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
 import { ItineraryItemEntity } from '../itinerary/itinerary-item.entity';
 import { TripEntity } from '../trips/trip.entity';
@@ -56,12 +57,9 @@ export class WeatherAlertService implements OnModuleInit, OnModuleDestroy {
     // Redis 가 죽어도 스캔 자체는 굴러가야 하므로 에러는 삼킨다.
     // 다만 WeatherHelper 와 달리 offline queue 는 켠 채로 둔다 — 여기 쓰기는 캐시가 아니라
     // 중복 알림 억제 기록이라, 연결 전에 유실되면 다음 스캔이 같은 날을 또 알린다.
-    this.redis = new Redis({
-      host: config.get<string>('REDIS_HOST', 'localhost'),
-      port: config.get<number>('REDIS_PORT', 6379),
-      lazyConnect: true,
-      maxRetriesPerRequest: 1,
-    });
+    this.redis = new Redis(
+      redisConnection(config, { lazyConnect: true, maxRetriesPerRequest: 1 }),
+    );
     this.redis.on('error', () => undefined);
   }
 

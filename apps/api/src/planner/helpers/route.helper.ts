@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { Redis } from 'ioredis';
+import { redisConnection } from '../../common/redis.config';
 import type { Coordinates, RouteMode } from '@tripick/types';
 
 interface EtaResult {
@@ -119,13 +120,13 @@ export class RouteHelper implements OnModuleDestroy {
   private readonly redis: Redis;
 
   constructor(private readonly config: ConfigService) {
-    this.redis = new Redis({
-      host: this.config.get<string>('REDIS_HOST', 'localhost'),
-      port: this.config.get<number>('REDIS_PORT', 6379),
-      lazyConnect: true,
-      maxRetriesPerRequest: 1,
-      enableOfflineQueue: false,
-    });
+    this.redis = new Redis(
+      redisConnection(this.config, {
+        lazyConnect: true,
+        maxRetriesPerRequest: 1,
+        enableOfflineQueue: false,
+      }),
+    );
     // Redis 미가동 시에도 ETA 조회 자체는 실패하면 안 되므로 에러를 삼킨다.
     this.redis.on('error', () => undefined);
   }

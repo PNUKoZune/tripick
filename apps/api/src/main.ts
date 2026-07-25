@@ -2,13 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
-
-const DEFAULT_CORS_ORIGINS = [
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'http://localhost:3001',
-  'http://127.0.0.1:3001',
-];
+import { corsOrigins } from './common/cors';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -27,8 +21,7 @@ async function bootstrap() {
   );
 
   app.enableCors({
-    origin: process.env['CORS_ORIGIN']?.split(',').map((origin) => origin.trim()) ??
-      DEFAULT_CORS_ORIGINS,
+    origin: corsOrigins(),
     credentials: true,
     // Retry-After 는 CORS 기본 노출 헤더가 아니다. 웹이 크로스 오리진으로 호출하므로
     // 명시하지 않으면 429 재시도 카운트다운이 헤더를 못 읽는다.
