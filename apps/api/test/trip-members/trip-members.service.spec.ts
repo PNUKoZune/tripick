@@ -21,6 +21,7 @@ function setup() {
   const preferencesService = { findByUser: jest.fn(async () => null), getPreferenceVector: jest.fn() };
   const realtimeGateway = { evictFromTrip: jest.fn(async () => undefined) };
   const inboxService = {
+    create: jest.fn(async (_dto?: unknown) => undefined),
     clearTripInvite: jest.fn(async () => undefined),
     cancelTripInvite: jest.fn(async () => undefined),
   };
@@ -112,8 +113,43 @@ describe('TripMembersService.remove', () => {
 
     expect(membersRepo.remove).toHaveBeenCalled();
     expect(realtimeGateway.evictFromTrip).toHaveBeenCalledWith('trip-1', 'guest');
-    // accepted(pending 아님) 취소이므로 초대 취소 알림은 없다.
+    // accepted(pending 아님) 제거이므로 초대 취소 알림은 없다.
     expect(inboxService.cancelTripInvite).not.toHaveBeenCalled();
+  });
+
+  it('accepted 멤버 제거 시 제외 알림을 인박스로 보낸다', async () => {
+    const { service, tripsRepo, membersRepo, inboxService } = setup();
+    tripsRepo.findOneBy.mockResolvedValue({ id: 'trip-1', userId: 'u1', title: '부산 여행' });
+    membersRepo.findOneBy.mockResolvedValue(member({ status: 'accepted', userId: 'guest' }));
+
+    await service.remove('trip-1', 'm1', 'u1');
+
+    expect(inboxService.create).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'guest', category: 'general' }),
+    );
+    // 접근 불가한 여행이라 '여행 보기' 딥링크가 붙지 않도록 payload.tripId 는 싣지 않는다.
+    const dto = inboxService.create.mock.calls[0]?.[0] as { payload?: unknown };
+    expect(dto.payload).toBeUndefined();
+  });
+
+  it('userId 없는(수동 등록) accepted 멤버 제거는 알림을 보내지 않는다', async () => {
+    const { service, tripsRepo, membersRepo, inboxService } = setup();
+    tripsRepo.findOneBy.mockResolvedValue({ id: 'trip-1', userId: 'u1' });
+    membersRepo.findOneBy.mockResolvedValue(member({ status: 'accepted', userId: null }));
+
+    await service.remove('trip-1', 'm1', 'u1');
+
+    expect(inboxService.create).not.toHaveBeenCalled();
+  });
+
+  it('pending 초대 취소는 제외 알림(create)이 아니라 취소 알림만 보낸다', async () => {
+    const { service, tripsRepo, membersRepo, inboxService } = setup();
+    tripsRepo.findOneBy.mockResolvedValue({ id: 'trip-1', userId: 'u1', title: '부산 여행' });
+    membersRepo.findOneBy.mockResolvedValue(member({ status: 'pending', userId: 'invitee' }));
+
+    await service.remove('trip-1', 'm1', 'u1');
+
+    expect(inboxService.create).not.toHaveBeenCalled();
   });
 
   it('pending 초대 취소 시 invitee 에게 취소 알림을 보낸다', async () => {

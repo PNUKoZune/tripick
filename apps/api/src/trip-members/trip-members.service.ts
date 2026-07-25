@@ -283,8 +283,9 @@ export class TripMembersService {
       throw new BadRequestException('owner member cannot be removed');
     }
 
-    // 제거 전에 pending invitee 여부를 잡아둔다 — remove 후엔 member 상태를 못 읽는다.
+    // 제거 전에 실계정 멤버의 상태를 잡아둔다 — remove 후엔 member 상태를 못 읽는다.
     const pendingInvitee = member.status === 'pending' && member.userId ? member.userId : null;
+    const removedMember = member.status === 'accepted' && member.userId ? member.userId : null;
 
     await this.membersRepo.remove(member);
 
@@ -302,6 +303,19 @@ export class TripMembersService {
         userId: pendingInvitee,
         tripMemberId: memberId,
         tripTitle: trip?.title ?? '여행',
+      });
+    }
+
+    // owner 가 이미 수락한 멤버를 내보낸 경우: 소켓만 끊으면 여행이 조용히 사라져
+    // 이유를 알 수 없으므로 인박스+FCM 으로 통지한다. 더는 접근 불가한 여행이라
+    // open-trip 액션이 붙지 않도록 payload.tripId 는 싣지 않는다(끊긴 '여행 보기' 버튼 방지).
+    if (removedMember) {
+      const trip = await this.tripsRepo.findOneBy({ id: tripId });
+      await this.inboxService.create({
+        userId: removedMember,
+        category: 'general',
+        title: '여행에서 제외되었어요',
+        body: `"${trip?.title ?? '여행'}" 여행 멤버에서 제외되었습니다.`,
       });
     }
   }
