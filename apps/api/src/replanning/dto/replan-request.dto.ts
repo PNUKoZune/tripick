@@ -24,7 +24,12 @@ import type {
   ReplanTrigger,
 } from '@tripick/types';
 
-const REPLAN_TRIGGERS = ['deviation', 'weather', 'manual'] as const satisfies readonly ReplanTrigger[];
+const REPLAN_TRIGGERS = [
+  'deviation',
+  'weather',
+  'crowd',
+  'manual',
+] as const satisfies readonly ReplanTrigger[];
 const REPLAN_PACE = ['relaxed', 'balanced', 'packed'] as const satisfies readonly ReplanPace[];
 const REPLAN_BUDGET = ['thrifty', 'normal', 'premium'] as const satisfies readonly ReplanBudget[];
 

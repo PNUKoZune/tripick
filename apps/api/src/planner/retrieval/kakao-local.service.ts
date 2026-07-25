@@ -263,7 +263,9 @@ export class KakaoLocalService {
         ? ['실내 관광', '박물관', '카페']
         : context.trigger === 'deviation'
           ? ['근처 관광지', '근처 카페']
-          : ['관광지', '맛집', '카페'];
+          : context.trigger === 'crowd'
+            ? ['한적한 관광지', '숨은 명소', '카페']
+            : ['관광지', '맛집', '카페'];
 
     const keywords = [
       ...tasteKeywords.map((tag) => `${context.destination} ${tag}`),

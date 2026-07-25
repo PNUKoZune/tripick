@@ -702,6 +702,9 @@ export class PlannerService {
     if (options.trigger === 'weather') {
       return `${base}; ${agentEvidence}; ${cragEvidence}; 날씨 이벤트를 고려해 실내/대체 가능 장소 우선`;
     }
+    if (options.trigger === 'crowd') {
+      return `${base}; ${agentEvidence}; ${cragEvidence}; 혼잡 예상을 고려해 붐비지 않는 대체 장소·시간대 우선`;
+    }
     return `${base}; ${agentEvidence}; ${cragEvidence}`;
   }
 

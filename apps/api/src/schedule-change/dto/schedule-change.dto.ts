@@ -21,7 +21,12 @@ import {
 } from '../../replanning/dto/replan-request.dto';
 import type { ReplanTrigger } from '@tripick/types';
 
-const REPLAN_TRIGGERS = ['deviation', 'weather', 'manual'] as const;
+const REPLAN_TRIGGERS = [
+  'deviation',
+  'weather',
+  'crowd',
+  'manual',
+] as const satisfies readonly ReplanTrigger[];
 
 /** replan payload — tripId 는 상위 proposal.tripId 로 강제되므로 제외 */
 class ReplanProposalBodyDto {

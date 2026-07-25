@@ -9,6 +9,7 @@ import {
   FiChevronsLeft,
   FiChevronsRight,
   FiUserPlus,
+  FiX,
 } from 'react-icons/fi';
 import { LuShare2, LuSparkles } from 'react-icons/lu';
 import { useQuery } from '@tanstack/react-query';
@@ -17,6 +18,7 @@ import type {
   PlannerMapMarkerDto,
   PlannerSwapResponseDto,
   PlannerTripDto,
+  ReplanTrigger,
 } from '@tripick/types';
 
 import { SessionGuard } from '@/entities/session';
@@ -167,15 +169,45 @@ function TripLightSummaryCard({ trip, compact = false }: { trip: PlannerTripDto;
   );
 }
 
+/**
+ * 알림 딥링크로 planner 에 들어왔을 때 뜨는 비침습 재계획 배너 문구.
+ * 배너는 "권유"만 한다 — 닫으면 아무 잡도 안 돌고 일정만 본다(CLAUDE.md: 추천만, 재계획은 수동).
+ * 'manual' 은 배너로 노출되지 않으므로(사용자가 직접 버튼을 누른 경우) 매핑에서 제외.
+ */
+const REPLAN_BANNER_COPY: Record<Exclude<ReplanTrigger, 'manual'>, {
+  emoji: string;
+  title: string;
+  body: string;
+}> = {
+  weather: {
+    emoji: '⛅',
+    title: '이 날 날씨 변화가 예상돼요',
+    body: '실내·대체 장소 위주로 일정을 다시 짜볼까요?',
+  },
+  crowd: {
+    emoji: '🚶',
+    title: '이 날 혼잡이 예상돼요',
+    body: '덜 붐비는 장소로 일정을 다시 짜볼까요?',
+  },
+  deviation: {
+    emoji: '📍',
+    title: '일정 장소에 도착하지 못한 것 같아요',
+    body: '지금 위치에 맞춰 일정을 다시 짜볼까요?',
+  },
+};
+
 export function PlannerView({
   tripId,
   initialDay,
   initialProposalId,
+  initialReplanTrigger,
 }: {
   tripId?: string;
   initialDay?: number;
   /** 인박스 "확인" 딥링크로 열린 경우, 검토할 제안 id (owner) */
   initialProposalId?: string;
+  /** 알림(날씨·혼잡·미도착) 딥링크로 열린 경우, 재계획 배너에 프리필할 트리거 */
+  initialReplanTrigger?: ReplanTrigger;
 }) {
   return (
     <SessionGuard>
@@ -183,6 +215,7 @@ export function PlannerView({
         {...(tripId ? { tripId } : {})}
         {...(initialDay ? { initialDay } : {})}
         {...(initialProposalId ? { initialProposalId } : {})}
+        {...(initialReplanTrigger ? { initialReplanTrigger } : {})}
       />
     </SessionGuard>
   );
@@ -192,10 +225,12 @@ function PlannerContent({
   tripId,
   initialDay,
   initialProposalId,
+  initialReplanTrigger,
 }: {
   tripId?: string;
   initialDay?: number;
   initialProposalId?: string;
+  initialReplanTrigger?: ReplanTrigger;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<PlannerTab>('schedule');
@@ -205,6 +240,18 @@ function PlannerContent({
   const [swapResult, setSwapResult] = useState<{ id: string; name: string } | null>(null);
   const [membersOpen, setMembersOpen] = useState(false);
   const [replanOpen, setReplanOpen] = useState(false);
+  // 재계획 모달 트리거. 일반 "AI 재계획" 버튼은 'manual', 알림 배너에서 열면 그 알림의 트리거.
+  const [replanTrigger, setReplanTrigger] = useState<ReplanTrigger>('manual');
+  // 알림(날씨·혼잡·미도착) 딥링크로 들어온 경우에만 뜨는 비침습 배너.
+  // 닫으면 그냥 일정만 본다(자동 재계획 없음) — CLAUDE.md "추천만, 재계획은 수동" 원칙.
+  const [alertBanner, setAlertBanner] = useState<ReplanTrigger | null>(
+    initialReplanTrigger ?? null,
+  );
+
+  function openReplan(trigger: ReplanTrigger) {
+    setReplanTrigger(trigger);
+    setReplanOpen(true);
+  }
   // 진행 중 여행이 있으면 우하단 "여행 중" FAB(ActiveTripFab)가 떠서 겹치므로 재계획 버튼을 그 위로 쌓는다
   const { active: activeTrip } = useActiveTrip();
   const [shareOpen, setShareOpen] = useState(false);
@@ -443,7 +490,7 @@ function PlannerContent({
             <button
               type="button"
               aria-label="AI 재계획"
-              onClick={() => setReplanOpen(true)}
+              onClick={() => openReplan('manual')}
               className={`fixed z-20 flex size-14 items-center justify-center rounded-full text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] active:translate-y-px lg:hidden ${
                 activeTrip ? 'bottom-[152px]' : 'bottom-[96px]'
               }`}
@@ -516,7 +563,7 @@ function PlannerContent({
                 {trip ? (
                   <button
                     type="button"
-                    onClick={() => setReplanOpen(true)}
+                    onClick={() => openReplan('manual')}
                     className="inline-flex h-10 items-center justify-center rounded-[14px] bg-[color:var(--btn-bg)] px-4 text-[14px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)]"
                   >
                     <span className="flex items-center gap-1.5">
@@ -726,6 +773,7 @@ function PlannerContent({
         open={replanOpen}
         onClose={() => setReplanOpen(false)}
         isOwner={isOwner}
+        trigger={replanTrigger}
         onProposed={handleProposed}
         onRequested={() =>
           setPlaceToast({
@@ -746,6 +794,55 @@ function PlannerContent({
       ) : null}
 
       {selectedTripId ? <ReplanToast tripId={selectedTripId} /> : null}
+
+      {/* 알림(날씨·혼잡·미도착) 딥링크로 열린 경우에만 뜨는 비침습 배너.
+          두 반응형 레이아웃 공통으로 상단 중앙에 떠 있고, 닫으면 그냥 일정을 본다. */}
+      {alertBanner && alertBanner !== 'manual' && trip ? (
+        <div className="fixed left-1/2 top-3 z-40 w-[calc(100%-24px)] max-w-[420px] -translate-x-1/2">
+          <div className="flex items-start gap-3 rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] p-3.5 shadow-[var(--shadow-btn)]">
+            <span className="text-[20px] leading-none" aria-hidden>
+              {REPLAN_BANNER_COPY[alertBanner].emoji}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] font-bold text-[color:var(--ink)]">
+                {REPLAN_BANNER_COPY[alertBanner].title}
+              </p>
+              <p className="mt-0.5 text-[12.5px] text-[color:var(--ink-sub)]">
+                {REPLAN_BANNER_COPY[alertBanner].body}
+              </p>
+              <div className="mt-2.5 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const trigger = alertBanner;
+                    setAlertBanner(null);
+                    openReplan(trigger);
+                  }}
+                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[12px] bg-[color:var(--btn-bg)] px-3.5 text-[13px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)]"
+                >
+                  <LuSparkles className="size-4" aria-hidden />
+                  AI 재계획
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAlertBanner(null)}
+                  className="inline-flex h-9 items-center justify-center rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3.5 text-[13px] font-semibold text-[color:var(--ink-sub)] transition-colors hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink)]"
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+            <button
+              type="button"
+              aria-label="배너 닫기"
+              onClick={() => setAlertBanner(null)}
+              className="-mr-1 -mt-1 flex size-7 shrink-0 items-center justify-center rounded-full text-[color:var(--ink-faint)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink)]"
+            >
+              <FiX className="size-4" aria-hidden />
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {placeToast ? (
         <Toast

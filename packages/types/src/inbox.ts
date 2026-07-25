@@ -6,6 +6,8 @@
  * - 가상 row: 친구 incoming 요청 (정본은 friends 테이블, 인박스에선 가상 인박스 row 로 직렬화)
  */
 
+import type { ReplanTrigger } from './replanning';
+
 export type NotificationCategory =
   | 'replan_ready'
   | 'weather_alert'
@@ -39,6 +41,12 @@ export interface InboxItemActionDto {
   proposalId?: string;
   /** open-trip 딥링크 시 열 일차(1-based). 없으면 여행 첫 일차로 연다 */
   day?: number;
+  /**
+   * open-trip 딥링크가 재계획을 권하는 경우, 그 맥락 트리거(weather·crowd·deviation).
+   * planner 에서 자동 재계획을 걸지 않고, 이 트리거를 프리필한 비침습 배너로만 제안한다.
+   * 없으면 단순 일정 보기.
+   */
+  replan?: ReplanTrigger;
 }
 
 export interface InboxItemDto {

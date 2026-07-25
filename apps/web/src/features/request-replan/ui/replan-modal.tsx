@@ -7,6 +7,7 @@ import type {
   ReplanPace,
   ReplanPlaceDto,
   ReplanPreferencesDto,
+  ReplanTrigger,
 } from '@tripick/types';
 
 import { BottomSheet, PlaceSearchPicker, SegmentToggle, Switch } from '@/shared/ui';
@@ -21,6 +22,8 @@ type Props = {
   onRequested?: () => void;
   /** owner 면 즉시 재계획, 아니면 owner 승인 대기 제안으로 보낸다 */
   isOwner?: boolean;
+  /** 재계획 트리거. 기본 'manual'. 알림 배너에서 열리면 weather·crowd·deviation 로 넘어온다 */
+  trigger?: ReplanTrigger;
   /** 비-owner 제안 성공 시 요약 전달(토스트용) */
   onProposed?: (summary: string) => void;
 };
@@ -43,10 +46,12 @@ export function ReplanModal({
   onClose,
   onRequested,
   isOwner = true,
+  trigger = 'manual',
   onProposed,
 }: Props) {
   const mutation = useRequestReplan(tripId, {
     isOwner,
+    trigger,
     ...(onProposed ? { onProposed } : {}),
   });
   const [note, setNote] = useState('');
