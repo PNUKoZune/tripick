@@ -77,6 +77,19 @@ describe('AlternativeProcessor', () => {
     });
   });
 
+  it('keeps the replan_ready category even for a weather-triggered replan', async () => {
+    planner.replan.mockResolvedValue([]);
+
+    // 결과 알림을 weather_alert 로 보내면 인박스가 여기에도 재계획 액션을 붙여 루프가 되고,
+    // 날씨 알림을 끈 사용자는 본인이 요청한 재계획 결과를 못 받는다.
+    await processor.process(job({ data: { tripId: 'trip-1', trigger: 'weather' } }));
+
+    expect(inbox.create.mock.calls.map((call) => call[0].category)).toEqual([
+      'replan_ready',
+      'replan_ready',
+    ]);
+  });
+
   it('pushes a failed result and rethrows so BullMQ retries', async () => {
     planner.replan.mockRejectedValue(new Error('llm timeout'));
 
