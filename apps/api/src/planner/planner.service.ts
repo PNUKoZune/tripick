@@ -26,6 +26,7 @@ import type {
   ReplanBudget,
   ReplanPace,
   ReplanRequestDto,
+  ReplanTrigger,
   TasteTagDto,
 } from '@tripick/types';
 import type { CandidatePlace, RetrievalContext } from './retrieval/types';
@@ -40,6 +41,17 @@ const BUDGET_HINT: Record<ReplanBudget, string> = {
   thrifty: '가성비 위주(무료·저렴한 장소 선호)',
   normal: '보통 예산',
   premium: '프리미엄(고급 맛집·명소 선호)',
+};
+
+/**
+ * 트리거별 memo 꼬리말. `Record<ReplanTrigger, …>` 라 ReplanTrigger 에 값이 늘면 여기서
+ * 컴파일 에러로 잡힌다 — if 체인 시절엔 새 트리거의 memo 가 조용히 빈 채로 나갔다.
+ */
+const TRIGGER_MEMO_NOTE: Record<ReplanTrigger, string> = {
+  manual: '수동 재계획 요청 반영',
+  deviation: '이탈 상황에서 복귀 쉬운 순서로 재배치',
+  weather: '날씨 이벤트를 고려해 실내/대체 가능 장소 우선',
+  crowd: '혼잡 예상을 고려해 붐비지 않는 대체 장소·시간대 우선',
 };
 
 interface GenerateOptions {
@@ -685,19 +697,8 @@ export class PlannerService {
       ? `AI planner 생성: ${agentMemo}`
       : `AI planner fallback: ${agentMemo}`;
 
-    if (options.trigger === 'manual') {
-      return `${base}; ${agentEvidence}; ${cragEvidence}; 수동 재계획 요청 반영`;
-    }
-    if (options.trigger === 'deviation') {
-      return `${base}; ${agentEvidence}; ${cragEvidence}; 이탈 상황에서 복귀 쉬운 순서로 재배치`;
-    }
-    if (options.trigger === 'weather') {
-      return `${base}; ${agentEvidence}; ${cragEvidence}; 날씨 이벤트를 고려해 실내/대체 가능 장소 우선`;
-    }
-    if (options.trigger === 'crowd') {
-      return `${base}; ${agentEvidence}; ${cragEvidence}; 혼잡 예상을 고려해 붐비지 않는 대체 장소·시간대 우선`;
-    }
-    return `${base}; ${agentEvidence}; ${cragEvidence}`;
+    const triggerNote = options.trigger ? TRIGGER_MEMO_NOTE[options.trigger] : undefined;
+    return [base, agentEvidence, cragEvidence, ...(triggerNote ? [triggerNote] : [])].join('; ');
   }
 
   private toItemType(category: string): ItineraryItemDto['type'] {
