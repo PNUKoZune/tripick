@@ -19,9 +19,16 @@ const firebaseConfig = {
 };
 
 /**
- * 푸시 data payload → 이동 경로. 메인 스레드 rn-bridge.tsx 의 routeForNotification 과 동일 규칙
- * (서비스 워커는 앱 코드를 import 할 수 없어 불가피하게 중복). 규칙 변경 시 양쪽을 함께 고친다.
+ * 푸시 data payload → 이동 경로. 메인 스레드 shared/web-push/route.ts 의 routeForNotification
+ * 및 packages/types 의 REPLAN_TRIGGER_BY_CATEGORY 와 동일 규칙 (서비스 워커는 앱 코드를
+ * import 할 수 없어 불가피하게 중복). 규칙 변경 시 양쪽을 함께 고친다.
  */
+const REPLAN_TRIGGER_BY_CATEGORY = {
+  weather_alert: 'weather',
+  crowd_alert: 'crowd',
+  arrival_alert: 'deviation',
+};
+
 function routeForNotification(data) {
   const category = data.category || data.type;
   const tripId = data.tripId;
@@ -34,8 +41,14 @@ function routeForNotification(data) {
     case 'crowd_alert':
     case 'arrival_alert':
     case 'trip_reminder':
-    case 'general':
-      return tripId ? `/planner?tripId=${tripId}` : '/inbox';
+    case 'general': {
+      if (!tripId) return '/inbox';
+      const day = Number(data.day);
+      const replan = REPLAN_TRIGGER_BY_CATEGORY[category];
+      const dayQuery = Number.isInteger(day) && day > 0 ? `&day=${day}` : '';
+      const replanQuery = replan ? `&replan=${replan}` : '';
+      return `/planner?tripId=${tripId}${dayQuery}${replanQuery}`;
+    }
     default:
       return '/inbox';
   }
