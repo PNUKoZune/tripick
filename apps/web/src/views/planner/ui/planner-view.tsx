@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FiChevronLeft,
   FiChevronRight,
@@ -247,6 +247,18 @@ function PlannerContent({
   const [alertBanner, setAlertBanner] = useState<ReplanTrigger | null>(
     initialReplanTrigger ?? null,
   );
+
+  // 배너를 닫거나 재계획 모달로 넘어가면 URL 의 ?replan= 도 함께 지운다. 남겨두면 뒤로가기·
+  // 새로고침으로 재진입할 때마다 이미 처리한 제안 배너가 다시 뜬다. history 만 갈아끼우므로
+  // (router.replace 와 달리) 리렌더·데이터 재요청은 없다.
+  const dismissAlertBanner = useCallback(() => {
+    setAlertBanner(null);
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('replan')) return;
+    url.searchParams.delete('replan');
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  }, []);
 
   function openReplan(trigger: ReplanTrigger) {
     setReplanTrigger(trigger);
@@ -815,7 +827,7 @@ function PlannerContent({
                   type="button"
                   onClick={() => {
                     const trigger = alertBanner;
-                    setAlertBanner(null);
+                    dismissAlertBanner();
                     openReplan(trigger);
                   }}
                   className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[12px] bg-[color:var(--btn-bg)] px-3.5 text-[13px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)]"
@@ -825,7 +837,7 @@ function PlannerContent({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAlertBanner(null)}
+                  onClick={dismissAlertBanner}
                   className="inline-flex h-9 items-center justify-center rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3.5 text-[13px] font-semibold text-[color:var(--ink-sub)] transition-colors hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink)]"
                 >
                   닫기
@@ -835,7 +847,7 @@ function PlannerContent({
             <button
               type="button"
               aria-label="배너 닫기"
-              onClick={() => setAlertBanner(null)}
+              onClick={dismissAlertBanner}
               className="-mr-1 -mt-1 flex size-7 shrink-0 items-center justify-center rounded-full text-[color:var(--ink-faint)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink)]"
             >
               <FiX className="size-4" aria-hidden />
