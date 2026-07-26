@@ -142,7 +142,7 @@
 
 ## 9. 알려진 한계 / 후속 작업
 
-- **"수락 → 재계획" 미배선** — `crowd_alert`·`weather_alert` 모두 알림 탭 시 planner 이동까지만이고, 거기서 재계획은 `manual` 로 나간다. `trigger:'weather'` 는 타입·프롬프트·결과분기까지 준비됐으나 진입점이 없다. 둘을 함께 배선하는 것이 후속 후보
+- ~~**"수락 → 재계획" 미배선**~~ — 해소됨. 알림 딥링크가 재계획 트리거를 실어 planner 배너로 제안한다: [`docs/alerts/alert-replan-wiring-v1.md`](./alert-replan-wiring-v1.md)
 - **임계값 캘리브레이션** — 상대 1.2 / 하한 10% 는 초기값. 실제 발송량을 보고 튜닝 필요
 - **이름 매칭 누락** — 저장 title 과 KTO `tAtsNm` 표기가 다르면(부제·괄호) 알림이 조용히 누락될 수 있다. 진단용 `debug` 로그만 남겨 뒀다
 - **cron TZ 일관성** — 이번엔 `crowd-alert` 만 `tz:'Asia/Seoul'` 을 명시했다. `weather-alert` 도 같은 잠재 이슈가 있으나 범위 밖으로 뒀다

@@ -60,6 +60,7 @@
 - [alerts/mid-term-forecast-v1.md](alerts/mid-term-forecast-v1.md) — 기상청 중기예보 확장 + 날씨 버그 수정
 - [alerts/weather-alert-scheduler-v1.md](alerts/weather-alert-scheduler-v1.md) — 날씨 트리거 알림 스케줄러
 - [alerts/crowd-alert-scheduler-v1.md](alerts/crowd-alert-scheduler-v1.md) — 관광지 혼잡(집중률) 트리거 알림 스케줄러
+- [alerts/alert-replan-wiring-v1.md](alerts/alert-replan-wiring-v1.md) — 알림 → 재계획 배선 (트리거 프리필 배너 · crowd 트리거)
 
 ## 알림 인프라 · 인박스 (Notification)
 
