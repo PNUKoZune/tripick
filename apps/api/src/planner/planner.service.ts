@@ -321,7 +321,7 @@ export class PlannerService {
           day,
           order: order + 1,
           type: this.toItemType(seed.category),
-          name: this.buildPlaceName(seed.name, options.trigger, day, order),
+          name: seed.name,
           address: seed.address,
           coordinates: seed.coordinates,
           scheduledAt: currentAt.toISOString(),
@@ -633,14 +633,6 @@ export class PlannerService {
       });
     });
     return result;
-  }
-
-  private buildPlaceName(name: string, trigger: GenerateOptions['trigger'], day: number, order: number): string {
-    if (!trigger) return name;
-    if (day === 1 && order >= 1) {
-      return `${name} (${trigger} 대응)`;
-    }
-    return name;
   }
 
   /**

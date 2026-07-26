@@ -72,6 +72,26 @@ describe('PlannerService hard constraints', () => {
     expect(stored[0]?.memo).toBe('12시 예약, 주차 앞쪽');
   });
 
+  it('stores plain place names on a triggered replan (no trigger token in the name)', async () => {
+    const harness = createHarness();
+    harness.constraintEngine.validate.mockImplementation(async (items: ItineraryItemDto[]) => ({
+      valid: true,
+      issues: [],
+      items,
+    }));
+    // 1일차에 2개 이상 배치돼야 예전 접미사 조건(day===1 && order>=1)에 걸린다.
+    harness.plannerAgent.plan.mockResolvedValue([
+      { candidate: place('p1', '광안리 카페', 'cafe'), day: 1, order: 1, durationMin: 60, memo: '', aiGenerated: true },
+      { candidate: place('p2', '해동용궁사', 'attraction'), day: 1, order: 2, durationMin: 60, memo: '', aiGenerated: true },
+    ]);
+
+    await harness.service.replan({ tripId: TRIP.id, trigger: 'crowd' });
+
+    const stored = harness.itineraryService.replaceTripItems.mock.calls[0]?.[1] ?? [];
+    // 트리거 맥락은 memo 로만 남긴다 — 장소명에 영문 enum 을 붙이면 화면·공유·메모 매칭이 다 깨진다.
+    expect(stored.map((item: ItineraryItemDto) => item.name)).toEqual(['광안리 카페', '해동용궁사']);
+  });
+
   it('does not replace stored itinerary items when AI and fallback drafts violate hard constraints', async () => {
     const harness = createHarness();
     harness.constraintEngine.validate.mockResolvedValue({
@@ -152,6 +172,7 @@ function createHarness(pace?: 'relaxed' | 'balanced' | 'packed') {
   const routeHelper = {
     getDrivingEta: jest.fn(),
     getTransitEta: jest.fn(),
+    getEta: jest.fn().mockResolvedValue({ durationSec: 900, distanceM: 3000 }),
   };
   const placeRetrieval = {
     retrieve: jest.fn().mockResolvedValue({
