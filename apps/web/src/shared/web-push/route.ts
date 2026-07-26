@@ -1,7 +1,12 @@
+import { REPLAN_TRIGGER_BY_CATEGORY, type NotificationCategory } from '@tripick/types';
+
 /**
  * 푸시 data payload → 이동할 경로. 백엔드는 data 에 category(=type) 와 tripId 를 싣는다.
  * - friend_request·trip_invite: 수락/거절 액션이 인박스 가상·영속 row 에 있으므로 /inbox
  * - 여행 관련(replan·weather·crowd·arrival·reminder·general): tripId 있으면 해당 여행, 없으면 인박스
+ *
+ * 제안 알림(weather·crowd·arrival)은 day·replan 을 쿼리로 이어 붙인다 — 인박스 목록에서 누른
+ * 경우와 같은 배너를 푸시 탭 경로에서도 띄우기 위해서다(REPLAN_TRIGGER_BY_CATEGORY 공유).
  *
  * 서비스 워커(firebase-messaging-sw.js)에는 앱 코드를 import 할 수 없어 같은 규칙이 복제돼 있다.
  * 규칙을 바꾸면 SW 쪽도 함께 고친다.
@@ -20,8 +25,18 @@ export function routeForNotification(data?: Record<string, string>): string | nu
     case 'arrival_alert':
     case 'trip_reminder':
     case 'general':
-      return tripId ? `/planner?tripId=${tripId}` : '/inbox';
+      return tripId ? `/planner?tripId=${tripId}${plannerQuery(category, data)}` : '/inbox';
     default:
       return '/inbox';
   }
+}
+
+/** 딥링크 보조 쿼리(day·replan) — 값이 없으면 빈 문자열. */
+function plannerQuery(category: string, data: Record<string, string>): string {
+  const day = Number(data.day);
+  const replan = REPLAN_TRIGGER_BY_CATEGORY[category as NotificationCategory];
+  return [
+    Number.isInteger(day) && day > 0 ? `&day=${day}` : '',
+    replan ? `&replan=${replan}` : '',
+  ].join('');
 }

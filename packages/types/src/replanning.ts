@@ -1,4 +1,4 @@
-export type ReplanTrigger = 'deviation' | 'weather' | 'manual';
+export type ReplanTrigger = 'deviation' | 'weather' | 'crowd' | 'manual';
 export type ReplanStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 /** 일정 강도(하루 일정 밀도) */

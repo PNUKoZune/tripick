@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import type { Coordinates } from '@tripick/types';
+import type { Coordinates, ReplanTrigger } from '@tripick/types';
 import { inferPlaceTags, tasteTagsToKeywords } from './place-seeds';
 import type { RawPlaceCandidate, RetrievalContext } from './types';
 
@@ -35,6 +35,22 @@ interface KakaoSearchResponse {
  */
 export const KAKAO_CATEGORY_CODES = ['CT1', 'AT4', 'FD6', 'CE7'] as const;
 export type KakaoCategoryCode = (typeof KAKAO_CATEGORY_CODES)[number];
+
+/** 트리거 없음(최초 생성) 기본 키워드. */
+const DEFAULT_KEYWORDS = ['관광지', '맛집', '카페'];
+
+/**
+ * 트리거별 후보 검색 키워드. `Record<ReplanTrigger, …>` 라 ReplanTrigger 에 값이 늘면 여기서
+ * 컴파일 에러로 잡힌다 — 삼항 체인 시절엔 새 트리거가 조용히 기본 키워드로 떨어졌다.
+ * NOTE: 세 재계획 트리거 모두 '맛집' 계열 키워드가 없어 후보 풀에 restaurant 가 얇게 잡힌다
+ * (기본 경로에만 있음). 별도 건으로 다룬다 — 여기선 분기 구조만 표로 옮긴다.
+ */
+const TRIGGER_KEYWORDS: Record<ReplanTrigger, string[]> = {
+  weather: ['실내 관광', '박물관', '카페'],
+  deviation: ['근처 관광지', '근처 카페'],
+  crowd: ['한적한 관광지', '숨은 명소', '카페'],
+  manual: DEFAULT_KEYWORDS,
+};
 
 /** category_group_code → 내부 category 라벨 매핑. */
 const CATEGORY_GROUP_TO_CATEGORY: Record<string, string> = {
@@ -258,12 +274,9 @@ export class KakaoLocalService {
 
   private buildKeywords(context: RetrievalContext): string[] {
     const tasteKeywords = tasteTagsToKeywords(context.tasteTags).slice(0, 4);
-    const triggerKeywords =
-      context.trigger === 'weather'
-        ? ['실내 관광', '박물관', '카페']
-        : context.trigger === 'deviation'
-          ? ['근처 관광지', '근처 카페']
-          : ['관광지', '맛집', '카페'];
+    const triggerKeywords = context.trigger
+      ? TRIGGER_KEYWORDS[context.trigger]
+      : DEFAULT_KEYWORDS;
 
     const keywords = [
       ...tasteKeywords.map((tag) => `${context.destination} ${tag}`),

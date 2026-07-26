@@ -6,6 +6,8 @@
  * - 가상 row: 친구 incoming 요청 (정본은 friends 테이블, 인박스에선 가상 인박스 row 로 직렬화)
  */
 
+import type { ReplanTrigger } from './replanning';
+
 export type NotificationCategory =
   | 'replan_ready'
   | 'weather_alert'
@@ -18,6 +20,21 @@ export type NotificationCategory =
   | 'general';
 
 export type InboxItemKind = NotificationCategory | 'friend_request';
+
+/**
+ * 알림 카테고리 → 재계획 트리거. 여기 실린 카테고리는 "일정을 바꿀까요?" 제안 알림이라,
+ * 열 때 planner 가 그 맥락을 프리필한 배너를 띄운다(자동 재계획은 안 함). 없는 카테고리는
+ * 단순 일정 보기 — 특히 replan_ready 는 재계획 "결과" 알림이라 여기 넣으면 안 된다.
+ *
+ * 인박스 액션 빌더(InboxService)와 푸시 탭 라우팅(routeForNotification)이 함께 참조한다.
+ * 한쪽만 알고 있으면 푸시를 직접 탭한 사용자에겐 배너가 아예 안 뜬다.
+ * 서비스 워커(firebase-messaging-sw.js)는 앱 코드를 import 할 수 없어 같은 표가 복제돼 있다.
+ */
+export const REPLAN_TRIGGER_BY_CATEGORY: Partial<Record<NotificationCategory, ReplanTrigger>> = {
+  weather_alert: 'weather',
+  crowd_alert: 'crowd',
+  arrival_alert: 'deviation',
+};
 
 export interface InboxItemActionDto {
   /** UI 에서 어떤 동작을 그릴지 결정 */
@@ -39,6 +56,12 @@ export interface InboxItemActionDto {
   proposalId?: string;
   /** open-trip 딥링크 시 열 일차(1-based). 없으면 여행 첫 일차로 연다 */
   day?: number;
+  /**
+   * open-trip 딥링크가 재계획을 권하는 경우, 그 맥락 트리거(weather·crowd·deviation).
+   * planner 에서 자동 재계획을 걸지 않고, 이 트리거를 프리필한 비침습 배너로만 제안한다.
+   * 없으면 단순 일정 보기.
+   */
+  replan?: ReplanTrigger;
 }
 
 export interface InboxItemDto {

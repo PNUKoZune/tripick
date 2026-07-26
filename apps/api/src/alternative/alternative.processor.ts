@@ -85,16 +85,15 @@ export class AlternativeProcessor extends WorkerHost {
           ? `${label} 일정이 업데이트됐어요. 확인해 보세요.`
           : `${label} 재계획에 실패했어요. 잠시 후 다시 시도해 주세요.`;
 
-      // 날씨 트리거 재계획은 weather_alert 카테고리로 발신 — 수신 토글은 replan_ready 와 공유(prefersCategory).
-      // NOTE: 날씨 스캐너(WeatherAlertModule)는 자동 재계획을 걸지 않고 "변경할까요?" 알림만 보낸다.
-      // 사용자가 여행 화면에서 직접 재계획을 요청하면 trigger:'weather' 로 이 분기를 탄다.
-      const category = trigger === 'weather' ? 'weather_alert' : 'replan_ready';
-
+      // 트리거와 무관하게 항상 replan_ready — 이건 "재계획 결과" 알림이지 새 제안이 아니다.
+      // 트리거별 카테고리(weather_alert 등)로 보내면 (1) 인박스가 이 결과 카드에도 '일정 변경'
+      // 재계획 액션을 붙여 완료 → 재계획 → 완료 루프가 되고, (2) 해당 알림 토글을 끈 사용자는
+      // 자기가 직접 요청한 재계획의 완료·실패조차 못 받는다.
       await Promise.all(
         userIds.map((userId) =>
           this.inboxService.create({
             userId,
-            category,
+            category: 'replan_ready',
             title,
             body,
             payload: { tripId, jobId, trigger, status },

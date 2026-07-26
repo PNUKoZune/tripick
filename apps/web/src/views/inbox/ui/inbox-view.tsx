@@ -178,7 +178,10 @@ function InboxContent() {
       }
       // 알림에 일차가 실려 있으면 그 일차로 딥링크한다(날씨·혼잡·미도착 알림).
       const dayQuery = action.day ? `&day=${action.day}` : '';
-      router.push(`/planner?tripId=${action.tripId}${dayQuery}`);
+      // 알림이 재계획을 권하는 경우, 트리거를 실어 planner 가 비침습 배너로 제안하게 한다
+      // (자동 재계획 없음 — 사용자가 배너를 눌러야 모달이 열린다).
+      const replanQuery = action.replan ? `&replan=${action.replan}` : '';
+      router.push(`/planner?tripId=${action.tripId}${dayQuery}${replanQuery}`);
     } else if (action.type === 'open-friends') {
       router.push('/friends');
     }

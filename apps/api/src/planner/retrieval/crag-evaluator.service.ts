@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { FOOD_PREFERENCES, type Coordinates } from '@tripick/types';
+import { FOOD_PREFERENCES, type Coordinates, type ReplanTrigger } from '@tripick/types';
 import { inferPlaceTags, normalizeDestinationRegion, tasteTagsToKeywords } from './place-seeds';
 import { NEUTRAL_POPULARITY } from './naver-search.service';
 import type { CandidatePlace, CragScore, RawPlaceCandidate, RetrievalContext } from './types';
@@ -19,6 +19,24 @@ const INDOOR_TAGS = new Set<string>([
 
 /** CRAG 총점에서 네이버 대중 인지도 항이 차지하는 가중치. accept 게이트 보정과 공유. */
 export const POPULARITY_WEIGHT = 0.12;
+
+/** 트리거 없음(최초 생성) 및 트리거별 선호 신호가 없을 때 쓰는 중립 점수. */
+const NEUTRAL_TRIGGER_SCORE = 0.64;
+
+/**
+ * 트리거별 후보 선호도. `Record<ReplanTrigger, …>` 라 ReplanTrigger 에 값이 늘면 여기서
+ * 컴파일 에러로 잡힌다 — if 체인 시절엔 새 트리거가 조용히 기본값으로 떨어졌다(crowd 가 그랬다).
+ * 점수 신호가 없는 트리거는 중립값을 명시적으로 둔다(후보 조향은 kakao-local 키워드가 맡는다).
+ */
+const TRIGGER_SCORE: Record<ReplanTrigger, (tags: string[]) => number> = {
+  // 비 예보 대응 — 실내 후보 우대.
+  weather: (tags) => (tags.some((tag) => INDOOR_TAGS.has(tag)) ? 0.9 : 0.42),
+  // 미도착 대응 — 복귀 동선을 짜야 해서 후보 전반을 살짝 우대.
+  deviation: () => 0.72,
+  // 혼잡 대응 — "붐비지 않음"을 판단할 후보 단위 신호가 없어 중립. 조향은 검색 키워드로.
+  crowd: () => NEUTRAL_TRIGGER_SCORE,
+  manual: () => NEUTRAL_TRIGGER_SCORE,
+};
 
 @Injectable()
 export class CragEvaluatorService {
@@ -179,13 +197,8 @@ export class CragEvaluatorService {
     tags: string[],
     context: RetrievalContext,
   ): number {
-    if (context.trigger === 'weather') {
-      return tags.some((tag) => INDOOR_TAGS.has(tag)) ? 0.9 : 0.42;
-    }
-    if (context.trigger === 'deviation') {
-      return 0.72;
-    }
-    return 0.64;
+    if (!context.trigger) return NEUTRAL_TRIGGER_SCORE;
+    return TRIGGER_SCORE[context.trigger](tags);
   }
 
   private availabilityScore(

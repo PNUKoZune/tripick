@@ -7,6 +7,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { UserEntity } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
 import { NotificationEntity } from './notification.entity';
+import { REPLAN_TRIGGER_BY_CATEGORY } from '@tripick/types';
 import type {
   CreateNotificationDto,
   InboxItemActionDto,
@@ -291,19 +292,18 @@ export class InboxService {
         },
       ];
     }
-    if (
-      (notification.category === 'weather_alert' ||
-        notification.category === 'crowd_alert' ||
-        notification.category === 'arrival_alert') &&
-      tripId
-    ) {
-      // 세 알림 모두 payload.day(문자열)에 해당 일차를 실어 보낸다 — 딥링크로 그 일차를 바로 연다.
+    const replan = REPLAN_TRIGGER_BY_CATEGORY[notification.category];
+    if (replan && tripId) {
+      // 제안 알림들은 payload.day(문자열)에 해당 일차를 실어 보낸다 — 딥링크로 그 일차를 바로 연다.
+      // 각 알림의 성격을 재계획 트리거로 실어 planner 가 그 맥락을 프리필한 배너를 띄우게 한다
+      // (자동 재계획은 안 함 — 배너를 닫으면 그냥 일정만 본다).
       const day = Number(notification.payload?.day);
       return [
         {
           type: 'open-trip',
           label: '일정 변경',
           tripId,
+          replan,
           ...(Number.isInteger(day) && day > 0 ? { day } : {}),
         },
       ];

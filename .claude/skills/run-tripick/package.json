@@ -1,0 +1,9 @@
+{
+  "name": "run-tripick-driver",
+  "private": true,
+  "type": "module",
+  "description": "Agent harness for driving the TriPick web app headlessly. Not part of the pnpm workspace.",
+  "dependencies": {
+    "playwright": "^1.40.0"
+  }
+}
