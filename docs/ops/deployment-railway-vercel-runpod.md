@@ -58,7 +58,8 @@ Railway 가 TLS 종료와 WebSocket 업그레이드를 모두 처리하므로 �
 
 ### 차원 일치 제약
 
-`LLM_EMBEDDING_DIMENSIONS=1024` 는 `infra/postgres/init.sql` 의 `vector(1024)` 컬럼과 **반드시 일치**해야 한다.
+`LLM_EMBEDDING_DIMENSIONS=1024` 는 `vector(1024)` 컬럼과 **반드시 일치**해야 한다
+(정의: `apps/api/src/database/migrations/1700000000000-InitVectorSchema.ts`, 로컬 사본 `infra/postgres/init.sql`).
 `preference_embeddings.embedding` 과 `place_embeddings.embedding` 이 동일 차원이어야 하며,
 임베딩 모델 교체 시 DB 스키마 변경과 전체 재임베딩(`pnpm --filter @tripick/api reembed:preferences`)이 함께 필요하다.
 
@@ -82,7 +83,8 @@ RunPod 콜드스타트가 겹치면 무조건 타임아웃된다. 프로덕션�
 기본 Postgres 템플릿이 아닌 **커스텀 Docker 서비스로 `pgvector/pgvector:pg16`** 를 배포한다.
 일반 `postgres:16` 이미지는 `CREATE EXTENSION vector` 가 불가하여 사용을 금지한다.
 
-배포 직후 `infra/postgres/init.sql` 을 수동 적용한다 (자세한 내용은 5-2 참조).
+스키마는 손댈 필요가 없다 — API 컨테이너가 부팅하면서 TypeORM 마이그레이션으로
+확장·테이블·인덱스를 모두 만든다 (5-2 참조). 빈 DB 만 준비하면 된다.
 
 ### 4-2. Redis 서비스
 
@@ -107,8 +109,8 @@ Railway Redis 애드온을 사용한다. 단 접속 정보가 비밀번호를 �
 ## 5. 선행 코드 작업 (배포 전 필수)
 
 현재 `develop` 상태로는 그대로 배포되지 않는다. 아래 항목을 처리한다.
-`chore/production-deploy-prep` 브랜치에서 **5-1·5-4·5-5 를 구현 완료**했다.
-5-2 는 배포 절차(수동 적용), 5-3 은 MVP 운영 제약으로 남긴다.
+`chore/production-deploy-prep` 브랜치에서 **5-1·5-2·5-4·5-5 를 구현 완료**했다.
+5-3 은 MVP 운영 제약으로 남긴다.
 
 ### 5-1. Redis 접속에 비밀번호·TLS 지원 없음 — 필수 ✅ 구현 완료
 
@@ -127,15 +129,58 @@ Railway Redis 애드온을 사용한다. 단 접속 정보가 비밀번호를 �
 (`lazyConnect`·`maxRetriesPerRequest` 등)은 `extra` 인자로 병합한다.
 파싱 검증은 `apps/api/test/common/redis.config.spec.ts`.
 
-### 5-2. 프로덕션에서 스키마가 생성되지 않음 — 필수
+### 5-2. 프로덕션에서 스키마가 생성되지 않음 — 필수 ✅ 구현 완료
 
-- `apps/api/src/app.module.ts:53` 의 `synchronize` 는 `NODE_ENV === 'development'` 일 때만 활성
-- `infra/postgres/init.sql` 은 docker-compose 의 entrypoint 로만 실행되어 Railway 에서는 아무도 실행하지 않음
+**문제**. 프로덕션 DB 에 테이블을 만들어주는 주체가 아무도 없었다.
 
-pgvector 테이블은 TypeORM 엔티티로 관리되지 않으므로, 첫 배포 시 `init.sql` 수동 적용이 현실적이다.
-장기적으로는 TypeORM 마이그레이션 전환을 검토한다.
+- `app.module.ts` 의 `synchronize` 는 `NODE_ENV === 'development'` 일 때만 활성 → 엔티티 테이블 13개 미생성
+- `infra/postgres/init.sql` 은 docker-compose entrypoint 로만 실행 → pgvector 테이블 3개도 미생성
 
-적용 대상: `vector`·`uuid-ossp` 확장, `preference_embeddings`, `place_embeddings` 및 관련 인덱스.
+**조치**: TypeORM 마이그레이션으로 전환했다. 첫 배포 전이라 프로덕션 데이터가 없어
+전환 비용·위험이 가장 낮은 시점이었다.
+
+| 추가 | 내용 |
+| --- | --- |
+| `apps/api/src/database/data-source.ts` | CLI 전용 DataSource. `entities`·`migrations` 를 glob 으로 수집 |
+| `.../migrations/1700000000000-InitVectorSchema.ts` | 확장 + pgvector 테이블. **손으로 작성** |
+| `.../migrations/1785135565704-InitEntities.ts` | 엔티티 13개 DDL. `migration:generate` 자동 생성 |
+| package.json | `typeorm`·`migration:{generate,run,revert,show}` 스크립트 |
+
+**동작 방식** — 개발과 프로덕션을 배타적으로 나눴다. 둘 다 켜면 `synchronize` 가
+마이그레이션 결과를 덮어쓸 수 있다.
+
+```ts
+synchronize:    isDevelopment,   // 개발: 지금까지처럼 자동 반영
+migrationsRun: !isDevelopment,   // 그 외: 부팅 시 마이그레이션 실행
+```
+
+즉 **Railway 에서 별도 배포 단계가 필요 없다** — 컨테이너가 뜨면서 스스로 스키마를 맞춘다.
+replica 1개 운영(5-3)이라 동시 실행 경합이 없기에 성립하는 방식이고,
+인스턴스를 늘리면 배포 파이프라인의 독립 단계로 빼야 한다.
+
+**순서 보장.** pgvector 마이그레이션이 `uuid-ossp` 확장을 만들고 엔티티 DDL 이 그걸 쓰므로,
+타임스탬프를 `1700000000000` 으로 의도적으로 낮게 고정해 항상 먼저 실행되게 했다.
+
+**`init.sql` 은 남긴다.** 로컬 docker-compose 최초 기동용으로 계속 쓰이며,
+마이그레이션 파일과 내용이 같아야 한다. 한쪽만 고치지 않도록 양쪽에 주석을 달아뒀다.
+
+#### 알아둘 것
+
+- **기존 로컬 DB 에 `migration:run` 을 돌리면 실패한다.** `synchronize` 로 이미 만들어진
+  테이블에 `CREATE TABLE` 이 부딪힌다. 개발 DB 는 `docker compose down -v` 후 재생성이 제일 깔끔하다.
+  평소 개발은 `synchronize` 경로라 마이그레이션을 돌릴 일 자체가 없다
+- **`migration:generate` 는 매번 `notificationPreferences` 기본값 한 줄을 노이즈로 낸다.**
+  Postgres 가 jsonb 기본값의 키 순서·공백을 정규화해 저장하는데 TypeORM 이 원본 문자열과
+  단순 비교하기 때문. 실제 차이가 아니므로 생성된 마이그레이션에서 지우면 된다
+
+#### 검증
+
+빈 DB 를 새로 만들어 `NODE_ENV=production` 으로 `dist` 를 기동하는 실제 경로를 그대로 밟았다.
+
+- 부팅 시 마이그레이션 2건 자동 적용 (`migrations` 테이블에 기록됨)
+- 테이블 17개(엔티티 13 + 벡터 3 + `migrations`), 확장 `vector`·`uuid-ossp`, HNSW 인덱스 2개 생성 확인
+- `POST /auth/demo` 200 — uuid 기본값·jsonb 기본값·FK 까지 쓰기 경로 동작 확인
+- 적용 후 `migration:generate` 재실행 시 위 jsonb 노이즈 외 스키마 차이 없음
 
 ### 5-3. Socket.IO Redis 어댑터 미설치 — 스케일 제약
 
@@ -223,13 +268,12 @@ Geolocation 은 HTTPS 환경에서만 동작하나, Vercel 은 기본 HTTPS 이�
 
 ## 8. 배포 순서
 
-1. **선행 코드 작업** — 5-1(Redis URL 통합), 5-5(헬스체크), 5-4(CORS 제한)
+1. **선행 코드 작업** — 5-1(Redis URL 통합), 5-2(마이그레이션), 5-4(CORS 제한), 5-5(헬스체크) 모두 완료
 2. **Dockerfile** — `apps/api/Dockerfile` 작성 완료 (컨텍스트=레포 루트)
 3. **Railway**
    1. Postgres 서비스 배포 (`pgvector/pgvector:pg16`)
-   2. `init.sql` 수동 적용
-   3. Redis 애드온 추가
-   4. API 서비스 배포 (replica 1)
+   2. Redis 애드온 추가
+   3. API 서비스 배포 (replica 1) — 부팅 시 마이그레이션이 스키마를 자동 생성한다
 4. **RunPod** — vLLM + TEI 기동 후 엔드포인트 확보 → Railway 환경변수 주입
 5. **Vercel** — web 배포 → 카카오/ODsay 콘솔에 도메인 등록
 6. **R2 버킷 생성 + Resend SMTP 전환**

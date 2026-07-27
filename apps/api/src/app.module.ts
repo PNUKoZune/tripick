@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -46,15 +47,28 @@ import { InboxModule } from './inbox/inbox.module';
 
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        url:
-          config.get<string>('DATABASE_URL') ??
-          'postgresql://tripick:tripick@localhost:5432/tripick',
-        autoLoadEntities: true,
-        synchronize: config.get('NODE_ENV') === 'development',
-        logging: config.get('NODE_ENV') === 'development',
-      }),
+      useFactory: (config: ConfigService) => {
+        // 개발은 지금까지처럼 synchronize 로 빠르게 반영하고,
+        // 그 외(프로덕션·스테이징)는 마이그레이션만으로 스키마를 만든다.
+        // 둘을 동시에 켜면 synchronize 가 마이그레이션 결과를 덮어쓸 수 있어 배타적으로 둔다.
+        const isDevelopment = config.get('NODE_ENV') === 'development';
+
+        return {
+          type: 'postgres',
+          url:
+            config.get<string>('DATABASE_URL') ??
+            'postgresql://tripick:tripick@localhost:5432/tripick',
+          autoLoadEntities: true,
+          synchronize: isDevelopment,
+          logging: isDevelopment,
+          // CLI 용 정의는 src/database/data-source.ts — 경로를 바꾸면 양쪽 다 고쳐야 한다.
+          migrations: [join(__dirname, 'database', 'migrations', '*.{ts,js}')],
+          migrationsTableName: 'migrations',
+          // replica 1개 운영(§5-3)이라 부팅 시 마이그레이션이 동시 실행될 일이 없다.
+          // 다중 인스턴스로 늘리면 배포 파이프라인의 별도 단계로 빼야 한다.
+          migrationsRun: !isDevelopment,
+        };
+      },
     }),
 
     BullModule.forRootAsync({
