@@ -13,6 +13,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import type { InboxToastDto, JwtPayload, ReplanResultDto } from '@tripick/types';
 import { TripMembersService } from '../trip-members/trip-members.service';
+import { corsOrigins } from '../common/cors';
 
 /** 인증을 통과한 소켓의 client.data 에 담기는 사용자 정보 */
 interface AuthedSocketData {
@@ -37,7 +38,7 @@ type JoinTripAck = (response: { event: 'joined' | 'join-denied'; tripId: string 
  * `evictFromTrip` 으로 해당 사용자의 소켓을 room 에서 즉시 내보낸다.
  */
 @WebSocketGateway({
-  cors: { origin: '*' },
+  cors: { origin: corsOrigins() },
   namespace: '/realtime',
 })
 export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {

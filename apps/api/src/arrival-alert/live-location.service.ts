@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
+import { redisConnection } from '../common/redis.config';
 import { LOCATION_TTL_SEC } from './arrival-alert.constants';
 
 /** 서버에 보관되는 사용자 최신 위치 1건. */
@@ -24,12 +25,9 @@ export class LiveLocationService implements OnModuleInit, OnModuleDestroy {
   private readonly redis: Redis;
 
   constructor(config: ConfigService) {
-    this.redis = new Redis({
-      host: config.get<string>('REDIS_HOST', 'localhost'),
-      port: config.get<number>('REDIS_PORT', 6379),
-      lazyConnect: true,
-      maxRetriesPerRequest: 1,
-    });
+    this.redis = new Redis(
+      redisConnection(config, { lazyConnect: true, maxRetriesPerRequest: 1 }),
+    );
     this.redis.on('error', () => undefined);
   }
 

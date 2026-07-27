@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -6,7 +7,9 @@ import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { Redis } from 'ioredis';
+import { redisConnection } from './common/redis.config';
 import { HttpThrottlerGuard } from './common/guards/http-throttler.guard';
+import { HealthController } from './health/health.controller';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { TripsModule } from './trips/trips.module';
@@ -38,35 +41,40 @@ import { InboxModule } from './inbox/inbox.module';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         throttlers: [{ ttl: 60_000, limit: 120 }],
-        storage: new ThrottlerStorageRedisService(
-          new Redis({
-            host: config.get<string>('REDIS_HOST', 'localhost'),
-            port: config.get<number>('REDIS_PORT', 6379),
-          }),
-        ),
+        storage: new ThrottlerStorageRedisService(new Redis(redisConnection(config))),
       }),
     }),
 
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        url:
-          config.get<string>('DATABASE_URL') ??
-          'postgresql://tripick:tripick@localhost:5432/tripick',
-        autoLoadEntities: true,
-        synchronize: config.get('NODE_ENV') === 'development',
-        logging: config.get('NODE_ENV') === 'development',
-      }),
+      useFactory: (config: ConfigService) => {
+        // 개발은 지금까지처럼 synchronize 로 빠르게 반영하고,
+        // 그 외(프로덕션·스테이징)는 마이그레이션만으로 스키마를 만든다.
+        // 둘을 동시에 켜면 synchronize 가 마이그레이션 결과를 덮어쓸 수 있어 배타적으로 둔다.
+        const isDevelopment = config.get('NODE_ENV') === 'development';
+
+        return {
+          type: 'postgres',
+          url:
+            config.get<string>('DATABASE_URL') ??
+            'postgresql://tripick:tripick@localhost:5432/tripick',
+          autoLoadEntities: true,
+          synchronize: isDevelopment,
+          logging: isDevelopment,
+          // CLI 용 정의는 src/database/data-source.ts — 경로를 바꾸면 양쪽 다 고쳐야 한다.
+          migrations: [join(__dirname, 'database', 'migrations', '*.{ts,js}')],
+          migrationsTableName: 'migrations',
+          // replica 1개 운영(§5-3)이라 부팅 시 마이그레이션이 동시 실행될 일이 없다.
+          // 다중 인스턴스로 늘리면 배포 파이프라인의 별도 단계로 빼야 한다.
+          migrationsRun: !isDevelopment,
+        };
+      },
     }),
 
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        connection: {
-          host: config.get<string>('REDIS_HOST', 'localhost'),
-          port: config.get<number>('REDIS_PORT', 6379),
-        },
+        connection: redisConnection(config),
         defaultJobOptions: {
           attempts: 3,
           backoff: { type: 'fixed', delay: 2000 },
@@ -95,6 +103,7 @@ import { InboxModule } from './inbox/inbox.module';
     FriendsModule,
     InboxModule,
   ],
+  controllers: [HealthController],
   providers: [
     // 전역 가드로 모든 HTTP 라우트에 throttler 적용 (WS 는 통과)
     { provide: APP_GUARD, useClass: HttpThrottlerGuard },

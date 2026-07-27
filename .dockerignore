@@ -1,0 +1,24 @@
+# 의존성·빌드 산출물 — 이미지 안에서 새로 설치·빌드한다 (호스트 것 복사 금지)
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+.turbo
+
+# tsc 증분 캐시. dist 를 제외해도 이게 남으면 tsc 가 "이미 빌드됨"으로 보고
+# 아무것도 emit 하지 않아, packages/* 의 dist 가 비어 api 빌드가 TS6305 로 깨진다.
+**/*.tsbuildinfo
+
+# VCS·로그·에디터
+.git
+.gitignore
+**/*.log
+.vscode
+
+# 로컬 환경파일 — 런타임 env 는 배포 플랫폼(Railway)이 주입한다
+**/.env
+**/.env.*
+
+# 빌드에 불필요한 것
+docker-compose.yml
+docs

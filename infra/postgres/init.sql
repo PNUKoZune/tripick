@@ -1,3 +1,9 @@
+-- 로컬 docker-compose 최초 기동 전용 (postgres 컨테이너 entrypoint).
+-- 같은 내용이 TypeORM 마이그레이션에도 있다:
+--   apps/api/src/database/migrations/1700000000000-InitVectorSchema.ts
+-- 프로덕션은 그 마이그레이션이 적용하므로, 이 파일을 고치면 마이그레이션도 같이 고쳐야 한다.
+-- (기존 마이그레이션 수정 대신 새 마이그레이션 추가가 원칙 — 이미 적용된 DB 가 있으므로)
+
 -- pgvector 확장 활성화
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
