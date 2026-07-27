@@ -5,6 +5,10 @@
 **/.turbo
 .turbo
 
+# tsc 증분 캐시. dist 를 제외해도 이게 남으면 tsc 가 "이미 빌드됨"으로 보고
+# 아무것도 emit 하지 않아, packages/* 의 dist 가 비어 api 빌드가 TS6305 로 깨진다.
+**/*.tsbuildinfo
+
 # VCS·로그·에디터
 .git
 .gitignore

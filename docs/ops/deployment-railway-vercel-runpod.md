@@ -104,6 +104,20 @@ Railway Redis 애드온을 사용한다. 단 접속 정보가 비밀번호를 �
 - 런타임: `node:20-slim` 비루트(`node`) 실행, `CMD node dist/main.js`, `PORT` 환경변수 우선
 - **replica 는 1개로 고정한다** (사유는 5-3 참조)
 
+#### `.dockerignore` 의 `*.tsbuildinfo` 제외는 필수
+
+`packages/{types,utils}` 는 composite 프로젝트라 빌드 후 **패키지 루트에** `tsconfig.tsbuildinfo`
+를 남긴다. `**/dist` 만 제외하고 이 파일이 이미지로 들어가면 `tsc` 가 "이미 빌드됨" 으로 판단해
+아무것도 emit 하지 않고, api 빌드가 `TS6305: Output file ... has not been built from source file`
+로 깨진다. 호스트에 `dist` 가 남아 있으면 로컬 빌드에서는 재현되지 않으니 주의.
+
+#### 검증 (실제 이미지 빌드·기동)
+
+- `docker build -f apps/api/Dockerfile -t tripick-api .` 성공 (이미지 553MB)
+- 빈 DB·Redis 를 붙여 컨테이너 기동 → 마이그레이션 2건 자동 적용, 테이블 17개 생성
+- `GET /api/v1/health` 200, `POST /auth/demo` 200, Docker `HEALTHCHECK` = `healthy`
+- `REDIS_URL` 경로(5-1)로 Redis 접속 성공
+
 ---
 
 ## 5. 선행 코드 작업 (배포 전 필수)
@@ -225,7 +239,7 @@ CLAUDE.md 아키텍처에 "Redis Adapter / Pub-Sub Sync" 가 명시되어 있으
 | `CORS_ORIGIN` | (기본값) | Vercel 도메인 (쉼표 구분) |
 | `ODSAY_SERVICE_URL` | `http://localhost:4000` | **ODsay 콘솔 등록 도메인과 정확히 일치** |
 | `JWT_SECRET` / `JWT_REFRESH_SECRET` | `change-me-*` | 별도 생성한 시크릿 |
-| `SENTRY_DSN` | (비움) | 프로덕션 DSN |
+| `SENTRY_DSN` | (비움) | (비움) — Sentry 미연동, 10절 참조 |
 
 ### ODsay 주의
 
@@ -289,7 +303,6 @@ Geolocation 은 HTTPS 환경에서만 동작하나, Vercel 은 기본 HTTPS 이�
 - 경로 조회 — 직선거리 폴백이 아닌 실제 API 응답인지 확인
 - 이미지 업로드 → R2 저장 및 공개 URL 접근
 - BullMQ 재계획 잡 처리 → WebSocket/FCM push 도달
-- Sentry 이벤트 수신
 
 ---
 
@@ -298,5 +311,9 @@ Geolocation 은 HTTPS 환경에서만 동작하나, Vercel 은 기본 HTTPS 이�
 - **API replica 1개 고정** — Socket.IO Redis 어댑터 미도입 (5-3)
 - **BullMQ Worker 가 API 와 동일 프로세스** — 재계획 잡이 API 응답성과 자원을 공유한다.
   부하 증가 시 Worker 를 별도 Railway 서비스로 분리하는 것을 검토한다.
-- **스키마 변경이 수동** — TypeORM 마이그레이션 미도입 (5-2)
+- **마이그레이션이 부팅 시 실행된다** — replica 1 전제(5-2). 인스턴스를 늘리면
+  배포 파이프라인의 독립 단계로 분리해야 한다
+- **Sentry 미연동** — `@sentry/nestjs`·`@sentry/nextjs` 의존성이 없고 초기화 코드도 없다.
+  `SENTRY_DSN` 을 넣어도 아무 일도 일어나지 않으므로, 에러 모니터링이 필요하면 별도 작업이 필요하다
+  (CLAUDE.md MONITORING LAYER 은 목표 구성이며 현재 미구현)
 - **RunPod 엔드포인트 URL 변동** — Pod 재시작 시 주소가 바뀌면 Railway 환경변수 갱신이 필요하다
