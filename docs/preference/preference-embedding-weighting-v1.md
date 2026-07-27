@@ -97,7 +97,7 @@ PATCH /preference-analyzer/photos/tags  {url, tag, enabled}
 - **`산` 정규식 잔여.** 뒤에 한글이 붙는 산악 표현(예: 산악회)과 임야 지번(`산 12`)은 정확도가 낮다. §4-5 트레이드오프.
 - **`INDOOR_TAGS` 의 mood/environment 는 수동 목록.** FOOD 는 어휘에서 자동 파생되지만 mood/environment 실내값은 손으로 고른다 — 새 값 추가 시 함께 갱신 필요.
 - **어휘 확장 vs 장소 커버리지.** `TAG_HINTS` 는 넓혔지만 `SEEDS_BY_REGION` 시드는 그대로라, 새 태그(온천·야경 등)가 붙을 실제 후보는 외부 API 결과에 의존한다.
-- **라이브 마이그레이션.** `disabledPhotoTags` 는 형제 jsonb 컬럼처럼 `synchronize`+`default` 에만 의존한다(프로젝트에 마이그레이션 인프라 없음). 라이브 스키마 반영은 별도 결정.
+- ~~**라이브 마이그레이션.**~~ 해소됨. 작성 시점엔 `disabledPhotoTags` 가 `synchronize`+`default` 에만 의존했으나, 이후 TypeORM 마이그레이션으로 전환해 프로덕션은 부팅 시 `migrationsRun` 이 스키마를 잡는다([deployment §5-2](../ops/deployment-railway-vercel-runpod.md)). 첫 배포 전이라 이 컬럼도 초기 마이그레이션(`InitEntities`)에 포함됐다.
 
 ## 8. 변경 파일
 

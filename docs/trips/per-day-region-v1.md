@@ -29,6 +29,7 @@
 - 저장은 **별도 `trip_days` 테이블**. `trips.destination` 단일 컬럼에 배열을 욱여넣지 않고 정규화한다. `(tripId, day)` 당 여러 행이 생긴다(하루 여러 지역).
 - `trips.destination` 은 **대표 지역**(지도 중심·표지 등 표시용)으로 유지한다. 일자별 지역을 쓰면 프론트가 고유 지역을 합친 요약 라벨(`부산 · 경주`)로 채운다. 이 라벨은 **표시 전용**이며 지역 검색 키로 쓰지 않는다(§5.2 폴백 주의).
 - 마이그레이션 파일은 만들지 않는다. 이 저장소는 dev `synchronize`(`NODE_ENV=development`) + `autoLoadEntities` 로 스키마를 잡는 관례이므로 엔티티 등록만으로 `trip_days` 가 생성된다.
+  - (이후 갱신) 프로덕션은 TypeORM 마이그레이션으로 전환됐다 — `trip_days` 는 초기 마이그레이션(`InitEntities`)에 포함되지만, **이후 엔티티를 바꿀 땐 마이그레이션도 함께 생성**해야 한다([deployment §5-2](../ops/deployment-railway-vercel-runpod.md)). 개발은 여전히 `synchronize` 경로.
 
 [`apps/api/src/trips/trip-day.entity.ts`](../../apps/api/src/trips/trip-day.entity.ts)
 

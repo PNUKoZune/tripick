@@ -114,4 +114,4 @@ pnpm --filter @tripick/api build       # nest build
 
 - 중기예보 `regId` 는 대표도시 nearest-centroid 스냅이라 도 단위 해상도 — 국내 여행엔 충분하나 세밀한 지역차는 한계.
 - 중기예보는 강수확률·최저/최고기온만 제공(강수량·습도·풍속 없음). 8~10일차는 오전/오후 구분 없이 하루 단위.
-- **날씨 변화 감지 → 재계획 자동 트리거 부재** — 반응 로직(카테고리 분기·프롬프트 힌트·CRAG)은 있으나 `trigger:'weather'` 잡을 넣는 스케줄러가 없다([`alternative.processor.ts`](../../apps/api/src/alternative/alternative.processor.ts) backlog 주석). 이번 확장으로 최대 10일 비교 기반이 생겼으니 별도 feat 브랜치로 붙이는 것을 권장.
+- ~~**날씨 변화 감지 → 재계획 연결 부재**~~ — 해소됨. 감지는 [`weather-alert-scheduler-v1`](./weather-alert-scheduler-v1.md)(스캔 → `weather_alert` inbox·FCM), 알림 → 재계획 진입은 [`alert-replan-wiring-v1`](./alert-replan-wiring-v1.md)(딥링크에 `trigger:'weather'` 를 실어 planner 배너로 제안). **자동 트리거는 기획상 의도적 제외** — 날씨는 "추천만" 하고 잡은 사용자가 배너를 눌러야 돈다(CLAUDE.md §7).

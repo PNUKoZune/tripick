@@ -61,7 +61,7 @@
 | `day` / `targetItemId` | 딥링크·미리보기용(있으면) |
 | `resolvedAt` | 승인/거절/취소 처리 시각 |
 
-- 테이블은 `synchronize` 로 생성(§7 마이그레이션 인프라는 별개 백로그).
+- 테이블은 작성 시점 관례대로 `synchronize` 로 생성했다. 이후 TypeORM 마이그레이션으로 전환돼 프로덕션에서는 초기 마이그레이션(`InitEntities`)이 이 테이블을 만든다([deployment §5-2](../ops/deployment-railway-vercel-runpod.md)).
 - 공통 타입: [`packages/types/src/schedule-change.ts`](../../packages/types/src/schedule-change.ts) — `ScheduleChangeKind`·`ScheduleChangeStatus`·`ScheduleChangePayload`(union)·`ScheduleChangeProposalDto`·`CreateScheduleChangeDto`.
 - 인박스 확장: [`packages/types/src/inbox.ts`](../../packages/types/src/inbox.ts) 에 `NotificationCategory` 2종(`schedule_change_request`·`schedule_change_result`), `InboxItemActionDto.type` 2종(`review-schedule-change`·`reject-schedule-change`) + `proposalId` 필드 추가. preference 기본값 on(설정 UI 미노출 → 항상 켜진 트랜잭션성 알림).
 

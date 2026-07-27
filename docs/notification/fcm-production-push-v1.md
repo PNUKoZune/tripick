@@ -21,7 +21,7 @@
 
 - `friend_request` 푸시 (수신설정 토글은 있으나 friends 흐름이 인박스·푸시 미발신 — 카테고리 체계 설계 필요)
 - `weather_alert` 발신처 (카테고리·수신설정·인박스 액션은 준비됐으나 이 카테고리로 알림을 만드는 코드 없음)
-- 프로덕션 스키마 마이그레이션 경로 (`fcm_tokens` 포함 전 엔티티가 dev `synchronize` 의존 — FCM 무관 레포 전반 과제)
+- ~~프로덕션 스키마 마이그레이션 경로~~ (`fcm_tokens` 포함 전 엔티티가 dev `synchronize` 의존 — FCM 무관 레포 전반 과제) → 이후 TypeORM 마이그레이션으로 전환돼 해소([deployment §5-2](../ops/deployment-railway-vercel-runpod.md))
 
 ## 2. 데이터 모델 — 토큰 테이블 분리
 

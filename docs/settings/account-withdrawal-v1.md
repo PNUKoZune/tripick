@@ -118,5 +118,5 @@ soft delete(`deletedAt`) + 30일 grace 를 검토하고 **채택하지 않았다
 ## 9. 후속 / 제외
 
 - **모달 공통 셸 + 포커스 트랩** — [`shared/ui/dialog.tsx`](../../apps/web/src/shared/ui/dialog.tsx) 와 이 다이얼로그가 스크롤 락·ESC·백드롭을 각자 구현하고, 양쪽 다 포커스 트랩이 없다. 개별 모달에서 고치면 반쪽이라 공통 `ModalShell` 추출 과제로 [백로그](../plans/2026-07-21-open-backlog.md)에 분리
-- **DB 마이그레이션** — `withdrawal_reasons` 는 `synchronize` 로 생성된다. 레포 전체가 마이그레이션 없이 굴러가므로 이 테이블만 별도 처리하지 않았다(백로그의 "DB 마이그레이션 인프라" 항목에 포함)
+- ~~**DB 마이그레이션**~~ — 해소됨. 작성 시점엔 레포 전체가 `synchronize` 로 굴러가 `withdrawal_reasons` 도 그에 따랐으나, 이후 TypeORM 마이그레이션으로 전환해 이 테이블도 초기 마이그레이션(`InitEntities`)에 포함됐다([deployment §5-2](../ops/deployment-railway-vercel-runpod.md))
 - **탈퇴 사유 조회 화면** — 현재는 DB 직접 조회. 관리자 화면이 생기면 집계 뷰 추가

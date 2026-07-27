@@ -110,7 +110,7 @@
 
 ## 8. 주의사항 / 후속
 
-- `preferences.photoUrls`(jsonb) 컬럼은 dev의 `synchronize`로 자동 반영. **운영 배포 시 마이그레이션 필요**
+- `preferences.photoUrls`(jsonb) 컬럼은 dev의 `synchronize`로 자동 반영. ~~**운영 배포 시 마이그레이션 필요**~~ → 해소: 프로덕션은 TypeORM 마이그레이션(`migrationsRun`)이 스키마를 잡는다([deployment §5-2](../ops/deployment-railway-vercel-runpod.md)). 이후 엔티티를 바꿀 땐 `pnpm migration:generate` 로 마이그레이션을 함께 만들어야 한다
 - 사진 원본 저장은 `STORAGE_*`(로컬 MinIO / 라이브 R2) 설정 시 동작. 미설정이면 분석만 되고 원본 미보관
 - `beforeunload`는 브라우저 레벨 이탈(새로고침·탭 닫기·외부 URL)만 막고, 앱 내부 소프트 네비게이션은 미차단
 - 기존 저장 프로필의 옛 필드(travelStyles 등)는 마이그레이션 없이 무시되고 신규 필드는 빈 배열로 폴백

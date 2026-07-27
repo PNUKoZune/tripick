@@ -3,7 +3,7 @@
 문서 목적: 각 기능 문서(`*-v1`)의 후속/백로그 섹션을 모아, 아직 안 된 항목만 체크박스로 추적한다. CLAUDE.md 기획 범위와 대조해 계획 밖 항목은 제외했다.
 
 작성일: 2026-07-21
-기준선: 최신 문서 `arrival-check-alert-v1`(2026-07-21)까지. `[코드확인]` = 미처리 여부를 코드로 대조한 항목.
+기준선: 최신 문서 `day-scoped-replan-v1`·`deployment-railway-vercel-runpod`(2026-07-27)까지. `[코드확인]` = 미처리 여부를 코드로 대조한 항목.
 관련 문서: [docs/README.md](../README.md) (문서 인덱스), [CLAUDE.md](../../CLAUDE.md) (기획 범위·non-goal)
 
 ## 상태 표기
@@ -22,10 +22,10 @@
 
 ## 공통 · 여러 문서에 반복 (우선순위 후보)
 
-- [ ] **"수락 → 재계획" 배선** `[코드확인: 없음]` — `deviation`/`weather` 트리거 타입·프롬프트·결과분기는 준비됨. 알림 탭 → planner 이동 후 재계획 진입점만 없음 ([arrival](../alerts/arrival-check-alert-v1.md#L142)·[crowd](../alerts/crowd-alert-scheduler-v1.md#L143)·[mid-term](../alerts/mid-term-forecast-v1.md#L113))
+- [x] **"수락 → 재계획" 배선** `[코드확인]` — 알림 카테고리→트리거 매핑을 공유 상수([`REPLAN_TRIGGER_BY_CATEGORY`](../../packages/types/src/inbox.ts))로 올려 인박스 액션·푸시 탭 라우팅 양쪽이 같은 화면(`/planner?tripId=&day=&replan=<trigger>`)에 도착 → planner 비침습 배너 → 트리거 프리필 `ReplanModal`. **자동 재계획은 의도적 제외** — 배너를 닫으면 아무 잡도 안 돈다(CLAUDE.md "추천만" 원칙 유지). `ReplanTrigger` 에 `crowd` 신설(분기는 `Record<ReplanTrigger,…>` 전수 테이블), 재계획 **결과** 알림은 트리거 무관 `replan_ready` 고정해 권유 루프 차단 ([alert-replan-wiring](../alerts/alert-replan-wiring-v1.md)). 배너는 "이 날" 을 말하는데 재계획은 여행 전체이던 어긋남은 [day-scoped-replan](../planner/day-scoped-replan-v1.md)(`targetDays`, 알림 딥링크 일차가 모달 기본 범위)으로 해소. 잔여 항목은 §알림·날씨·혼잡으로 분리
 - [ ] **iOS 푸시(APNs) 실기기 검증** `[대기: 실기기 + APNs Auth Key]` — iPhone 17 Pro 시뮬레이터 Debug 빌드·설치·실행과 Firebase plist 번들 포함은 확인(2026-07-22). Auth Key 업로드 + Xcode capability 및 APNs 수신은 실기기에서 검증 ([inbox](../notification/inbox-and-trip-invite-v1.md#L450)·[photo-taste](../preference/preference-photo-taste-analysis-v1.md#L152)·[trip-progress](../trips/trip-progress-live-v1.md#L147)·[mobile](../setup/mobile-webview-setup.md#L226))
 - [x] **Web Push (Service Worker + VAPID)** — 브라우저 단독 사용자 푸시 수신 ([web-push](../notification/web-push-service-worker-v1.md)). 자동 권한 프롬프트→옵트인 UI, `platform='web'` 정밀 태깅은 후속
-- [ ] **DB 마이그레이션 인프라** `[코드확인: 없음]` `[대기: 라이브 스키마 반영 결정]` — `synchronize` 의존, 라이브 스키마 반영 미결 ([preferences-enh](../preference/preferences-enhancements-v1.md#L111)·[weighting](../preference/preference-embedding-weighting-v1.md#L94))
+- [x] **DB 마이그레이션 인프라** `[코드확인]` — TypeORM 마이그레이션으로 전환(첫 배포 전이라 프로덕션 데이터가 없어 전환 비용이 가장 싼 시점). [app.module.ts](../../apps/api/src/app.module.ts#L62) 가 `synchronize: isDevelopment` / `migrationsRun: !isDevelopment` 로 개발·프로덕션을 **배타** 분기(둘 다 켜면 synchronize 가 마이그레이션 결과를 덮어씀) → 컨테이너가 뜨면서 스스로 스키마를 맞춰 별도 배포 단계가 없다(replica 1개 전제). 마이그레이션 2건 — 손으로 쓴 `1700000000000-InitVectorSchema`(확장·pgvector 테이블, 타임스탬프를 낮게 고정해 항상 먼저) + 자동 생성 `1785135565704-InitEntities`(엔티티 13개 DDL). CLI 용 [data-source.ts](../../apps/api/src/database/data-source.ts) + `migration:{generate,run,revert,show}` 스크립트. 빈 DB 를 `NODE_ENV=production` 으로 기동해 테이블 17개·확장 2개·HNSW 인덱스 2개 생성 확인 ([deployment §5-2](../ops/deployment-railway-vercel-runpod.md)). 로컬 개발은 `synchronize` 경로 유지 — 기존 DB 에 `migration:run` 하면 `CREATE TABLE` 충돌이라 `docker compose down -v` 후 재생성 ([preferences-enh](../preference/preferences-enhancements-v1.md#L111)·[weighting](../preference/preference-embedding-weighting-v1.md#L94))
 - [x] **모달 공통 셸(`ModalShell`) 추출 + 포커스 트랩** `[코드확인]` — [modal-shell.tsx](../../apps/web/src/shared/ui/modal-shell.tsx) 가 body 스크롤 락·ESC·백드롭·포커스 트랩을 전담하고 확인 다이얼로그 6종이 패널 클래스만 넘긴다. 트랩은 [use-focus-trap.ts](../../apps/web/src/shared/lib/use-focus-trap.ts) 로 분리해 자체 애니메이션 phase 를 가진 [BottomSheet](../../apps/web/src/shared/ui/bottom-sheet.tsx) 도 훅만 재사용. `onDismiss` 를 `undefined` 로 넘기면 처리 중 닫힘을 막는다
 - [x] **지도 폴리라인 동선 시각화** `[코드확인: 없음]` `[제외: 폴리라인 동선은 오히려 UI 상으로 불편할 수 있음]` — 내 위치 이동 버튼 포함 ([main-planner](../planner/main-planner-v1.md#L263)·[planner-enh](../planner/planner-page-enhancements-v1.md#L124))
 
@@ -39,6 +39,8 @@
 - [x] 현재 장소 비교 카드(P3-9) → 대안 카드 취향 근거(reason) 정식 노출로 대체 `[코드확인]` — 좌우 비교 카드는 BottomSheet 세로 레이아웃에 부적합. `place.reason` 을 `waitLabel` 에 욱여넣던 것을 `PlannerAlternativeDto.reason` 전용 필드로 분리해 카드에 한 줄 노출
 - [x] pending/resolve 후보 마커 좌표 정규화 일관화 `[코드확인]` — 추천/resolve 응답 마커를 병합 후 `normalizeMarkerPositions` 로 폴백 x·y 재정규화(SDK 미로딩 미리보기 정합)
 - [x] 필수 포함 장소 LLM 경로 보장 주입(구 best-effort) `[코드확인]` — `enforceMustInclude` 로 LLM/폴백 계획에서 누락된 필수 장소를 음수 order 로 강제 주입해 일차별 slice 에서 살아남게 보장 ([planner-enh](../planner/planner-page-enhancements-v1.md#L124))
+- [ ] 일차 간 동선 연속성 미고려 — 2일차만 다시 짜면 1일차 마지막 장소와 2일차 첫 장소의 거리를 아무도 안 본다. 원래도 그랬으나 부분 재계획은 "나머지는 그대로" 라는 약속이라 간극이 더 눈에 띈다 ([day-scoped-replan](../planner/day-scoped-replan-v1.md#L136))
+- [ ] 비연속 일차 범위(`[1,3]`)가 연속 2일로 취급됨 — AI 플래너에는 1..N 로만 넘어가고 프롬프트 기간도 1일차~3일차로 넓게 나가, 날짜별 날씨·영업요일이 어긋날 수 있다
 - [x] 검색 드롭다운 키보드 내비 · 태블릿 사이드바 접힘 localStorage `[코드확인]` — combobox/listbox + 방향키·Enter·Esc, 사이드바 접힘 상태 localStorage 유지
 
 ## 라우팅
@@ -56,6 +58,9 @@
 - [x] 날씨/재계획 알림 수신 토글 분리 `[코드확인]` — `prefersCategory` 의 weather/crowd/arrival→replan_ready collapse 제거, 각 카테고리가 자기 키를 따름. 설정 UI 는 "재계획 완료"(replan_ready)와 "날씨·혼잡·미도착 추천"(weather_alert 대표, crowd·arrival 동반) 2개 row 로 분리. 기존 replan_ready off 사용자는 이제 추천을 따로 끌 수 있음(추천은 기본 on 으로 복귀)
 - [ ] 임계값 캘리브레이션(유예 15분·반경 500m·신선도 10분, 상대 1.2·하한 10%) `[보류: 라이브 데이터 부재]` — 오탐/미탐 지표가 쌓여야 튜닝 근거가 생김. 실데이터 없이는 착수 애매 ([arrival](../alerts/arrival-check-alert-v1.md#L142)·[crowd](../alerts/crowd-alert-scheduler-v1.md#L143))
 - [ ] iOS 백그라운드 위치(significant-location-change) `[보류: 실기기 + iOS 네이티브]` — significant-location-change 는 실기기 검증 + 네이티브 작업 필요
+- [ ] 미도착 배너가 현재 위치를 안 실어 보냄 — 문구는 "지금 위치에 맞춰" 인데 `currentLocation`·`deviatedItemId` 가 빈 채로 나가 CRAG 거리 점수가 중립값으로 떨어지고 검색도 반경 앵커 없이 목적지 전역을 훑는다. 인박스 액션에 `itemId` 를 실어 배너까지 스레딩하면 해결 ([alert-replan-wiring](../alerts/alert-replan-wiring-v1.md#L128))
+- [ ] replan jobId 중복 제거가 트리거별로 갈림 — 키가 `${tripId}-${trigger}-${bucket}` 이라 배너(`weather`)와 FAB(`manual`) 로 연달아 제출하면 두 잡이 다 큐에 들어가 재생성이 두 번 돈다
+- [ ] 재계획 트리거 검색 키워드에 `맛집` 계열 부재 `[보류: 후보 풀이 실제로 바뀌는 동작 변경]` — weather·deviation·crowd 셋 다. 후보 풀에 restaurant 가 얇아 식사 슬롯이 빌 수 있다. `TRIGGER_KEYWORDS` 에 NOTE 로만 남겨둠
 - [x] KTO `tAtsNm` 이름 매칭 누락 지표화 `[코드확인]` — 조용히 사라지던 관광지 조회 스킵을 사유별(region_unresolved·budget_exhausted·no_data·name_mismatch·empty_rate) 집계 → 스캔 끝에 커버리지 요약 로그(스킵 있으면 warn). `fetchConcentration` 이 사유 반환(`ConcentrationLookup`), `CoverageMetrics` 누적. **이름 매칭 로직 개선(부분일치·별칭)은 지표 보고 판단** — 오알림 방지 스킵 동작은 유지 ([crowd](../alerts/crowd-alert-scheduler-v1.md#L143))
 - [x] 강수확률 UI 노출 `[코드확인]` — 날씨 카드에 일자별 최대 POP(물방울 아이콘 + %) 노출. 단기예보만 POP 가 있어 중기·폴백 일자는 숨김. 습도는 `[제외: 불필요]` ([weather-forecast](../alerts/weather-forecast-v1.md#L88))
 
