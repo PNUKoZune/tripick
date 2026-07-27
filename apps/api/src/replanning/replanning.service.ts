@@ -19,11 +19,13 @@ export class ReplanningService {
       throw new ForbiddenException();
     }
 
-    // P3-12: 같은 여행·트리거의 재계획을 짧은 시간 창(10초) 안에서 dedup.
+    // P3-12: 같은 여행·트리거·대상 일차의 재계획을 짧은 시간 창(10초) 안에서 dedup.
     // BullMQ 는 동일 jobId 를 무시하므로 연속 클릭/중복 제출이 하나의 잡으로 합쳐진다.
+    // 대상 일차를 키에 넣지 않으면 "1일차 → 곧바로 2일차" 재계획이 하나로 합쳐져 버려진다.
     const bucket = Math.floor(Date.now() / 10_000);
+    const scope = dto.targetDays?.length ? [...dto.targetDays].sort((a, b) => a - b).join('.') : 'all';
     const job = await this.queue.add(REPLAN_JOB, dto, {
-      jobId: `${dto.tripId}-${dto.trigger}-${bucket}`,
+      jobId: `${dto.tripId}-${dto.trigger}-${scope}-${bucket}`,
     });
     return {
       jobId: String(job.id),

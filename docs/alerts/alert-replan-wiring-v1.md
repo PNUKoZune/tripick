@@ -124,7 +124,7 @@
 
 ## 8. 알려진 한계 / 후속 작업
 
-- **배너는 "이 날" 을 말하지만 재계획은 여행 전체** — `PlannerService.replan` 이 `replaceTripItems` 로 모든 일차를 갈아끼운다. 진행 중 여행에서 3일차 알림을 눌렀는데 이미 다녀온 1·2일차까지 바뀌고, 같은 장소로 재배치되지 않은 항목의 사용자 메모가 사라진다. 일차 단위 부분 재계획이 후속 후보
+- ~~**배너는 "이 날" 을 말하지만 재계획은 여행 전체**~~ — 해소: [`docs/planner/day-scoped-replan-v1.md`](../planner/day-scoped-replan-v1.md). `targetDays` 로 대상 일차만 재생성하고, 알림 딥링크의 일차가 재계획 모달의 기본 범위가 된다
 - **미도착 배너가 현재 위치를 안 보낸다** — 문구는 "지금 위치에 맞춰" 인데 `currentLocation`·`deviatedItemId` 가 비어 나간다. CRAG 거리 점수가 중립값으로 떨어지고 검색도 반경 앵커 없이 목적지 전역을 훑는다. 인박스 액션에 `itemId` 를 실어 배너까지 스레딩하면 해결 가능
 - **jobId 중복 제거가 트리거별로 갈린다** — `${tripId}-${trigger}-${bucket}` 이라 배너(`weather`)와 FAB(`manual`) 로 연달아 제출하면 두 잡이 모두 큐에 들어가 전체 재생성이 두 번 돈다
 - **재계획 트리거 키워드에 `맛집` 계열이 없다** — weather·deviation·crowd 셋 다. 후보 풀에 restaurant 가 얇아 식사 슬롯이 빌 수 있다. 값 변경은 후보 풀이 실제로 바뀌는 동작 변경이라 이번 범위에서 빼고 `TRIGGER_KEYWORDS` 에 NOTE 로만 남겼다

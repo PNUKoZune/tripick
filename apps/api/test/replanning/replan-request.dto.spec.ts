@@ -34,6 +34,28 @@ describe('Replan request DTO validation', () => {
       .toEqual(expect.arrayContaining(['lat', 'lng']));
   });
 
+  it('accepts a day-scoped replan payload', async () => {
+    const dto = plainToInstance(ReplanRequestBodyDto, {
+      tripId: '7ad4657d-cb04-4450-a6af-195e1ceb8791',
+      trigger: 'manual',
+      targetDays: [2, 3],
+    });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+    expect(dto.targetDays).toEqual([2, 3]);
+  });
+
+  it('rejects non-positive or fractional target days', async () => {
+    const dto = plainToInstance(ReplanRequestBodyDto, {
+      tripId: '7ad4657d-cb04-4450-a6af-195e1ceb8791',
+      trigger: 'manual',
+      targetDays: [0, 1.5],
+    });
+
+    const errors = await validate(dto);
+    expect(errors.map((error) => error.property)).toContain('targetDays');
+  });
+
   it('allows alternative payloads that include trigger while endpoint overrides it', async () => {
     const dto = plainToInstance(AlternativeReplanRequestBodyDto, {
       tripId: '7ad4657d-cb04-4450-a6af-195e1ceb8791',
