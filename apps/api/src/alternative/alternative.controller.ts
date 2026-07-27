@@ -23,11 +23,15 @@ export class AlternativeController {
   }
 
   @Post('request')
-  @ApiOperation({ summary: '대안 팝업 자유 텍스트 요청 → 재계획 트리거 (manual)' })
+  @ApiOperation({ summary: '사용자 재계획 요청 → 재계획 트리거 (기본 manual)' })
   requestReplan(@CurrentUser() user: UserEntity, @Body() dto: AlternativeReplanRequestBodyDto) {
     return this.replanningService.enqueue(user.id, {
       ...dto,
-      trigger: 'manual',
+      // 요청에 실린 트리거를 그대로 쓰고, 없을 때만 manual 로 떨어뜨린다.
+      // 무조건 manual 로 덮어쓰면 알림 배너(날씨·혼잡·미도착)에서 연 재계획이
+      // 검색 키워드("실내 관광"·"한적한 관광지")·CRAG context 점수·LLM 프롬프트에서
+      // 전부 일반 재계획으로 취급돼, 알림→재계획 배선이 조용히 무효가 된다.
+      trigger: dto.trigger ?? 'manual',
     });
   }
 }
