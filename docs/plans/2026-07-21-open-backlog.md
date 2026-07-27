@@ -68,9 +68,12 @@
 
 - [x] confidence 활용(CRAG 보정/임계 필터) `[코드확인]` — confidence 0.35 미만 태그는 검색·CRAG 매칭에서 제외하고, 유효 태그 점수는 confidence 만큼 중립값에서 보정 ([photo-taste](../preference/preference-photo-taste-analysis-v1.md#L152))
 - [ ] 미분석 사진 전용 재분석 버튼
-- [ ] 검색 품질 평가 하네스(golden set) → blend weight·radius 튜닝 ([enrichment](../preference/place-embedding-enrichment-v1.md#L149))
-- [ ] ANN 스케일 region 코드 pre-filter
-- [ ] 전국 재적재(현재 경상북도만 검증) `[보류: 경북 검증 우선]`
+- [x] 검색 품질 평가 하네스(golden set) → blend weight·radius 튜닝 — `pnpm eval:retrieval` 이 실제 파이프라인(pgvector+카카오 폴백+네이버 인지도)을 그대로 태워 골든셋 10케이스에 recall@k·MRR·지역정합을 잰다. **설계 핵심은 `cat`(적재 커버리지)을 따로 재는 것** — 안 그러면 적재가 얕은 지역의 낮은 recall 을 랭킹 탓으로 오독한다. `--sweep=KEY=v1,v2` 로 환경변수 조합 반복 측정. **결론: blend weight 는 0.6 유지** — 0~1 전 구간에서 R\|cat 0.27~0.30 으로 케이스 1~2건 차이 안에서만 흔들려 바꿀 근거가 없다. 정답의 절반이 카탈로그에 없는 상태(커버리지 47%)에서 상수를 만지면 노이즈를 쫓는 셈이라 커버리지가 먼저다. radius 는 10케이스 중 카카오 폴백이 1건뿐이라 신호 자체가 안 나옴 ([region-filter-and-eval](../preference/place-retrieval-region-filter-and-eval-v1.md))
+- [x] ANN 스케일 region 코드 pre-filter — `destination_region ILIKE '경상북%' OR name/address ILIKE …` 를 정본 코드 등가 비교(`region_code`·`sigungu_code` + btree)로 교체. ILIKE 는 인덱스를 못 타 전체 스캔이거나 HNSW post-filter 로 밀려나고, 후자는 지역이 선택적일수록 근사 이웃이 통째로 걸러져 **결과가 조용히 비는** 방향으로 망가진다. 9.7천 행에서 계획이 Seq Scan(17.7ms) → BitmapOr(3.2ms)로 바뀌었고, 이제 스캔이 카탈로그 전체가 아니라 그 지역 크기에만 비례한다. 코드는 적재·질의가 [region-code.ts](../../apps/api/src/planner/retrieval/region-code.ts) 같은 함수로 계산하고 **주소가 라벨보다 우선** — KTO 시도 목록이 `전남광주통합특별시` 같은 통합 행정명을 주는데 그걸 따르면 광주 장소가 전남으로 묶여 '광주' 검색에서 사라진다. 지역정합 99%·금지어 0 으로 누수 없음 확인
+- [x] 전국 재적재(현재 경상북도만 검증) — 16개 시도 **9,761행**. 1차 `--reseed --max=50`(provenance 없는 옛 벡터 1,906건 폐기 → 현재 모델로 재생성 + 영업시간), 2차 `KTO_FETCH_OPENING_HOURS=false --max=300`(커버리지 확장, 신규 8,095). **영업시간은 장소당 1콜이라 커버리지 패스와 갈랐다** — 안 그러면 일일 예산 900을 300건에 다 쓴다. 남은 구멍은 §후속의 대표 명소·광주 두 건
+- [ ] 대표 명소가 카탈로그에 없음 — 남산서울타워·설악산·성산일출봉이 전국 9.7천 건에 부재(골든셋 커버리지 47%). KTO `areaBasedList2` 는 인기순 정렬이 없어 페이지를 깊게 파도 안 잡힌다. 지역별 대표 명소 키워드 시드를 카카오 키워드 검색으로 적재하는 별도 패스 필요
+- [ ] 광주 적재 3건 — KTO 시도 목록이 광주·전남을 `전남광주통합특별시` 로 합쳐 줘 카카오 앵커가 전남 좌표로 쏠린다. 통합 라벨 감지 → 앵커 분산 필요
+- [ ] 카탈로그에 있는데 상위에 못 오는 랭킹 문제(`R|cat` 0.27) — 예: '대구 서문시장' 이 적재돼 있는데 상위 16 밖. 커버리지 개선 후 재측정하고 손대는 순서
 - [ ] `INDOOR_TAGS` mood/environment 자동화 · `산` 정규식 개선 ([weighting](../preference/preference-embedding-weighting-v1.md#L94))
 
 ## 트립
