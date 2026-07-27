@@ -131,6 +131,11 @@ export class ReplanRequestBodyDto extends BaseReplanRequestBodyDto implements Re
   trigger!: ReplanTrigger;
 }
 
+/**
+ * `/alternative/*` 바디. trigger 는 선택값이다 —
+ * `/request` 는 실려 오면 그대로 쓰고(알림 배너에서 연 재계획의 weather·crowd·deviation),
+ * 없으면 manual. `/deviation` 은 이탈 신고 전용이라 항상 deviation 으로 고정한다.
+ */
 export class AlternativeReplanRequestBodyDto extends BaseReplanRequestBodyDto {
   @IsOptional()
   @IsIn(REPLAN_TRIGGERS)
