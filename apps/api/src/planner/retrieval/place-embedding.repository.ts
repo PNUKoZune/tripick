@@ -9,6 +9,7 @@ import {
   normalizeDestinationRegion,
   regionPrefixStem,
 } from './place-seeds';
+import { destinationRegionFilter, placeRegionCodes } from './region-code';
 import type { RawPlaceCandidate } from './types';
 
 export interface UpsertPlaceInput {
@@ -87,22 +88,36 @@ export class PlaceEmbeddingRepository {
     limit: number,
     preferenceVector?: number[],
   ): Promise<RawPlaceCandidate[]> {
-    // 목적지 최단 어간(접미사·도 제거)으로 시도/시군구를 매칭한다.
-    // 예: '경주' → region_sigungu '경주시' 프리픽스 매칭, '부산' → destination_region '부산',
-    //     '경기도' → '경기%' 로 짧은 라벨 '경기'·풀네임 '경기도' 모두 매칭.
-    const stem = regionPrefixStem(destination);
-    const stemLike = stem ? `${stem}%` : '';
-    const destinationLike = `%${destination}%`;
-    const vector = `[${embedding.join(',')}]`;
-    const hasPreference = Array.isArray(preferenceVector) && preferenceVector.length > 0;
+    // 목적지를 정본 지역 코드로 바꿔 등가 비교로 pre-filter 한다.
+    // ILIKE 프리픽스였을 때는 인덱스를 못 타 (a) 전체 스캔이거나 (b) HNSW 근사 이웃을
+    // 뒤에서 걸러내는 post-filter 였고, 후자는 후보가 통째로 탈락해 결과가 비었다.
+    // 등가 비교면 플래너가 btree(region_code/sigungu_code)로 먼저 좁히고 정확 KNN 을 돌린다.
+    // 예: '경주'→sigungu '경주', '부산 해운대구'→sido '부산', '경상북도'→sido '경북'.
+    const { sido, sigungu } = destinationRegionFilter(destination);
+    const params: unknown[] = [`[${embedding.join(',')}]`];
+
+    // 지역 코드가 안 잡히는 목적지(자유 입력·해외)는 필터 없이 전역 검색으로 둔다.
+    // 지역 라벨이 아예 없는 행(폴백 시드)은 어느 목적지에서도 후보로 남긴다.
+    const unlabeled = '(region_code IS NULL AND sigungu_code IS NULL)';
+    let regionClause = '';
+    if (sido) {
+      params.push(sido);
+      regionClause = `AND (region_code = $${params.length} OR ${unlabeled})`;
+    } else if (sigungu) {
+      params.push(sigungu);
+      regionClause = `AND (sigungu_code = $${params.length} OR ${unlabeled})`;
+    }
+
+    params.push(limit);
+    const limitIndex = params.length;
+
     // 취향 벡터가 있으면 후보별 취향 코사인을 SQL 에서 함께 계산해 리랭킹 신호로 사용
-    const preference = hasPreference ? `[${preferenceVector.join(',')}]` : null;
-    const preferenceSelect = hasPreference
-      ? '1 - (embedding <=> $5::vector) AS preference_similarity'
-      : 'NULL AS preference_similarity';
-    const params = hasPreference
-      ? [vector, stemLike, destinationLike, limit, preference]
-      : [vector, stemLike, destinationLike, limit];
+    const hasPreference = Array.isArray(preferenceVector) && preferenceVector.length > 0;
+    let preferenceSelect = 'NULL AS preference_similarity';
+    if (hasPreference) {
+      params.push(`[${preferenceVector!.join(',')}]`);
+      preferenceSelect = `1 - (embedding <=> $${params.length}::vector) AS preference_similarity`;
+    }
 
     try {
       const rows: PlaceEmbeddingRow[] = await this.dataSource.query(
@@ -121,14 +136,9 @@ export class PlaceEmbeddingRepository {
                ${preferenceSelect}
         FROM place_embeddings
         WHERE embedding IS NOT NULL
-          AND (
-            destination_region IS NULL
-            OR name ILIKE $3
-            OR address ILIKE $3
-            OR ($2 <> '' AND (region_sigungu ILIKE $2 OR destination_region ILIKE $2))
-          )
+          ${regionClause}
         ORDER BY embedding <=> $1::vector
-        LIMIT $4
+        LIMIT $${limitIndex}
         `,
         params,
       );
@@ -332,6 +342,15 @@ export class PlaceEmbeddingRepository {
   ): Promise<void> {
     const vector = `[${embedding.join(',')}]`;
 
+    // 라벨(destination_region·region_sigungu)은 소스 표기 그대로 남기고,
+    // 검색 필터가 쓰는 정본 코드를 여기서 함께 파생해 둔다 — 질의 쪽도 같은 함수로 계산하므로
+    // 라벨 표기가 섞여 있어도('경상북도'/'경북'/'gyeongbuk') 한 코드로 만난다.
+    const { regionCode, sigunguCode } = placeRegionCodes(
+      place.region,
+      place.regionSigungu,
+      place.address,
+    );
+
     if (existingId) {
       await this.dataSource.query(
         `
@@ -347,6 +366,8 @@ export class PlaceEmbeddingRepository {
           embedding = $10::vector,
           text_hash = $11,
           embedding_model = $12,
+          region_code = $13,
+          sigungu_code = $14,
           updated_at = NOW()
         WHERE id = $1
         `,
@@ -363,6 +384,8 @@ export class PlaceEmbeddingRepository {
           vector,
           place.textHash ?? null,
           place.embeddingModel ?? null,
+          regionCode,
+          sigunguCode,
         ],
       );
       return;
@@ -384,9 +407,11 @@ export class PlaceEmbeddingRepository {
         embedding,
         text_hash,
         embedding_model,
+        region_code,
+        sigungu_code,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::vector, $12, $13, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::vector, $12, $13, $14, $15, NOW())
       `,
       [
         place.kakaoPlaceId ?? null,
@@ -402,6 +427,8 @@ export class PlaceEmbeddingRepository {
         vector,
         place.textHash ?? null,
         place.embeddingModel ?? null,
+        regionCode,
+        sigunguCode,
       ],
     );
   }
