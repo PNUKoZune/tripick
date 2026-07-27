@@ -41,6 +41,7 @@
 - [planner/routing-external-api-v1.md](planner/routing-external-api-v1.md) — 길찾기 외부 API 전환(카카오 모빌리티 · ODsay)
 - [planner/realtime-websocket-v1.md](planner/realtime-websocket-v1.md) — 실시간 재계획 WebSocket 연동
 - [planner/invitee-change-approval-v1.md](planner/invitee-change-approval-v1.md) — 참여자 일정 변경 owner 승인 흐름
+- [planner/day-scoped-replan-v1.md](planner/day-scoped-replan-v1.md) — 일자별 부분 재계획(대상 일차만 재생성, 나머지 일차 보존)
 
 ## 취향 · 임베딩 (Preference)
 
