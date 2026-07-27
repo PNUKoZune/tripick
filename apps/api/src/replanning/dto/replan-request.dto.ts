@@ -1,8 +1,10 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsLatitude,
   IsLongitude,
   IsNumber,
@@ -109,6 +111,18 @@ export class BaseReplanRequestBodyDto implements Omit<ReplanRequestDto, 'trigger
   @IsString()
   @MaxLength(300)
   note?: string;
+
+  /**
+   * 재계획할 일차(1-based). 생략하면 전체 일정. 상한은 여행 일수를 모르는 시점이라
+   * 넉넉히 두고(31), 여행 범위를 벗어난 일차는 PlannerService 가 잘라낸다.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(31)
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  targetDays?: number[];
 
   @IsOptional()
   @IsArray()

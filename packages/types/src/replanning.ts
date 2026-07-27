@@ -39,6 +39,11 @@ export interface ReplanRequestDto {
   deviatedItemId?: string;
   /** 사용자 자유 텍스트 요청 (예: "조용한 감성 카페 위주로"). 재계획 시 검색·프롬프트에 반영 */
   note?: string;
+  /**
+   * 재계획할 일차(1-based). 생략·빈 배열이면 전체 일정을 다시 짠다.
+   * 지정한 일차만 새로 생성하고 나머지 일차는 저장된 일정 그대로 둔다.
+   */
+  targetDays?: number[];
   /** 이번 재계획에 반드시 포함할 장소들 */
   mustIncludePlaces?: ReplanPlaceDto[];
   /** 재계획 구조화 옵션 */

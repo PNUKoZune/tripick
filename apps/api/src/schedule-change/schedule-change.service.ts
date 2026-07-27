@@ -264,6 +264,7 @@ export class ScheduleChangeService {
   /**
    * 딥링크·미리보기용 일차. add/reorder 는 payload 에 일차가 있고,
    * 항목 기반(update/delete/swap)은 대상 항목의 일차를 쓴다(없으면 undefined).
+   * 일자별 재계획은 대상 일차 중 첫 일차로 보낸다(전체 재계획이면 undefined).
    */
   private dayOf(
     payload: ScheduleChangePayload,
@@ -273,9 +274,17 @@ export class ScheduleChangeService {
       case 'add_item':
       case 'reorder_items':
         return payload.body.day;
+      case 'replan':
+        return this.sortedTargetDays(payload.body.targetDays)[0];
       default:
         return itemLabel?.day;
     }
+  }
+
+  /** 재계획 대상 일차를 오름차순 정리한다(빈 배열 = 전체 일정). */
+  private sortedTargetDays(targetDays: number[] | undefined): number[] {
+    if (!targetDays?.length) return [];
+    return [...new Set(targetDays)].sort((a, b) => a - b);
   }
 
   /** 사람이 읽는 한 줄 요약. 대상 항목명은 미리 조회한 itemLabel 사용(사라졌으면 일반 문구) */
@@ -298,7 +307,9 @@ export class ScheduleChangeService {
       }
       case 'replan': {
         const note = payload.body.note?.trim();
-        return note ? `AI 재계획 요청: "${note}"` : 'AI 재계획 요청';
+        const days = this.sortedTargetDays(payload.body.targetDays);
+        const scope = days.length > 0 ? `${days.join('·')}일차 ` : '';
+        return note ? `${scope}AI 재계획 요청: "${note}"` : `${scope}AI 재계획 요청`;
       }
     }
   }

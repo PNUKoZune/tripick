@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { LuSparkles } from 'react-icons/lu';
 import type {
+  PlannerDayDto,
   ReplanBudget,
   ReplanPace,
   ReplanPlaceDto,
@@ -18,8 +19,12 @@ type Props = {
   tripId: string;
   open: boolean;
   onClose: () => void;
-  /** 재계획 요청 전송 성공 시 호출 (토스트 등) */
-  onRequested?: () => void;
+  /** 여행 일차 목록. 2일 이상이면 "재계획 범위"에서 일차를 고를 수 있다 */
+  days?: PlannerDayDto[];
+  /** 모달을 열 때 기본 선택할 일차 (보통 화면에서 보고 있는 일차) */
+  defaultDay?: number;
+  /** 재계획 요청 전송 성공 시 호출 (토스트 등). scopeLabel 은 "2일차 일정"·"전체 일정" */
+  onRequested?: (scopeLabel: string) => void;
   /** owner 면 즉시 재계획, 아니면 owner 승인 대기 제안으로 보낸다 */
   isOwner?: boolean;
   /** 재계획 트리거. 기본 'manual'. 알림 배너에서 열리면 weather·crowd·deviation 로 넘어온다 */
@@ -44,6 +49,8 @@ export function ReplanModal({
   tripId,
   open,
   onClose,
+  days = [],
+  defaultDay,
   onRequested,
   isOwner = true,
   trigger = 'manual',
@@ -60,19 +67,41 @@ export function ReplanModal({
   const [avoid, setAvoid] = useState('');
   const [minimizeTravel, setMinimizeTravel] = useState(false);
   const [budget, setBudget] = useState<ReplanBudget>('normal');
+  // 여행이 2일 이상일 때만 범위를 고른다. 기본은 보고 있던 일차 하나 —
+  // 전체를 갈아엎는 쪽이 되돌리기 어려우므로 좁은 범위를 기본값으로 둔다.
+  const multiDay = days.length > 1;
+  const [scope, setScope] = useState<'all' | 'days'>('days');
+  const [selectedDays, setSelectedDays] = useState<number[]>([]);
 
   useEffect(() => {
     if (!open) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- 모달이 열릴 때 입력 필드 초기화
+    /* eslint-disable react-hooks/set-state-in-effect -- 모달이 열릴 때 입력 필드 초기화 */
     setNote('');
     setMustPlaces([]);
     setPace('balanced');
     setAvoid('');
     setMinimizeTravel(false);
     setBudget('normal');
+    setScope(multiDay ? 'days' : 'all');
+    const fallbackDay = days[0]?.day ?? 1;
+    setSelectedDays([defaultDay && days.some((d) => d.day === defaultDay) ? defaultDay : fallbackDay]);
+    /* eslint-enable react-hooks/set-state-in-effect */
     mutation.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  function toggleDay(day: number) {
+    setSelectedDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b),
+    );
+  }
+
+  // 단일 일차 여행이거나 "전체 일정"이면 targetDays 를 아예 보내지 않는다(= 전체 재계획).
+  const targetDays = multiDay && scope === 'days' ? selectedDays : [];
+  // 뒤에 조사 "을"이 붙는 문구라 두 경우 모두 "…일정"으로 끝나게 맞춘다.
+  const scopeLabel = targetDays.length > 0 ? `${targetDays.join('·')}일차 일정` : '전체 일정';
+  // 일차를 고르는 모드인데 하나도 안 골랐으면 보낼 게 없다.
+  const canSubmit = !(multiDay && scope === 'days' && selectedDays.length === 0);
 
   function handleSubmit() {
     const preferences: ReplanPreferencesDto = {
@@ -83,13 +112,14 @@ export function ReplanModal({
     };
     const payload: ReplanFormPayload = {
       ...(note.trim() ? { note: note.trim() } : {}),
+      ...(targetDays.length > 0 ? { targetDays } : {}),
       ...(mustPlaces.length > 0 ? { mustIncludePlaces: mustPlaces } : {}),
       preferences,
     };
     mutation.mutate(payload, {
       onSuccess: () => {
         // owner 만 "AI가 다시 짜는 중" 토스트. 제안 모드는 훅이 onProposed 로 알린다.
-        if (isOwner) onRequested?.();
+        if (isOwner) onRequested?.(scopeLabel);
         onClose();
       },
     });
@@ -115,6 +145,48 @@ export function ReplanModal({
         </div>
 
         <div className="mt-4 space-y-5">
+          {multiDay ? (
+            <Field label="재계획 범위" hint="고른 일차만 다시 짜요">
+              <SegmentToggle
+                items={[
+                  { value: 'days', label: '일차 선택' },
+                  { value: 'all', label: '전체 일정' },
+                ]}
+                value={scope}
+                onChange={(next) => setScope(next as 'all' | 'days')}
+              />
+              {scope === 'days' ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {days.map((item) => {
+                    const active = selectedDays.includes(item.day);
+                    return (
+                      <button
+                        key={item.day}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => toggleDay(item.day)}
+                        className={`h-9 rounded-full border px-3 text-[13px] font-semibold transition ${
+                          active
+                            ? 'border-[color:var(--primary)] bg-[color:var(--primary-tint)] text-[color:var(--primary)]'
+                            : 'border-[color:var(--line)] bg-[color:var(--card)] text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+              <p className="mt-2 text-[12px] text-[color:var(--ink-faint)]">
+                {scope === 'days'
+                  ? selectedDays.length > 0
+                    ? `${selectedDays.join('·')}일차만 새로 만들고 나머지 일차는 그대로 둬요.`
+                    : '다시 짤 일차를 하나 이상 골라주세요.'
+                  : '여행 전체 일정을 새로 만들어요.'}
+              </p>
+            </Field>
+          ) : null}
+
           <Field label="어떻게 바꿀까요?" hint="자유롭게 적어주세요">
             <textarea
               value={note}
@@ -193,7 +265,7 @@ export function ReplanModal({
           </button>
           <button
             type="button"
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || !canSubmit}
             onClick={handleSubmit}
             className="inline-flex h-14 flex-1 items-center justify-center rounded-[18px] bg-[color:var(--btn-bg)] text-[16px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none"
           >

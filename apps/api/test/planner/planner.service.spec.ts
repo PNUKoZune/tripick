@@ -283,6 +283,157 @@ describe('PlannerService 일자별 지역', () => {
   });
 });
 
+describe('PlannerService 일자별 재계획', () => {
+  it('대상 일차만 다시 만들고 나머지 일차는 저장된 일정 그대로 둔다', async () => {
+    const harness = createPartialHarness();
+
+    const result = await harness.service.replan({
+      tripId: TRIP.id,
+      trigger: 'manual',
+      targetDays: [2],
+    });
+
+    // 전체 교체(replaceTripItems)가 아니라 2일차만 교체한다.
+    expect(harness.itineraryService.replaceTripItems).not.toHaveBeenCalled();
+    expect(harness.itineraryService.replaceDayItems).toHaveBeenCalledTimes(1);
+    const [, days, stored] = harness.itineraryService.replaceDayItems.mock.calls[0]!;
+    expect(days).toEqual([2]);
+    expect(stored.map((item: ItineraryItemDto) => item.day)).toEqual([2]);
+    // 2일차 항목은 여행 시작일(7/10)이 아니라 실제 2일차 날짜(7/11)에 잡힌다.
+    expect(stored[0]?.scheduledAt.slice(0, 10)).toBe('2026-07-11');
+
+    // 응답은 유지한 일차까지 합친 여행 전체 일정이다.
+    expect(result.map((item) => [item.day, item.name])).toEqual([
+      [1, '광안리 카페'],
+      [2, '감천문화마을'],
+      [3, '태종대'],
+    ]);
+  });
+
+  it('AI 플래너에는 대상 일차 수만큼만 계획하게 하고 결과를 실제 일차로 되돌린다', async () => {
+    const harness = createPartialHarness();
+
+    await harness.service.replan({ tripId: TRIP.id, trigger: 'weather', targetDays: [2] });
+
+    expect(harness.plannerAgent.plan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dayCount: 1,
+        startDate: '2026-07-11',
+        endDate: '2026-07-11',
+      }),
+    );
+    // 플래너는 day: 1 로 계획했지만 저장은 실제 2일차로 되돌아간다.
+    const [, , stored] = harness.itineraryService.replaceDayItems.mock.calls[0]!;
+    expect(stored[0]?.day).toBe(2);
+  });
+
+  it('유지되는 일차에 이미 있는 장소는 후보에서 뺀다', async () => {
+    const harness = createPartialHarness();
+
+    await harness.service.replan({ tripId: TRIP.id, trigger: 'manual', targetDays: [2] });
+
+    const candidates: CandidatePlace[] = harness.plannerAgent.plan.mock.calls[0]![0].candidates;
+    // 1일차에 그대로 남는 '광안리 카페'가 후보로 다시 들어오면 같은 장소가 두 일차에 중복된다.
+    expect(candidates.map((candidate) => candidate.name)).toEqual(['감천문화마을']);
+  });
+
+  it('여행 범위를 벗어난 일차만 들어오면 전체 재계획으로 되돌린다', async () => {
+    const harness = createPartialHarness();
+
+    await harness.service.replan({ tripId: TRIP.id, trigger: 'manual', targetDays: [9] });
+
+    expect(harness.itineraryService.replaceDayItems).not.toHaveBeenCalled();
+    expect(harness.itineraryService.replaceTripItems).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** 3일 여행 + 각 일차에 저장된 항목이 하나씩 있는 부분 재계획 하네스 */
+function createPartialHarness() {
+  const trip = { ...TRIP, startDate: '2026-07-10', endDate: '2026-07-12' };
+  const keptDay1 = savedItem('item-1', 1, '광안리 카페', '2026-07-10T00:00:00.000Z');
+  const keptDay3 = savedItem('item-3', 3, '태종대', '2026-07-12T00:00:00.000Z');
+  const staleDay2 = savedItem('item-2', 2, '해동용궁사', '2026-07-11T00:00:00.000Z');
+  const fresh = place('fresh-1', '감천문화마을', 'attraction');
+  // 1일차에 그대로 남는 장소와 이름이 같은 후보 — 중복 배치 방지 대상.
+  const duplicate = place('dup-1', '광안리 카페', 'cafe');
+
+  const tripsRepo = {
+    findOneBy: jest.fn().mockResolvedValue(trip),
+    save: jest.fn().mockResolvedValue(trip),
+  };
+  const tripDaysRepo = { find: jest.fn().mockResolvedValue([]) };
+  const itineraryService = {
+    findByTrip: jest.fn().mockResolvedValue([keptDay1, staleDay2, keptDay3]),
+    replaceTripItems: jest.fn(async (_tripId: string, items: ItineraryItemDto[]) =>
+      items.map((item, index) => ({ ...item, id: `saved-${index + 1}`, scheduledAt: new Date(item.scheduledAt) })),
+    ),
+    replaceDayItems: jest.fn(async (_tripId: string, _days: number[], items: ItineraryItemDto[]) =>
+      items.map((item, index) => ({ ...item, id: `saved-${index + 1}`, scheduledAt: new Date(item.scheduledAt) })),
+    ),
+  };
+  const preferencesService = {
+    findByUser: jest.fn().mockResolvedValue(null),
+    getPreferenceVector: jest.fn().mockResolvedValue(null),
+  };
+  const plannerAgent = {
+    plan: jest.fn(async (options: { candidates: CandidatePlace[] }) =>
+      options.candidates.slice(0, 1).map((candidate) => ({
+        candidate,
+        day: 1,
+        order: 1,
+        durationMin: 90,
+        memo: 'LLM 배치',
+        aiGenerated: true,
+      })),
+    ),
+  };
+  const weatherHelper = {
+    getExtendedForecast: jest.fn().mockResolvedValue(new Map()),
+    buildWeatherHint: jest.fn().mockReturnValue('날씨 양호'),
+  };
+  const routeHelper = { getEta: jest.fn().mockResolvedValue({ durationSec: 900, distanceM: 3000 }) };
+  const placeRetrieval = {
+    retrieve: jest.fn().mockResolvedValue({
+      places: [duplicate, fresh],
+      trace: { sources: ['fixture'], averageConfidence: 0.9 },
+    }),
+  };
+  const scheduleConstraint = { apply: jest.fn((items: ItineraryItemDto[]) => items) };
+  const constraintEngine = {
+    validate: jest.fn(async (items: ItineraryItemDto[]) => ({ valid: true, issues: [], items })),
+  };
+
+  const service = new PlannerService(
+    tripsRepo as any,
+    tripDaysRepo as any,
+    itineraryService as any,
+    preferencesService as any,
+    plannerAgent as any,
+    weatherHelper as any,
+    routeHelper as any,
+    placeRetrieval as any,
+    scheduleConstraint as any,
+    constraintEngine as any,
+  );
+
+  return { service, itineraryService, plannerAgent, placeRetrieval };
+}
+
+function savedItem(id: string, day: number, name: string, scheduledAt: string) {
+  return {
+    id,
+    tripId: TRIP.id,
+    day,
+    order: 1,
+    type: 'attraction' as const,
+    name,
+    address: '부산 어딘가',
+    coordinates: { lat: 35.1 + day, lng: 129.1 + day },
+    scheduledAt: new Date(scheduledAt),
+    durationMin: 90,
+  };
+}
+
 function place(id: string, name: string, category: string): CandidatePlace {
   return {
     id,

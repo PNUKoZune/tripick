@@ -177,19 +177,25 @@ function ProposalDiff({
         </DiffBox>
       );
     }
-    case 'replan':
+    case 'replan': {
+      const targetDays = [...new Set(payload.body.targetDays ?? [])].sort((a, b) => a - b);
+      const scopeLabel =
+        targetDays.length > 0 ? `${targetDays.join('·')}일차 AI 재계획` : 'AI 재계획(전체 일정)';
       return (
-        <DiffBox tone="change" label="AI 재계획">
+        <DiffBox tone="change" label={scopeLabel}>
           <div className="text-[13px] text-[#6B7684]">
             {payload.body.note?.trim()
               ? `요청: “${payload.body.note.trim()}”`
-              : 'AI가 일정 전체를 다시 생성해요.'}
+              : targetDays.length > 0
+                ? `AI가 ${targetDays.join('·')}일차만 다시 생성해요.`
+                : 'AI가 일정 전체를 다시 생성해요.'}
           </div>
           <div className="mt-1 text-[12px] text-[#8B95A1]">
             승인하면 AI 재계획이 실행되고, 완료 시 일정에 반영돼요.
           </div>
         </DiffBox>
       );
+    }
   }
 }
 

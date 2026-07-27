@@ -784,13 +784,16 @@ function PlannerContent({
         tripId={trip?.id ?? selectedTripId}
         open={replanOpen}
         onClose={() => setReplanOpen(false)}
+        days={trip?.days ?? []}
+        // 보고 있던 일차를 기본 범위로 — 알림 딥링크(?day=)로 들어온 경우도 그 일차가 잡힌다.
+        defaultDay={day}
         isOwner={isOwner}
         trigger={replanTrigger}
         onProposed={handleProposed}
-        onRequested={() =>
+        onRequested={(scopeLabel) =>
           setPlaceToast({
             tone: 'success',
-            title: 'AI가 일정을 다시 짜고 있어요',
+            title: `AI가 ${scopeLabel}을 다시 짜고 있어요`,
             message: '완료되면 일정에 자동으로 반영돼요.',
           })
         }
