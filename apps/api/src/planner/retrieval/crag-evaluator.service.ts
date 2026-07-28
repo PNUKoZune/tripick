@@ -17,6 +17,10 @@ const INDOOR_TAGS = new Set<string>([
   'hotspring',
 ]);
 
+/** 후보 풀 구성을 보장할 때 쓰는 종류 묶음 (식음 / 볼거리). */
+const DINING_CATEGORIES: ReadonlySet<string> = new Set(['restaurant', 'cafe']);
+const ATTRACTION_CATEGORIES: ReadonlySet<string> = new Set(['attraction']);
+
 /** CRAG 총점에서 네이버 대중 인지도 항이 차지하는 가중치. accept 게이트 보정과 공유. */
 export const POPULARITY_WEIGHT = 0.12;
 
@@ -46,25 +50,67 @@ export class CragEvaluatorService {
       .sort((a, b) => b.confidence - a.confidence);
   }
 
+  /** 후보 풀이 반드시 담아야 하는 종류별 최소 수. 일정에 식사 슬롯과 볼거리가 둘 다 필요하다. */
+  private static readonly POOL_MIN_PER_KIND = 2;
+
+  /**
+   * 점수 순으로 후보를 고르되, 종류별 최소 보유량을 보장한다.
+   *
+   * ⚠️ 예전 구현은 **상위 6칸을 카테고리당 2개로 제한**했는데 두 가지가 잘못이었다.
+   *   1. 상한에 걸린 후보를 건너뛴 채 limit 을 채우고 반환해 **후보를 영구히 버렸다**
+   *      (백필 루프가 실행될 일이 없었다). 제주 실측에서 점수 3위 한라산·5위 비자림이
+   *      탈락하고 점수가 더 낮은 카페·리조트가 그 자리에 들어왔다.
+   *   2. 제약을 머리에 걸어서, 자연·문화 취향 질의인데도 상위 6칸 중 4칸이 카페·식당으로
+   *      채워지고 정답이 7위 밖으로 밀렸다.
+   *
+   * 필요한 건 "상위가 다양해야 한다"가 아니라 **"풀에 종류가 둘 다 있어야 한다"** 다 — 플래너는
+   * 16개 후보를 받아 식사 슬롯과 관광 슬롯을 채우므로, 순서보다 구성이 중요하다. 그래서 머리는
+   * 점수 순 그대로 두고, 부족한 종류만 꼬리 자리를 내주고 채운다.
+   */
   selectTopDiverse(candidates: CandidatePlace[], limit: number): CandidatePlace[] {
-    const selected: CandidatePlace[] = [];
-    const categoryCount = new Map<string, number>();
+    const selected = candidates.slice(0, limit);
+    if (selected.length < limit) return selected;
 
-    for (const candidate of candidates) {
-      const count = categoryCount.get(candidate.category) ?? 0;
-      if (count >= 2 && selected.length < Math.min(limit, 6)) continue;
-      selected.push(candidate);
-      categoryCount.set(candidate.category, count + 1);
-      if (selected.length >= limit) return selected;
-    }
+    for (const kind of [DINING_CATEGORIES, ATTRACTION_CATEGORIES]) {
+      const have = selected.filter((candidate) => kind.has(candidate.category)).length;
+      const missing = CragEvaluatorService.POOL_MIN_PER_KIND - have;
+      if (missing <= 0) continue;
 
-    for (const candidate of candidates) {
-      if (selected.some((item) => item.id === candidate.id)) continue;
-      selected.push(candidate);
-      if (selected.length >= limit) break;
+      const chosen = new Set(selected.map((candidate) => candidate.id));
+      const fills = candidates
+        .filter((candidate) => kind.has(candidate.category) && !chosen.has(candidate.id))
+        .slice(0, missing);
+
+      // 내줄 자리는 **과잉 종류의 꼬리**부터 — 최소 보유량을 지키는 종류를 깎으면 안 된다.
+      for (const fill of fills) {
+        const dropIndex = this.lastReplaceableIndex(selected, kind);
+        if (dropIndex < 0) break;
+        selected.splice(dropIndex, 1, fill);
+      }
     }
 
     return selected;
+  }
+
+  /**
+   * 교체해 내줄 수 있는 마지막 자리. 채우려는 종류가 아니고, 그 종류를 빼도 최소 보유량이
+   * 깨지지 않는 후보 중 가장 뒤에 있는 것.
+   */
+  private lastReplaceableIndex(
+    selected: CandidatePlace[],
+    filling: ReadonlySet<string>,
+  ): number {
+    for (let i = selected.length - 1; i >= 0; i -= 1) {
+      const candidate = selected[i]!;
+      if (filling.has(candidate.category)) continue;
+      const kind = DINING_CATEGORIES.has(candidate.category)
+        ? DINING_CATEGORIES
+        : ATTRACTION_CATEGORIES;
+      const have = selected.filter((item) => kind.has(item.category)).length;
+      if (have <= CragEvaluatorService.POOL_MIN_PER_KIND) continue;
+      return i;
+    }
+    return -1;
   }
 
   private evaluate(candidate: RawPlaceCandidate, context: RetrievalContext): CandidatePlace {

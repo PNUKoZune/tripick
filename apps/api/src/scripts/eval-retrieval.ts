@@ -135,6 +135,21 @@ interface CaseMetrics {
   fallbackUsed: boolean;
   hits: string[];
   misses: string[];
+  /**
+   * 상위 결과의 이름·카테고리·CRAG 항목 점수. 놓친 정답 대신 **무엇이 올라왔는지** 보려면
+   * 이게 있어야 한다 — 항목별 점수까지 봐야 어느 항이 순위를 밀어올렸는지 갈린다.
+   * JSON 덤프에만 담기고 표 출력에는 영향이 없다.
+   */
+  top: Array<{
+    name: string;
+    category: string;
+    confidence: number;
+    inRegion: boolean;
+    isRelevant: boolean;
+    terms: Record<string, number>;
+  }>;
+  /** 적재돼 있는데 상위에 못 든 정답 — 랭킹이 실패한 대상 */
+  missesInCatalog: string[];
 }
 
 function parseArgs(argv: string[]) {
@@ -164,10 +179,22 @@ function parseArgs(argv: string[]) {
   return options;
 }
 
-/** 공백·대소문자를 무시한 부분일치. '동궁과 월지' ↔ '동궁과월지(안압지)' 처럼 표기가 흔들려서. */
+/**
+ * 공백·대소문자를 무시한 부분일치. '동궁과 월지' ↔ '동궁과월지(안압지)' 처럼 표기가 흔들려서.
+ *
+ * **짧은 쪽이 3글자 이상이어야 한다** — 양방향 부분일치라 2글자 결과가 그걸 품은 정답의
+ * 크레딧을 훔친다. 실측에서 대구 식당 '다시' 가 정답 '김광석다시그리기길' 로 인정돼
+ * 그 케이스 MRR 이 1.00 으로 잡혔다(1위가 정답이라는 뜻인데 실제로는 무관한 식당).
+ * 지표를 부풀리는 방향의 오탐이라 반드시 막아야 한다.
+ */
+const MIN_NAME_MATCH_LENGTH = 3;
+
 function nameMatches(candidate: string, expected: string): boolean {
   const a = candidate.replace(/\s+/g, '').toLowerCase();
   const b = expected.replace(/\s+/g, '').toLowerCase();
+  if (a === b) return true;
+  const shorter = a.length <= b.length ? a : b;
+  if (shorter.length < MIN_NAME_MATCH_LENGTH) return false;
   return a.includes(b) || b.includes(a);
 }
 
@@ -270,7 +297,31 @@ async function evaluateCase(
     fallbackUsed: result.trace.fallbackUsed,
     hits,
     misses,
+    missesInCatalog: misses.filter((name) => inCatalog.includes(name)),
+    top: places.map((place) => ({
+      name: place.name,
+      category: place.category,
+      confidence: place.confidence,
+      inRegion: !expectedRegion ? true : inExpectedRegion(place, expectedRegion),
+      isRelevant: testCase.relevant.some((name) => nameMatches(place.name, name)),
+      terms: {
+        retrieval: round3(place.crag.retrieval),
+        taste: round3(place.crag.taste),
+        popularity: round3(place.crag.popularity),
+        locality: round3(place.crag.locality),
+        context: round3(place.crag.context),
+        availability: round3(place.crag.availability),
+        dataQuality: round3(place.crag.dataQuality),
+        ...(place.crag.personalization !== undefined
+          ? { personalization: round3(place.crag.personalization) }
+          : {}),
+      },
+    })),
   };
+}
+
+function round3(value: number): number {
+  return Number(value.toFixed(3));
 }
 
 function printTable(metrics: CaseMetrics[], ks: number[]): void {
@@ -370,6 +421,9 @@ async function main() {
     for (const combo of combos) {
       // ConfigService 는 process.env 를 실시간으로 읽으므로 여기서 덮으면 그대로 반영된다.
       for (const [key, value] of Object.entries(combo)) process.env[key] = value;
+      // 인지도 인덱스는 목적지 단위 캐시라, 비우지 않으면 첫 조합의 인덱스를 뒤 조합이
+      // 재사용해 스윕이 조용히 무효가 된다(코퍼스 크기 스윕이 실제로 그렇게 무효였다).
+      app.get(NaverSearchService).clearCache();
 
       const label = Object.entries(combo)
         .map(([key, value]) => `${key}=${value}`)

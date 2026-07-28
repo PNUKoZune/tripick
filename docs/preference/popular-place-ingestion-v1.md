@@ -133,6 +133,8 @@ pnpm ingest:places -- --sources=tour,kakao --append --max=300
 환경변수: `POPULAR_INGEST_CANDIDATE_MULTIPLIER`(기본 5) 로 탐색 깊이 조절. `NAVER_SEARCH_CLIENT_ID`/`_SECRET` 필수.
 
 ## 5. 검증
+> ⚠️ **수치 정정** — 이 문서의 recall·MRR 은 평가 하네스에 짧은 이름 부분일치 오탐이 있던 시점의 값이라 부풀려져 있다(2글자 결과가 그 글자를 품은 정답의 크레딧을 훔쳤다). 적재 커버리지·지역정합은 다른 경로로 계산해 영향이 없다. 수정된 하네스 기준 값과 경위는 [`retrieval-ranking-tuning-v1.md`](./retrieval-ranking-tuning-v1.md#L1) §1.1 참고.
+
 
 ### 5.1 실적재
 

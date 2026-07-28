@@ -44,4 +44,30 @@ describe('isEligibleItineraryCandidate', () => {
       }),
     ).toBe(true);
   });
+
+  it('행정구역명 자체는 방문할 장소가 아니다', () => {
+    // 카카오에 '제주도' 같은 이름으로 등록된 문서가 있고, 인지도 매칭에서 코퍼스 언급을
+    // 통째로 흡수해 상위를 차지한다(실측: 제주 케이스 1위, 인지도 1.00).
+    for (const name of ['제주도', '경상북도', '강원도', '부산', '광주광역시']) {
+      expect(
+        isEligibleItineraryCandidate({
+          name,
+          category: 'attraction',
+          categoryDetail: '여행 > 관광,명소',
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it('지역명을 품은 실제 장소는 통과한다', () => {
+    for (const name of ['강원도립화목원', '제주도립미술관', '부산시민공원']) {
+      expect(
+        isEligibleItineraryCandidate({
+          name,
+          category: 'attraction',
+          categoryDetail: '여행 > 관광,명소',
+        }),
+      ).toBe(true);
+    }
+  });
 });
