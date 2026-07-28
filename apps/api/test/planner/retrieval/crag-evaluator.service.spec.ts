@@ -1,5 +1,6 @@
 /// <reference types="jest" />
 
+import type { ConfigService } from '@nestjs/config';
 import { CragEvaluatorService } from '../../../src/planner/retrieval/crag-evaluator.service';
 import type { CandidatePlace, RawPlaceCandidate, RetrievalContext } from '../../../src/planner/retrieval/types';
 
@@ -344,5 +345,37 @@ describe('CragEvaluatorService', () => {
         'a3',
       ]);
     });
+  });
+
+  /**
+   * retrieval 가중은 실측 근거로 0.24 → 0.06 으로 내렸다(`retrieval-rank.ts` 주석).
+   * 스윕 노브가 게이트를 흔들지 않는지 — 즉 남은 몫이 비례 배분되는지 — 를 서비스 경로에서 확인한다.
+   */
+  it('CRAG_RETRIEVAL_WEIGHT 를 바꿔도 confidence 수준은 유지된다 (합 1 비례 배분)', () => {
+    const withWeight = (value: string): CragEvaluatorService =>
+      new CragEvaluatorService({
+        get: (key: string) => (key === 'CRAG_RETRIEVAL_WEIGHT' ? value : undefined),
+      } as unknown as ConfigService);
+
+    const candidate: RawPlaceCandidate = {
+      id: 'c1',
+      name: '광안리 브런치 카페',
+      category: 'cafe',
+      address: '부산 수영구 광안해변로 219',
+      coordinates: { lat: 35.1532, lng: 129.1185 },
+      source: 'pgvector',
+      similarity: 0.52,
+      tags: ['cafe', 'beach', 'romantic'],
+      destinationRegion: 'busan',
+    };
+
+    const low = withWeight('0.06').rank([candidate], busanContext)[0]!;
+    const high = withWeight('0.24').rank([candidate], busanContext)[0]!;
+
+    // 가중을 4배 차이로 벌려도 총점은 게이트(0.52) 판정을 뒤집을 만큼 움직이지 않는다.
+    expect(Math.abs(low.confidence - high.confidence)).toBeLessThan(0.05);
+    expect(withWeight('0.06').weights().popularity).toBeGreaterThan(
+      withWeight('0.24').weights().popularity,
+    );
   });
 });

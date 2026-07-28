@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   FOOD_PREFERENCES,
   type Coordinates,
@@ -9,6 +10,7 @@ import {
 import { inferPlaceTags, normalizeDestinationRegion, tasteTagsToKeywords } from './place-seeds';
 import { collapseNearDuplicates } from './near-duplicate';
 import { NEUTRAL_POPULARITY } from './naver-search.service';
+import { DEFAULT_RETRIEVAL_WEIGHT, termWeights, type TermWeights } from './retrieval-rank';
 import type { CandidatePlace, CragScore, RawPlaceCandidate, RetrievalContext } from './types';
 
 /**
@@ -52,9 +54,6 @@ const INDOOR_TAGS = new Set<string>([
 const DINING_CATEGORIES: ReadonlySet<string> = new Set(['restaurant', 'cafe']);
 const ATTRACTION_CATEGORIES: ReadonlySet<string> = new Set(['attraction']);
 
-/** CRAG 총점에서 네이버 대중 인지도 항이 차지하는 가중치. accept 게이트 보정과 공유. */
-export const POPULARITY_WEIGHT = 0.12;
-
 /** 트리거 없음(최초 생성) 및 트리거별 선호 신호가 없을 때 쓰는 중립 점수. */
 const NEUTRAL_TRIGGER_SCORE = 0.64;
 
@@ -75,12 +74,24 @@ const TRIGGER_SCORE: Record<ReplanTrigger, (tags: string[]) => number> = {
 
 @Injectable()
 export class CragEvaluatorService {
+  constructor(@Optional() private readonly config?: ConfigService) {}
+
   rank(candidates: RawPlaceCandidate[], context: RetrievalContext): CandidatePlace[] {
+    const weights = this.weights();
     const scored = this.deduplicate(candidates)
-      .map((candidate) => this.evaluate(candidate, context))
+      .map((candidate) => this.evaluate(candidate, context, weights))
       .sort((a, b) => b.confidence - a.confidence);
     // 근접 중복 접기는 **점수 정렬 뒤에** 온다 — 남는 대표가 그 무리에서 가장 높은 후보여야 한다.
     return collapseNearDuplicates(scored, context.destination);
+  }
+
+  /**
+   * 실효 가중치. `CRAG_RETRIEVAL_WEIGHT` 로 retrieval 항만 조정하고 남은 몫은 비례 배분해
+   * 합 1 을 지킨다(=confidence 의 절대 의미 유지). accept 게이트도 이 값을 봐야 한다.
+   */
+  weights(): TermWeights {
+    const raw = Number(this.config?.get<string>('CRAG_RETRIEVAL_WEIGHT'));
+    return termWeights(Number.isFinite(raw) ? raw : DEFAULT_RETRIEVAL_WEIGHT);
   }
 
   /** 후보 풀이 반드시 담아야 하는 종류별 최소 수. 일정에 식사 슬롯과 볼거리가 둘 다 필요하다. */
@@ -146,7 +157,11 @@ export class CragEvaluatorService {
     return -1;
   }
 
-  private evaluate(candidate: RawPlaceCandidate, context: RetrievalContext): CandidatePlace {
+  private evaluate(
+    candidate: RawPlaceCandidate,
+    context: RetrievalContext,
+    weights: TermWeights,
+  ): CandidatePlace {
     const tags = candidate.tags?.length ? candidate.tags : inferPlaceTags(candidate);
     const matchedTags = this.matchedTags(tags, context);
     const penalties: string[] = [];
@@ -158,16 +173,16 @@ export class CragEvaluatorService {
     const availability = this.availabilityScore(candidate, context, penalties);
     const dataQuality = this.dataQualityScore(candidate, penalties);
     const popularity = this.popularityScore(candidate, context, penalties);
-    // 네이버 인지도 항(0.12)을 더해 마이너 장소를 후순위로 민다.
+    // 네이버 인지도 항을 더해 마이너 장소를 후순위로 민다.
     // 인덱스 비활성 시 popularity=중립값이라 나머지 항 비율만 유지되고 순위는 불변.
     const total = this.clamp(
-      retrieval * 0.24 +
-        taste * 0.2 +
-        popularity * POPULARITY_WEIGHT +
-        locality * 0.16 +
-        contextScore * 0.13 +
-        availability * 0.09 +
-        dataQuality * 0.06,
+      retrieval * weights.retrieval +
+        taste * weights.taste +
+        popularity * weights.popularity +
+        locality * weights.locality +
+        contextScore * weights.context +
+        availability * weights.availability +
+        dataQuality * weights.dataQuality,
     );
 
     const crag: CragScore = {

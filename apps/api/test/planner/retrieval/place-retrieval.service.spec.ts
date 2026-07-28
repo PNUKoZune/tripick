@@ -1,6 +1,7 @@
 /// <reference types="jest" />
 
 import { PlaceRetrievalService } from '../../../src/planner/retrieval/place-retrieval.service';
+import { DEFAULT_TERM_WEIGHTS } from '../../../src/planner/retrieval/retrieval-rank';
 import type { CandidatePlace, RawPlaceCandidate } from '../../../src/planner/retrieval/types';
 
 describe('PlaceRetrievalService candidate eligibility', () => {
@@ -13,6 +14,8 @@ describe('PlaceRetrievalService candidate eligibility', () => {
       selectTopDiverse: jest.fn((places: CandidatePlace[], limit: number) =>
         places.slice(0, limit),
       ),
+      // accept 게이트의 인지도 감점 되돌림이 실효 가중치를 evaluator 에 되묻는다.
+      weights: jest.fn(() => DEFAULT_TERM_WEIGHTS),
     };
     const service = new PlaceRetrievalService(
       config({ PLACE_RETRIEVAL_AUTO_SEED: 'false' }),
