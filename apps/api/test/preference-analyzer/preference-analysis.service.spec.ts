@@ -27,7 +27,7 @@ function makeService(overrides: {
   upsert?: jest.Mock;
   getObject?: jest.Mock;
   inboxCreate?: jest.Mock;
-  queue?: Partial<{ add: jest.Mock; getJob: jest.Mock }>;
+  queue?: Partial<{ add: jest.Mock; getJob: jest.Mock; getJobs: jest.Mock }>;
 } = {}) {
   // aggregate 는 실제 구현을 쓴다 — 재집계 결과가 이 서비스의 핵심 산출물이라서.
   const visionAnalyzer = new VisionAnalyzer({ get: <T>(_k: string, d?: T) => d } as any);
@@ -44,7 +44,12 @@ function makeService(overrides: {
   };
   // 알림은 InboxService.create 로 발송한다 (구 FCM sendToUser 직접 호출에서 이관).
   const inbox = { create: overrides.inboxCreate ?? jest.fn().mockResolvedValue(undefined) };
-  const queue = { add: jest.fn(), getJob: jest.fn(), ...overrides.queue };
+  const queue = {
+    add: jest.fn(),
+    getJob: jest.fn(),
+    getJobs: jest.fn().mockResolvedValue([]),
+    ...overrides.queue,
+  };
 
   const service = new PreferenceAnalysisService(
     queue as any,
@@ -385,5 +390,52 @@ describe('PreferenceAnalysisService.getStatus', () => {
     const status = await service.getStatus('job-1', 'u1');
 
     expect(status).toMatchObject({ status: 'failed', error: 'storage unreachable' });
+  });
+});
+
+describe('PreferenceAnalysisService.findActiveJob', () => {
+  function pendingJob(userId: string, id = 'job-live') {
+    return {
+      id,
+      data: { userId, photoUrls: ['a', 'b'] },
+      progress: 1,
+      getState: jest.fn().mockResolvedValue('active'),
+    };
+  }
+
+  it('finds the job still running for this user', async () => {
+    const getJobs = jest.fn().mockResolvedValue([pendingJob('u1')]);
+    const { service } = makeService({ queue: { getJobs } });
+
+    await expect(service.findActiveJob('u1')).resolves.toMatchObject({
+      jobId: 'job-live',
+      status: 'running',
+      analyzed: 1,
+      total: 2,
+    });
+    // 끝난 잡은 재분석을 막을 이유가 없다 — 미완료 상태만 본다.
+    expect(getJobs).toHaveBeenCalledWith(['active', 'waiting', 'waiting-children', 'delayed']);
+  });
+
+  it('ignores jobs belonging to another user', async () => {
+    const { service } = makeService({
+      queue: { getJobs: jest.fn().mockResolvedValue([pendingJob('someone-else')]) },
+    });
+
+    expect(await service.findActiveJob('u1')).toBeNull();
+  });
+
+  it('returns null when nothing is in flight', async () => {
+    const { service } = makeService();
+    expect(await service.findActiveJob('u1')).toBeNull();
+  });
+
+  it('treats an unreachable queue as "nothing in flight"', async () => {
+    const { service } = makeService({
+      queue: { getJobs: jest.fn().mockRejectedValue(new Error('redis down')) },
+    });
+
+    // 조회 실패로 요청을 죽이지 않는다 — 뒤이은 enqueue 가 503 을 낸다.
+    expect(await service.findActiveJob('u1')).toBeNull();
   });
 });

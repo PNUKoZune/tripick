@@ -161,6 +161,11 @@ export interface TogglePhotoTagDto {
 export interface PreferencePhotoTagsDto {
   url: string;
   tags: Array<{ tag: TasteTagValue; enabled: boolean }>;
+  /**
+   * 분석이 끝난 사진인지. `tags` 가 비어 있는 이유가 "취향을 못 찾음"인지
+   * "아직 분석되지 않음(잡 실패)"인지 화면이 구분하려면 별도 신호가 필요하다.
+   */
+  analyzed: boolean;
 }
 
 /** 한 번에 업로드할 수 있는 취향 사진 수 */

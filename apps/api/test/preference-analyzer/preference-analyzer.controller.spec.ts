@@ -24,12 +24,14 @@ function makeController(overrides: {
   putObject?: jest.Mock;
   enqueue?: jest.Mock;
   getStatus?: jest.Mock;
+  findActiveJob?: jest.Mock;
   deleteObject?: jest.Mock;
 } = {}) {
   const visionAnalyzer = new VisionAnalyzer({ get: <T>(_k: string, d?: T) => d } as any);
   const analysisService = {
     enqueue: overrides.enqueue ?? jest.fn().mockResolvedValue({ jobId: 'job-1', status: 'queued' }),
     getStatus: overrides.getStatus ?? jest.fn().mockResolvedValue(null),
+    findActiveJob: overrides.findActiveJob ?? jest.fn().mockResolvedValue(null),
   };
   const preferencesService = {
     findByUser: overrides.findByUser ?? jest.fn().mockResolvedValue(null),
@@ -150,6 +152,79 @@ describe('PreferenceAnalyzerController.uploadImages', () => {
   });
 });
 
+describe('PreferenceAnalyzerController.reanalyze', () => {
+  const withStranded = {
+    photoUrls: ['http://s/done.png', 'http://s/stranded.png'],
+    photoTags: { 'http://s/done.png': tags({ food: ['cafe'], confidence: 0.8 }) },
+  };
+
+  it('queues only the photos that have no analysis result', async () => {
+    const { controller, analysisService } = makeController({
+      findByUser: jest.fn().mockResolvedValue(withStranded),
+    });
+
+    await expect(controller.reanalyze(user)).resolves.toMatchObject({ jobId: 'job-1' });
+
+    const [jobData, allUrls] = analysisService.enqueue.mock.calls[0];
+    expect(jobData.photoUrls).toEqual(['http://s/stranded.png']);
+    expect(jobData.storageKeys).toEqual(['stranded.png']);
+    // 보관 목록은 그대로 — 재분석은 사진을 추가하지 않는다
+    expect(allUrls).toEqual(withStranded.photoUrls);
+  });
+
+  it('works at the photo cap, where a new upload cannot piggyback', async () => {
+    const { controller, analysisService, storage } = makeController({
+      findByUser: jest.fn().mockResolvedValue({
+        photoUrls: Array.from({ length: 10 }, (_, i) => `http://s/${i}.png`),
+        photoTags: {},
+      }),
+    });
+
+    await controller.reanalyze(user);
+
+    expect(analysisService.enqueue.mock.calls[0][0].photoUrls).toHaveLength(10);
+    // 새 사진이 없으므로 스토리지에 쓰지 않는다
+    expect(storage.putObject).not.toHaveBeenCalled();
+  });
+
+  it('returns the job already running instead of analyzing the same photos twice', async () => {
+    const findActiveJob = jest.fn().mockResolvedValue({ jobId: 'job-live', status: 'running' });
+    const { controller, analysisService } = makeController({
+      findByUser: jest.fn().mockResolvedValue(withStranded),
+      findActiveJob,
+    });
+
+    await expect(controller.reanalyze(user)).resolves.toMatchObject({ jobId: 'job-live' });
+    expect(analysisService.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('rejects when every photo already has a result', async () => {
+    const { controller, analysisService } = makeController({
+      findByUser: jest.fn().mockResolvedValue({
+        photoUrls: ['http://s/done.png'],
+        photoTags: { 'http://s/done.png': tags({ food: ['cafe'] }) },
+      }),
+    });
+
+    await expect(controller.reanalyze(user)).rejects.toThrow('다시 분석할 사진이 없습니다.');
+    expect(analysisService.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('rejects when the user has no photos at all', async () => {
+    const { controller } = makeController();
+    await expect(controller.reanalyze(user)).rejects.toThrow(BadRequestException);
+  });
+
+  it('refuses when object storage is not configured', async () => {
+    const { controller } = makeController({
+      isReady: jest.fn().mockReturnValue(false),
+      findByUser: jest.fn().mockResolvedValue(withStranded),
+    });
+
+    await expect(controller.reanalyze(user)).rejects.toThrow(ServiceUnavailableException);
+  });
+});
+
 describe('PreferenceAnalyzerController.deletePhoto', () => {
   it('re-aggregates taste tags from the remaining photos', async () => {
     const upsert = jest.fn().mockResolvedValue({
@@ -228,6 +303,7 @@ describe('PreferenceAnalyzerController.togglePhotoTag', () => {
     // 화면이 바로 반영할 수 있게 사진별 상태를 함께 돌려준다
     expect(result.photos[0]).toEqual({
       url: 'http://s/a.png',
+      analyzed: true,
       tags: [
         { tag: 'cafe', enabled: true },
         { tag: 'healing', enabled: false },
@@ -312,6 +388,7 @@ describe('PreferenceAnalyzerController.listPhotoTags', () => {
     await expect(controller.listPhotoTags(user)).resolves.toEqual([
       {
         url: 'http://s/a.png',
+        analyzed: true,
         tags: [
           { tag: 'cafe', enabled: true },
           { tag: 'healing', enabled: false },

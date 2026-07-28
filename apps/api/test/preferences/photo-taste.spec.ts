@@ -90,6 +90,7 @@ describe('buildPhotoTagsView', () => {
     expect(view).toEqual([
       {
         url: 'a',
+        analyzed: true,
         tags: [
           { tag: 'cafe', enabled: true },
           { tag: 'healing', enabled: false },
@@ -106,7 +107,18 @@ describe('buildPhotoTagsView', () => {
       disabledPhotoTags: {},
     });
 
-    expect(view).toEqual([{ url: 'pending', tags: [] }]);
+    // 화면이 "취향 없음" 과 "아직 분석 안 됨" 을 구분해야 해서 analyzed 를 따로 내린다
+    expect(view).toEqual([{ url: 'pending', analyzed: false, tags: [] }]);
+  });
+
+  it('marks an analyzed photo that produced no tags as analyzed', () => {
+    const view = buildPhotoTagsView({
+      photoUrls: ['empty'],
+      photoTags: { empty: tags() },
+      disabledPhotoTags: {},
+    });
+
+    expect(view).toEqual([{ url: 'empty', analyzed: true, tags: [] }]);
   });
 });
 

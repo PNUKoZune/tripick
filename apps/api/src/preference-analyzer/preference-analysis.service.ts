@@ -77,7 +77,33 @@ export class PreferenceAnalysisService {
     if (!job) return null;
     // 남의 잡 상태를 들여다볼 수 없도록 소유자를 확인한다.
     if (job.data.userId !== userId) return null;
+    return this.describe(job, userId);
+  }
 
+  /**
+   * 이 사용자의 아직 끝나지 않은 분석 잡. 없으면 null.
+   *
+   * 재분석 버튼은 몇 번이고 누를 수 있어서, 같은 사진을 두 잡이 동시에 분석하면
+   * 장당 35초짜리 vision 호출이 그대로 두 배가 된다(추론 서버는 한 대다).
+   */
+  async findActiveJob(userId: string): Promise<PreferenceAnalysisJobDto | null> {
+    // Redis 가 죽어 있으면 getJobs 도 던지지 않고 매달린다 — 조회 실패는 "없음"으로 보고
+    // 뒤이은 enqueue 가 503 을 내게 둔다(같은 요청에서 두 번 기다리지 않도록).
+    const jobs = await withTimeout(
+      this.queue.getJobs(['active', 'waiting', 'waiting-children', 'delayed']),
+      ENQUEUE_TIMEOUT_MS,
+      '진행 중 분석 잡 조회 응답 없음',
+    ).catch(() => null);
+    if (!jobs) return null;
+
+    const mine = jobs.find((job) => job?.data?.userId === userId);
+    return mine ? this.describe(mine, userId) : null;
+  }
+
+  private async describe(
+    job: Job<AnalyzePhotosJobData, AnalyzePhotosJobResult>,
+    userId: string,
+  ): Promise<PreferenceAnalysisJobDto> {
     const state = await job.getState();
     const progress = typeof job.progress === 'number' ? job.progress : 0;
     // 진행 중에는 DB 를 보지 않는다 — 3초마다 폴링하므로 잡당 수십 번의 불필요한 조회가 된다.

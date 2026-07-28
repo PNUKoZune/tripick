@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  FiAlertCircle,
   FiCheck,
   FiImage,
   FiLoader,
   FiLock,
   FiPlus,
+  FiRefreshCw,
   FiThumbsDown,
   FiThumbsUp,
   FiX,
@@ -16,6 +18,7 @@ import {
   MAX_PREFERENCE_PHOTOS,
   MAX_PREFERENCE_UPLOAD,
   type PreferenceAnalysisJobDto,
+  type PreferencePhotoTagsDto,
   type TasteTagDto,
   type TasteTagValue,
   type ThemePreference,
@@ -38,6 +41,7 @@ import {
   getPreferenceAnalysisJob,
   getPreferencePhotoTags,
   readAnalysisJob,
+  reanalyzePreferencePhotos,
   rememberAnalysisJob,
   savePreferences,
   togglePreferencePhotoTag,
@@ -307,6 +311,30 @@ export function PreferenceSetupForm() {
     },
   });
 
+  const reanalyzePhotosMutation = useMutation({
+    mutationFn: async () => {
+      const session = getStoredSession() ?? (await startDemoSession());
+      return reanalyzePreferencePhotos(session.tokens.accessToken);
+    },
+    onSuccess: (job) => {
+      // 새 사진이 없으므로 목록은 그대로고, 잡 추적만 업로드와 같은 경로로 이어간다.
+      rememberAnalysisJob(job.jobId);
+      setActiveJobId(job.jobId);
+      setToast({
+        title: '다시 분석할게요',
+        message: '완료되면 알림으로 알려드릴게요. 다른 페이지로 이동해도 괜찮아요.',
+        tone: 'success',
+      });
+    },
+    onError: (error) => {
+      setToast({
+        title: '재분석 실패',
+        message: error instanceof Error ? error.message : '사진을 다시 분석하지 못했습니다.',
+        tone: 'error',
+      });
+    },
+  });
+
   // 사진별로 어떤 태그가 나왔는지 + 사용자가 켜둔 상태
   const photoTagsQuery = useQuery({
     queryKey: queryKeys.preferences.photoTags,
@@ -360,7 +388,17 @@ export function PreferenceSetupForm() {
   });
 
   const photoTagsByUrl = useMemo(
-    () => new Map((photoTagsQuery.data ?? []).map((photo) => [photo.url, photo.tags])),
+    () => new Map((photoTagsQuery.data ?? []).map((photo) => [photo.url, photo])),
+    [photoTagsQuery.data],
+  );
+
+  /**
+   * 분석 결과가 없는 저장된 사진 수. 잡이 재시도까지 실패하면 남는다.
+   * 자동 복구는 "다음 업로드"에 편승하는데, 사진 10장을 다 채우면 그 기회가 없어
+   * 사용자가 하나를 지우기 전까지 무신호로 남는다 — 전용 버튼으로 그 막힘을 푼다.
+   */
+  const unanalyzedCount = useMemo(
+    () => (photoTagsQuery.data ?? []).filter((photo) => !photo.analyzed).length,
     [photoTagsQuery.data],
   );
 
@@ -524,16 +562,20 @@ export function PreferenceSetupForm() {
               </div>
               <ul className="space-y-2">
                 {savedPhotoUrls.map((url) => {
-                  const photoTags = photoTagsByUrl.get(url) ?? [];
+                  const photo = photoTagsByUrl.get(url);
                   return (
                     <SavedPhotoRow
                       key={url}
                       url={url}
-                      tags={photoTags}
-                      // 태그가 아직 없는 사진은, 분석 잡이 돌거나 목록을 불러오는 중이면
-                      // "취향 없음" 이 아니라 "분석 중" 으로 보여야 한다.
-                      pending={
-                        photoTags.length === 0 && (analyzing || photoTagsQuery.isLoading)
+                      tags={photo?.tags ?? []}
+                      // 아직 분석되지 않은 사진은 "취향 없음" 이 아니라 그렇게 보여야 한다.
+                      // 잡이 돌거나 목록을 불러오는 중이면 아직 결론이 아니라 "분석 중".
+                      state={
+                        photo?.analyzed
+                          ? 'analyzed'
+                          : analyzing || photoTagsQuery.isLoading || !photo
+                            ? 'analyzing'
+                            : 'unanalyzed'
                       }
                       busy={togglePhotoTagMutation.isPending || deletePhotoMutation.isPending}
                       onToggle={(tag, enabled) =>
@@ -545,6 +587,22 @@ export function PreferenceSetupForm() {
                   );
                 })}
               </ul>
+              {unanalyzedCount > 0 && !analyzing ? (
+                <button
+                  type="button"
+                  onClick={() => reanalyzePhotosMutation.mutate()}
+                  disabled={reanalyzePhotosMutation.isPending}
+                  className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-[14px] bg-[color:var(--card-soft)] text-[13px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--line)] active:scale-[0.99] disabled:text-[color:var(--ink-faint)] lg:max-w-[280px]"
+                >
+                  <FiRefreshCw
+                    className={`size-3.5 ${reanalyzePhotosMutation.isPending ? 'animate-spin' : ''}`}
+                    aria-hidden
+                  />
+                  {reanalyzePhotosMutation.isPending
+                    ? '요청하는 중…'
+                    : `분석 안 된 사진 ${unanalyzedCount}장 다시 분석`}
+                </button>
+              ) : null}
             </div>
           ) : null}
           <div
@@ -852,15 +910,16 @@ function ChoiceCard({
 function SavedPhotoRow({
   url,
   tags,
-  pending,
+  state,
   busy,
   onToggle,
   onDelete,
   onZoom,
 }: {
   url: string;
-  tags: Array<{ tag: TasteTagValue; enabled: boolean }>;
-  pending: boolean;
+  tags: PreferencePhotoTagsDto['tags'];
+  /** 'unanalyzed' = 분석 결과가 아직 없음(잡 실패), 'analyzed' = 결과 있음(태그 0장일 수도) */
+  state: 'analyzing' | 'analyzed' | 'unanalyzed';
   busy: boolean;
   onToggle: (tag: TasteTagValue, enabled: boolean) => void;
   onDelete: () => void;
@@ -902,10 +961,15 @@ function SavedPhotoRow({
               </button>
             ))}
           </div>
-        ) : pending ? (
+        ) : state === 'analyzing' ? (
           <p className="flex items-center gap-1.5 text-[13px] font-medium text-[color:var(--ink-faint)]">
             <FiLoader className="size-3.5 animate-spin" aria-hidden />
             취향을 분석하고 있어요…
+          </p>
+        ) : state === 'unanalyzed' ? (
+          <p className="flex items-center gap-1.5 text-[13px] font-medium text-[color:var(--danger)]">
+            <FiAlertCircle className="size-3.5 shrink-0" aria-hidden />
+            분석하지 못한 사진이에요. 아래에서 다시 분석할 수 있어요.
           </p>
         ) : (
           <p className="text-[13px] font-medium text-[color:var(--ink-faint)]">
