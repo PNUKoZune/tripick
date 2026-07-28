@@ -2,6 +2,7 @@
 
 import type { ConfigService } from '@nestjs/config';
 import { CragEvaluatorService } from '../../../src/planner/retrieval/crag-evaluator.service';
+import { DEFAULT_RETRIEVAL_WEIGHT } from '../../../src/planner/retrieval/retrieval-rank';
 import type { CandidatePlace, RawPlaceCandidate, RetrievalContext } from '../../../src/planner/retrieval/types';
 
 describe('CragEvaluatorService', () => {
@@ -377,5 +378,10 @@ describe('CragEvaluatorService', () => {
     expect(withWeight('0.06').weights().popularity).toBeGreaterThan(
       withWeight('0.24').weights().popularity,
     );
+
+    // 빈 문자열은 `Number('') === 0` 이라 검사 없이 쓰면 **retrieval 항이 조용히 사라진다**.
+    expect(withWeight('').weights().retrieval).toBeCloseTo(DEFAULT_RETRIEVAL_WEIGHT, 10);
+    expect(withWeight('  ').weights().retrieval).toBeCloseTo(DEFAULT_RETRIEVAL_WEIGHT, 10);
+    expect(withWeight('abc').weights().retrieval).toBeCloseTo(DEFAULT_RETRIEVAL_WEIGHT, 10);
   });
 });

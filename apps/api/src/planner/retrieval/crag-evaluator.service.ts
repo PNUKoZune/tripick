@@ -90,8 +90,15 @@ export class CragEvaluatorService {
    * 합 1 을 지킨다(=confidence 의 절대 의미 유지). accept 게이트도 이 값을 봐야 한다.
    */
   weights(): TermWeights {
-    const raw = Number(this.config?.get<string>('CRAG_RETRIEVAL_WEIGHT'));
-    return termWeights(Number.isFinite(raw) ? raw : DEFAULT_RETRIEVAL_WEIGHT);
+    return termWeights(this.readWeight('CRAG_RETRIEVAL_WEIGHT', DEFAULT_RETRIEVAL_WEIGHT));
+  }
+
+  private readWeight(key: string, fallback: number): number {
+    const raw = this.config?.get<string>(key);
+    // 빈 문자열·미설정은 Number('') === 0 이라 조용히 0 가중이 되므로 명시적으로 걸러낸다.
+    if (raw === undefined || raw === null || String(raw).trim() === '') return fallback;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : fallback;
   }
 
   /** 후보 풀이 반드시 담아야 하는 종류별 최소 수. 일정에 식사 슬롯과 볼거리가 둘 다 필요하다. */
