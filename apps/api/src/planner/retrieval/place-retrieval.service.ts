@@ -57,7 +57,7 @@ export class PlaceRetrievalService {
       await this.placeEmbeddings.searchByEmbedding(
         searchEmbedding,
         context.destination,
-        limit * 3,
+        limit * this.candidatePoolMultiplier(),
         preferenceVector,
       ),
       'pgvector',
@@ -161,6 +161,27 @@ export class PlaceRetrievalService {
    * ⚠️ 골든셋 정답은 '그 목적지의 유명 명소' 라 개인화 품질 자체는 측정하지 못한다.
    * 이 값을 더 내리는(=블렌드를 더 끄는) 근거로 이 지표만 쓰면 안 된다.
    */
+  /**
+   * 최종 개수(limit)의 몇 배까지 pgvector 후보를 뽑을지.
+   *
+   * 이 배수가 곧 **인지도·취향 재정렬이 손댈 수 있는 범위의 한계**다 — 선발은 순전히 벡터
+   * 거리(`ORDER BY embedding <=> query`)이고 인지도는 그 뒤의 재정렬에만 관여하므로,
+   * 풀에 못 들어온 장소는 인지도가 아무리 높아도 결과에 나올 길이 없다.
+   *
+   * 3 → 10. 서울처럼 한 지역에 후보가 몰린 곳에서 청계천·북촌한옥마을이 적재돼 있는데도
+   * 상위 48 밖이라 결과에 못 들어왔다(서울 R|cat 0.00 → 0.50). **비용은 거의 없다** —
+   * 지역 pre-filter 가 이미 그 지역 전체 행의 거리를 계산하므로 LIMIT 은 top-N 힙 크기만
+   * 바꾼다(서울 660행에서 48→320 이 31kB→60kB, 실행시간 5~6ms 로 동일). 늘어나는 건
+   * 재정렬 대상 수(Node CPU)뿐이고, 후보가 적은 지역은 LIMIT 이 상한일 뿐이라 영향이 없다.
+   *
+   * 20 은 R|cat 이 0.498→0.507 로 미세하게 오르는 대신 MRR 이 0.735→0.689 로 떨어진다
+   * (상위에 노이즈가 함께 들어온다). 10 이 무릎이다.
+   */
+  private candidatePoolMultiplier(): number {
+    const value = this.readNumber('PLACE_CANDIDATE_POOL_MULTIPLIER', 10);
+    return Math.max(1, Math.floor(value));
+  }
+
   private preferenceBlendWeight(): number {
     const weight = this.readNumber('PREFERENCE_BLEND_WEIGHT', 0.85);
     return Math.max(0, Math.min(1, weight));
