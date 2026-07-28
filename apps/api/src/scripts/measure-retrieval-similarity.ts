@@ -7,6 +7,8 @@
  * 만들 이유가 없다) 를 먼저 재야 한다.
  *
  * 실행: cd apps/api && pnpm ts-node -r tsconfig-paths/register src/scripts/measure-retrieval-similarity.ts
+ *   --start-at=21:00   방문 시각(KST)을 넣어 영업시간 가드(availability)의 발동률까지 본다.
+ *                      골든셋 케이스엔 startAt 이 없어 기본 실행에서는 그 항이 늘 중립값이다.
  *
  * 계측 방식은 파이프라인 로직을 다시 쓰지 않는다 — 실제 `PlaceRetrievalService.retrieve` 를
  * 그대로 호출하고 `PlaceEmbeddingRepository.searchByEmbedding` 의 반환을 가로채, 질의 벡터
@@ -132,8 +134,19 @@ function f(value: number, digits = 3): string {
   return Number.isFinite(value) ? value.toFixed(digits) : '  -  ';
 }
 
+/** `--start-at=HH:MM`(KST) → Date. 기준일은 고정값이라 실행마다 결과가 흔들리지 않는다. */
+function parseStartAt(argv: string[]): Date | undefined {
+  const arg = argv.find((value) => value.startsWith('--start-at='));
+  if (!arg) return undefined;
+  const [hour, minute] = arg.split('=')[1]!.split(':').map(Number);
+  if (!Number.isFinite(hour)) return undefined;
+  const utcHour = (hour! - 9 + 24) % 24;
+  return new Date(`2026-08-01T${String(utcHour).padStart(2, '0')}:${String(minute ?? 0).padStart(2, '0')}:00.000Z`);
+}
+
 async function main() {
   const setPath = resolve(__dirname, 'retrieval-golden-set.json');
+  const startAt = parseStartAt(process.argv.slice(2));
   const goldenSet = JSON.parse(readFileSync(setPath, 'utf8')) as { cases: GoldenCase[] };
 
   const app = await NestFactory.createApplicationContext(MeasureModule, {
@@ -173,6 +186,8 @@ async function main() {
     };
     const termAuc: Record<string, number[]> = {};
     const termValues: Record<string, number[]> = {};
+    const penaltyCounts: Record<string, number> = {};
+    let scoredTotal = 0;
 
     const allSim: number[] = [];
     const allPref: number[] = [];
@@ -205,6 +220,7 @@ async function main() {
         ...(testCase.trigger ? { trigger: testCase.trigger } : {}),
         ...(testCase.notes ? { notes: testCase.notes } : {}),
         ...(preferenceVector ? { preferenceVector } : {}),
+        ...(startAt ? { startAt } : {}),
       });
 
       const pool = captured;
@@ -246,6 +262,15 @@ async function main() {
         ['dataQuality', (c) => c.crag.dataQuality],
         ['personalization', (c) => c.crag.personalization],
       ];
+      // 가드 항(locality·availability·dataQuality)이 실제로 발동하는지 — 발동하지 않는 항에
+      // 가중을 주는 것은 일하는 항을 희석하는 것과 같다.
+      for (const candidate of scored) {
+        for (const penalty of candidate.crag.penalties) {
+          penaltyCounts[penalty] = (penaltyCounts[penalty] ?? 0) + 1;
+        }
+      }
+      scoredTotal += scored.length;
+
       for (const [name, pick] of terms) {
         const r = scoredRelevant.map(pick).filter((v): v is number => v !== undefined);
         const o = scoredOther.map(pick).filter((v): v is number => v !== undefined);
@@ -269,6 +294,16 @@ async function main() {
           String(caseRelevantSim.length).padStart(7) +
           f(caseAuc, 2).padStart(7),
       );
+    }
+
+    console.log(
+      `\n[가드 발동률] 채점된 후보 ${scoredTotal}건 중` +
+        (startAt ? ` (startAt=${startAt.toISOString()})` : ' (startAt 없음 — availability 는 늘 중립)'),
+    );
+    const penalties = Object.entries(penaltyCounts).sort((a, b) => b[1] - a[1]);
+    if (penalties.length === 0) console.log('  발동 없음');
+    for (const [name, count] of penalties) {
+      console.log(`  ${name.padEnd(24)}${String(count).padStart(6)}건 ${f((count / scoredTotal) * 100, 1)}%`);
     }
 
     const pooled = stats(allSim);
