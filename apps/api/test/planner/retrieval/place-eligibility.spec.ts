@@ -59,6 +59,32 @@ describe('isEligibleItineraryCandidate', () => {
     }
   });
 
+  it('SEO 상호는 실존 음식점이어도 후보에서 뺀다', () => {
+    // '경주맛집' 은 카카오에 등록된 실제 음식점이라 카테고리 화이트리스트를 통과하고,
+    // 이름이 코퍼스 상투어와 같아 인지도 1.00 을 받아 상위를 먹었다(경주 케이스 2위).
+    for (const name of ['경주맛집', '다솥맛집', '기차여행']) {
+      expect(
+        isEligibleItineraryCandidate({
+          name,
+          category: 'restaurant',
+          categoryDetail: '음식점 > 한식',
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it('코스명은 접미사가 같아도 통과한다', () => {
+    for (const name of ['해파랑길 2코스', '강화 자전거 관광코스']) {
+      expect(
+        isEligibleItineraryCandidate({
+          name,
+          category: 'attraction',
+          categoryDetail: '여행 > 관광,명소',
+        }),
+      ).toBe(true);
+    }
+  });
+
   it('지역명을 품은 실제 장소는 통과한다', () => {
     for (const name of ['강원도립화목원', '제주도립미술관', '부산시민공원']) {
       expect(

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { OPENING_HOURS_FIELD, parseOpeningHours } from './opening-hours.parser';
+import { isTravelCourseArticle } from './place-name-quality';
 import { parseSigungu } from './place-seeds';
 import type { IngestPlace } from './ingestion.types';
 import type { Coordinates } from '@tripick/types';
@@ -90,6 +91,9 @@ const CONTENT_TYPE_CATEGORY: Record<string, string> = {
 
 /** 적재에서 제외할 contentTypeId (숙박). 이 서비스는 숙박을 일정 후보로 다루지 않는다. */
 const EXCLUDED_CONTENT_TYPES = new Set(['32']);
+
+/** 여행코스. 실제 코스명과 큐레이션 기사가 섞여 오므로 이름 모양으로 한 번 더 가른다. */
+export const TRAVEL_COURSE_CONTENT_TYPE = '25';
 
 /** contentTypeId → 한글 유형명 (임베딩 텍스트 강화용). */
 const CONTENT_TYPE_NAME: Record<string, string> = {
@@ -467,12 +471,41 @@ export class TourApiService {
     return Math.hypot(latDelta, lngDelta) * 1000;
   }
 
+  /**
+   * 한 시도의 특정 contentTypeId 에 속하는 contentId 전체를 모은다 (정리 스크립트용).
+   *
+   * 왜 필요한가 — 적재된 행은 contentTypeId 를 저장하지 않으므로, 이미 들어온 여행코스 기사를
+   * 이름 모양만으로 골라내면 '경산 임당동과 조영동 고분군' 같은 실제 명소가 함께 죽는다.
+   * KTO 에 "이 시도의 여행코스 목록"을 되물어 확정 집합을 만든 뒤에 이름 규칙을 적용한다.
+   */
+  async fetchContentIds(
+    lDongRegnCd: string,
+    contentTypeId: string,
+    maxPages = 20,
+  ): Promise<string[]> {
+    const apiKey = this.apiKey();
+    if (!apiKey) return [];
+
+    const numOfRows = 100; // KTO 상한
+    const ids: string[] = [];
+    for (let page = 1; page <= maxPages; page += 1) {
+      const rows = await this.fetchPage(apiKey, lDongRegnCd, page, numOfRows, undefined, contentTypeId);
+      for (const row of rows) {
+        const id = String(row.contentid ?? '').trim();
+        if (id) ids.push(id);
+      }
+      if (rows.length < numOfRows) break;
+    }
+    return ids;
+  }
+
   private async fetchPage(
     apiKey: string,
     lDongRegnCd: string,
     pageNo: number,
     numOfRows: number,
     budget?: KtoCallBudget,
+    contentTypeId?: string,
   ): Promise<TourAreaItem[]> {
     if (budget && !budget.consume()) throw new KtoQuotaExceededError('areaBasedList2');
     try {
@@ -486,6 +519,7 @@ export class TourApiService {
           _type: 'json',
           arrange: 'O', // 대표이미지 있는 순 정렬
           lDongRegnCd, // 폐기 예정인 areaCode 대체 (법정동 시도 코드)
+          ...(contentTypeId ? { contentTypeId } : {}),
         },
         timeout: 10000,
       });
@@ -517,6 +551,12 @@ export class TourApiService {
     if (EXCLUDED_CONTENT_TYPES.has(contentTypeId)) return null; // 숙박 제외
     const category = CONTENT_TYPE_CATEGORY[contentTypeId] ?? 'attraction';
     const address = [row.addr1, row.addr2].filter(Boolean).join(' ').trim();
+
+    // 여행코스(25)에는 실제 코스명('남파랑길 25코스')과 큐레이션 기사('가정의 달, 싱글을 위한
+    // 혼자 먹는 밥상 코스')가 섞여 온다. 기사는 방문할 지점이 아니므로 적재하지 않는다.
+    if (contentTypeId === TRAVEL_COURSE_CONTENT_TYPE && isTravelCourseArticle(name, address)) {
+      return null;
+    }
     const sigungu = parseSigungu(address);
     const categoryDetail = CONTENT_TYPE_NAME[contentTypeId];
 

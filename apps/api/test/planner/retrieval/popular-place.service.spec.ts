@@ -28,8 +28,14 @@ function doc(over: Partial<RawPlaceCandidate>): RawPlaceCandidate {
   } as RawPlaceCandidate;
 }
 
-/** 축별 코퍼스를 순서대로 돌려주는 네이버 스텁 (명소 → 맛집). */
-function naverStub(texts: string[] = [ATTRACTION_CORPUS, RESTAURANT_CORPUS]) {
+/**
+ * 축별 코퍼스를 순서대로 돌려주는 네이버 스텁 (명소 → 맛집).
+ * controlText 를 주면 관문 ③(지역 특이도)의 대조 코퍼스가 되고, 주지 않으면 그 관문은 꺼진다.
+ */
+function naverStub(
+  texts: string[] = [ATTRACTION_CORPUS, RESTAURANT_CORPUS],
+  controlText?: string,
+) {
   const queue = [...texts];
   return {
     hasCredentials: () => true,
@@ -38,6 +44,10 @@ function naverStub(texts: string[] = [ATTRACTION_CORPUS, RESTAURANT_CORPUS]) {
       if (text === undefined) return null;
       return { text, docCount: 10, index: new NaverPopularityIndex(text, 10) };
     }),
+    getControlIndex: jest.fn(async () =>
+      controlText === undefined ? null : new NaverPopularityIndex(controlText, 10),
+    ),
+    minRegionSpecificity: () => 5,
   } as any;
 }
 
@@ -121,6 +131,8 @@ describe('PopularPlaceService', () => {
           docCount: 10,
           index: new NaverPopularityIndex(RESTAURANT_CORPUS, 10),
         }),
+      getControlIndex: jest.fn(async () => null),
+      minRegionSpecificity: () => 5,
     } as any;
     const service = new PopularPlaceService(config(), naver, kakao);
 
@@ -169,6 +181,38 @@ describe('PopularPlaceService', () => {
 
     const places = await service.collect('전남광주통합특별시', 20);
     expect(places.map((p) => p.name).sort()).toEqual(['국립아시아문화전당', '오동도']);
+  });
+
+  it('이름이 흔한 단어인 상호는 언급이 있어도 탈락한다 (관문 ③: 지역 특이도)', async () => {
+    // 실측 사례 — 광주 식당 '조금더'·경기 식당 '맛있게' 는 카카오 실존 등록이고 코퍼스에도
+    // 그 단어가 있어 관문 ②를 정당하게 통과했다. 전국 코퍼스에서도 같은 비율로 나오면 탈락.
+    const region = '서울 맛집 추천 맛있게 먹은 집. 맛있게 잘 먹었어요. 맛있게 한 상. 남산서울타워 야경.';
+    const control = '국내 맛집 추천 맛있게 먹는 법. 맛있게 즐기기. 맛있게 한 그릇.';
+    const kakao = kakaoStub((keyword) =>
+      keyword.includes('맛있게')
+        ? [doc({ name: '맛있게', category: 'restaurant', kakaoPlaceId: '5', address: '서울 중구 세종대로 1' })]
+        : [],
+    );
+    const service = new PopularPlaceService(config(), naverStub(['', region], control), kakao);
+
+    expect(await service.collect('서울', 10)).toHaveLength(0);
+  });
+
+  it('그 지역에서만 자주 쓰이는 이름은 관문 ③을 통과한다', async () => {
+    const region = ATTRACTION_CORPUS;
+    // 대조 코퍼스에 없는 이름 = 그 지역에서만 쓰이는 고유명 (특이도 ∞).
+    const control = '국내 여행지 추천 부산 해운대. 제주 성산일출봉. 강릉 안목해변.';
+    const kakao = kakaoStub((keyword) => (keyword.includes('남산서울타워') ? [doc({})] : []));
+    const service = new PopularPlaceService(config(), naverStub([region], control), kakao);
+
+    expect((await service.collect('서울', 10)).map((p) => p.name)).toEqual(['남산서울타워']);
+  });
+
+  it('대조 코퍼스를 못 모으면 관문 ③만 건너뛰고 수집은 계속한다', async () => {
+    const kakao = kakaoStub((keyword) => (keyword.includes('남산서울타워') ? [doc({})] : []));
+    const service = new PopularPlaceService(config(), naverStub([ATTRACTION_CORPUS]), kakao);
+
+    expect((await service.collect('서울', 10)).map((p) => p.name)).toEqual(['남산서울타워']);
   });
 
   it('네이버 키가 없으면 isAvailable 이 false 다', () => {

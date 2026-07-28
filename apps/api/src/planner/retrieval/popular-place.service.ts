@@ -2,11 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { KakaoLocalService } from './kakao-local.service';
 import { NaverSearchService } from './naver-search.service';
+import { mentionSpecificity } from './naver-search.service';
 import { extractPlaceNameCandidates, isGenericPlaceName } from './popular-name-extract';
 import { parseSigungu, regionSearchStem } from './place-seeds';
 import { placeRegionCodes, sidoCodesForLabel } from './region-code';
 import type { SidoCode } from './region-code';
 import type { MentionCorpus } from './naver-search.service';
+import type { PopularityIndex } from './types';
 import type { PlaceNameCandidate } from './popular-name-extract';
 import type { IngestPlace } from './ingestion.types';
 import type { RawPlaceCandidate } from './types';
@@ -19,8 +21,8 @@ import type { RawPlaceCandidate } from './types';
  * 카카오 카테고리 검색(`searchAround`)도 좌표 앵커 주변을 정확도순으로 훑을 뿐
  * "남들이 실제로 많이 가는 곳"이라는 신호가 없다. 그 신호는 네이버 추천 글에만 있다.
  *
- * 파이프라인: 네이버 코퍼스 → 이름 추출(제안) → 카카오 정규화 → 역방향 확인 → IngestPlace.
- * 세 번째·네 번째 단계가 정확성을 책임진다 — 자세한 근거는 popular-name-extract.ts 주석 참고.
+ * 파이프라인: 네이버 코퍼스 → 이름 추출(제안) → 카카오 정규화 → 역방향 확인 → 지역 특이도
+ * → IngestPlace. 뒤의 세 단계가 정확성을 책임진다 — 근거는 popular-name-extract.ts 주석 참고.
  */
 
 /** 이 소스가 노리는 두 축. 축마다 코퍼스와 인정 카테고리를 따로 둔다. */
@@ -60,7 +62,14 @@ const CORPUS_DISPLAY = 100;
 const RESOLVE_DOCS = 5;
 
 /** 카카오 문서 1건에 대한 판정. */
-type Verdict = 'ok' | 'category' | 'region' | 'unmentioned' | 'generic' | 'duplicate';
+type Verdict =
+  | 'ok'
+  | 'category'
+  | 'region'
+  | 'unmentioned'
+  | 'unspecific'
+  | 'generic'
+  | 'duplicate';
 
 /** 후보가 왜 탈락했는지 — 조용한 스킵을 남기지 않기 위한 계수. */
 interface RejectCounts extends Record<Exclude<Verdict, 'ok'>, number> {
@@ -72,6 +81,8 @@ interface RejectCounts extends Record<Exclude<Verdict, 'ok'>, number> {
   region: number;
   /** 정본명이 코퍼스에 없음 — 관문 ②. '여행'→'경주여행사' 류가 여기서 죽는다 */
   unmentioned: number;
+  /** 언급은 있지만 전국 코퍼스에서도 같은 비율로 나옴 — 관문 ③. 일반어 상호('맛있게') */
+  unspecific: number;
   /** 정본명이 상호가 아니라 검색 노출용 문구('서울맛집'·'놀만한곳') */
   generic: number;
   /** 이미 수집한 장소 */
@@ -119,6 +130,14 @@ export class PopularPlaceService {
     const collected: IngestPlace[] = [];
     const seenPlaceIds = new Set<string>();
 
+    // 관문 ③(지역 특이도)의 분모. 실패하면 이 관문만 건너뛴다 — 없다고 적재를 멈출 이유는 없다.
+    const control = await this.naverSearch.getControlIndex();
+    if (!control) {
+      this.logger.warn(
+        `[${region}] 대조 코퍼스를 만들지 못해 지역 특이도 관문을 건너뜁니다(일반어 상호가 섞일 수 있음).`,
+      );
+    }
+
     for (const axis of AXES) {
       const axisBudget = Math.max(1, Math.round(budget * axis.share));
       const queries = axis.suffixes.map((suffix) => `${stem} ${suffix}`);
@@ -136,7 +155,7 @@ export class PopularPlaceService {
       const before = collected.length;
       const rejects = await this.resolveCandidates(
         candidates,
-        { region, stem, targetSidos, axis, corpus, axisBudget },
+        { region, stem, targetSidos, axis, corpus, control, axisBudget },
         collected,
         seenPlaceIds,
       );
@@ -144,7 +163,7 @@ export class PopularPlaceService {
       this.logger.log(
         `[${region}] ${axis.label}: 코퍼스 ${corpus.docCount}건 → 후보 ${candidates.length} → 확정 ${collected.length - before} ` +
           `(탈락 미발견 ${rejects.no_match} / 카테고리 ${rejects.category} / 타지역 ${rejects.region} / ` +
-          `언급없음 ${rejects.unmentioned} / 상투어 ${rejects.generic} / 중복 ${rejects.duplicate})`,
+          `언급없음 ${rejects.unmentioned} / 일반어 ${rejects.unspecific} / 상투어 ${rejects.generic} / 중복 ${rejects.duplicate})`,
       );
     }
 
@@ -181,6 +200,7 @@ export class PopularPlaceService {
       targetSidos: SidoCode[];
       axis: PopularAxis;
       corpus: MentionCorpus;
+      control: PopularityIndex | null;
       axisBudget: number;
     },
     collected: IngestPlace[],
@@ -191,6 +211,7 @@ export class PopularPlaceService {
       category: 0,
       region: 0,
       unmentioned: 0,
+      unspecific: 0,
       generic: 0,
       duplicate: 0,
     };
@@ -227,7 +248,13 @@ export class PopularPlaceService {
   /** 카카오 문서가 이 축·지역의 실제 인기 장소인지 판정한다. */
   private verify(
     doc: RawPlaceCandidate,
-    ctx: { region: string; targetSidos: SidoCode[]; axis: PopularAxis; corpus: MentionCorpus },
+    ctx: {
+      region: string;
+      targetSidos: SidoCode[];
+      axis: PopularAxis;
+      corpus: MentionCorpus;
+      control: PopularityIndex | null;
+    },
     seenPlaceIds: ReadonlySet<string>,
   ): Verdict {
     if (!ctx.axis.categories.includes(doc.category)) return 'category';
@@ -241,6 +268,17 @@ export class PopularPlaceService {
 
     // 관문 ②: 카카오가 준 정본명이 코퍼스에 실제로 있어야 한다.
     if (ctx.corpus.index.mentions(doc.name) === 0) return 'unmentioned';
+
+    // 관문 ③: 그 언급이 **이 지역 고유**여야 한다. 이름이 흔한 한국어 단어인 상호는 언급이
+    // 있어도 자기 인기가 아니라 남의 문장이다 — 광주 '조금더'·경기 '맛있게' 가 관문 ②를
+    // 정당하게 통과했던 경로다. 전국 코퍼스 언급률과 비교해 갈라낸다.
+    if (
+      ctx.control &&
+      mentionSpecificity(doc.name, ctx.corpus.index, ctx.control) <
+        this.naverSearch.minRegionSpecificity()
+    ) {
+      return 'unspecific';
+    }
 
     if (doc.kakaoPlaceId && seenPlaceIds.has(doc.kakaoPlaceId)) return 'duplicate';
     return 'ok';
