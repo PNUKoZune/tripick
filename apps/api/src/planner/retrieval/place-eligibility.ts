@@ -1,3 +1,4 @@
+import { isSeoBusinessName } from './place-name-quality';
 import { isRegionLabel } from './region-code';
 import type { RawPlaceCandidate } from './types';
 
@@ -34,6 +35,11 @@ export function isEligibleItineraryCandidate(
   // (실측: 제주 케이스 1위가 '제주도', 인지도 1.00). 여행 카테고리를 달고 오므로
   // 아래 카테고리 화이트리스트로는 걸러지지 않아 이름으로 막는다.
   if (isRegionLabel(place.name)) return false;
+
+  // 검색 노출용 문구를 상호로 등록한 SEO 상호('경주맛집'). 적재에서도 막지만, 규칙이 생기기
+  // 전에 들어온 행과 아직 정리 스크립트를 돌리지 않은 환경이 있어 검색 단계에서도 뺀다.
+  // 카테고리 화이트리스트는 이걸 못 막는다 — 실존 음식점이라 '음식점' 카테고리를 달고 온다.
+  if (isSeoBusinessName(place.name)) return false;
 
   const categoryDetail = normalize(place.categoryDetail ?? '');
   if (EXCLUDED_CATEGORY_KEYWORDS.some((keyword) => categoryDetail.includes(normalize(keyword)))) {

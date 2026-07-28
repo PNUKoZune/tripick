@@ -20,6 +20,28 @@ const NAVER_MAX_DISPLAY = 100;
 /** 목적지 코퍼스를 만들 검색어 접미사. "경주 여행지 추천" 식으로 결합된다. */
 const RECOMMEND_SUFFIXES = ['여행지 추천', '가볼만한 곳', '핫플레이스'] as const;
 
+/**
+ * 지역명이 없는 전국 추천 코퍼스를 만들 검색어. **지역 특이도의 분모**로만 쓴다.
+ *
+ * 왜 필요한가 — 역방향 매칭은 이름이 코퍼스에 몇 번 나오는지만 세므로, 이름이 흔한 한국어
+ * 단어인 상호는 남의 언급을 자기 것으로 가져간다(실측: 식당 '맛있게' 가 대구 맛집 코퍼스에서
+ * 12회, 카페 '연다'·'담다' 도 같은 경로). 이름 길이·접미사 휴리스틱으로는 실제 상호와 구분이
+ * 안 되지만, **일반어는 어느 지역 코퍼스에서나 비슷한 비율로 나오고 실제 장소는 자기 지역
+ * 코퍼스에만 몰린다**. 그래서 지역 무관 코퍼스를 대조군으로 두고 언급률 비를 본다.
+ */
+const CONTROL_QUERIES = ['국내 여행지 추천', '국내 맛집 추천', '가볼만한 곳 추천'] as const;
+
+/**
+ * 지역 특이도 하한 — 지역 코퍼스 언급률이 대조 코퍼스 언급률의 몇 배 이상이어야
+ * "그 지역의 인기 장소"로 인정할지.
+ *
+ * 기본 5 는 실측으로 갈랐다(제주·대구·광주 × 명소·맛집 축, 코퍼스 각 600건):
+ *   실제 장소 — 성산일출봉 9.25 / 한라산 9.50 / 팔공산·서문시장·돈사돈·따로국밥 ∞(대조 0)
+ *   일반어    — 맛있게 4.00 / 네이버 3.33 / 조금더 0.50
+ * 두 무리 사이가 4~6 에서 비어 있어 5 를 뒀다. 대조 코퍼스에 아예 없는 이름(∞)은 항상 통과.
+ */
+const DEFAULT_MIN_REGION_SPECIFICITY = 5;
+
 /** 언급 0 인 마이너 장소에 주는 하한 점수 (제거가 아닌 소프트 감점). */
 const UNMENTIONED_SCORE = 0.15;
 /** 인덱스 비활성(키 없음·조회 실패) 시 evaluator 가 쓰는 중립 점수. */
@@ -39,6 +61,10 @@ export interface MentionCorpus {
  * 후보 장소명의 언급 빈도를 조회하는 인덱스를 만든다.
  * 장소명 추출(불안정한 한글 NER) 대신, 깨끗한 후보 name 이 코퍼스에 몇 번 나오는지 세는
  * 역방향 매칭이라 마이너 장소는 자연히 언급 0 으로 걸러진다.
+ *
+ * 역방향 매칭의 대가는 **이름이 흔한 단어인 상호가 남의 언급을 가져가는 것**이다. 그래서
+ * 지역명 없는 전국 코퍼스(CONTROL_QUERIES)를 대조군으로 함께 만들어, 두 코퍼스에서 비슷한
+ * 비율로 나오는 이름은 인지도 가점 대상에서 빼고 중립으로 둔다.
  */
 @Injectable()
 export class NaverSearchService {
@@ -60,7 +86,41 @@ export class NaverSearchService {
     // 서브지역(부산 해운대 등)까지 보존해야 그 지역의 인기 장소가 코퍼스에 잡힌다.
     const stem = regionSearchStem(destination) || destination;
     const queries = RECOMMEND_SUFFIXES.map((suffix) => `${stem} ${suffix}`);
-    return this.buildIndex(`region:${key}`, queries, destination, credentials);
+    const region = await this.buildIndex(`region:${key}`, queries, destination, credentials);
+    if (region.docCount === 0) return region;
+
+    // 대조 코퍼스는 목적지와 무관하므로 캐시 1건으로 전 목적지가 공유한다(6h 당 6콜).
+    // 실패하면 필터 없이 지역 인덱스만 쓴다 — 보정을 못 하는 것이지 랭킹이 망가지진 않는다.
+    const control = await this.getControlIndex();
+    if (!control) return region;
+    return new RegionSpecificPopularityIndex(region, control, this.minRegionSpecificity());
+  }
+
+  /**
+   * 지역명 없는 전국 추천 코퍼스 인덱스 (지역 특이도의 분모). 키 없음·조회 실패 시 null.
+   * 적재(PopularPlaceService)와 런타임 랭킹이 같은 대조군을 공유한다.
+   */
+  async getControlIndex(): Promise<PopularityIndex | null> {
+    const credentials = this.credentials();
+    if (!credentials) return null;
+    const control = await this.buildIndex(
+      'control:national',
+      [...CONTROL_QUERIES],
+      '전국 대조',
+      credentials,
+    );
+    return control.docCount > 0 ? control : null;
+  }
+
+  /** 지역 특이도 하한. 근거는 DEFAULT_MIN_REGION_SPECIFICITY 주석 참고. */
+  minRegionSpecificity(): number {
+    const value = Number(
+      this.config.get<string | number>(
+        'NAVER_MIN_REGION_SPECIFICITY',
+        DEFAULT_MIN_REGION_SPECIFICITY,
+      ),
+    );
+    return Number.isFinite(value) && value >= 0 ? value : DEFAULT_MIN_REGION_SPECIFICITY;
   }
 
   /**
@@ -258,12 +318,15 @@ function stripMarkup(text: string): string {
 export class NaverPopularityIndex implements PopularityIndex {
   /** 공백을 제거한 코퍼스 — 장소명 띄어쓰기 차이(동궁과월지 vs 동궁과 월지)를 흡수한다. */
   private readonly compact: string;
+  /** 공백을 살린 코퍼스 — 짧은 이름은 공백을 건너뛴 매칭을 인정하지 않는다(아래 SHORT_NAME_LENGTH). */
+  private readonly spaced: string;
 
   constructor(
     corpus: string,
     readonly docCount: number,
   ) {
     this.compact = corpus.replace(/\s+/g, '');
+    this.spaced = corpus.replace(/\s+/g, ' ');
   }
 
   /** 정식명에 붙는 기관 수식어. 블로그는 보통 이걸 떼고 쓴다('국립경주박물관'→'경주박물관'). */
@@ -284,6 +347,17 @@ export class NaverPopularityIndex implements PopularityIndex {
    */
   private static readonly MIN_COUNTABLE_LENGTH = 3;
 
+  /**
+   * 이 길이까지는 **공백을 살린 코퍼스**에서만 언급을 센다.
+   *
+   * compact 매칭(공백 제거)은 '동궁과 월지'↔'동궁과월지' 를 흡수하려고 넣은 것인데, 짧은
+   * 이름에선 공백을 건너뛰어 남의 문장을 자기 언급으로 만든다 — 실측에서 광주 식당 '조금더'가
+   * 본문의 '조금 더' 를 먹었다. 3글자 명소(한라산·불국사·석굴암)는 블로그에서도 붙여 쓰므로
+   * 공백을 살려도 그대로 걸린다. 여기서 공백 매칭이 0 인데 compact 매칭은 잡히는 이름은
+   * **판정 불가(중립)** 로 둔다 — 감점(0.15)까지 주면 띄어 쓴 실제 짧은 이름이 손해를 본다.
+   */
+  private static readonly SHORT_NAME_LENGTH = 3;
+
   /** 등록명을 쪼갤 구분자. '대구 서문시장 & 서문시장 야시장' 같은 장식적 등록명 대응. */
   private static readonly NAME_SPLIT = /[\s&,·/()[\]]+/;
 
@@ -299,13 +373,28 @@ export class NaverPopularityIndex implements PopularityIndex {
   }
 
   mentions(name: string): number {
+    return this.count(name).mentions;
+  }
+
+  /**
+   * 언급 수와 **판정 가능 여부**를 함께 돌려준다. countable=false 는 "이 이름으로는 셀 수 없음"
+   * (2글자 이하 / 짧은 이름이 공백을 건너뛴 매칭만 걸림)이라 점수를 중립으로 둬야 한다.
+   */
+  private count(name: string): { countable: boolean; mentions: number } {
     const needle = this.countableNeedle(name);
-    if (!needle) return 0;
+    if (!needle) return { countable: false, mentions: 0 };
+
+    const short = needle.length <= NaverPopularityIndex.SHORT_NAME_LENGTH;
+    const haystack = short ? this.spaced : this.compact;
     for (const key of this.matchKeys(name, needle)) {
-      const count = this.countOccurrences(key);
-      if (count > 0) return count;
+      const count = this.countOccurrences(key, haystack);
+      if (count > 0) return { countable: true, mentions: count };
     }
-    return 0;
+    // 짧은 이름이 공백 제거 코퍼스에서만 걸리면 남의 언급일 가능성이 크다 → 판정 보류.
+    if (short && this.countOccurrences(needle, this.compact) > 0) {
+      return { countable: false, mentions: 0 };
+    }
+    return { countable: true, mentions: 0 };
   }
 
   /**
@@ -337,23 +426,72 @@ export class NaverPopularityIndex implements PopularityIndex {
     return keys;
   }
 
-  private countOccurrences(needle: string): number {
+  private countOccurrences(needle: string, haystack: string): number {
     let count = 0;
-    let from = this.compact.indexOf(needle);
+    let from = haystack.indexOf(needle);
     while (from !== -1) {
       count += 1;
-      from = this.compact.indexOf(needle, from + needle.length);
+      from = haystack.indexOf(needle, from + needle.length);
     }
     return count;
   }
 
   score(name: string): number {
-    // 셀 수 없는 이름(2글자)은 중립 — 감점 대상인 '언급 0' 과 구분한다.
-    if (!this.countableNeedle(name)) return NEUTRAL_POPULARITY;
-    const count = this.mentions(name);
-    if (count === 0) return UNMENTIONED_SCORE;
+    const { countable, mentions } = this.count(name);
+    // 셀 수 없는 이름(2글자·공백 건너뛴 매칭)은 중립 — 감점 대상인 '언급 0' 과 구분한다.
+    if (!countable) return NEUTRAL_POPULARITY;
+    if (mentions === 0) return UNMENTIONED_SCORE;
     // 로그 스케일: 1회→0.63, 2회→0.74, 4회→0.87. 소수 언급도 완만하게 상승.
-    return Math.min(1, 0.45 + 0.18 * Math.log2(count + 1));
+    return Math.min(1, 0.45 + 0.18 * Math.log2(mentions + 1));
+  }
+}
+
+/**
+ * 지역 특이도 = 지역 코퍼스 언급률 / 대조 코퍼스 언급률.
+ * 대조 코퍼스에 없는 이름은 Infinity(그 지역에서만 쓰이는 고유명), 지역 코퍼스에 없으면 0.
+ */
+export function mentionSpecificity(
+  name: string,
+  region: PopularityIndex,
+  control: PopularityIndex,
+): number {
+  const regionMentions = region.mentions(name);
+  if (regionMentions === 0) return 0;
+  if (region.docCount === 0 || control.docCount === 0) return Infinity;
+  const controlMentions = control.mentions(name);
+  if (controlMentions === 0) return Infinity;
+  return regionMentions / region.docCount / (controlMentions / control.docCount);
+}
+
+/**
+ * 지역 코퍼스 인덱스에 **대조 코퍼스 필터**를 씌운 인덱스.
+ * 특이도가 하한 미만인 이름(= 전국 어디서나 쓰이는 흔한 한국어 단어를 상호로 쓴 장소)은
+ * 가점도 감점도 주지 않고 중립으로 둔다. 실제 언급이 있는 장소만 인지도 가점을 받는다.
+ */
+export class RegionSpecificPopularityIndex implements PopularityIndex {
+  constructor(
+    private readonly region: PopularityIndex,
+    private readonly control: PopularityIndex,
+    private readonly minSpecificity: number,
+  ) {}
+
+  get docCount(): number {
+    return this.region.docCount;
+  }
+
+  /** 이름이 이 지역 고유의 언급을 가진 것으로 인정되는지. */
+  isRegionSpecific(name: string): boolean {
+    return mentionSpecificity(name, this.region, this.control) >= this.minSpecificity;
+  }
+
+  mentions(name: string): number {
+    return this.isRegionSpecific(name) ? this.region.mentions(name) : 0;
+  }
+
+  score(name: string): number {
+    // 언급 자체가 없는 마이너 장소는 기존대로 감점(하한)이고, '일반어를 상호로 쓴 장소'만 중립이다.
+    if (this.region.mentions(name) === 0) return this.region.score(name);
+    return this.isRegionSpecific(name) ? this.region.score(name) : NEUTRAL_POPULARITY;
   }
 }
 

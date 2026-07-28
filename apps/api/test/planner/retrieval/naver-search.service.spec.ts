@@ -2,9 +2,11 @@
 
 import axios from 'axios';
 import {
+  mentionSpecificity,
   NaverPopularityIndex,
   NaverSearchService,
   NEUTRAL_POPULARITY,
+  RegionSpecificPopularityIndex,
 } from '../../../src/planner/retrieval/naver-search.service';
 
 jest.mock('axios');
@@ -77,9 +79,14 @@ describe('NaverSearchService', () => {
   });
 
   it('builds an index from blog + cafe results and caches per destination', async () => {
-    mockedAxios.get.mockResolvedValue({
-      data: { items: [{ title: '경주 <b>불국사</b> 후기', description: '불국사 최고' }] },
-    });
+    // 전국 대조 코퍼스('국내 …' 검색)에는 없고 목적지 코퍼스에만 있는 이름이어야 가점이 남는다.
+    mockedAxios.get.mockImplementation((_url: string, options?: any) =>
+      Promise.resolve({
+        data: String(options?.params?.query ?? '').includes('경주')
+          ? { items: [{ title: '경주 <b>불국사</b> 후기', description: '불국사 최고' }] }
+          : { items: [{ title: '국내 여행지 추천', description: '전국 명소 모음' }] },
+      }),
+    );
     const service = new NaverSearchService(
       config({ NAVER_SEARCH_CLIENT_ID: 'id', NAVER_SEARCH_CLIENT_SECRET: 'secret' }),
     );
@@ -94,11 +101,13 @@ describe('NaverSearchService', () => {
   });
 
   it('keeps the succeeding endpoint corpus when the other endpoint fails', async () => {
-    mockedAxios.get.mockImplementation((url: string) =>
+    mockedAxios.get.mockImplementation((url: string, options?: any) =>
       url.includes('/cafearticle')
         ? Promise.reject(new Error('cafe down'))
         : Promise.resolve({
-            data: { items: [{ title: '경주 <b>불국사</b> 후기', description: '불국사 최고' }] },
+            data: String(options?.params?.query ?? '').includes('경주')
+              ? { items: [{ title: '경주 <b>불국사</b> 후기', description: '불국사 최고' }] }
+              : { items: [{ title: '국내 여행지 추천', description: '전국 명소 모음' }] },
           }),
     );
     const service = new NaverSearchService(
@@ -160,5 +169,81 @@ describe('NaverPopularityIndex 매칭 정확도', () => {
 
   it('언급 0 인 마이너 장소는 중립이 아니라 하한이다 (셀 수 있는 이름이므로)', () => {
     expect(index.score('무명한옥카페')).toBeLessThan(NEUTRAL_POPULARITY);
+  });
+});
+
+/**
+ * compact 매칭(공백 제거)은 '동궁과 월지'↔'동궁과월지' 를 흡수하려고 넣은 것인데,
+ * 짧은 이름에선 공백을 건너뛰어 남의 문장을 자기 언급으로 만든다(광주 식당 '조금더').
+ */
+describe('NaverPopularityIndex 짧은 이름 공백 매칭', () => {
+  const corpus =
+    '광주 맛집 추천, 조금 더 걸으면 나오는 집. 조금 더 매콤한 맛. 무등산 등산 후 국밥. ' +
+    '무등산 야경도 좋다. 동궁과 월지 야간개장.';
+  const index = new NaverPopularityIndex(corpus, 5);
+
+  it('3글자 이름이 공백을 건너뛴 매칭만 걸리면 판정 보류(중립)', () => {
+    // '조금 더' 는 부사구다. 여기서 감점(0.15)까지 주면 띄어 쓴 실제 짧은 이름이 손해를 본다.
+    expect(index.mentions('조금더')).toBe(0);
+    expect(index.score('조금더')).toBe(NEUTRAL_POPULARITY);
+  });
+
+  it('3글자 명소는 붙여 쓰이므로 그대로 센다', () => {
+    expect(index.mentions('무등산')).toBe(2);
+    expect(index.score('무등산')).toBeGreaterThan(NEUTRAL_POPULARITY);
+  });
+
+  it('4글자 이상은 기존 compact 매칭을 유지한다 (띄어쓰기 흡수)', () => {
+    expect(index.mentions('동궁과월지')).toBe(1);
+  });
+});
+
+/**
+ * 역방향 매칭의 대가 — 이름이 흔한 한국어 단어인 상호가 남의 언급을 가져간다.
+ * 지역 코퍼스와 전국 대조 코퍼스의 언급률 비(지역 특이도)로 갈라낸다.
+ */
+describe('RegionSpecificPopularityIndex', () => {
+  const region = new NaverPopularityIndex(
+    '대구 맛집 추천 맛있게 먹은 집. 맛있게 잘 먹었어요. 맛있게 한 상 차림. 서문시장 야시장. 서문시장 먹거리.',
+    10,
+  );
+  const control = new NaverPopularityIndex(
+    '국내 맛집 추천 맛있게 먹는 법. 맛있게 즐기기. 맛있게 한 그릇 비우기.',
+    10,
+  );
+  const index = new RegionSpecificPopularityIndex(region, control, 5);
+
+  it('전국 코퍼스에서도 흔한 이름은 가점을 주지 않고 중립으로 둔다', () => {
+    expect(region.score('맛있게')).toBeGreaterThan(NEUTRAL_POPULARITY); // 필터 없으면 가점
+    expect(index.score('맛있게')).toBe(NEUTRAL_POPULARITY);
+    expect(index.mentions('맛있게')).toBe(0);
+  });
+
+  it('그 지역에서만 쓰이는 이름은 원래 점수를 유지한다', () => {
+    expect(index.score('서문시장')).toBe(region.score('서문시장'));
+    expect(index.mentions('서문시장')).toBe(region.mentions('서문시장'));
+  });
+
+  it('언급 자체가 없는 마이너 장소는 기존대로 하한(감점)이다', () => {
+    // 중립으로 올려 주면 '언급 없는 장소'와 '일반어 상호'가 구분되지 않는다.
+    expect(index.score('무명한옥카페')).toBe(region.score('무명한옥카페'));
+    expect(index.score('무명한옥카페')).toBeLessThan(NEUTRAL_POPULARITY);
+  });
+});
+
+describe('mentionSpecificity', () => {
+  const region = new NaverPopularityIndex('제주 성산일출봉 성산일출봉 성산일출봉 우진해장국', 10);
+  const control = new NaverPopularityIndex('국내 여행지 추천 성산일출봉 포함', 10);
+
+  it('대조 코퍼스에 없는 이름은 Infinity (그 지역 고유명)', () => {
+    expect(mentionSpecificity('우진해장국', region, control)).toBe(Infinity);
+  });
+
+  it('양쪽에 있으면 언급률 비를 돌려준다', () => {
+    expect(mentionSpecificity('성산일출봉', region, control)).toBeCloseTo(3);
+  });
+
+  it('지역 코퍼스에 없으면 0', () => {
+    expect(mentionSpecificity('한라산', region, control)).toBe(0);
   });
 });

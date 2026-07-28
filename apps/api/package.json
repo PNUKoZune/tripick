@@ -11,6 +11,7 @@
     "seed:demo-live": "ts-node -r tsconfig-paths/register src/scripts/seed-demo-live.ts",
     "ingest:places": "ts-node -r tsconfig-paths/register src/scripts/ingest-places.ts",
     "eval:retrieval": "ts-node -r tsconfig-paths/register src/scripts/eval-retrieval.ts",
+    "cleanup:catalog": "ts-node -r tsconfig-paths/register src/scripts/cleanup-catalog.ts",
     "reembed:preferences": "ts-node -r tsconfig-paths/register src/scripts/reembed-preferences.ts",
     "typeorm": "typeorm-ts-node-commonjs -d src/database/data-source.ts",
     "migration:generate": "pnpm typeorm migration:generate",

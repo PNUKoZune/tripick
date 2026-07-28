@@ -8,6 +8,7 @@ import { PlaceEmbeddingRepository } from './place-embedding.repository';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { KtoCallBudget, TourApiService } from './tour-api.service';
 import { PopularPlaceService } from './popular-place.service';
+import { isSeoBusinessName } from './place-name-quality';
 import { inferPlaceTags, parseSigungu } from './place-seeds';
 import { SIDO_CODES } from './region-code';
 import type { IngestPlace, IngestRegionResult, IngestSource, IngestSummary } from './ingestion.types';
@@ -232,7 +233,13 @@ export class PlaceIngestionService {
       );
     }
 
-    const deduped = this.dedupe(collected);
+    // SEO 상호는 소스를 가리지 않고 들어온다 — popular 관문이 막아도 카카오 주변 검색이
+    // '경주맛집' 을 실존 음식점으로 다시 주워 온다. 소스 합류 후 한 곳에서 막는다.
+    const unique = this.dedupe(collected);
+    const deduped = unique.filter((place) => !isSeoBusinessName(place.name));
+    if (deduped.length < unique.length) {
+      this.logger.log(`[${region}] SEO 상호 ${unique.length - deduped.length}건 제외`);
+    }
     const model = this.embeddingModelId();
 
     let inserted = 0;
