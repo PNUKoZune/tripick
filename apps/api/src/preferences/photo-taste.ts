@@ -74,6 +74,8 @@ export function buildPhotoTagsView(state: PhotoTasteState): PreferencePhotoTagsD
       tags: analyzed
         ? tagsOf(analyzed).map((tag) => ({ tag, enabled: !off.has(tag) }))
         : [],
+      // 태그가 없는 사진은 두 가지다 — 분석했으나 취향이 안 나온 것과, 아직 분석 안 된 것.
+      analyzed: Boolean(analyzed),
     };
   });
 }

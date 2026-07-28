@@ -146,6 +146,37 @@ export class PreferenceAnalyzerController {
     );
   }
 
+  @Post('reanalyze')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({
+    summary: '보관 중인 사진 중 아직 분석되지 않은 것만 다시 분석 (새 업로드 없이)',
+  })
+  async reanalyze(@CurrentUser() user: UserEntity): Promise<PreferenceAnalysisJobDto> {
+    // 잡이 원본을 스토리지에서 다시 읽는다 (업로드와 같은 이유로 스토리지가 필수).
+    if (!this.storage.isReady()) {
+      throw new ServiceUnavailableException(
+        '이미지 저장소가 설정되지 않아 사진 분석을 시작할 수 없습니다.',
+      );
+    }
+
+    const existing = await this.preferencesService.findByUser(user.id);
+    const photoUrls = existing?.photoUrls ?? [];
+    const pending = this.pendingPhotos(photoUrls, existing?.photoTags ?? {});
+    if (pending.urls.length === 0) {
+      throw new BadRequestException('다시 분석할 사진이 없습니다.');
+    }
+
+    // 이미 돌고 있는 잡이 있으면 그 잡을 돌려준다 — 새로 등록하면 같은 사진을 두 번 분석한다.
+    // (분석 중인 사진도 아직 결과가 없어 pending 으로 잡히므로 이 검사가 반드시 필요하다)
+    const running = await this.analysisService.findActiveJob(user.id);
+    if (running) return running;
+
+    return this.analysisService.enqueue(
+      { userId: user.id, photoUrls: pending.urls, storageKeys: pending.keys },
+      photoUrls,
+    );
+  }
+
   /** 분석 결과가 없는 기존 사진과 그 스토리지 키. 키를 못 구하는 외부 URL 은 건너뛴다. */
   private pendingPhotos(
     urls: string[],

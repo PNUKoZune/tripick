@@ -72,6 +72,14 @@ export function analyzePreferenceImages(token: string, files: File[]) {
   return api.upload<PreferenceAnalysisJobDto>('/preference-analyzer/upload', formData, token);
 }
 
+/**
+ * 새 사진 없이, 보관 중인 사진 중 아직 분석되지 않은 것만 다시 분석한다.
+ * 사진 10장을 다 채운 상태에서는 업로드에 편승할 수 없어 별도 진입점이 필요하다.
+ */
+export function reanalyzePreferencePhotos(token: string) {
+  return api.post<PreferenceAnalysisJobDto>('/preference-analyzer/reanalyze', {}, token);
+}
+
 /** 분석 잡 진행 상태 조회. */
 export function getPreferenceAnalysisJob(token: string, jobId: string) {
   return api.get<PreferenceAnalysisJobDto>(`/preference-analyzer/jobs/${jobId}`, token);
