@@ -117,6 +117,24 @@ describe('placeRegionCodes', () => {
     ).toEqual({ regionCode: '전남', sigunguCode: '여수' });
   });
 
+  it('시군구 계층이 없는 세종 주소는 시군구 코드를 비운다', () => {
+    // 시/군/구 글자가 토큰 **중간**에 있는 걸 시군구로 보면 실재하지 않는 코드가 박힌다.
+    // 옛 백필 SQL 이 앵커 없는 정규식으로 이걸 밟아 44행을 오염시켰다 —
+    // '장군면'→'장', '국책연구원3로'→'국책연'. 등가 비교 pre-filter 라 그 행은
+    // 어떤 시군구 질의와도 안 맞는 죽은 코드가 된다. 세종은 시도 아래가 읍·면·동이다.
+    for (const address of [
+      '세종특별자치시 장군면 월현윗길 119-39',
+      '세종특별자치시 국책연구원3로 12 (반곡동)',
+      '세종특별자치시  금남구즉로 152', // 공백 두 칸 — 토큰 분리가 흔들려도 결과는 같아야 한다
+      '세종특별자치시 조치원읍 새내로 15',
+    ]) {
+      expect(placeRegionCodes('세종특별자치시', null, address)).toEqual({
+        regionCode: '세종',
+        sigunguCode: null,
+      });
+    }
+  });
+
   it('주소로 못 정하면 라벨로 폴백한다', () => {
     expect(placeRegionCodes('경상북도', '경주시', '')).toEqual({
       regionCode: '경북',
