@@ -140,6 +140,37 @@ describe('PopularPlaceService', () => {
     expect(kakao.searchByText).toHaveBeenCalledTimes(1);
   });
 
+  it('통합 시도 라벨은 두 시도를 모두 인정한다 (광주가 통째로 탈락하면 안 된다)', async () => {
+    // 카카오 주소도 '전남광주통합특별시' 를 쓰므로, 대상 시도를 하나로 잡으면
+    // 광주(자치구) 또는 전남(시·군) 한쪽이 전부 'region' 탈락한다.
+    const corpus = '전남광주 여행지 추천 국립아시아문화전당. 국립아시아문화전당 야경. 오동도 동백. 오동도 산책.';
+    const kakao = kakaoStub((keyword) => {
+      if (keyword.includes('국립아시아문화전당')) {
+        return [
+          doc({
+            name: '국립아시아문화전당',
+            kakaoPlaceId: 'g1',
+            address: '전남광주통합특별시 동구 문화전당로 38',
+          }),
+        ];
+      }
+      if (keyword.includes('오동도')) {
+        return [
+          doc({
+            name: '오동도',
+            kakaoPlaceId: 'j1',
+            address: '전남광주통합특별시 여수시 오동도로 222',
+          }),
+        ];
+      }
+      return [];
+    });
+    const service = new PopularPlaceService(config(), naverStub([corpus]), kakao);
+
+    const places = await service.collect('전남광주통합특별시', 20);
+    expect(places.map((p) => p.name).sort()).toEqual(['국립아시아문화전당', '오동도']);
+  });
+
   it('네이버 키가 없으면 isAvailable 이 false 다', () => {
     const naver = { hasCredentials: () => false } as any;
     expect(new PopularPlaceService(config(), naver, kakaoStub(() => [])).isAvailable).toBe(false);

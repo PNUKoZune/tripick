@@ -226,6 +226,31 @@
       "forbidden": []
     },
     {
+      "id": "gwangju-culture",
+      "intent": "예술·근대 취향의 광주 — 통합 행정구역 라벨(전남광주통합특별시) 때문에 후보가 전남으로 묻히지 않는지 보는 케이스",
+      "destination": "광주",
+      "expectRegion": "광주",
+      "tasteTags": {
+        "food": ["korean"],
+        "mood": ["cultural", "nostalgic"],
+        "environment": ["city"],
+        "confidence": 0.8
+      },
+      "relevant": [
+        "무등산",
+        "국립아시아문화전당",
+        "양림동",
+        "펭귄마을",
+        "5·18기념공원",
+        "사직공원",
+        "우치공원",
+        "말바우시장",
+        "충장로",
+        "광주호수생태원"
+      ],
+      "forbidden": ["오동도", "유달산", "순천만"]
+    },
+    {
       "id": "sokcho-mountain",
       "intent": "산·자연 취향의 속초 — 설악산 권역이 상위에 와야 한다",
       "destination": "속초",
