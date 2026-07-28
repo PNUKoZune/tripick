@@ -51,6 +51,7 @@
 - [preference/place-embedding-and-preference-personalization-v1.md](preference/place-embedding-and-preference-personalization-v1.md) — 장소·취향 임베딩 파이프라인 & 개인화
 - [preference/place-embedding-enrichment-v1.md](preference/place-embedding-enrichment-v1.md) — 장소 임베딩 데이터 강화
 - [preference/place-retrieval-region-filter-and-eval-v1.md](preference/place-retrieval-region-filter-and-eval-v1.md) — 검색 지역 pre-filter(정본 코드) · 품질 평가 하네스(골든셋)
+- [preference/popular-place-ingestion-v1.md](preference/popular-place-ingestion-v1.md) — 네이버 인기 장소 적재 패스(대표 명소·맛집, 적재 커버리지 47%→80%)
 - [preference/embedding-server-separation-v1.md](preference/embedding-server-separation-v1.md) — 임베딩 서버 분리
 
 ## 알림 · 날씨 · 혼잡 (Alerts)
