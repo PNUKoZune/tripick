@@ -53,6 +53,7 @@
 - [preference/place-retrieval-region-filter-and-eval-v1.md](preference/place-retrieval-region-filter-and-eval-v1.md) — 검색 지역 pre-filter(정본 코드) · 품질 평가 하네스(골든셋)
 - [preference/popular-place-ingestion-v1.md](preference/popular-place-ingestion-v1.md) — 네이버 인기 장소 적재 패스(대표 명소·맛집, 적재 커버리지 47%→80%)
 - [preference/merged-sido-label-v1.md](preference/merged-sido-label-v1.md) — 통합 행정구역 라벨 분리(광주가 전남으로 묻히던 문제, 백필)
+- [preference/retrieval-ranking-tuning-v1.md](preference/retrieval-ranking-tuning-v1.md) — 검색 랭킹 튜닝(다양성 상한이 상위 후보를 버리던 버그, 인지도 매칭 정확도, R|cat 0.16→0.38)
 - [preference/embedding-server-separation-v1.md](preference/embedding-server-separation-v1.md) — 임베딩 서버 분리
 
 ## 알림 · 날씨 · 혼잡 (Alerts)
