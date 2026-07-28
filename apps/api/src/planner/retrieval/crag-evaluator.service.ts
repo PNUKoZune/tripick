@@ -1,20 +1,51 @@
 import { Injectable } from '@nestjs/common';
-import { FOOD_PREFERENCES, type Coordinates, type ReplanTrigger } from '@tripick/types';
+import {
+  FOOD_PREFERENCES,
+  type Coordinates,
+  type EnvironmentPreference,
+  type MoodPreference,
+  type ReplanTrigger,
+} from '@tripick/types';
 import { inferPlaceTags, normalizeDestinationRegion, tasteTagsToKeywords } from './place-seeds';
+import { collapseNearDuplicates } from './near-duplicate';
 import { NEUTRAL_POPULARITY } from './naver-search.service';
 import type { CandidatePlace, CragScore, RawPlaceCandidate, RetrievalContext } from './types';
 
-// 비(날씨) 재계획에서 실내 후보를 우대할 때 쓰는 태그.
-// 식음(FOOD 전체)은 실내라 어휘에서 직접 파생 — 새 음식 태그를 추가해도 자동 포함된다.
-// mood·environment 는 실내로 볼 수 있는 값만 골라 넣는다 (전시·가족·핫플·프리미엄·도심·온천).
+/**
+ * mood·environment 태그의 실내 여부. 비(날씨) 재계획에서 실내 후보를 우대할 때 쓴다.
+ *
+ * `Record<MoodPreference | EnvironmentPreference, …>` 인 것이 핵심 — 예전엔 실내 태그만 골라
+ * 담은 배열이라 어휘에 값이 늘면 **조용히 실외로 취급**됐다(hotspring·nightview 를 추가했을 때
+ * 실제로 그랬다). 이제 어휘에 값을 더하면 여기서 컴파일 에러가 난다.
+ * 식음(FOOD 전체)은 실내가 정의상 자명해 아래에서 어휘째 파생한다.
+ */
+const INDOOR_BY_TASTE_TAG: Record<MoodPreference | EnvironmentPreference, boolean> = {
+  // mood
+  healing: false, // 숲·해변 힐링이 다수 — 스파는 hotspring 이 잡는다
+  adventure: false,
+  romantic: false,
+  family: true, // 박물관·체험관 등 실내 가족 시설
+  cultural: true, // 전시·박물관
+  nostalgic: false, // 시장·골목이 다수
+  trendy: true, // 편집숍·소품샵
+  luxury: true, // 호텔·오마카세
+  // environment
+  nature: false,
+  city: true, // 도심 실내 시설
+  beach: false,
+  mountain: false,
+  village: false,
+  lake: false,
+  island: false,
+  hotspring: true,
+  nightview: false,
+};
+
 const INDOOR_TAGS = new Set<string>([
   ...FOOD_PREFERENCES,
-  'cultural',
-  'family',
-  'trendy',
-  'luxury',
-  'city',
-  'hotspring',
+  ...Object.entries(INDOOR_BY_TASTE_TAG)
+    .filter(([, indoor]) => indoor)
+    .map(([tag]) => tag),
 ]);
 
 /** 후보 풀 구성을 보장할 때 쓰는 종류 묶음 (식음 / 볼거리). */
@@ -45,9 +76,11 @@ const TRIGGER_SCORE: Record<ReplanTrigger, (tags: string[]) => number> = {
 @Injectable()
 export class CragEvaluatorService {
   rank(candidates: RawPlaceCandidate[], context: RetrievalContext): CandidatePlace[] {
-    return this.deduplicate(candidates)
+    const scored = this.deduplicate(candidates)
       .map((candidate) => this.evaluate(candidate, context))
       .sort((a, b) => b.confidence - a.confidence);
+    // 근접 중복 접기는 **점수 정렬 뒤에** 온다 — 남는 대표가 그 무리에서 가장 높은 후보여야 한다.
+    return collapseNearDuplicates(scored, context.destination);
   }
 
   /** 후보 풀이 반드시 담아야 하는 종류별 최소 수. 일정에 식사 슬롯과 볼거리가 둘 다 필요하다. */
@@ -312,6 +345,7 @@ export class CragEvaluatorService {
     return `${matched}, ${sourceLabel} confidence ${confidence}%${personalized}${popular}${fallback}`;
   }
 
+  /** ID·이름+주소 완전일치 중복 제거. 근접 중복은 점수 정렬 뒤 `collapseNearDuplicates` 가 맡는다. */
   private deduplicate(candidates: RawPlaceCandidate[]): RawPlaceCandidate[] {
     const seen = new Set<string>();
     const unique: RawPlaceCandidate[] = [];

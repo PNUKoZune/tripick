@@ -104,6 +104,61 @@ describe('inferPlaceTags', () => {
     ).not.toContain('mountain');
   });
 
+  it("'…산' 으로 끝나는 시·군 이름 전체를 산으로 보지 않는다", () => {
+    // 예전 규칙은 부산·울산·마산·경산 넉 자만 막아 나머지 열 곳이 새고 있었다(실측 오탐 34건).
+    for (const place of [
+      { name: 'CGV 논산', category: 'attraction', address: '충남 논산시 시민로 181' },
+      { name: '군산 해망굴', category: 'attraction', address: '전북특별자치도 군산시 군산창2길 48' },
+      { name: '개심사(서산)', category: 'attraction', address: '충청남도 서산시 운산면 개심사로 321-86' },
+      { name: '금산 칠백의총', category: 'attraction', address: '충청남도 금산군 금성면 의총길 50' },
+      { name: '스타벅스 동부산DT점', category: 'cafe', address: '부산 기장군 기장해안로 56' },
+    ]) {
+      expect(inferPlaceTags(place)).not.toContain('mountain');
+    }
+  });
+
+  it("'…산' 뒤에 시설어가 붙어도 산악 신호를 유지한다", () => {
+    // 예전 규칙은 뒤에 한글이 오면 무조건 제외해 가장 대표적인 산악 후보 46건을 놓쳤다.
+    for (const name of ['한라산국립공원', '팔공산케이블카', '설악산소공원', '비슬산자연휴양림', '문수산전망대']) {
+      expect(
+        inferPlaceTags({ name, category: 'attraction', address: '어딘가' }),
+      ).toContain('mountain');
+    }
+  });
+
+  it('앞 글자가 한글이면 행정지명으로 오인하지 않는다 (금오산)', () => {
+    // '오'를 오산으로 보고 떨어뜨리면 실제 산이 죽는다.
+    expect(
+      inferPlaceTags({ name: '금오산', category: 'attraction', address: '경상북도 구미시 남통동' }),
+    ).toContain('mountain');
+    expect(
+      inferPlaceTags({ name: '팔마산', category: 'attraction', address: '전북특별자치도 군산시 동흥남동' }),
+    ).toContain('mountain');
+  });
+
+  it('임야 지번(산 nnn) 주소는 산·숲 신호로 남긴다', () => {
+    // 이름에 '산' 이 없는 백록담·사라오름류가 이 신호로만 잡힌다(실측 200건 중 198건이 산악 후보).
+    expect(
+      inferPlaceTags({
+        name: '백록담',
+        category: 'attraction',
+        address: '제주특별자치도 서귀포시 토평동 산 15-1',
+      }),
+    ).toEqual(expect.arrayContaining(['mountain', 'nature']));
+  });
+
+  it("제주 오름·휴양림·폭포처럼 '산' 이 없는 자연 후보도 태깅한다", () => {
+    expect(
+      inferPlaceTags({ name: '용눈이오름', category: 'attraction', address: '제주 제주시 구좌읍' }),
+    ).toContain('mountain');
+    expect(
+      inferPlaceTags({ name: '고대산자연휴양림', category: 'attraction', address: '경기도 연천군' }),
+    ).toEqual(expect.arrayContaining(['nature', 'healing']));
+    expect(
+      inferPlaceTags({ name: '천지연폭포', category: 'attraction', address: '제주 서귀포시' }),
+    ).toContain('nature');
+  });
+
   it('확장된 취향 어휘를 장소에서도 뽑아낸다', () => {
     expect(
       inferPlaceTags({ name: '스시 오마카세', category: 'restaurant', address: '서울특별시 강남구' }),

@@ -82,6 +82,48 @@ describe('CragEvaluatorService', () => {
     expect(ranked[0]!.confidence).toBeGreaterThan(ranked[1]!.confidence);
   });
 
+  it('같은 장소를 가리키는 근접 중복 후보를 접고 자리를 비운다', () => {
+    // 실측: 제주 상위 16칸 중 1·2위가 둘 다 '한라산'(다른 kakao id, 1.9km) 이었다.
+    const jeju: RetrievalContext = { userId: 'user-1', destination: '제주', trigger: 'manual' };
+    const ranked = service.rank(
+      [
+        {
+          id: 'hallasan-a',
+          name: '한라산',
+          category: 'attraction',
+          address: '제주특별자치도 제주시 오등동 산 182',
+          coordinates: { lat: 33.37666, lng: 126.54244 },
+          source: 'pgvector',
+          similarity: 0.78,
+          destinationRegion: '제주도',
+        },
+        {
+          id: 'hallasan-b',
+          name: '한라산',
+          category: 'attraction',
+          address: '제주특별자치도 서귀포시 서홍동 산 1-1',
+          coordinates: { lat: 33.36142, lng: 126.52942 },
+          source: 'pgvector',
+          similarity: 0.77,
+          destinationRegion: '제주도',
+        },
+        {
+          id: 'bijarim',
+          name: '비자림',
+          category: 'attraction',
+          address: '제주특별자치도 제주시 구좌읍 비자숲길 55',
+          coordinates: { lat: 33.4899, lng: 126.8135 },
+          source: 'pgvector',
+          similarity: 0.76,
+          destinationRegion: '제주도',
+        },
+      ],
+      jeju,
+    );
+
+    expect(ranked.map((candidate) => candidate.id)).toEqual(['hallasan-a', 'bijarim']);
+  });
+
   it('keeps selected candidates diverse before filling the rest', () => {
     const ranked = service.rank(
       [
