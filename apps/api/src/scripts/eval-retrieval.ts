@@ -43,7 +43,11 @@ import { PlaceEmbeddingRepository } from '../planner/retrieval/place-embedding.r
 import { PlaceRetrievalService } from '../planner/retrieval/place-retrieval.service';
 import { TextEmbeddingService } from '../../src/embedding/text-embedding.service';
 import { buildPreferenceText } from '../preferences/preference-text';
-import { destinationRegionFilter, toSidoCode, toSigunguCode } from '../planner/retrieval/region-code';
+import {
+  destinationRegionFilter,
+  placeRegionCodes,
+  toSigunguCode,
+} from '../planner/retrieval/region-code';
 import type { CandidatePlace } from '../planner/retrieval/types';
 
 /**
@@ -174,12 +178,15 @@ function firstRelevantRank(places: CandidatePlace[], relevant: string[]): number
   return 0;
 }
 
-/** 결과 장소가 목적지 지역에 속하는지 — 주소 첫 토큰(시도)·둘째 토큰(시군구) 코드로 본다. */
+/**
+ * 결과 장소가 목적지 지역에 속하는지 — 주소에서 파생한 시도·시군구 코드로 본다.
+ * 적재와 **같은 함수**(`placeRegionCodes`)를 써야 한다. 통합 라벨('전남광주통합특별시')은
+ * 시도 토큰만으로 안 갈려서, 예전처럼 `toSidoCode` 로 첫 토큰만 보면 광주 장소가 전부
+ * '전남' 으로 읽혀 지역정합이 0% 로 오보고된다.
+ */
 function inExpectedRegion(place: CandidatePlace, expected: string): boolean {
-  const tokens = (place.address ?? '').trim().split(/\s+/);
-  const sido = toSidoCode(tokens[0] ?? '');
-  const sigungu = toSigunguCode(tokens[1] ?? '');
-  return sido === expected || sigungu === expected;
+  const { regionCode, sigunguCode } = placeRegionCodes(null, null, place.address ?? null);
+  return regionCode === expected || sigunguCode === expected;
 }
 
 function mean(values: number[]): number {

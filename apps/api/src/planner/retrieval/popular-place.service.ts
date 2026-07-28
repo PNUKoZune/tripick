@@ -4,7 +4,8 @@ import { KakaoLocalService } from './kakao-local.service';
 import { NaverSearchService } from './naver-search.service';
 import { extractPlaceNameCandidates, isGenericPlaceName } from './popular-name-extract';
 import { parseSigungu, regionSearchStem } from './place-seeds';
-import { placeRegionCodes, toSidoCode } from './region-code';
+import { placeRegionCodes, sidoCodesForLabel } from './region-code';
+import type { SidoCode } from './region-code';
 import type { MentionCorpus } from './naver-search.service';
 import type { PlaceNameCandidate } from './popular-name-extract';
 import type { IngestPlace } from './ingestion.types';
@@ -99,11 +100,20 @@ export class PopularPlaceService {
   async collect(region: string, budget: number): Promise<IngestPlace[]> {
     const stem = regionSearchStem(region) || region;
     // KTO 라벨('경상북도')과 주소('경상북도 경주시 …')가 같은 코드로 떨어지는지로 지역을 검증한다.
-    const targetSido = toSidoCode(region) ?? (await this.resolveParentSido(region, stem));
-    if (!targetSido) {
+    // 통합 라벨('전남광주통합특별시')은 두 시도를 포괄하므로 코드가 여러 개다 — 하나와만
+    // 비교하면 한쪽(광주)이 통째로 탈락한다.
+    const targetSidos = sidoCodesForLabel(region);
+    if (targetSidos.length === 0) {
+      // 시도로 안 잡히는 라벨은 시군구 단위 타깃('속초') — 상위 시도를 조회해 그걸로 검증한다.
+      const parent = await this.resolveParentSido(region, stem);
+      if (parent) targetSidos.push(parent);
+    }
+    if (targetSidos.length === 0) {
       this.logger.warn(
         `[${region}] 시도 코드로 해석되지 않는 라벨 — 지역 검증 없이 수집합니다(타지역 동명 장소가 섞일 수 있음).`,
       );
+    } else if (targetSidos.length > 1) {
+      this.logger.log(`[${region}] 통합 라벨 — 시도 ${targetSidos.join('·')} 를 모두 인정합니다.`);
     }
 
     const collected: IngestPlace[] = [];
@@ -126,7 +136,7 @@ export class PopularPlaceService {
       const before = collected.length;
       const rejects = await this.resolveCandidates(
         candidates,
-        { region, stem, targetSido, axis, corpus, axisBudget },
+        { region, stem, targetSidos, axis, corpus, axisBudget },
         collected,
         seenPlaceIds,
       );
@@ -148,7 +158,7 @@ export class PopularPlaceService {
    * 시군구 정확 일치로 걸러 버리면 그 지역 여행에서 실제로 가는 인접 명소가 통째로 빠진다.
    * 반대로 검증을 아예 빼면 타지역 동명 장소가 섞이므로 시도 수준이 적당한 타협점이다.
    */
-  private async resolveParentSido(region: string, stem: string): Promise<string | null> {
+  private async resolveParentSido(region: string, stem: string): Promise<SidoCode | null> {
     const docs = await this.kakaoLocal.searchByText(stem, 1);
     const address = docs[0]?.address;
     if (!address) return null;
@@ -168,7 +178,7 @@ export class PopularPlaceService {
     ctx: {
       region: string;
       stem: string;
-      targetSido: string | null;
+      targetSidos: SidoCode[];
       axis: PopularAxis;
       corpus: MentionCorpus;
       axisBudget: number;
@@ -217,7 +227,7 @@ export class PopularPlaceService {
   /** 카카오 문서가 이 축·지역의 실제 인기 장소인지 판정한다. */
   private verify(
     doc: RawPlaceCandidate,
-    ctx: { region: string; targetSido: string | null; axis: PopularAxis; corpus: MentionCorpus },
+    ctx: { region: string; targetSidos: SidoCode[]; axis: PopularAxis; corpus: MentionCorpus },
     seenPlaceIds: ReadonlySet<string>,
   ): Verdict {
     if (!ctx.axis.categories.includes(doc.category)) return 'category';
@@ -225,7 +235,9 @@ export class PopularPlaceService {
 
     // 주소가 정본 — 카카오 키워드 검색은 지역 접두어를 붙여도 타지역 동명 장소를 섞어 준다.
     const { regionCode } = placeRegionCodes(ctx.region, null, doc.address);
-    if (ctx.targetSido && regionCode !== ctx.targetSido) return 'region';
+    if (ctx.targetSidos.length > 0 && (!regionCode || !ctx.targetSidos.includes(regionCode))) {
+      return 'region';
+    }
 
     // 관문 ②: 카카오가 준 정본명이 코퍼스에 실제로 있어야 한다.
     if (ctx.corpus.index.mentions(doc.name) === 0) return 'unmentioned';

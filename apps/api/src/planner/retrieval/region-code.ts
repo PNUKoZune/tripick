@@ -54,6 +54,73 @@ const SIDO_ALIASES: ReadonlyArray<readonly [SidoCode, readonly string[]]> = [
 const SIDO_ONLY: ReadonlyArray<readonly [SidoCode, string]> = [['광주', '광주']];
 
 /**
+ * 통합 행정구역 라벨. 시도 코드 하나로 안 떨어져서 시군구를 함께 봐야 갈린다.
+ *
+ * 광주·전남 통합으로 **KTO 시도 목록과 카카오 주소가 모두** `전남광주통합특별시` 를 쓴다.
+ * 접두 매칭에 맡기면 `전남` 별칭에 먼저 걸려 광주 소재 장소가 전부 전남으로 묶이고,
+ * 그러면 '광주' 목적지 검색은 후보가 없어 **조용히 빈다**.
+ *
+ * 가르는 규칙: **광주는 자치구만 있고 전남은 자치구가 없다.**
+ * 광주 = 동구·서구·남구·북구·광산구 (전부 '구'), 전남 = 목포시·여수시·… + 군 (자치구 없음).
+ * 따라서 시군구 라벨이 '구' 로 끝나면 광주, 그 외('시'·'군')는 전남이다.
+ */
+const MERGED_SIDO_LABELS: ReadonlyArray<{
+  /** 라벨 접두 (정규화된 소문자·공백제거 형태로 비교) */
+  readonly prefix: string;
+  /** 이 라벨이 포괄하는 시도 코드 전체 */
+  readonly members: readonly SidoCode[];
+  /** 시군구 라벨로 소속 시도를 정한다. */
+  readonly split: (sigunguLabel: string) => SidoCode;
+  /**
+   * 시군구를 알 수 없을 때 쓸 코드 (주소 없는 KTO 여행코스 행 등).
+   * null 로 두면 그 행이 '지역 라벨 없는 행'이 되어 **모든 목적지 검색의 후보로 살아난다**
+   * (폴백 시드용 의미). 판정 불가일 때는 통합 전 접두 시도로 두는 게 덜 틀린다.
+   */
+  readonly fallback: SidoCode;
+}> = [
+  {
+    prefix: '전남광주',
+    members: ['광주', '전남'],
+    split: (sigunguLabel) => (/구$/.test(sigunguLabel) ? '광주' : '전남'),
+    fallback: '전남',
+  },
+];
+
+/** 라벨이 통합 행정구역 라벨인지. 맞으면 그 정의를 돌려준다. */
+function matchMergedLabel(label: string | null | undefined) {
+  if (!label) return null;
+  const normalized = label.trim().toLowerCase().replace(/\s+/g, '');
+  return MERGED_SIDO_LABELS.find((merged) => normalized.startsWith(merged.prefix)) ?? null;
+}
+
+/**
+ * 시도 라벨 + 시군구 라벨로 시도 코드를 정한다. 통합 라벨만 시군구를 보고,
+ * 그 외에는 `toSidoCode` 와 동일하다. 통합 라벨인데 시군구가 없으면 그 라벨의 fallback.
+ */
+export function toSidoCodeWithSigungu(
+  sidoLabel: string | null | undefined,
+  sigunguLabel?: string | null,
+): SidoCode | null {
+  const merged = matchMergedLabel(sidoLabel);
+  if (!merged) return toSidoCode(sidoLabel);
+  const sigungu = sigunguLabel?.trim();
+  return sigungu ? merged.split(sigungu) : merged.fallback;
+}
+
+/**
+ * 라벨이 포괄하는 시도 코드 전체. 통합 라벨은 여러 개다.
+ *
+ * 적재 검증용 — 통합 시도를 대상으로 수집하면 후보 주소의 시도 코드가 광주일 수도 전남일 수도
+ * 있으므로, 하나와 비교하면 한쪽이 통째로 탈락한다.
+ */
+export function sidoCodesForLabel(label: string | null | undefined): SidoCode[] {
+  const merged = matchMergedLabel(label);
+  if (merged) return [...merged.members];
+  const code = toSidoCode(label);
+  return code ? [code] : [];
+}
+
+/**
  * 시군구 별칭. seed 카탈로그가 쓰는 로마자 슬러그를 한글 정본 코드로 맞춘다
  * (시도 로마자는 SIDO_ALIASES 가 이미 처리하므로 시군구 단위인 것만).
  */
@@ -77,6 +144,13 @@ const REGION_LABELS: ReadonlySet<string> = (() => {
         // 끝 '도'·'시' 를 조사로 떼어낸 형태까지 라벨로 인정한다.
         labels.add(label.replace(/(도|시)$/, ''));
       }
+    }
+  }
+  // 통합 라벨도 장소명이 아니다 — 적재 후보에서 빠져야 한다.
+  for (const merged of MERGED_SIDO_LABELS) {
+    labels.add(merged.prefix);
+    for (const suffix of ['통합특별시', '통합특별', '통합']) {
+      labels.add(`${merged.prefix}${suffix}`);
     }
   }
   labels.delete('');
@@ -133,10 +207,14 @@ export function toSigunguCode(label: string | null | undefined): string | null {
 /**
  * 적재 시 행에 저장할 지역 코드를 만든다.
  *
- * **주소가 1순위** — 수집 라벨은 소스의 행정 구분을 그대로 받는데, KTO 시도 목록에는
- * 우리 17개 코드에 없는 통합 라벨('전남광주통합특별시')이 섞여 나온다. 그 라벨로 코드를
- * 정하면 실제로는 광주에 있는 장소가 전남으로 묶여 '광주' 검색에서 통째로 사라진다.
- * 장소의 주소는 그런 사정과 무관하게 실제 소재지를 말하므로 주소를 먼저 본다.
+ * **주소가 1순위** — 수집 라벨은 소스의 행정 구분을 그대로 받는데, 통합 라벨
+ * ('전남광주통합특별시')은 우리 17개 코드 중 하나로 안 떨어진다. 그걸 접두 매칭에 맡기면
+ * 광주 장소가 전남으로 묶여 '광주' 검색에서 통째로 사라진다. 장소의 주소는 그런 사정과
+ * 무관하게 실제 소재지(시군구)를 말하므로 주소를 먼저 본다.
+ *
+ * **통합 라벨은 시도 토큰만으로 못 가른다** — 주소의 시군구 토큰을 함께 넘겨
+ * `toSidoCodeWithSigungu` 가 가른다('북구'→광주, '화순군'→전남). 카카오 주소도 통합 라벨을
+ * 쓰므로 이 경로가 곧 정본이다.
  *
  * 주소로 못 정하면 라벨로 폴백하고, 라벨이 시도로도 안 잡히면(seed 슬러그 'gyeongju' 처럼
  * 시군구 단위 라벨) 시군구 코드로 본다. 어느 쪽도 아니면(seed 의 'default') 둘 다 null —
@@ -148,17 +226,23 @@ export function placeRegionCodes(
   address?: string | null,
 ): { regionCode: SidoCode | null; sigunguCode: string | null } {
   const tokens = (address ?? '').trim().split(/\s+/).filter(Boolean);
-  const addressSido = toSidoCode(tokens[0] ?? null);
-  const addressSigungu = /[시군구]$/.test(tokens[1] ?? '') ? toSigunguCode(tokens[1]!) : null;
+  const addressSigunguLabel = /[시군구]$/.test(tokens[1] ?? '') ? tokens[1]! : null;
+  const addressSido = toSidoCodeWithSigungu(tokens[0] ?? null, addressSigunguLabel);
+  const addressSigungu = addressSigunguLabel ? toSigunguCode(addressSigunguLabel) : null;
 
-  const regionCode = addressSido ?? toSidoCode(region);
+  const regionCode = addressSido ?? toSidoCodeWithSigungu(region, regionSigungu);
   const sigunguCode = addressSigungu ?? toSigunguCode(regionSigungu);
   if (regionCode) return { regionCode, sigunguCode };
 
+  // 시도 코드가 안 나온 행만 온다. 라벨을 시군구로 재해석하되, 시도 라벨을 접미사만 떼어
+  // 시군구 코드로 박는 일은 없어야 한다 — '전남광주통합특별시'가 시군구 '전남광주통합특별'로
+  // 새면 어떤 목적지와도 안 맞는 죽은 코드가 된다.
   const fallbackSigungu = sigunguCode ?? toSigunguCode(region);
+  const isDeadCode =
+    !fallbackSigungu || fallbackSigungu === 'default' || isRegionLabel(fallbackSigungu);
   return {
     regionCode: null,
-    sigunguCode: fallbackSigungu === 'default' ? null : fallbackSigungu,
+    sigunguCode: isDeadCode ? null : fallbackSigungu,
   };
 }
 

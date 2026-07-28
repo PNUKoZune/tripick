@@ -3,8 +3,11 @@
 import {
   SIDO_CODES,
   destinationRegionFilter,
+  isRegionLabel,
   placeRegionCodes,
+  sidoCodesForLabel,
   toSidoCode,
+  toSidoCodeWithSigungu,
   toSigunguCode,
 } from '../../../src/planner/retrieval/region-code';
 
@@ -123,5 +126,69 @@ describe('placeRegionCodes', () => {
       regionCode: '부산',
       sigunguCode: null,
     });
+  });
+});
+
+/**
+ * 광주·전남 통합으로 KTO 시도 목록과 **카카오 주소가 모두** '전남광주통합특별시' 를 쓴다.
+ * 접두 매칭에 맡기면 '전남' 별칭에 먼저 걸려 광주 장소가 전부 전남으로 묶이고,
+ * 등가 비교 검색에서 '광주' 목적지가 조용히 빈다.
+ */
+describe('통합 시도 라벨 (전남광주통합특별시)', () => {
+  it('자치구 주소는 광주로 가른다 (광주는 자치구만 있다)', () => {
+    for (const gu of ['동구', '서구', '남구', '북구', '광산구']) {
+      expect(
+        placeRegionCodes('전남광주통합특별시', null, `전남광주통합특별시 ${gu} 어딘가로 1`)
+          .regionCode,
+      ).toBe('광주');
+    }
+  });
+
+  it('시·군 주소는 전남으로 가른다 (전남은 자치구가 없다)', () => {
+    for (const sigungu of ['여수시', '목포시', '나주시', '화순군', '영광군']) {
+      expect(
+        placeRegionCodes('전남광주통합특별시', null, `전남광주통합특별시 ${sigungu} 어딘가로 1`)
+          .regionCode,
+      ).toBe('전남');
+    }
+  });
+
+  it('시군구를 알 수 없으면 통합 전 접두 시도로 둔다 — 코드를 null 로 비우면 안 된다', () => {
+    // null 이면 '지역 라벨 없는 행'이 되어 모든 목적지 검색의 후보로 살아난다(폴백 시드 의미).
+    // 주소 없는 KTO 여행코스 행이 이 경로로 온다.
+    expect(placeRegionCodes('전남광주통합특별시', null, null)).toEqual({
+      regionCode: '전남',
+      sigunguCode: null,
+    });
+  });
+
+  it('시도 라벨을 시군구 코드로 흘리지 않는다', () => {
+    // '전남광주통합특별시' → 접미사만 떼면 '전남광주통합특별' 이라는 죽은 시군구 코드가 된다.
+    expect(placeRegionCodes('전남광주통합특별시', null, null).sigunguCode).toBeNull();
+  });
+
+  it('sidoCodesForLabel 은 통합 라벨이 포괄하는 시도를 모두 돌려준다', () => {
+    // 적재 검증이 하나와만 비교하면 한쪽(광주)이 통째로 탈락한다.
+    expect(sidoCodesForLabel('전남광주통합특별시').sort()).toEqual(['광주', '전남']);
+    expect(sidoCodesForLabel('광주광역시')).toEqual(['광주']);
+    expect(sidoCodesForLabel('전라남도')).toEqual(['전남']);
+    expect(sidoCodesForLabel('속초')).toEqual([]);
+  });
+
+  it('통합 라벨은 장소명이 아니다 (적재 후보에서 제외)', () => {
+    for (const label of ['전남광주통합특별시', '전남광주통합특별', '전남광주']) {
+      expect(isRegionLabel(label)).toBe(true);
+    }
+  });
+
+  it('toSidoCodeWithSigungu 는 통합 라벨 외에는 toSidoCode 와 같다', () => {
+    for (const label of ['경상북도', '부산광역시', '제주특별자치도', '강원특별자치도']) {
+      expect(toSidoCodeWithSigungu(label, '아무개시')).toBe(toSidoCode(label));
+    }
+  });
+
+  it("사용자 질의 '광주' 는 그대로 광주광역시로 해석된다", () => {
+    // 질의 쪽 계약은 바뀌지 않는다 — 백필로 카탈로그가 이 코드를 갖게 되는 게 이번 변경이다.
+    expect(destinationRegionFilter('광주')).toEqual({ sido: '광주', sigungu: null });
   });
 });
