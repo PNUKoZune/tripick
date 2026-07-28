@@ -55,6 +55,7 @@
 - [preference/merged-sido-label-v1.md](preference/merged-sido-label-v1.md) — 통합 행정구역 라벨 분리(광주가 전남으로 묻히던 문제, 백필)
 - [preference/retrieval-ranking-tuning-v1.md](preference/retrieval-ranking-tuning-v1.md) — 검색 랭킹 튜닝(다양성 상한이 상위 후보를 버리던 버그, 인지도 매칭 정확도, R|cat 0.16→0.38)
 - [preference/catalog-name-quality-v1.md](preference/catalog-name-quality-v1.md) — 카탈로그 이름 품질(일반어 상호 지역 특이도, SEO 상호·여행코스 기사 제거)
+- [preference/crag-term-weight-tuning-v1.md](preference/crag-term-weight-tuning-v1.md) — CRAG 항목 가중치 튜닝(retrieval 0.24→0.06, 유사도 정규화·죽은 가중 재분배 두 부정 결과)
 - [preference/embedding-server-separation-v1.md](preference/embedding-server-separation-v1.md) — 임베딩 서버 분리
 
 ## 알림 · 날씨 · 혼잡 (Alerts)
