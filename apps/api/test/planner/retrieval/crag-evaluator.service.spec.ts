@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 
 import { CragEvaluatorService } from '../../../src/planner/retrieval/crag-evaluator.service';
-import type { RawPlaceCandidate, RetrievalContext } from '../../../src/planner/retrieval/types';
+import type { CandidatePlace, RawPlaceCandidate, RetrievalContext } from '../../../src/planner/retrieval/types';
 
 describe('CragEvaluatorService', () => {
   const service = new CragEvaluatorService();
@@ -227,5 +227,80 @@ describe('CragEvaluatorService', () => {
     const ranked = service.rank([candidate], busanContext);
     expect(ranked[0]!.crag.popularity).toBe(0.5);
     expect(ranked[0]!.crag.penalties).not.toContain('naver-unmentioned');
+  });
+
+  /**
+   * 예전 구현은 다양성 상한에 걸린 후보를 건너뛴 채 limit 을 채우고 반환해 **버렸다**.
+   * 제주 실측에서 점수 3위 한라산·5위 비자림이 사라지고 더 낮은 점수가 그 자리에 들어왔다.
+   */
+  describe('selectTopDiverse', () => {
+    function candidate(id: string, category: string, confidence: number): CandidatePlace {
+      return {
+        id,
+        name: id,
+        category,
+        address: '서울 어딘가',
+        coordinates: { lat: 37.5, lng: 127 },
+        source: 'pgvector',
+        tags: [],
+        confidence,
+        reason: '',
+        crag: {
+          total: confidence,
+          retrieval: 0,
+          taste: 0,
+          locality: 0,
+          context: 0,
+          availability: 0,
+          dataQuality: 0,
+          popularity: 0,
+          matchedTags: [],
+          penalties: [],
+        },
+      } as CandidatePlace;
+    }
+
+    it('한 카테고리가 쏠려도 고득점 후보를 버리지 않는다', () => {
+      const candidates = [
+        ...Array.from({ length: 8 }, (_, i) => candidate(`a${i}`, 'attraction', 0.9 - i * 0.01)),
+        candidate('c0', 'cafe', 0.5),
+        candidate('r0', 'restaurant', 0.49),
+      ];
+
+      const selected = service.selectTopDiverse(candidates, 6);
+
+      // 점수 상위 4개 관광지가 카페·식당보다 앞에 남아야 한다.
+      expect(selected.slice(0, 4).map((c) => c.id)).toEqual(['a0', 'a1', 'a2', 'a3']);
+      expect(selected).toHaveLength(6);
+    });
+
+    it('점수만으로 뽑으면 없을 종류를 최소 보유량만큼 채운다', () => {
+      const candidates = [
+        ...Array.from({ length: 6 }, (_, i) => candidate(`a${i}`, 'attraction', 0.9 - i * 0.01)),
+        candidate('c0', 'cafe', 0.3),
+        candidate('r0', 'restaurant', 0.29),
+      ];
+
+      const selected = service.selectTopDiverse(candidates, 6);
+
+      // 식음 후보가 점수로는 밖이지만 일정에 식사 슬롯이 필요하므로 꼬리 자리를 받는다.
+      const dining = selected.filter((c) => c.category === 'cafe' || c.category === 'restaurant');
+      expect(dining).toHaveLength(2);
+      // 내주는 자리는 꼬리부터 — 최상위는 그대로.
+      expect(selected[0]!.id).toBe('a0');
+      expect(selected).toHaveLength(6);
+    });
+
+    it('한 종류만 있으면 있는 것만 돌려준다 (억지로 못 채운다)', () => {
+      const candidates = Array.from({ length: 4 }, (_, i) =>
+        candidate(`a${i}`, 'attraction', 0.9 - i * 0.01),
+      );
+      expect(service.selectTopDiverse(candidates, 4).map((c) => c.id)).toEqual([
+        'a0',
+        'a1',
+        'a2',
+        'a3',
+      ]);
+    });
   });
 });

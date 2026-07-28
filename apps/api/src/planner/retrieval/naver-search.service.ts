@@ -204,8 +204,27 @@ export class NaverSearchService {
     return { id, secret };
   }
 
+  /**
+   * 코퍼스 1회 조회당 문서 수 (네이버 상한 100).
+   *
+   * 기본값을 30 → 100 으로 올렸다. **호출 수는 그대로고 페이지만 커지므로 비용은 같은데**,
+   * 코퍼스가 얇으면 대표 장소 언급이 아예 안 잡혀 인지도가 하한으로 떨어진다 — 실측에서
+   * 대구 '서문시장' 이 30 에서는 언급 0(인지도 0.15, 17위)이고 100 에서는 상위로 올라왔다.
+   * 골든셋 11케이스 기준 R|cat 0.337→0.377, MRR 0.514→0.650.
+   */
   private display(): number {
-    return this.normalizeDisplay(this.config.get<string | number>('NAVER_SEARCH_DISPLAY', 30)) ?? 30;
+    return this.normalizeDisplay(this.config.get<string | number>('NAVER_SEARCH_DISPLAY', 100)) ?? 100;
+  }
+
+  /**
+   * 인지도 인덱스 캐시를 비운다 (평가 하네스 전용).
+   *
+   * 왜 필요한가 — 인덱스는 목적지 단위 6h TTL 캐시다. 하네스가 한 프로세스에서 파라미터 조합을
+   * 돌리면 첫 조합이 만든 인덱스를 뒤 조합이 그대로 재사용해 **스윕이 조용히 무효가 된다**
+   * (실측: NAVER_SEARCH_DISPLAY=30/60/100 이 소수점까지 동일하게 나왔다).
+   */
+  clearCache(): void {
+    this.cache.clear();
   }
 
   /** 1..NAVER_MAX_DISPLAY 로 클램프. 값이 없거나 잘못되면 null. */
@@ -252,18 +271,70 @@ export class NaverPopularityIndex implements PopularityIndex {
   /** 수식어를 뗀 코어를 매칭에 쓰기 위한 최소 길이. '도서관'·'극장' 같은 일반어 오탐 방지. */
   private static readonly MIN_CORE_LENGTH = 4;
 
-  mentions(name: string): number {
+  /**
+   * 언급을 셀 수 있는 최소 이름 길이.
+   *
+   * 매칭이 부분문자열이라 2글자 상호는 코퍼스의 흔한 단어를 자기 언급으로 센다 — 실측에서
+   * 대구 식당 '다시'가 코퍼스의 '다시'(부사) 6회를 먹고 인지도 0.95 로 1위에 올랐고,
+   * '지금'·'공간'·'예전'·'이유' 도 같은 경로였다. 3글자부터는 한국 명소가 대거 걸려 있어
+   * (한라산·비자림·불국사·석굴암·첨성대·무등산) 컷을 올릴 수 없다.
+   *
+   * 2글자는 세지 않고 **중립**으로 둔다 — 가점도 감점도 주지 않는다. 2글자 실제 명소('우도')는
+   * 가점을 잃지만 감점도 없어 손해가 대칭이고, 일반어 상호가 1위를 먹는 손해보다 훨씬 작다.
+   */
+  private static readonly MIN_COUNTABLE_LENGTH = 3;
+
+  /** 등록명을 쪼갤 구분자. '대구 서문시장 & 서문시장 야시장' 같은 장식적 등록명 대응. */
+  private static readonly NAME_SPLIT = /[\s&,·/()[\]]+/;
+
+  /**
+   * 이름이 코퍼스 언급을 셀 수 있는 형태인지. 셀 수 없으면 null → 호출 측이 중립 처리한다.
+   * (0 을 돌려주면 '언급 없는 마이너 장소'와 구분이 안 돼 감점 대상이 된다)
+   */
+  private countableNeedle(name: string): string | null {
     const needle = name.replace(/\s+/g, '').toLowerCase();
-    // 1글자 장소명은 오탐이 심해 세지 않는다.
-    if (needle.length < 2 || this.compact.length === 0) return 0;
-    // 정식명이 블로그 표현보다 긴 경우(예: '국립경주박물관' vs '경주박물관')를 놓치지 않도록
-    // 기관 수식어를 뗀 코어로 매칭한다. 코어는 정식명 언급까지 부분문자열로 포함하므로 더 정확하다.
+    if (needle.length < NaverPopularityIndex.MIN_COUNTABLE_LENGTH) return null;
+    if (this.compact.length === 0) return null;
+    return needle;
+  }
+
+  mentions(name: string): number {
+    const needle = this.countableNeedle(name);
+    if (!needle) return 0;
+    for (const key of this.matchKeys(name, needle)) {
+      const count = this.countOccurrences(key);
+      if (count > 0) return count;
+    }
+    return 0;
+  }
+
+  /**
+   * 시도할 매칭 키를 우선순위대로. 앞의 키가 하나라도 걸리면 거기서 멈춘다.
+   *
+   * 1. 정식명 전체 — 가장 정확
+   * 2. 기관 수식어를 뗀 코어 ('국립경주박물관' → '경주박물관')
+   * 3. 등록명 토큰 중 긴 것 — 지자체가 붙인 장식적 등록명은 통째로는 코퍼스에 없다.
+   *    실측: '대구 서문시장 & 서문시장 야시장' 은 코퍼스 매칭 0 이라 인지도 하한(0.15)을 맞았는데,
+   *    토큰 '서문시장' 으로는 13회다. 정답이 적재돼 있는데 상위에 못 오던 주요 원인.
+   */
+  private matchKeys(name: string, needle: string): string[] {
+    const keys = [needle];
+
     const core = needle.replace(NaverPopularityIndex.INSTITUTION_QUALIFIER, '');
-    const key =
-      core.length >= NaverPopularityIndex.MIN_CORE_LENGTH && core.length < needle.length
-        ? core
-        : needle;
-    return this.countOccurrences(key);
+    if (core.length >= NaverPopularityIndex.MIN_CORE_LENGTH && core.length < needle.length) {
+      keys.push(core);
+    }
+
+    // 토큰 폴백은 이름이 여러 토큰일 때만 의미가 있다(단일 토큰이면 needle 과 같다).
+    const tokens = name
+      .toLowerCase()
+      .split(NaverPopularityIndex.NAME_SPLIT)
+      .filter((token) => token.length >= NaverPopularityIndex.MIN_CORE_LENGTH);
+    if (tokens.length > 1) {
+      keys.push(...[...new Set(tokens)].sort((a, b) => b.length - a.length));
+    }
+
+    return keys;
   }
 
   private countOccurrences(needle: string): number {
@@ -277,6 +348,8 @@ export class NaverPopularityIndex implements PopularityIndex {
   }
 
   score(name: string): number {
+    // 셀 수 없는 이름(2글자)은 중립 — 감점 대상인 '언급 0' 과 구분한다.
+    if (!this.countableNeedle(name)) return NEUTRAL_POPULARITY;
     const count = this.mentions(name);
     if (count === 0) return UNMENTIONED_SCORE;
     // 로그 스케일: 1회→0.63, 2회→0.74, 4회→0.87. 소수 언급도 완만하게 상승.

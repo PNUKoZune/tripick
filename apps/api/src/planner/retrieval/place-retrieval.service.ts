@@ -67,6 +67,7 @@ export class PlaceRetrievalService {
       rawCandidates.push(...pgvector);
     }
 
+
     let ranked = this.evaluator.rank(rawCandidates, context);
     if (!this.isStrongEnough(ranked, limit)) {
       const kakao = this.filterEligibleCandidates(
@@ -147,8 +148,21 @@ export class PlaceRetrievalService {
     return blended.map((value) => value / norm);
   }
 
+  /**
+   * 질의 벡터와 취향 벡터의 결합 비율 (1 이면 순수 질의).
+   *
+   * 0.6 → 0.85. 골든셋 스윕에서 블렌드를 낮출수록 목적지 대표 장소를 잘 찾는다
+   * (R|cat 0.6→0.337, 0.85→0.371, 1.0→0.370). **개인화를 버리는 결정이 아니다** —
+   * 취향은 질의 텍스트의 `taste:` 태그와 CRAG taste 항으로도 들어가고, 벡터 블렌드는 세 번째
+   * 채널이다. 그 세 번째가 목적지 정합을 깎고 있었다. 1.0(완전 차단) 대신 0.85 인 이유는
+   * 지표가 1.0 과 동등한 범위이고, 사진 취향이 강한 사용자에게 줄 미세 조정을 남겨 두는 쪽이
+   * 안전해서다.
+   *
+   * ⚠️ 골든셋 정답은 '그 목적지의 유명 명소' 라 개인화 품질 자체는 측정하지 못한다.
+   * 이 값을 더 내리는(=블렌드를 더 끄는) 근거로 이 지표만 쓰면 안 된다.
+   */
   private preferenceBlendWeight(): number {
-    const weight = this.readNumber('PREFERENCE_BLEND_WEIGHT', 0.6);
+    const weight = this.readNumber('PREFERENCE_BLEND_WEIGHT', 0.85);
     return Math.max(0, Math.min(1, weight));
   }
 

@@ -1,3 +1,4 @@
+import { isRegionLabel } from './region-code';
 import type { RawPlaceCandidate } from './types';
 
 const EXCLUDED_CATEGORY_KEYWORDS = [
@@ -22,10 +23,18 @@ const TRAVEL_CATEGORY_KEYWORDS = [
   '쇼핑',
 ];
 
-/** 자동 일정에 부적합한 의료 장소가 attraction 기본값으로 유입되는 것을 막는다. */
+/**
+ * 자동 일정에 부적합한 장소(의료 시설·행정구역명)가 attraction 기본값으로 유입되는 것을 막는다.
+ */
 export function isEligibleItineraryCandidate(
   place: Pick<RawPlaceCandidate, 'name' | 'category'> & { categoryDetail?: string },
 ): boolean {
+  // 행정구역명 자체는 방문할 장소가 아니다. 카카오에 '제주도'·'경상북도' 같은 이름으로 등록된
+  // 문서가 있고, 인지도 매칭에서 코퍼스 언급을 통째로 흡수해 상위를 차지한다
+  // (실측: 제주 케이스 1위가 '제주도', 인지도 1.00). 여행 카테고리를 달고 오므로
+  // 아래 카테고리 화이트리스트로는 걸러지지 않아 이름으로 막는다.
+  if (isRegionLabel(place.name)) return false;
+
   const categoryDetail = normalize(place.categoryDetail ?? '');
   if (EXCLUDED_CATEGORY_KEYWORDS.some((keyword) => categoryDetail.includes(normalize(keyword)))) {
     return false;
