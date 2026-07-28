@@ -62,6 +62,39 @@ const SIGUNGU_ALIASES: ReadonlyArray<readonly [string, readonly string[]]> = [
 ];
 
 /**
+ * 행정구역 라벨 전체 집합 (정확 일치용). 별칭 어간에 접미사를 붙여 만든다.
+ * 접미사를 뗀 형태('강원특별자치')도 넣는다 — 조사 '도'를 떼면 그 형태가 나온다.
+ */
+const REGION_LABELS: ReadonlySet<string> = (() => {
+  const labels = new Set<string>();
+  const suffixes = ['', '도', '시', '특별시', '광역시', '특별자치도', '특별자치시'];
+  for (const [code, aliases] of [...SIDO_ALIASES, ...SIDO_ONLY.map(([c, a]) => [c, [a]] as const)]) {
+    for (const stem of [code, ...aliases]) {
+      if (!/[가-힣]/.test(stem)) continue;
+      for (const suffix of suffixes) {
+        const label = `${stem}${suffix}`;
+        labels.add(label);
+        // 끝 '도'·'시' 를 조사로 떼어낸 형태까지 라벨로 인정한다.
+        labels.add(label.replace(/(도|시)$/, ''));
+      }
+    }
+  }
+  labels.delete('');
+  return labels;
+})();
+
+/**
+ * 토큰이 행정구역 라벨 그 자체인지 (장소명이 아님). 적재 후보에서 '강원도'·'제주특별자치도'·
+ * '부산' 같은 지역명을 빼는 데 쓴다.
+ *
+ * **접두 매칭이 아니라 정확 일치**여야 한다 — `toSidoCode` 는 '강원도립화목원'도 '강원'으로
+ * 잡아 주는데(접두 매칭), 그건 춘천의 실제 관광지다.
+ */
+export function isRegionLabel(token: string): boolean {
+  return REGION_LABELS.has(token.trim().replace(/\s+/g, ''));
+}
+
+/**
  * 시도 라벨을 코드로 정규화한다. 매칭 안 되면 null.
  * 예: '경상북도'→'경북', '경북'→'경북', '서울특별시'→'서울', 'jeju'→'제주'.
  */
