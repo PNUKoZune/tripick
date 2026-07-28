@@ -1,0 +1,254 @@
+{
+  "version": 1,
+  "note": "검색 품질 회귀 기준선. relevant 는 '이 목적지·취향이면 상위에 있어야 마땅한' 장소를 사람이 고른 것으로, 카탈로그에 실제로 적재됐는지와 무관하게 적는다 (적재 커버리지 부족과 랭킹 실패를 분리해서 보기 위함 — catalog 열 참고). 이름은 부분일치로 매칭하므로 통용 표기를 쓴다.",
+  "cases": [
+    {
+      "id": "gyeongju-cultural",
+      "intent": "역사·유적 취향의 경주 — 문화재가 상위에 와야 한다",
+      "destination": "경주",
+      "expectRegion": "경북",
+      "tasteTags": {
+        "food": ["korean"],
+        "mood": ["cultural", "nostalgic"],
+        "environment": ["village"],
+        "confidence": 0.85
+      },
+      "relevant": [
+        "불국사",
+        "석굴암",
+        "첨성대",
+        "대릉원",
+        "동궁과 월지",
+        "국립경주박물관",
+        "양동마을",
+        "황리단길",
+        "교촌마을",
+        "월정교"
+      ],
+      "forbidden": ["해운대", "경복궁"]
+    },
+    {
+      "id": "busan-beach",
+      "intent": "바다·힐링 취향의 부산 — 해변이 상위에 와야 한다",
+      "destination": "부산",
+      "expectRegion": "부산",
+      "tasteTags": {
+        "food": ["seafood"],
+        "mood": ["healing"],
+        "environment": ["beach"],
+        "confidence": 0.8
+      },
+      "relevant": [
+        "해운대해수욕장",
+        "광안리해수욕장",
+        "송정해수욕장",
+        "다대포해수욕장",
+        "태종대",
+        "흰여울문화마을",
+        "송도해상케이블카",
+        "오륙도",
+        "자갈치시장",
+        "감천문화마을"
+      ],
+      "forbidden": ["경포", "협재"]
+    },
+    {
+      "id": "jeju-nature",
+      "intent": "자연·모험 취향의 제주 — 화산·숲·오름이 상위에 와야 한다",
+      "destination": "제주",
+      "expectRegion": "제주",
+      "tasteTags": {
+        "food": [],
+        "mood": ["adventure", "healing"],
+        "environment": ["nature", "mountain"],
+        "confidence": 0.9
+      },
+      "relevant": [
+        "성산일출봉",
+        "한라산",
+        "만장굴",
+        "비자림",
+        "천지연폭포",
+        "정방폭포",
+        "주상절리",
+        "사려니숲길",
+        "우도",
+        "산굼부리"
+      ],
+      "forbidden": ["남산서울타워"]
+    },
+    {
+      "id": "seoul-city-nightview",
+      "intent": "도심·야경 취향의 서울 — 전망·도심 명소가 상위에 와야 한다",
+      "destination": "서울",
+      "expectRegion": "서울",
+      "tasteTags": {
+        "food": ["cafe"],
+        "mood": ["trendy"],
+        "environment": ["city", "nightview"],
+        "confidence": 0.8
+      },
+      "relevant": [
+        "남산서울타워",
+        "롯데월드타워",
+        "청계천",
+        "한강공원",
+        "북촌한옥마을",
+        "성수",
+        "홍대",
+        "명동",
+        "DDP",
+        "서울숲"
+      ],
+      "forbidden": ["해운대", "성산일출봉"]
+    },
+    {
+      "id": "gangneung-cafe-beach",
+      "intent": "카페·바다 취향의 강릉 — 커피거리와 해변이 상위에 와야 한다",
+      "destination": "강릉",
+      "expectRegion": "강원",
+      "tasteTags": {
+        "food": ["cafe", "bakery"],
+        "mood": ["healing", "romantic"],
+        "environment": ["beach"],
+        "confidence": 0.85
+      },
+      "relevant": [
+        "안목해변",
+        "강릉커피거리",
+        "경포해수욕장",
+        "경포대",
+        "정동진",
+        "오죽헌",
+        "주문진",
+        "강문해변",
+        "테라로사",
+        "선교장"
+      ],
+      "forbidden": ["광안리"]
+    },
+    {
+      "id": "jeonju-food-hanok",
+      "intent": "한식·전통 취향의 전주 — 한옥마을 일대 먹거리가 상위에 와야 한다",
+      "destination": "전주",
+      "expectRegion": "전북",
+      "tasteTags": {
+        "food": ["korean", "bunsik"],
+        "mood": ["nostalgic", "cultural"],
+        "environment": ["village"],
+        "confidence": 0.85
+      },
+      "relevant": [
+        "전주한옥마을",
+        "경기전",
+        "전동성당",
+        "오목대",
+        "남부시장",
+        "자만벽화마을",
+        "풍남문",
+        "전주향교",
+        "객리단길",
+        "전주비빔밥"
+      ],
+      "forbidden": ["북촌한옥마을"]
+    },
+    {
+      "id": "yeosu-romantic-island",
+      "intent": "로맨틱·섬 취향의 여수 — 해상케이블카·섬이 상위에 와야 한다",
+      "destination": "여수",
+      "expectRegion": "전남",
+      "tasteTags": {
+        "food": ["seafood"],
+        "mood": ["romantic"],
+        "environment": ["island", "nightview"],
+        "confidence": 0.8
+      },
+      "relevant": [
+        "여수해상케이블카",
+        "오동도",
+        "향일암",
+        "돌산공원",
+        "이순신광장",
+        "낭만포차",
+        "고소동",
+        "여수엑스포",
+        "장군도",
+        "하멜등대"
+      ],
+      "forbidden": ["오륙도"]
+    },
+    {
+      "id": "daegu-nostalgic",
+      "intent": "레트로 취향의 대구 — 근대골목·시장이 상위에 와야 한다",
+      "destination": "대구",
+      "expectRegion": "대구",
+      "tasteTags": {
+        "food": ["bunsik", "meat"],
+        "mood": ["nostalgic"],
+        "environment": ["city"],
+        "confidence": 0.75
+      },
+      "relevant": [
+        "서문시장",
+        "김광석다시그리기길",
+        "근대골목",
+        "청라언덕",
+        "이월드",
+        "83타워",
+        "앞산공원",
+        "칠성시장",
+        "동성로",
+        "팔공산"
+      ],
+      "forbidden": ["남대문시장"]
+    },
+    {
+      "id": "gyeongju-weather-indoor",
+      "intent": "비 예보 재계획 — 실내 후보(박물관·전시·카페)가 상위로 올라와야 한다",
+      "destination": "경주",
+      "expectRegion": "경북",
+      "trigger": "weather",
+      "tasteTags": {
+        "food": ["cafe"],
+        "mood": ["cultural"],
+        "environment": [],
+        "confidence": 0.8
+      },
+      "relevant": [
+        "국립경주박물관",
+        "경주엑스포",
+        "솔거미술관",
+        "천마총",
+        "동리목월문학관",
+        "경주밀레니엄파크",
+        "우양미술관"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "sokcho-mountain",
+      "intent": "산·자연 취향의 속초 — 설악산 권역이 상위에 와야 한다",
+      "destination": "속초",
+      "expectRegion": "강원",
+      "tasteTags": {
+        "food": ["seafood"],
+        "mood": ["adventure"],
+        "environment": ["mountain", "nature"],
+        "confidence": 0.85
+      },
+      "relevant": [
+        "설악산",
+        "울산바위",
+        "권금성",
+        "신흥사",
+        "속초해수욕장",
+        "영금정",
+        "아바이마을",
+        "속초관광수산시장",
+        "청초호",
+        "외옹치"
+      ],
+      "forbidden": ["한라산"]
+    }
+  ]
+}

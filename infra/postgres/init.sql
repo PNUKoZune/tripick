@@ -34,8 +34,10 @@ CREATE TABLE IF NOT EXISTS place_embeddings (
   name                TEXT NOT NULL,
   address             TEXT,
   category            TEXT,
-  destination_region  TEXT,           -- 시도 라벨 (예: 서울, 경상북도)
-  region_sigungu      TEXT,           -- 시군구 라벨 (예: 경주시, 해운대구). 시/군 단위 정밀 필터용
+  destination_region  TEXT,           -- 시도 라벨 (예: 서울, 경상북도). 소스 표기 그대로
+  region_sigungu      TEXT,           -- 시군구 라벨 (예: 경주시, 해운대구). 소스 표기 그대로
+  region_code         TEXT,           -- 시도 정본 코드 (예: 경북). 검색 pre-filter 등가 비교용
+  sigungu_code        TEXT,           -- 시군구 정본 코드 (예: 경주). 접미사 제거
   coordinates         JSONB,
   image_url           TEXT,           -- 대표 이미지 (KTO firstimage 등)
   opening_hours       TEXT,           -- 'HH:MM-HH:MM' (KTO detailIntro2). 제약 검증·CRAG 가용성 점수용
@@ -53,6 +55,8 @@ ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS opening_hours   TEXT;
 ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS text_hash       TEXT;
 ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS embedding_model TEXT;
 ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS updated_at      TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS region_code     TEXT;
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS sigungu_code    TEXT;
 
 -- pgvector HNSW 인덱스 (코사인 유사도 검색)
 CREATE INDEX IF NOT EXISTS idx_preference_embeddings_hnsw
@@ -70,6 +74,15 @@ CREATE INDEX IF NOT EXISTS idx_place_embeddings_region
 -- 시군구 정밀 필터 인덱스
 CREATE INDEX IF NOT EXISTS idx_place_embeddings_sigungu
   ON place_embeddings (region_sigungu);
+
+-- 검색 pre-filter 용 정본 코드 인덱스.
+-- ILIKE 라벨 매칭은 인덱스를 못 타 대규모에서 HNSW post-filter 로 밀려나므로,
+-- 등가 비교로 먼저 좁힐 수 있게 코드 컬럼에 btree 를 둔다.
+CREATE INDEX IF NOT EXISTS idx_place_embeddings_region_code
+  ON place_embeddings (region_code);
+
+CREATE INDEX IF NOT EXISTS idx_place_embeddings_sigungu_code
+  ON place_embeddings (sigungu_code);
 
 -- 로컬 seed 및 외부 API 후보 중복 방지/조회 최적화용 보조 인덱스
 CREATE INDEX IF NOT EXISTS idx_place_embeddings_region_name
