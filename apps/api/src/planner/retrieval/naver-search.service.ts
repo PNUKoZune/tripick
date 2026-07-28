@@ -25,6 +25,15 @@ const UNMENTIONED_SCORE = 0.15;
 /** 인덱스 비활성(키 없음·조회 실패) 시 evaluator 가 쓰는 중립 점수. */
 export const NEUTRAL_POPULARITY = 0.5;
 
+/** 적재용 코퍼스: 원문 + 그 원문으로 만든 역방향 인덱스. */
+export interface MentionCorpus {
+  /** 마크업 제거·소문자화된 코퍼스 원문 (장소명 추출 입력) */
+  text: string;
+  docCount: number;
+  /** 추출한 이름을 되짚어 확인하는 역방향 인덱스 */
+  index: NaverPopularityIndex;
+}
+
 /**
  * 네이버 블로그+카페 검색으로 "이 목적지에서 남들이 실제로 많이 가는 곳" 코퍼스를 모아
  * 후보 장소명의 언급 빈도를 조회하는 인덱스를 만든다.
@@ -73,6 +82,37 @@ export class NaverSearchService {
     return this.buildIndex(`seasonal:${year}-${month}`, queries, `${year}년 ${month}월`, credentials);
   }
 
+  /** 검색 키가 설정돼 있는지. 키가 없으면 모든 인지도 기능이 무동작이다. */
+  hasCredentials(): boolean {
+    return this.credentials() !== null;
+  }
+
+  /**
+   * 적재 전용: 임의 검색어로 코퍼스를 모아 **원문과 역방향 인덱스를 함께** 돌려준다.
+   * 런타임 인지도 조회와 달리 원문이 필요하다 — 적재는 코퍼스에서 장소명을 뽑아낸 뒤
+   * 그 이름을 다시 인덱스로 되짚어 확인한다(`PopularPlaceService`).
+   * 1회성 배치라 캐시하지 않는다. 키 없음·조회 실패·빈 코퍼스는 null.
+   */
+  async collectMentionCorpus(queries: string[], display?: number): Promise<MentionCorpus | null> {
+    const credentials = this.credentials();
+    if (!credentials) return null;
+
+    try {
+      const corpus = await this.collectCorpus(queries, credentials, display);
+      if (corpus.docCount === 0) return null;
+      return {
+        text: corpus.text,
+        docCount: corpus.docCount,
+        index: new NaverPopularityIndex(corpus.text, corpus.docCount),
+      };
+    } catch (error) {
+      this.logger.warn(
+        `네이버 코퍼스 수집 실패 ("${queries[0] ?? ''}" 등): ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+  }
+
   /**
    * 검색어 목록으로 코퍼스를 모아 인지도 인덱스를 만든다(캐시 경유).
    * 두 엔드포인트가 모두 실패했거나 결과가 없으면 캐시하지 않고 비활성 반환 —
@@ -111,8 +151,9 @@ export class NaverSearchService {
   private async collectCorpus(
     queries: string[],
     credentials: { id: string; secret: string },
+    displayOverride?: number,
   ): Promise<{ text: string; docCount: number }> {
-    const display = this.display();
+    const display = this.normalizeDisplay(displayOverride) ?? this.display();
     const parts: string[] = [];
     let docCount = 0;
 
@@ -164,8 +205,14 @@ export class NaverSearchService {
   }
 
   private display(): number {
-    const value = Number(this.config.get<string | number>('NAVER_SEARCH_DISPLAY', 30));
-    if (!Number.isFinite(value) || value <= 0) return 30;
+    return this.normalizeDisplay(this.config.get<string | number>('NAVER_SEARCH_DISPLAY', 30)) ?? 30;
+  }
+
+  /** 1..NAVER_MAX_DISPLAY 로 클램프. 값이 없거나 잘못되면 null. */
+  private normalizeDisplay(raw: string | number | undefined): number | null {
+    if (raw === undefined) return null;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) return null;
     return Math.min(NAVER_MAX_DISPLAY, Math.floor(value));
   }
 

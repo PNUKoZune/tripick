@@ -7,7 +7,9 @@ import { IngestCursorRepository } from './ingest-cursor.repository';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { KtoCallBudget, TourApiService } from './tour-api.service';
+import { PopularPlaceService } from './popular-place.service';
 import { inferPlaceTags, parseSigungu } from './place-seeds';
+import { SIDO_CODES } from './region-code';
 import type { IngestPlace, IngestRegionResult, IngestSource, IngestSummary } from './ingestion.types';
 
 export interface IngestOptions {
@@ -47,6 +49,7 @@ export class PlaceIngestionService {
     private readonly config: ConfigService,
     private readonly tourApi: TourApiService,
     private readonly kakaoLocal: KakaoLocalService,
+    private readonly popularPlaces: PopularPlaceService,
     private readonly embeddings: TextEmbeddingService,
     private readonly repository: PlaceEmbeddingRepository,
     private readonly cursors: IngestCursorRepository,
@@ -59,18 +62,21 @@ export class PlaceIngestionService {
 
     // 안전장치: 적재 전 임베딩 서버가 실제 벡터를 주는지 확인. 해시 폴백이면 중단.
     await this.assertEmbeddingServerReady(allowHash);
-
-    const sidos = await this.tourApi.fetchSidoList();
-    if (sidos.length === 0) {
-      this.logger.warn('시도 목록을 가져오지 못했습니다. KTO_API_KEY 를 확인하세요.');
+    // popular 은 네이버 코퍼스 없이는 전 지역에서 0건이 된다. 조용히 헛도는 대신 앞에서 막는다.
+    if (sources.includes('popular') && !this.popularPlaces.isAvailable) {
+      throw new Error(
+        'popular 소스는 네이버 검색 키가 필요합니다. NAVER_SEARCH_CLIENT_ID / _SECRET 를 설정하거나 --sources 에서 popular 를 빼세요.',
+      );
     }
 
+    const sidos = await this.resolveTargetSidos(sources);
+
     const targets = options.regions?.length
-      ? sidos.filter((s) => options.regions!.some((r) => s.name.includes(r)))
+      ? this.resolveRequestedTargets(sidos, options.regions, sources)
       : sidos;
 
     if (targets.length === 0 && options.regions?.length) {
-      this.logger.warn(`요청한 지역(${options.regions.join(', ')})에 해당하는 시도가 없습니다.`);
+      this.logger.warn(`요청한 지역(${options.regions.join(', ')})으로 적재할 대상이 없습니다.`);
     }
 
     const reseed = options.reseed ?? false;
@@ -80,6 +86,11 @@ export class PlaceIngestionService {
     const append = options.append ?? false;
     if (append) {
       this.logger.log('append 모드: 지역별 페이지 커서를 이어받아 새 페이지부터 적재합니다.');
+      if (sources.includes('popular')) {
+        // popular 은 페이지가 아니라 추천 글 코퍼스를 보므로 이어받을 커서가 없다.
+        // 매 실행 같은 상위 장소를 다시 확인하지만 텍스트 해시가 같아 재임베딩 없이 unchanged 다.
+        this.logger.log('popular 은 append 대상이 아닙니다 (코퍼스 기반, 페이지 커서 없음).');
+      }
     }
 
     // 실행 1회의 KTO 호출 예산. 소진되면 이후 지역의 KTO 수집을 멈춰 일일 한도를 지킨다.
@@ -112,6 +123,64 @@ export class PlaceIngestionService {
     return summary;
   }
 
+  /**
+   * `--regions` 로 요청한 지역을 적재 대상으로 바꾼다.
+   *
+   * 시도로 잡히면 그 시도를 쓴다. 안 잡히는 값('속초'·'전주')은 **시군구 단위 타깃**으로
+   * 그대로 받는다 — popular 은 시도 코퍼스가 넓을수록 그 지역 대표 명소가 묻히기 때문이다
+   * (실측: '강원도 여행지 추천' 코퍼스에서 설악산은 언급 8회로 129위, 상위는 시군구명과
+   * 도립시설이 차지한다. 설악산 글은 '속초 여행'으로 쓰인다).
+   * tour 는 KTO areaCode 가 있어야 하므로 시도 단위만 가능하고, 안 잡히면 건너뛴다.
+   */
+  private resolveRequestedTargets(
+    sidos: Array<{ code: string; name: string }>,
+    requested: string[],
+    sources: IngestSource[],
+  ): Array<{ code: string; name: string }> {
+    const targets: Array<{ code: string; name: string }> = [];
+    const seen = new Set<string>();
+    for (const raw of requested) {
+      const matched = sidos.filter((s) => s.name.includes(raw));
+      if (matched.length === 0 && sources.includes('tour')) {
+        this.logger.warn(
+          `요청한 지역(${raw})이 KTO 시도 목록에 없어 건너뜁니다 — tour 소스는 시도 단위만 적재합니다.`,
+        );
+        continue;
+      }
+      const resolved = matched.length > 0 ? matched : [{ code: '', name: raw }];
+      if (matched.length === 0) {
+        this.logger.log(`[${raw}] 시도가 아닌 지역 — 시군구 단위 타깃으로 적재합니다.`);
+      }
+      for (const target of resolved) {
+        if (seen.has(target.name)) continue;
+        seen.add(target.name);
+        targets.push(target);
+      }
+    }
+    return targets;
+  }
+
+  /**
+   * 적재 대상 시도 목록. 기본은 KTO 시도 목록(areaCode 가 필요하므로 tour 소스의 정본).
+   * tour 를 안 쓰는 실행(예: `--sources=popular`)은 KTO 키 없이도 돌아야 하므로
+   * 목록을 못 받으면 정본 시도 코드 17개로 폴백한다 (areaCode 는 쓰이지 않는다).
+   */
+  private async resolveTargetSidos(
+    sources: IngestSource[],
+  ): Promise<Array<{ code: string; name: string }>> {
+    const sidos = await this.tourApi.fetchSidoList();
+    if (sidos.length > 0) return sidos;
+
+    if (sources.includes('tour')) {
+      this.logger.warn('시도 목록을 가져오지 못했습니다. KTO_API_KEY 를 확인하세요.');
+      return sidos;
+    }
+    this.logger.log(
+      'KTO 시도 목록 없이 정본 시도 코드 17개로 진행합니다 (tour 소스를 쓰지 않는 실행).',
+    );
+    return SIDO_CODES.map((name) => ({ code: '', name }));
+  }
+
   private async ingestRegion(
     areaCode: string,
     region: string,
@@ -128,6 +197,14 @@ export class PlaceIngestionService {
     }
 
     const collected: IngestPlace[] = [];
+
+    // popular(대표 명소·맛집)을 맨 앞에 둔다. dedupe 가 먼저 온 쪽을 남기므로
+    // 같은 장소가 KTO/카카오에도 있으면 네이버로 확인된 정본 쪽이 살아남는다.
+    let popularPlaces: IngestPlace[] = [];
+    if (sources.includes('popular')) {
+      popularPlaces = await this.popularPlaces.collect(region, maxPerRegion);
+      collected.push(...popularPlaces);
+    }
 
     // 관광공사를 먼저 수집한다. 그 좌표들이 카카오 검색의 앵커가 되어
     // 소스 비중을 균형 있게(반반) 맞추고 위치 정확도를 확보한다.
@@ -149,7 +226,10 @@ export class PlaceIngestionService {
       }
     }
     if (sources.includes('kakao')) {
-      collected.push(...(await this.fetchKakao(region, maxPerRegion, tourPlaces)));
+      // 대표 명소 좌표도 앵커 풀에 넣는다 — 관광 중심지를 정확히 짚어 주므로 주변 탐색 질이 오른다.
+      collected.push(
+        ...(await this.fetchKakao(region, maxPerRegion, [...popularPlaces, ...tourPlaces])),
+      );
     }
 
     const deduped = this.dedupe(collected);
@@ -226,17 +306,18 @@ export class PlaceIngestionService {
   }
 
   /**
-   * 관광공사 좌표에서 뽑은 앵커들을 중심으로 카카오 카테고리 검색(위치+category_group_code)을 돌려
-   * 지역 장소를 수집한다. budget(=관광공사와 동일 상한)을 앵커·카테고리에 고르게 분배해
-   * 소스 비중을 반반으로 맞춘다. 관광공사 좌표가 없으면 지역 중심 1곳으로 폴백한다.
+   * 앞선 소스(popular·관광공사) 좌표에서 뽑은 앵커들을 중심으로 카카오 카테고리 검색
+   * (위치+category_group_code)을 돌려 지역 장소를 수집한다. budget(=관광공사와 동일 상한)을
+   * 앵커·카테고리에 고르게 분배해 소스 비중을 반반으로 맞춘다.
+   * 앵커가 하나도 없으면 지역 중심 1곳으로 폴백한다.
    */
   private async fetchKakao(
     region: string,
     budget: number,
-    tourPlaces: IngestPlace[],
+    anchorPlaces: IngestPlace[],
   ): Promise<IngestPlace[]> {
     const radius = this.ingestRadius();
-    let centers = this.deriveAnchors(tourPlaces, this.maxAnchors());
+    let centers = this.deriveAnchors(anchorPlaces, this.maxAnchors());
 
     if (centers.length === 0) {
       const center = await this.kakaoLocal.resolveCenter(region);
@@ -245,7 +326,7 @@ export class PlaceIngestionService {
         return [];
       }
       this.logger.warn(
-        `[${region}] 관광공사 좌표가 없어 지역 중심 1곳(반경 ${radius}m)만으로 카카오 수집 — 커버리지가 제한적입니다.`,
+        `[${region}] 앵커 좌표가 없어 지역 중심 1곳(반경 ${radius}m)만으로 카카오 수집 — 커버리지가 제한적입니다.`,
       );
       centers = [center];
     }

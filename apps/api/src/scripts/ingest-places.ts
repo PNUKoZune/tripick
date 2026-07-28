@@ -1,18 +1,27 @@
 /**
- * 카카오 로컬 + 관광공사 장소를 임베딩해서 place_embeddings 에 적재하는 CLI.
+ * 카카오 로컬 + 관광공사 + 네이버 인기 장소를 임베딩해서 place_embeddings 에 적재하는 CLI.
  *
  * 실행:
  *   cd apps/api && pnpm ingest:places
+ *   pnpm ingest:places -- --sources=popular --max=60   # 1차: 대표 명소·맛집만 얕고 정확하게
  *   pnpm ingest:places -- --regions=서울,부산 --sources=tour,kakao --max=100
  *   pnpm ingest:places -- --append --max=100   # 크론 반복 시 페이지 이어 누적
  *
  * 옵션:
  *   --regions=서울,부산   특정 시도만 적재 (미지정 시 전국 시도)
- *   --sources=tour,kakao  적재 소스 (기본: 둘 다)
+ *   --sources=tour,kakao  적재 소스 (기본: tour,kakao — popular 은 명시해야 돈다)
  *   --max=100             소스별 시도당 최대 수집 건수 (기본 100)
  *   --reseed              적재 전 대상 지역의 기존 벡터 삭제 (임베딩 서버 전환 시)
  *   --append              지역별 페이지 커서를 이어받아 새 페이지부터 적재 (크론 반복 시 누적)
  *   --allow-hash          임베딩 서버가 없어도 해시 폴백으로 적재 강행 (기본: 중단)
+ *
+ * 소스:
+ *   tour     KTO areaBasedList2 — 지역 전역을 넓게 채운다 (일일 호출 예산 있음)
+ *   kakao    앞선 소스 좌표를 앵커로 주변 카테고리 검색 — 카카오 전용 장소 보강
+ *   popular  네이버 추천 글에 자주 언급되는 대표 명소·맛집을 카카오로 정규화해 적재.
+ *            KTO 는 인기순 정렬이 없어 남산서울타워·설악산 같은 대표 명소를 못 잡는다.
+ *            네이버 검색 키(NAVER_SEARCH_CLIENT_ID/_SECRET) 필수 — 없으면 시작 시 중단한다.
+ *            페이지 커서가 없어 --append 대상이 아니다(매 실행 상위 장소 재확인 → unchanged).
  *
  * 안전장치: 기본적으로 임베딩 서버가 실제 벡터를 주지 못하면(해시 폴백) 적재를 중단한다.
  * 해시 벡터가 실제 벡터와 섞여 검색 품질이 손상되는 것을 막는다. 의도한 오프라인 적재는 --allow-hash.
@@ -26,6 +35,10 @@ import { PlaceIngestionModule } from '../planner/retrieval/place-ingestion.modul
 import { PlaceIngestionService } from '../planner/retrieval/place-ingestion.service';
 import type { IngestOptions } from '../planner/retrieval/place-ingestion.service';
 import type { IngestSource } from '../planner/retrieval/ingestion.types';
+
+function isIngestSource(value: string): value is IngestSource {
+  return value === 'tour' || value === 'kakao' || value === 'popular';
+}
 
 function parseArgs(argv: string[]): IngestOptions {
   const options: IngestOptions = {};
@@ -48,10 +61,15 @@ function parseArgs(argv: string[]): IngestOptions {
     if (rawKey === 'regions') {
       options.regions = value.split(',').map((s) => s.trim()).filter(Boolean);
     } else if (rawKey === 'sources') {
-      options.sources = value
-        .split(',')
-        .map((s) => s.trim())
-        .filter((s): s is IngestSource => s === 'tour' || s === 'kakao');
+      const requested = value.split(',').map((s) => s.trim()).filter(Boolean);
+      const unknown = requested.filter((s) => !isIngestSource(s));
+      // 오타를 조용히 버리면 sources=[] 로 아무것도 적재하지 않고 성공한 것처럼 끝난다.
+      if (unknown.length > 0) {
+        throw new Error(
+          `알 수 없는 소스: ${unknown.join(', ')} (가능: tour, kakao, popular)`,
+        );
+      }
+      options.sources = requested.filter(isIngestSource);
     } else if (rawKey === 'max') {
       const n = Number(value);
       if (Number.isFinite(n) && n > 0) options.maxPerRegion = n;
