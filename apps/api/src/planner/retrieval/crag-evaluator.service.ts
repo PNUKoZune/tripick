@@ -302,22 +302,45 @@ export class CragEvaluatorService {
     return TRIGGER_SCORE[context.trigger](tags);
   }
 
+  /**
+   * 영업시간 판정. **감점 전용이다** — 판정 불가(데이터 없음·형식 불명·방문 시각 없음)와
+   * "열려 있음 확인"이 같은 값이고, 확인된 닫힘만 깎는다.
+   *
+   * 예전엔 열림 0.95 / 판정 불가 0.58 로 갈라 **영업시간 데이터가 있다는 사실 자체에 총점 0.041**
+   * 을 얹고 있었다(가중 0.111 × 0.37). popularity 의 '언급 0' 감점 영향폭(0.052)에 맞먹는
+   * 크기인데, 장소 품질이 아니라 **데이터 출처**에 붙는 가점이었다.
+   *
+   * 그 출처가 카테고리와 얽혀 있다는 게 문제다. 영업시간은 KTO 출처(4,501행)만 얻을 수 있고
+   * 카카오 전용(5,980행)은 [구글 Places 미채택](../../../../docs/plans/2026-07-21-open-backlog.md)
+   * 이후 영구히 못 얻는데, **카페는 전원 카카오 출처다** — 카탈로그 실측 가점률이
+   * 식당 199/2,548(7.8%) · 관광지 345/6,615(5.2%) · **카페 0/1,312(0%)** 였다. 즉 카페만
+   * 구조적으로 가점에서 배제된다. 일정에는 카페 슬롯도 필요하다(`selectTopDiverse` 가 식음
+   * 최소 보유량을 보장하는 이유).
+   *
+   * 중립값이 예전 다수값 0.58 그대로인 것도 의도다 — 후보 95%가 이 값이라, 여기를 올리면 순위는
+   * 그대로인데 confidence 절대 수준이 통째로 올라가 accept 게이트(`CRAG_MIN_CONFIDENCE`)와
+   * 폴백 판정(`CRAG_TARGET_CONFIDENCE`)이 함께 움직인다.
+   *
+   * 영업시간 밖 일정을 실제로 막는 것은 이 항(총점 차이 0.037)이 아니라
+   * [ConstraintEngine.checkOpeningHours](../constraint/constraint.engine.ts) 의 하드 검증이다.
+   * 역할이 다르다 — 점수는 "가능하면 안 뽑기", 제약은 "뽑혔으면 막기".
+   */
   private availabilityScore(
     candidate: RawPlaceCandidate,
     context: RetrievalContext,
     penalties: string[],
   ): number {
-    if (!candidate.openingHours) return 0.58;
-    if (!context.startAt) return 0.68;
+    const neutral = 0.58;
+    if (!candidate.openingHours || !context.startAt) return neutral;
 
     const match = candidate.openingHours.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
-    if (!match) return 0.58;
+    if (!match) return neutral;
 
     const [, startHour, startMinute, endHour, endMinute] = match;
     const visitMinutes = this.kstMinutes(context.startAt);
     const start = Number(startHour) * 60 + Number(startMinute);
     const end = Number(endHour) * 60 + Number(endMinute);
-    if (visitMinutes >= start && visitMinutes <= end) return 0.95;
+    if (visitMinutes >= start && visitMinutes <= end) return neutral;
     penalties.push('closed-at-target-time');
     return 0.25;
   }

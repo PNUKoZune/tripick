@@ -349,6 +349,63 @@ describe('CragEvaluatorService', () => {
   });
 
   /**
+   * 영업시간 항은 감점 전용이다 — "데이터가 있다"에 가점하면 그건 장소 품질이 아니라
+   * 데이터 출처(KTO 관광지)에 붙는 가점이고, 카카오 전용 식당·카페는 영업시간을 영구히 못 얻어
+   * 체계적으로 후순위가 된다.
+   */
+  describe('availability 감점 전용', () => {
+    const withHours = (id: string, openingHours?: string): RawPlaceCandidate => ({
+      id,
+      name: `부산 후보 ${id}`,
+      category: 'attraction',
+      address: '부산 수영구 광안해변로 219',
+      coordinates: { lat: 35.1532, lng: 129.1185 },
+      source: 'pgvector',
+      similarity: 0.52,
+      tags: ['beach'],
+      destinationRegion: 'busan',
+      ...(openingHours ? { openingHours } : {}),
+    });
+
+    /** 2026-08-01 10:00 KST */
+    const visitAt = new Date('2026-08-01T01:00:00.000Z');
+
+    it('영업시간이 있고 열려 있어도 판정 불가 후보와 같은 점수 (출처 가점 없음)', () => {
+      const ranked = service.rank([withHours('open', '09:00-18:00'), withHours('unknown')], {
+        ...busanContext,
+        startAt: visitAt,
+      });
+
+      const open = ranked.find((c) => c.id === 'open')!;
+      const unknown = ranked.find((c) => c.id === 'unknown')!;
+      expect(open.crag.availability).toBe(unknown.crag.availability);
+      expect(open.confidence).toBe(unknown.confidence);
+      expect(open.crag.penalties).not.toContain('closed-at-target-time');
+    });
+
+    it('확인된 닫힘만 감점한다', () => {
+      const ranked = service.rank([withHours('closed', '19:00-23:00'), withHours('unknown')], {
+        ...busanContext,
+        startAt: visitAt,
+      });
+
+      const closed = ranked.find((c) => c.id === 'closed')!;
+      const unknown = ranked.find((c) => c.id === 'unknown')!;
+      expect(closed.crag.availability).toBeLessThan(unknown.crag.availability);
+      expect(closed.crag.penalties).toContain('closed-at-target-time');
+      expect(ranked[0]!.id).toBe('unknown');
+    });
+
+    it('방문 시각이 없으면 영업시간이 있어도 중립 — 후보 95%의 값과 같아야 게이트가 안 흔들린다', () => {
+      const [withData, withoutData] = [
+        service.rank([withHours('open', '09:00-18:00')], busanContext)[0]!,
+        service.rank([withHours('unknown')], busanContext)[0]!,
+      ];
+      expect(withData.crag.availability).toBe(withoutData.crag.availability);
+    });
+  });
+
+  /**
    * retrieval 가중은 실측 근거로 0.24 → 0.06 으로 내렸다(`retrieval-rank.ts` 주석).
    * 스윕 노브가 게이트를 흔들지 않는지 — 즉 남은 몫이 비례 배분되는지 — 를 서비스 경로에서 확인한다.
    */
