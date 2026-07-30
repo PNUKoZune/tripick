@@ -10,7 +10,7 @@ import { KtoCallBudget, TourApiService } from './tour-api.service';
 import { PopularPlaceService } from './popular-place.service';
 import { isSeoBusinessName } from './place-name-quality';
 import { inferPlaceTags, parseSigungu } from './place-seeds';
-import { SIDO_CODES } from './region-code';
+import { SIDO_CODES, placeRegionCodes } from './region-code';
 import type { IngestPlace, IngestRegionResult, IngestSource, IngestSummary } from './ingestion.types';
 
 export interface IngestOptions {
@@ -224,16 +224,16 @@ export class PlaceIngestionService {
       this.logger.warn(`[${region}] KTO 시도 코드가 없어 tour 수집을 건너뜁니다.`);
     } else if (sources.includes('tour')) {
       // reseed 는 항상 처음부터. append 는 커서를 이어받되 reseed 와 겹치면 처음부터.
-      const startPage = append && !reseed ? await this.cursors.getNextPage(region, 'tour') : 1;
-      const res = await this.tourApi.fetchByArea(areaCode, region, maxPerRegion, startPage, budget);
+      const startOffset = append && !reseed ? await this.cursors.getNextOffset(region, 'tour') : 0;
+      const res = await this.tourApi.fetchByArea(areaCode, region, maxPerRegion, startOffset, budget);
       tourPlaces = res.places;
       collected.push(...tourPlaces);
       if (append) {
-        await this.cursors.setNextPage(region, 'tour', res.nextPage);
-        if (res.nextPage === 1 && startPage !== 1) {
+        await this.cursors.setNextOffset(region, 'tour', res.nextOffset);
+        if (res.nextOffset === 0 && startOffset !== 0) {
           this.logger.log(`[${region}] tour 마지막 페이지 도달 → 커서 리셋(다음 실행은 상단부터 재확인)`);
         } else {
-          this.logger.log(`[${region}] tour append: page ${startPage} → 다음 커서 ${res.nextPage}`);
+          this.logger.log(`[${region}] tour append: offset ${startOffset} → 다음 커서 ${res.nextOffset}`);
         }
       }
     }
@@ -498,10 +498,20 @@ export class PlaceIngestionService {
   /**
    * 임베딩 대상 텍스트를 구성한다. 카테고리 상세(카카오 경로/KTO 유형명)와 지역(시도·시군구)을
    * 명시적으로 포함해 질의(destination:… taste:…)와 토큰이 겹치도록 하고 의미 신호를 강화한다.
+   *
+   * 지역은 수집 라벨이 아니라 **정본 코드**를 쓴다. 라벨은 그 행을 어떤 타깃으로 수집했는지에
+   * 따라 달라져서('속초' vs '강원특별자치도'), 같은 장소가 실행마다 다른 텍스트 해시를 갖고
+   * 매번 재임베딩됐다(증분 적재가 무력화되고 라벨이 뒤집힌다). 코드는 주소에서 파생되므로
+   * 어느 타깃으로 수집해도 같다 — 해시가 안정되고 unchanged 로 떨어진다.
    */
   private buildText(place: IngestPlace): string {
     const tags = inferPlaceTags(place).join(', ');
-    const regionLabel = [place.region, place.sigungu].filter(Boolean).join(' ');
+    const { regionCode, sigunguCode } = placeRegionCodes(
+      place.region,
+      place.sigungu ?? null,
+      place.address,
+    );
+    const regionLabel = [regionCode, sigunguCode].filter(Boolean).join(' ');
     return [
       place.name,
       place.categoryDetail || place.category,

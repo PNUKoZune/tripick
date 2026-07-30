@@ -220,20 +220,26 @@ export class TourApiService {
   }
 
   /**
-   * 특정 법정동 시도(lDongRegnCd)의 관광 장소를 startPage 부터 최대 maxItems 건 수집한다.
-   * numOfRows=maxItems(≤100)로 페이지를 나눠, append 모드가 커서(nextPage)를 이어받아
-   * 매 실행 다른 페이지를 읽게 한다. 끝에 도달하면 nextPage=1 로 wrap.
-   * @returns places 와 다음 실행이 읽을 페이지(nextPage)
+   * 특정 법정동 시도(lDongRegnCd)의 관광 장소를 startOffset 행부터 최대 maxItems 건 수집한다.
+   * numOfRows=maxItems(≤100)로 페이지를 나눠, append 모드가 커서(nextOffset)를 이어받아
+   * 매 실행 다른 구간을 읽게 한다. 끝에 도달하면 nextOffset=0 으로 wrap.
+   *
+   * 커서를 **행 오프셋**으로 주고받는 이유 — 페이지 번호는 그 실행의 배치 크기에 묶여 있어서
+   * `--max` 를 바꾸면 같은 커서가 다른 구간을 뜻한다. KTO 는 pageNo·numOfRows 만 받으므로
+   * 오프셋을 페이지 경계로 **내림** 정렬해 쓴다 — 내림이면 이미 읽은 구간을 다시 확인할 뿐이고
+   * (텍스트 해시가 같아 unchanged), 올림이면 그 사이 행을 영구히 건너뛴다.
+   *
+   * @returns places 와 다음 실행이 읽을 행 오프셋(nextOffset)
    */
   async fetchByArea(
     lDongRegnCd: string,
     region: string,
     maxItems: number,
-    startPage = 1,
+    startOffset = 0,
     budget?: KtoCallBudget,
-  ): Promise<{ places: IngestPlace[]; nextPage: number; quotaExceeded: boolean }> {
+  ): Promise<{ places: IngestPlace[]; nextOffset: number; quotaExceeded: boolean }> {
     const apiKey = this.apiKey();
-    if (!apiKey) return { places: [], nextPage: startPage, quotaExceeded: false };
+    if (!apiKey) return { places: [], nextOffset: startOffset, quotaExceeded: false };
 
     const batchSize = Math.min(Math.max(1, maxItems), 100); // KTO numOfRows 상한 100
     const pagesToFetch = Math.max(1, Math.ceil(maxItems / batchSize));
@@ -241,7 +247,9 @@ export class TourApiService {
     // 영업시간은 목록(areaBasedList2)에 없고 detailIntro2 로만 온다. 타입별 필드명이
     // 달라 contentTypeId 를 장소와 함께 들고 있어야 한다.
     const pending: Array<{ place: IngestPlace; contentTypeId: string }> = [];
-    let page = startPage;
+    let page = Math.floor(Math.max(0, startOffset) / batchSize) + 1;
+    // 읽은 행 수. 페이지 경계로 내림 정렬한 시작점에서 출발한다.
+    let consumed = (page - 1) * batchSize;
     let ended = false;
     let quotaExceeded = false;
 
@@ -253,6 +261,7 @@ export class TourApiService {
           ended = true;
           break;
         }
+        consumed += rows.length;
         for (const row of rows) {
           const place = this.toIngestPlace(row, region);
           if (!place) continue;
@@ -276,7 +285,7 @@ export class TourApiService {
       }
     }
 
-    return { places: collected, nextPage: ended ? 1 : page, quotaExceeded };
+    return { places: collected, nextOffset: ended ? 0 : consumed, quotaExceeded };
   }
 
   /**

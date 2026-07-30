@@ -64,12 +64,13 @@ KTO 가 `areaCode`·`sigunguCode`·`cat1~3` 파라미터를 폐기하고 법정�
 - 부수 수정: `deleteRegion` 이 `DELETE … RETURNING` 결과를 `dataSource.query` 로 받을 때 드라이버가 `[rows, affected]` 를 돌려줘 삭제 카운트가 항상 2로 잘못 집계되던 버그를, CTE(`WITH deleted AS (DELETE … RETURNING 1) SELECT count(*)`)로 수정.
 - 라벨 정합: `ldongCode2`가 풀네임('대구광역시')을 주는데 기존 DB는 옛 단축명('대구')이라, `deleteRegion`을 어간 프리픽스(`lower(destination_region) LIKE '대구%'`)로 확장해 **옛/새 라벨을 함께 삭제**한다. 덕분에 전국 재적재 시 TRUNCATE 없이도 옛 라벨 orphan 이 남지 않는다(시도 라벨이라 인접 시도 오삭제 없음: '경상북%'는 경상남도 미포함).
 
-### 3.6 append 모드 (페이지 커서로 반복 실행 = 누적)
+### 3.6 append 모드 (오프셋 커서로 반복 실행 = 누적)
 
 기본(비-append) 실행은 KTO `areaBasedList2`를 항상 **page 1부터** 읽어(정렬 `arrange=O` 고정) 매번 같은 상위 N개만 재확인한다 → provenance 가 "유지"로 처리해 **신규가 안 늘어난다**. 카탈로그를 키우려면 `--max`를 올리거나, `--append`로 페이지를 이어 읽어야 한다.
 
-- `ingest_cursors(region, source, next_page)`에 지역·소스별 다음 페이지를 저장.
-- `--append`: `fetchByArea`가 커서 페이지부터 `numOfRows=min(max,100)`로 읽고, 다음 커서를 저장한다. 끝에 도달하면 `next_page=1`로 wrap(다음 실행은 상단부터 재확인).
+- `ingest_cursors(region, source, next_offset)`에 지역·소스별 다음 **행 오프셋**을 저장.
+- `--append`: `fetchByArea`가 커서 오프셋부터 `numOfRows=min(max,100)`로 읽고, 다음 커서를 저장한다. 끝에 도달하면 `next_offset=0`으로 wrap(다음 실행은 상단부터 재확인).
+- 커서 단위는 페이지가 아니라 오프셋이다(`1785600000000-IngestCursorOffset`). 페이지 번호는 그 실행의 배치 크기에 묶여 있어 `--max`를 바꾸면 같은 숫자가 다른 구간을 뜻했다(page 3 = `--max=100`이면 200행, `--max=50`이면 100행) → 안 읽은 구간을 영구히 건너뛰거나 같은 구간을 되읽는다. 오프셋은 페이지 경계로 **내림** 정렬해 쓰므로 최악이 "이미 읽은 구간 재확인"(해시 동일 → 유지)이다.
 - 카카오는 별도 커서가 없다 — append 시 tour 배치(다른 페이지)의 좌표가 앵커가 되므로 자연히 새 지역을 탐색한다.
 - 증분 UPSERT 와 결합돼 겹치는 장소는 재임베딩 없이 유지, 새 페이지의 신규만 임베딩·삽입된다.
 
@@ -87,7 +88,7 @@ KTO 가 `areaCode`·`sigunguCode`·`cat1~3` 파라미터를 폐기하고 법정�
 | `embedding_model` | 임베딩 모델 → 모델 전환 감지 |
 | `updated_at` | 갱신 시각 |
 
-신규 테이블 `ingest_cursors(region, source, next_page)` — append 모드 페이지 커서.
+신규 테이블 `ingest_cursors(region, source, next_offset)` — append 모드 오프셋 커서.
 
 기존 실행 중 DB 반영:
 

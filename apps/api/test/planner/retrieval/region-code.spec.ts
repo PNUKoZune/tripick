@@ -62,6 +62,31 @@ describe('toSigunguCode', () => {
     expect(toSigunguCode('')).toBeNull();
     expect(toSigunguCode(null)).toBeNull();
   });
+
+  it('한 글자만 남는 자치구는 접미사를 남긴다 (실측 1,554행이 동·중·북·남·서였다)', () => {
+    expect(toSigunguCode('중구')).toBe('중구');
+    expect(toSigunguCode('동구')).toBe('동구');
+    expect(toSigunguCode('북구')).toBe('북구');
+    expect(toSigunguCode('남구')).toBe('남구');
+    expect(toSigunguCode('서구')).toBe('서구');
+  });
+
+  it('질의 쪽도 같은 코드로 떨어진다 (적재와 질의가 만나야 한다)', () => {
+    expect(destinationRegionFilter('중구')).toEqual({ sido: null, sigungu: '중구' });
+    // 시도가 함께 오면 시도 코드가 이긴다 — 동명 시군구 혼동은 여기서 갈린다.
+    expect(destinationRegionFilter('대구 중구')).toEqual({ sido: '대구', sigungu: null });
+  });
+
+  it('주소에서 파생한 시군구 코드도 한 글자가 되지 않는다', () => {
+    expect(placeRegionCodes(null, null, '대구광역시 중구 동성로2가 81')).toEqual({
+      regionCode: '대구',
+      sigunguCode: '중구',
+    });
+    expect(placeRegionCodes(null, null, '부산광역시 해운대구 우동 1394')).toEqual({
+      regionCode: '부산',
+      sigunguCode: '해운대',
+    });
+  });
 });
 
 describe('destinationRegionFilter', () => {
@@ -111,7 +136,7 @@ describe('placeRegionCodes', () => {
     // '광주' 검색에서 사라진다.
     expect(
       placeRegionCodes('전남광주통합특별시', null, '광주 동구 예술길 31'),
-    ).toEqual({ regionCode: '광주', sigunguCode: '동' });
+    ).toEqual({ regionCode: '광주', sigunguCode: '동구' });
     expect(
       placeRegionCodes('전남광주통합특별시', null, '전라남도 여수시 오동도로 222'),
     ).toEqual({ regionCode: '전남', sigunguCode: '여수' });

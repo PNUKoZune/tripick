@@ -190,7 +190,13 @@ export function toSidoCode(label: string | null | undefined): SidoCode | null {
  * '경주시'→'경주', '해운대구'→'해운대', '달성군'→'달성' 로 만든다.
  * 접미사를 떼면 빈 문자열이 되는 값('시')은 null.
  *
- * 동명 시군구('중구'·'남구')는 코드도 같다 — 시도 코드와 함께 써야 유일해진다.
+ * **접미사를 떼서 한 글자만 남는 자치구는 떼지 않는다** ('중구'→'중구', '동구'→'동구').
+ * 실측 카탈로그에서 동·중·북·남·서 다섯 글자가 1,554행을 차지했는데, 한 글자 코드는
+ * (a) 실재하는 지명이 아니라 사람이 읽을 수 없고 (b) '중'이 서울·부산·대구·인천 중구를
+ * 한꺼번에 뜻해 필터로서 아무것도 좁히지 못한다. 접미사를 남기면 최소한 '중구' 라는
+ * 실재 라벨이 되고, 질의 쪽도 같은 함수를 쓰므로 '중구' 입력과 그대로 만난다.
+ *
+ * 동명 시군구('중구'·'남구')는 시도가 달라도 코드가 같다 — 시도 코드와 함께 써야 유일해진다.
  * 검색은 시도 코드를 우선하므로(§destinationRegionFilter) 실제 혼동은 나지 않는다.
  */
 export function toSigunguCode(label: string | null | undefined): string | null {
@@ -201,7 +207,8 @@ export function toSigunguCode(label: string | null | undefined): string | null {
   );
   if (alias) return alias[0];
   const stripped = normalized.replace(/(특별자치시|자치시|시|군|구)$/, '');
-  return stripped || null;
+  if (!stripped) return null;
+  return stripped.length === 1 ? normalized : stripped;
 }
 
 /**

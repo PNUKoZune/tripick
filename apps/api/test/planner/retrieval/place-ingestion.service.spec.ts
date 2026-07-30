@@ -62,9 +62,57 @@ describe('PlaceIngestionService 지역 타깃 해석', () => {
       '51',
       '강원특별자치도',
       4,
-      1,
+      0,
       expect.anything(),
     );
+  });
+
+  it('append 는 오프셋 커서를 이어받아 저장한다', async () => {
+    const deps = mockDeps();
+    deps.cursors.getNextOffset.mockResolvedValue(250);
+    deps.tourApi.fetchByArea.mockResolvedValue({
+      places: [],
+      nextOffset: 350,
+      quotaExceeded: false,
+    });
+    const service = build(deps);
+
+    await service.ingest({
+      regions: ['강원'],
+      sources: ['tour'],
+      maxPerRegion: 100,
+      append: true,
+    });
+
+    expect(deps.tourApi.fetchByArea).toHaveBeenCalledWith(
+      '51',
+      '강원특별자치도',
+      100,
+      250,
+      expect.anything(),
+    );
+    expect(deps.cursors.setNextOffset).toHaveBeenCalledWith('강원특별자치도', 'tour', 350);
+  });
+});
+
+/**
+ * 임베딩 텍스트에 수집 라벨이 들어가 같은 장소가 타깃마다 다른 해시를 갖던 회귀를 막는다.
+ * (해시가 흔들리면 증분 적재가 무력화되고 매 실행 재임베딩된다)
+ */
+describe('PlaceIngestionService 임베딩 텍스트 안정성', () => {
+  it('같은 장소는 시도 타깃·시군구 타깃에서 같은 텍스트 해시를 갖는다', async () => {
+    const sido = mockDeps();
+    await build(sido).ingest({ regions: ['강원'], sources: ['kakao'], maxPerRegion: 4 });
+
+    const sigungu = mockDeps();
+    await build(sigungu).ingest({ regions: ['속초'], sources: ['kakao'], maxPerRegion: 4 });
+
+    const hashOf = (deps: MockDeps): unknown =>
+      deps.repository.upsertPlace.mock.calls[0]![0].textHash;
+    // 수집 라벨은 다르지만('강원특별자치도' vs '속초') 주소에서 파생한 정본 코드는 같다.
+    expect(sido.repository.upsertPlace.mock.calls[0]![0].region).toBe('강원특별자치도');
+    expect(sigungu.repository.upsertPlace.mock.calls[0]![0].region).toBe('속초');
+    expect(hashOf(sido)).toBe(hashOf(sigungu));
   });
 });
 
@@ -75,7 +123,7 @@ function mockDeps() {
     config: { get: jest.fn((_key: string, fallback?: unknown) => fallback) },
     tourApi: {
       fetchSidoList: jest.fn().mockResolvedValue([{ code: '51', name: '강원특별자치도' }]),
-      fetchByArea: jest.fn().mockResolvedValue({ places: [], nextPage: 1, quotaExceeded: false }),
+      fetchByArea: jest.fn().mockResolvedValue({ places: [], nextOffset: 0, quotaExceeded: false }),
       createCallBudget: jest.fn(() => ({ isExhausted: false, consume: () => true })),
     },
     kakaoLocal: {
@@ -104,7 +152,7 @@ function mockDeps() {
       upsertPlace: jest.fn().mockResolvedValue(undefined),
       updateOpeningHours: jest.fn().mockResolvedValue(undefined),
     },
-    cursors: { getNextPage: jest.fn().mockResolvedValue(1), setNextPage: jest.fn() },
+    cursors: { getNextOffset: jest.fn().mockResolvedValue(0), setNextOffset: jest.fn() },
   };
 }
 
