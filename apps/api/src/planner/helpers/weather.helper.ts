@@ -238,10 +238,19 @@ export class WeatherHelper implements OnModuleDestroy {
     }
   }
 
-  buildWeatherHint(forecasts: Map<string, ParsedForecast>): string {
+  /**
+   * 강수 시간대를 뽑아 플래너 프롬프트용 한 줄 힌트로 만든다.
+   *
+   * `dates`(`YYYYMMDD`)를 주면 그 날짜의 예보만 본다. 부분 재계획이 2일차만 다시 짤 때
+   * 1·3일차 강수 시간대까지 힌트에 실리면, LLM 이 다시 짜지도 않는 날의 비를 피하려고
+   * 실내 장소를 당겨 배치한다. 생략하면 예보맵 전체(= 여행 전체 생성).
+   */
+  buildWeatherHint(forecasts: Map<string, ParsedForecast>, dates?: string[]): string {
     const rainySlots: string[] = [];
+    const scope = dates && dates.length > 0 ? new Set(dates) : null;
 
     for (const [key, forecast] of forecasts) {
+      if (scope && !scope.has(forecast.date)) continue;
       if (
         (forecast.precipitationProbability ?? 0) >= 60 ||
         (forecast.precipitationType !== undefined && forecast.precipitationType > 0)

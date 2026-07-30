@@ -129,8 +129,7 @@ function defaultValue(key: string): string {
 function baseOptions(): PlannerAgentOptions {
   return {
     destination: '부산',
-    startDate: '2026-07-01',
-    endDate: '2026-07-01',
+    dayDates: ['2026-07-01'],
     wakeTime: '09:00',
     sleepTime: '22:00',
     transportMode: 'transit',

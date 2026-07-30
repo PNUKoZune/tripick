@@ -10,8 +10,13 @@ import {
 
 export interface PlannerAgentOptions {
   destination: string;
-  startDate: string;
-  endDate: string;
+  /**
+   * 계획할 각 day 의 실제 날짜(`YYYY-MM-DD`). 인덱스 i = 프롬프트상 `day` i+1.
+   * 부분 재계획이면 대상 일차의 날짜만 들어오고, `[1,3]` 처럼 **연속이 아닐 수 있다** —
+   * 그래서 시작·종료일 두 값이 아니라 날짜 목록을 넘긴다(두 값은 비연속 범위를 표현하지 못해
+   * `dayCount` 와 어긋난 기간을 프롬프트에 실었다). 길이는 항상 `dayCount` 와 같다.
+   */
+  dayDates: string[];
   wakeTime: string;
   sleepTime: string;
   transportMode: RouteMode;
@@ -134,6 +139,7 @@ export class PlannerAgentService {
         'Do not create new places.',
         `Return exactly ${Math.min(targetCount, options.candidates.length)} items if possible.`,
         `day must be between 1 and ${options.dayCount}.`,
+        'day 의 실제 날짜는 trip.days 를 따른다. 날짜가 연속이 아닐 수 있으므로 day 간 간격을 이어진 하루로 가정하지 않는다.',
         `order must be between 1 and ${options.itemsPerDay}.`,
         `일정 강도별 기본 ${options.minimumItemsPerDay}개는 최소 기준이지 상한이 아니다. 활동 시간이 길어 계산된 하루 목표 ${options.itemsPerDay}개를 가능한 모두 사용한다.`,
         'durationMin must be 45-150.',
@@ -172,8 +178,7 @@ export class PlannerAgentService {
       },
       trip: {
         destination: options.destination,
-        startDate: options.startDate,
-        endDate: options.endDate,
+        days: options.dayDates.map((date, index) => ({ day: index + 1, date })),
         wakeTime: options.wakeTime,
         sleepTime: options.sleepTime,
         transportMode: options.transportMode,
