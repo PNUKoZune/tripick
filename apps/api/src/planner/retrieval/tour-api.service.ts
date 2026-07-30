@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { OPENING_HOURS_FIELD, parseOpeningHours } from './opening-hours.parser';
 import { isTravelCourseArticle } from './place-name-quality';
+import { isPlausibleKoreanCoordinate } from './place-eligibility';
 import { parseSigungu } from './place-seeds';
 import type { IngestPlace } from './ingestion.types';
 import type { Coordinates } from '@tripick/types';
@@ -541,7 +542,9 @@ export class TourApiService {
   private toIngestPlace(row: TourAreaItem, region: string): IngestPlace | null {
     const lat = Number(row.mapy);
     const lng = Number(row.mapx);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+    // KTO 가 일부 항목에 placeholder 좌표를 준다(실측: 3행이 전부 남중국해 `19.694, 117.993`).
+    // non-finite·(0,0) 만 막던 시절엔 통과해 지도 마커가 바다에 찍히고 이동시간이 수천 km 가 됐다.
+    if (!isPlausibleKoreanCoordinate({ lat, lng })) {
       return null;
     }
     const name = String(row.title ?? '').trim();

@@ -178,7 +178,6 @@ export class CragEvaluatorService {
     const locality = this.localityScore(candidate, context, penalties);
     const contextScore = this.contextScore(candidate, tags, context);
     const availability = this.availabilityScore(candidate, context, penalties);
-    const dataQuality = this.dataQualityScore(candidate, penalties);
     const popularity = this.popularityScore(candidate, context, penalties);
     // 네이버 인지도 항을 더해 마이너 장소를 후순위로 민다.
     // 인덱스 비활성 시 popularity=중립값이라 나머지 항 비율만 유지되고 순위는 불변.
@@ -188,8 +187,7 @@ export class CragEvaluatorService {
         popularity * weights.popularity +
         locality * weights.locality +
         contextScore * weights.context +
-        availability * weights.availability +
-        dataQuality * weights.dataQuality,
+        availability * weights.availability,
     );
 
     const crag: CragScore = {
@@ -199,7 +197,6 @@ export class CragEvaluatorService {
       locality,
       context: contextScore,
       availability,
-      dataQuality,
       popularity,
       matchedTags,
       penalties,
@@ -343,17 +340,6 @@ export class CragEvaluatorService {
     if (visitMinutes >= start && visitMinutes <= end) return neutral;
     penalties.push('closed-at-target-time');
     return 0.25;
-  }
-
-  private dataQualityScore(candidate: RawPlaceCandidate, penalties: string[]): number {
-    let score = 0.35;
-    if (candidate.name) score += 0.15;
-    if (candidate.address) score += 0.15;
-    if (candidate.coordinates) score += 0.2;
-    if (candidate.category) score += 0.1;
-    if (candidate.kakaoPlaceId || candidate.tourismApiId) score += 0.05;
-    if (!candidate.address) penalties.push('missing-address');
-    return this.clamp(score);
   }
 
   private distanceScore(from: Coordinates, to: Coordinates): number {

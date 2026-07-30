@@ -44,7 +44,6 @@ export interface TermWeights {
   locality: number;
   context: number;
   availability: number;
-  dataQuality: number;
 }
 
 export type RestTerm = Exclude<keyof TermWeights, 'retrieval'>;
@@ -55,8 +54,8 @@ export type RestTerm = Exclude<keyof TermWeights, 'retrieval'>;
  *
  * ## ⚠️ "일 안 하는 항의 가중을 일하는 항으로 옮기기"도 시도했고 효과가 없었다
  *
- * penalty 발동률을 재면 항이 세 갈래로 갈린다 — locality **0%**, dataQuality **0%**,
- * availability 1.6%(방문 시각 주입 시), popularity 77.5% (11케이스 1,441후보).
+ * penalty 발동률을 재면 항이 갈린다 — locality **0%**, availability 1.6%(방문 시각 주입 시),
+ * popularity 77.5% (11케이스 1,441후보).
  * 그래서 발동 0% 인 항의 가중을 taste·popularity 로 몰아주는 배율 노브를 만들어 스윕했는데
  * 전 구간에서 **R@5 0.231 · MRR 0.841 이 소수점까지 동일**했고, 가드를 0 으로 없앤 구간에서만
  * R\|cat 이 0.585→0.575 로 내려갔다.
@@ -70,10 +69,15 @@ export type RestTerm = Exclude<keyof TermWeights, 'retrieval'>;
  * 리스크지 이득이 아니다. 그래서 갈래별 배율 노브는 폐기하고 단순 비례 배분으로 되돌렸다.
  *
  * 이 항들을 정말 개선하려면 가중치가 아니라 다음을 손대야 한다:
- *   - availability: 영업시간 커버리지가 544/10,481(5.2%)이라 대부분 중립값이다. 그리고 영업시간
- *     밖 후보를 실제로 막는 건 이 항(총점 0.037 차이)이 아니라
+ *   - availability: 영업시간 커버리지가 544/10,481(5.2%)이고 천장이 43%(카카오 전용은 영구 불가)라
+ *     대부분 중립값이다. 그리고 영업시간 밖 후보를 실제로 막는 건 이 항(총점 0.037 차이)이 아니라
  *     [ConstraintEngine.checkOpeningHours](../constraint/constraint.engine.ts) 의 하드 검증이다.
- *   - dataQuality: 전 후보 1.000 인 순수 상수. 주소 없는 행이 문제면 적격성 필터가 맞다.
+ *     그래서 가점을 없애고 **감점 전용**으로 바꿨다.
+ *   - dataQuality: **제거했다.** 전 후보 1.000 인 순수 상수였고, 다섯 검사 중 넷(name·address·
+ *     coordinates·category)은 `PlaceDto` 가 그 필드를 필수로 두고 있어 **타입상 도달 불가**였다.
+ *     실효 차이는 id 가 없는 seed 후보에게 총점 0.004 뿐. 방어가 필요한 건 좌표 불량이었고
+ *     (KTO placeholder 좌표 3행), 그건 점수 감점이 아니라 적격성 게이트로 옮겼다
+ *     ([place-eligibility.ts](./place-eligibility.ts) `isPlausibleKoreanCoordinate`).
  *   - locality: 지역 밖 후보는 **카카오 폴백 경로에서만** 들어오는데 골든셋 11케이스는 전부
  *     pgvector 단독이다. 즉 이 항은 골든셋으로 검증 불가 — 폴백 케이스를 넣기 전에는 만지지 않는다.
  */
@@ -83,7 +87,6 @@ const REST_RATIOS: Record<RestTerm, number> = {
   locality: 0.16,
   context: 0.13,
   availability: 0.09,
-  dataQuality: 0.06,
 };
 
 /** 스윕 결과 무릎값. `CRAG_RETRIEVAL_WEIGHT` 로 덮을 수 있다. */
@@ -114,7 +117,6 @@ export function termWeights(retrievalWeight = DEFAULT_RETRIEVAL_WEIGHT): TermWei
     locality: REST_RATIOS.locality * scale,
     context: REST_RATIOS.context * scale,
     availability: REST_RATIOS.availability * scale,
-    dataQuality: REST_RATIOS.dataQuality * scale,
   };
 }
 

@@ -96,4 +96,45 @@ describe('isEligibleItineraryCandidate', () => {
       ).toBe(true);
     }
   });
+
+  describe('좌표 타당성', () => {
+    const seoulPark = {
+      name: '계남근린공원',
+      category: 'attraction',
+      categoryDetail: '여행 > 관광,명소 > 공원',
+    };
+
+    it('국내 범위 밖 좌표는 후보에서 뺀다 (KTO placeholder 좌표)', () => {
+      // 실측: 서울·세종 3행이 전부 `19.694, 117.993`(남중국해)로 적재돼 있었다.
+      expect(
+        isEligibleItineraryCandidate({
+          ...seoulPark,
+          coordinates: { lat: 19.69442748, lng: 117.9925662504 },
+        }),
+      ).toBe(false);
+    });
+
+    it('국토 끝단은 통과한다 (마라도·백령도·독도·고성)', () => {
+      const edges = [
+        { lat: 33.06, lng: 126.27 }, // 마라도
+        { lat: 37.96, lng: 124.63 }, // 백령도
+        { lat: 37.24, lng: 131.87 }, // 독도
+        { lat: 38.61, lng: 128.35 }, // 고성 통일전망대
+      ];
+      for (const coordinates of edges) {
+        expect(isEligibleItineraryCandidate({ ...seoulPark, coordinates })).toBe(true);
+      }
+    });
+
+    it('(0,0)·NaN 도 막는다', () => {
+      expect(isEligibleItineraryCandidate({ ...seoulPark, coordinates: { lat: 0, lng: 0 } })).toBe(false);
+      expect(
+        isEligibleItineraryCandidate({ ...seoulPark, coordinates: { lat: Number.NaN, lng: 127 } }),
+      ).toBe(false);
+    });
+
+    it('좌표가 없는 입력은 이 규칙으로 탈락시키지 않는다 (다른 규칙만 적용)', () => {
+      expect(isEligibleItineraryCandidate(seoulPark)).toBe(true);
+    });
+  });
 });

@@ -311,7 +311,6 @@ async function evaluateCase(
         locality: round3(place.crag.locality),
         context: round3(place.crag.context),
         availability: round3(place.crag.availability),
-        dataQuality: round3(place.crag.dataQuality),
         ...(place.crag.personalization !== undefined
           ? { personalization: round3(place.crag.personalization) }
           : {}),

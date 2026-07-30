@@ -259,10 +259,9 @@ async function main() {
         ['locality', (c) => c.crag.locality],
         ['context', (c) => c.crag.context],
         ['availability', (c) => c.crag.availability],
-        ['dataQuality', (c) => c.crag.dataQuality],
         ['personalization', (c) => c.crag.personalization],
       ];
-      // 가드 항(locality·availability·dataQuality)이 실제로 발동하는지 — 발동하지 않는 항에
+      // 가드 항(locality·availability)이 실제로 발동하는지 — 발동하지 않는 항에
       // 가중을 주는 것은 일하는 항을 희석하는 것과 같다.
       for (const candidate of scored) {
         for (const penalty of candidate.crag.penalties) {

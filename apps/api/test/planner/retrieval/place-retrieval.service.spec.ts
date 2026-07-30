@@ -69,7 +69,6 @@ function ranked(place: RawPlaceCandidate): CandidatePlace {
       locality: 0.9,
       context: 0.9,
       availability: 0.9,
-      dataQuality: 0.9,
       popularity: 0.5,
       matchedTags: [],
       penalties: [],

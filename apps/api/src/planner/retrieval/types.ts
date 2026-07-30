@@ -35,7 +35,6 @@ export interface CragScore {
   locality: number;
   context: number;
   availability: number;
-  dataQuality: number;
   matchedTags: string[];
   penalties: string[];
   /** 취향 벡터 기반 개인화 점수 (0~1). 벡터가 없으면 undefined */

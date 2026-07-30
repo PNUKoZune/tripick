@@ -296,7 +296,6 @@ describe('CragEvaluatorService', () => {
           locality: 0,
           context: 0,
           availability: 0,
-          dataQuality: 0,
           popularity: 0,
           matchedTags: [],
           penalties: [],
