@@ -200,24 +200,30 @@ export class PlannerService {
       throw new BadRequestException('No place candidates found for itinerary generation');
     }
 
+    // 다시 짜는 일차의 실제 날짜. 프롬프트 day↔날짜 매핑과 날씨 힌트 범위가 이걸 공유한다.
+    const planDates = planDays.map((day) => this.offsetDate(trip.startDate, day - 1));
     const firstCandidate = candidates[0];
     const forecast = firstCandidate
       ? await this.weatherHelper.getExtendedForecast(firstCandidate.coordinates.lat, firstCandidate.coordinates.lng)
       : new Map();
-    const weatherHint = this.weatherHelper.buildWeatherHint(forecast);
+    // 예보맵 키는 기상청 포맷(YYYYMMDD)이라 하이픈을 뗀다. 대상 일차 예보만 힌트에 싣는다.
+    const weatherHint = this.weatherHelper.buildWeatherHint(
+      forecast,
+      planDates.map((date) => date.replace(/-/g, '')),
+    );
     // 단일 지역: AI 플래너가 하루 리듬·카테고리 균형을 맞춘다.
     // 일자별 지역: 각 일차를 그 날 지역 후보로만 채워야 하므로 지역-스코프 결정적 배치를 쓴다
     // (AI 는 여러 지역을 섞어 배치할 위험이 있어 일자별 모드에선 사용하지 않는다).
     // AI 플래너는 항상 1..N(=다시 짜는 일차 수)로 계획하고, 결과를 실제 일차 번호로 되돌린다.
     // 부분 재계획 때문에 프롬프트에 "3일차만" 같은 조건을 넣기보다 범위를 줄여 넘기는 쪽이
-    // 후보 수·day 검증(1..dayCount)과도 어긋나지 않는다.
+    // 후보 수·day 검증(1..dayCount)과도 어긋나지 않는다. 실제 날짜는 dayDates 로 함께 넘긴다 —
+    // 시작·종료일 두 값은 [1,3] 같은 비연속 범위를 표현하지 못해 dayCount 와 어긋났다.
     const agentPlan = perDayMode
       ? this.buildPerDayDeterministicPlan(poolsByDay!, itemsPerDay, planDays)
       : this.remapPlanDays(
           await this.plannerAgent.plan({
             destination: trip.destination,
-            startDate: this.offsetDate(trip.startDate, planDays[0]! - 1),
-            endDate: this.offsetDate(trip.startDate, planDays[planDays.length - 1]! - 1),
+            dayDates: planDates,
             wakeTime,
             sleepTime,
             transportMode: trip.transportMode,

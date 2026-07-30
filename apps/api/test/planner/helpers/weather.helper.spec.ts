@@ -98,6 +98,38 @@ describe('WeatherHelper', () => {
       expect(helper.buildWeatherHint(map)).toContain('강수 예보');
     });
 
+    it('scopes rainy slots to the given dates', () => {
+      const map = new Map([
+        ['20260710_1500', forecast({ date: '20260710', precipitationProbability: 80 })],
+        ['20260712_1500', forecast({ date: '20260712', precipitationProbability: 90 })],
+      ]);
+
+      const hint = helper.buildWeatherHint(map, ['20260712']);
+
+      // 다시 짜지 않는 일차(7/10)의 비까지 실리면 LLM 이 그 날을 피해 실내 장소를 당긴다.
+      expect(hint).toContain('20260712_1500');
+      expect(hint).not.toContain('20260710_1500');
+    });
+
+    it('falls back to fair weather when no slot falls in the given dates', () => {
+      const map = new Map([
+        ['20260710_1500', forecast({ date: '20260710', precipitationProbability: 80 })],
+      ]);
+      expect(helper.buildWeatherHint(map, ['20260712'])).toContain('날씨 양호');
+    });
+
+    it('keeps every slot when no dates are given', () => {
+      const map = new Map([
+        ['20260710_1500', forecast({ date: '20260710', precipitationProbability: 80 })],
+        ['20260712_1500', forecast({ date: '20260712', precipitationProbability: 90 })],
+      ]);
+
+      const hint = helper.buildWeatherHint(map);
+
+      expect(hint).toContain('20260710_1500');
+      expect(hint).toContain('20260712_1500');
+    });
+
     it('caps the listed rainy slots at five', () => {
       const map = new Map(
         Array.from({ length: 8 }, (_, i) => [

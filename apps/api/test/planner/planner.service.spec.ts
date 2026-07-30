@@ -318,13 +318,35 @@ describe('PlannerService 일자별 재계획', () => {
     expect(harness.plannerAgent.plan).toHaveBeenCalledWith(
       expect.objectContaining({
         dayCount: 1,
-        startDate: '2026-07-11',
-        endDate: '2026-07-11',
+        dayDates: ['2026-07-11'],
       }),
     );
     // 플래너는 day: 1 로 계획했지만 저장은 실제 2일차로 되돌아간다.
     const [, , stored] = harness.itineraryService.replaceDayItems.mock.calls[0]!;
     expect(stored[0]?.day).toBe(2);
+  });
+
+  it('비연속 범위는 실제 날짜 목록으로 넘어간다 (연속 2일로 뭉개지지 않는다)', async () => {
+    const harness = createPartialHarness();
+
+    await harness.service.replan({ tripId: TRIP.id, trigger: 'manual', targetDays: [1, 3] });
+
+    // 시작·종료일 두 값이면 7/10~7/12(3일)인데 dayCount 는 2 라 프롬프트가 자기모순이었다.
+    expect(harness.plannerAgent.plan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dayCount: 2,
+        dayDates: ['2026-07-10', '2026-07-12'],
+      }),
+    );
+  });
+
+  it('날씨 힌트는 다시 짜는 일차의 예보만 본다', async () => {
+    const harness = createPartialHarness();
+
+    await harness.service.replan({ tripId: TRIP.id, trigger: 'weather', targetDays: [2] });
+
+    // 1·3일차 강수까지 힌트에 실리면 다시 짜지도 않는 날의 비를 피해 실내 장소가 당겨진다.
+    expect(harness.weatherHelper.buildWeatherHint).toHaveBeenCalledWith(expect.anything(), ['20260711']);
   });
 
   it('유지되는 일차에 이미 있는 장소는 후보에서 뺀다', async () => {
@@ -416,7 +438,7 @@ function createPartialHarness() {
     constraintEngine as any,
   );
 
-  return { service, itineraryService, plannerAgent, placeRetrieval };
+  return { service, itineraryService, plannerAgent, placeRetrieval, weatherHelper };
 }
 
 function savedItem(id: string, day: number, name: string, scheduledAt: string) {
