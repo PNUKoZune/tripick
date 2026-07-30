@@ -9,7 +9,8 @@ import {
   normalizeDestinationRegion,
   regionPrefixStem,
 } from './place-seeds';
-import { destinationRegionFilter, placeRegionCodes } from './region-code';
+import { SAME_PLACE_RADIUS_M, normalizeCatalogName } from './near-duplicate';
+import { destinationRegionFilter, placeRegionCodes, sidoCodesForLabel } from './region-code';
 import type { RawPlaceCandidate } from './types';
 
 export interface UpsertPlaceInput {
@@ -208,12 +209,24 @@ export class PlaceEmbeddingRepository {
     }
   }
 
-  async countSeededRegion(destination: string): Promise<number> {
-    const region = normalizeDestinationRegion(destination);
+  /**
+   * 이 목적지 검색이 실제로 후보를 얻을 수 있는 행 수. **검색과 같은 정본 코드로 센다.**
+   *
+   * 예전 게이트(`countSeededRegion`)는 seed 슬러그 라벨(`destination_region='seoul'`)만 셌다.
+   * 적재는 '서울특별시' 로 넣으므로 카탈로그가 1만 행 있어도 0 으로 보고 매번 시드를 주입했다.
+   * 지역 라벨 없는 행(폴백 시드)은 세지 않는다 — 그 몇 건이 모든 지역을 '적재됨'으로 위장한다.
+   * 지역 코드가 안 잡히는 목적지(자유 입력)는 0 — 그런 목적지에 넣을 지역 시드가 애초에 없다.
+   */
+  async countRegionCandidates(destination: string): Promise<number> {
+    const { sido, sigungu } = destinationRegionFilter(destination);
+    const column = sido ? 'region_code' : sigungu ? 'sigungu_code' : null;
+    const code = sido ?? sigungu;
+    if (!column || !code) return 0;
     try {
       const rows: Array<{ count: string }> = await this.dataSource.query(
-        'SELECT COUNT(*)::text AS count FROM place_embeddings WHERE lower(destination_region) = $1',
-        [region],
+        `SELECT COUNT(*)::text AS count FROM place_embeddings
+         WHERE embedding IS NOT NULL AND ${column} = $1`,
+        [code],
       );
       return Number(rows[0]?.count ?? 0);
     } catch {
@@ -226,6 +239,16 @@ export class PlaceEmbeddingRepository {
     embed: (text: string) => Promise<number[]>,
   ): Promise<number> {
     const region = normalizeDestinationRegion(destination);
+    // 폴백 시드(DEFAULT_SEEDS)는 DB 에 넣지 않는다 — 라벨이 'default' 라 region_code·sigungu_code
+    // 가 둘 다 null 이 되고, 그러면 지역 필터의 unlabeled 예외로 **모든 목적지 검색**에 후보로
+    // 남는다. 좌표도 서울 도심 고정이라 다른 지역 여행의 동선을 깨뜨린다. 카탈로그가 빈 목적지는
+    // PlaceRetrievalService 의 인메모리 seed 폴백(getSeedCandidates)이 이미 커버한다.
+    if (region === 'default') {
+      this.logger.log(
+        `[${destination}] 전용 seed 카탈로그가 없어 DB 시딩을 건너뜁니다 (검색 단계 인메모리 폴백 사용).`,
+      );
+      return 0;
+    }
     const seeds = getSeedPlaces(destination);
     let inserted = 0;
 
@@ -296,6 +319,43 @@ export class PlaceEmbeddingRepository {
           openingHours: row.opening_hours,
         }
       : null;
+  }
+
+  /**
+   * ID 가 다른 **같은 물리적 장소**의 기존 행을 이름+좌표로 찾는다. 없으면 null.
+   *
+   * 왜 필요한가 — 적재 dedupe(이름+좌표)는 **한 실행 안에서만** 돌고, DB 조회는 ID
+   * (kakao_place_id / tourism_api_id)로만 한다. 그래서 KTO 가 먼저 넣은 장소를 다음 실행의
+   * 카카오가 다른 ID 로 다시 넣어 같은 장소가 두 행이 됐다(실측 카탈로그에 250m 이내 동명 쌍
+   * 138개, 거의 전부 소스 교차). 검색 단계 collapseNearDuplicates 가 접어 주므로 사용자에게는
+   * 안 보이지만 카탈로그는 계속 커지고 후보 풀 자리를 나눠 쓴다.
+   *
+   * 거리 식은 near-duplicate 의 `metersBetween` 과 같은 평면 근사를 쓴다 — 같은 판정이
+   * JS·SQL 두 곳에서 갈리지 않아야 한다.
+   */
+  async findSamePlace(
+    name: string,
+    coordinates: Coordinates,
+  ): Promise<{ id: string; openingHours: string | null } | null> {
+    const rows: Array<{ id: string; opening_hours: string | null }> = await this.dataSource.query(
+      `SELECT id, opening_hours FROM (
+         SELECT id,
+                opening_hours,
+                sqrt(
+                  power((((coordinates->>'lat')::double precision) - $2) * 111000, 2)
+                  + power((((coordinates->>'lng')::double precision) - $3) * 88000, 2)
+                ) AS distance_m
+         FROM place_embeddings
+         WHERE replace(lower(name), ' ', '') = $1
+           AND coordinates IS NOT NULL
+       ) candidates
+       WHERE distance_m <= $4
+       ORDER BY distance_m
+       LIMIT 1`,
+      [normalizeCatalogName(name), coordinates.lat, coordinates.lng, SAME_PLACE_RADIUS_M],
+    );
+    const row = rows[0];
+    return row ? { id: row.id, openingHours: row.opening_hours } : null;
   }
 
   /**
@@ -446,24 +506,39 @@ export class PlaceEmbeddingRepository {
    * 라벨 표기가 섞여 있어도(옛 단축명 '대구' vs 새 법정동 풀네임 '대구광역시' vs seed 슬러그 'daegu')
    * 어간 프리픽스로 함께 지워 임베딩 공간을 깨끗하게 재생성한다.
    * 예: region='대구광역시' → 어간 '대구' → '대구%' 로 '대구'·'대구광역시' 모두 삭제.
+   *
+   * **정본 코드(region_code)로도 함께 지운다** — 라벨만 보면 시군구 단위 타깃으로 적재된 행
+   * ('속초'·'강릉')이 시도 어간('강원%')에 안 걸려 옛 모델 벡터로 남는다. 그 혼재를 막는 게
+   * reseed 의 목적이므로 라벨 표기와 무관하게 그 시도 소재 행을 전부 지운다(이웃 지역 적재에서
+   * 국경을 넘어 들어온 행도 포함 — 그 장소의 소재지가 이 시도라면 이 시도의 재적재 대상이다).
+   * 시도로 안 잡히는 라벨(시군구 단위 타깃)은 코드가 없어 라벨 조건만 적용된다 — '속초' reseed 가
+   * 강원 전체를 비우지 않는다.
    */
   async deleteRegion(region: string): Promise<number> {
     const raw = region.toLowerCase();
-    const normalized = normalizeDestinationRegion(region);
+    // seed 슬러그 라벨('seoul'·'gyeongju')도 함께 지우되 'default' 는 제외한다 —
+    // normalizeDestinationRegion 은 4개 슬러그 밖 지역을 전부 'default' 로 떨어뜨리므로
+    // 그대로 쓰면 '강원특별자치도' reseed 가 다른 지역의 폴백 시드까지 지운다.
+    const slug = normalizeDestinationRegion(region);
+    const slugKey = slug === 'default' ? null : slug;
     const stem = regionPrefixStem(region).toLowerCase();
     const stemLike = stem ? `${stem}%` : null; // 어간이 비면(비정상 입력) 전체 삭제 방지 위해 미적용
+    // 통합 라벨('전남광주통합특별시')은 두 시도를 포괄하므로 코드가 여러 개다.
+    const codes = sidoCodesForLabel(region);
+    const codeList = codes.length > 0 ? codes : null;
     // CTE 로 삭제 후 개수를 SELECT 한다. DELETE ... RETURNING 을 dataSource.query 로 직접 받으면
     // 드라이버가 [rows, affected] 형태를 돌려줘 rows.length 가 실제 삭제 수와 어긋난다.
     const rows: Array<{ count: string }> = await this.dataSource.query(
       `WITH deleted AS (
          DELETE FROM place_embeddings
          WHERE lower(destination_region) = $1
-            OR lower(destination_region) = $2
+            OR ($2::text IS NOT NULL AND lower(destination_region) = $2)
             OR ($3::text IS NOT NULL AND lower(destination_region) LIKE $3)
+            OR ($4::text[] IS NOT NULL AND region_code = ANY($4::text[]))
          RETURNING 1
        )
        SELECT COUNT(*)::text AS count FROM deleted`,
-      [raw, normalized, stemLike],
+      [raw, slugKey, stemLike, codeList],
     );
     return Number(rows[0]?.count ?? 0);
   }

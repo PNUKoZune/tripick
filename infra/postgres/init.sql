@@ -91,11 +91,34 @@ CREATE INDEX IF NOT EXISTS idx_place_embeddings_region_name
 CREATE INDEX IF NOT EXISTS idx_place_embeddings_kakao_place_id
   ON place_embeddings (kakao_place_id);
 
--- 적재 페이지 커서 (append 모드: 반복 실행 시 지역·소스별로 다음 페이지부터 이어 적재)
+-- 소스 간 중복 판정용 정규화 이름 인덱스 (findSamePlace).
+-- 적재가 신규 후보마다 되묻는 조회라 없으면 매 건이 전체 스캔이고 카탈로그 크기에 선형으로 악화된다.
+-- 인덱스 식은 질의 식과 문자까지 같아야 계획기가 쓴다.
+CREATE INDEX IF NOT EXISTS idx_place_embeddings_normalized_name
+  ON place_embeddings ((replace(lower(name), ' ', '')));
+
+-- 적재 커서 (append 모드: 반복 실행 시 지역·소스별로 다음 지점부터 이어 적재)
+-- 단위는 페이지가 아니라 행 오프셋이다 — 페이지 번호는 그 실행의 배치 크기(--max)에 묶여
+-- 있어서, 쓴 실행과 읽는 실행의 --max 가 다르면 같은 숫자가 다른 구간을 뜻한다.
 CREATE TABLE IF NOT EXISTS ingest_cursors (
-  region     TEXT NOT NULL,      -- 시도 라벨 (예: 경상북도)
-  source     TEXT NOT NULL,      -- 'tour' 등 소스
-  next_page  INTEGER NOT NULL DEFAULT 1,  -- 다음 실행이 읽을 페이지. 끝에 도달하면 1로 wrap
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  region      TEXT NOT NULL,      -- 시도 라벨 (예: 경상북도)
+  source      TEXT NOT NULL,      -- 'tour' 등 소스
+  next_offset INTEGER NOT NULL DEFAULT 0,  -- 다음 실행이 읽을 행 오프셋. 끝에 도달하면 0으로 wrap
+  updated_at  TIMESTAMPTZ DEFAULT NOW(),
   PRIMARY KEY (region, source)
 );
+
+-- 기존 볼륨(page 커서)을 오프셋으로 환산해 컬럼을 교체한다 (재실행 안전).
+-- 옛 기본 배치 100 을 가정한 근사이며, 내림 환산이라 이미 읽은 구간을 다시 확인할 뿐 건너뛰지 않는다.
+ALTER TABLE ingest_cursors ADD COLUMN IF NOT EXISTS next_offset INTEGER NOT NULL DEFAULT 0;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'ingest_cursors' AND column_name = 'next_page'
+  ) THEN
+    UPDATE ingest_cursors SET next_offset = GREATEST(0, (next_page - 1) * 100)
+    WHERE next_offset = 0;
+    ALTER TABLE ingest_cursors DROP COLUMN next_page;
+  END IF;
+END $$;

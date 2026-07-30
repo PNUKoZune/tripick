@@ -28,6 +28,35 @@ import { regionSearchStem } from './place-seeds';
 const CONTAINMENT_MAX_KM = 2;
 
 /**
+ * **카탈로그 행 수준**에서 같은 물리적 장소로 볼 최대 거리(m). 위 §② 의 2km(검색 결과에서
+ * 이름 포함 관계를 접는 폭)와 목적이 다르다 — 이 값은 "이름이 같고 이만큼 가까우면 한 장소이니
+ * 행을 두 개 만들지 않는다"는 적재 판정이라 훨씬 보수적이어야 한다.
+ *
+ * 250m 근거 — 카탈로그 실측에서 이름이 같은 쌍 376개의 거리 분포는 0~100m 114쌍, 100~200m 24,
+ * 200~300m 10, 300~400m 11, 400~500m 8, 500m 초과 209였다. 400m 까지는 **전부 소스 교차**
+ * (한쪽 KTO·한쪽 카카오)로 같은 장소를 다르게 지오코딩한 것이고(대전오월드 311m,
+ * 국립중앙과학관 381m 처럼 넓은 시설의 입구 vs 중심), 400m 를 넘어서면 교차 비율이 떨어지며
+ * 500m 초과 209쌍은 도시마다 있는 동명 장소('중앙시장' 등)다. 즉 무릎은 400m 부근이지만,
+ * 잘못 합치면 실재하는 장소가 사라지는 방향이라 KTO 이름 검색 매칭과 같은 250m 를 쓴다
+ * (남는 100~400m 잔여는 검색 단계의 collapseNearDuplicates 가 접어 사용자에게는 안 보인다).
+ */
+export const SAME_PLACE_RADIUS_M = 250;
+
+/** 카탈로그 이름 비교용 정규화(공백 제거·소문자). 적재 dedupe·정리 CLI·SQL 이 같은 규칙을 쓴다. */
+export function normalizeCatalogName(name: string): string {
+  return compactName(name);
+}
+
+/**
+ * 두 좌표의 거리(m). 위도 1도=111km, 경도 1도≈88km(위도 37.5° 보정) 평면 근사 —
+ * 국내 단거리에서 오차 1% 미만이고, place-embedding.repository 의 SQL 이 같은 식을 쓴다
+ * (같은 판정이 JS·SQL 두 곳에서 갈리지 않게 하려면 근사식도 같아야 한다).
+ */
+export function metersBetween(from: Coordinates, to: Coordinates): number {
+  return distanceKm(from, to) * 1000;
+}
+
+/**
  * 포함 관계 판정에 요구하는 최소 이름 길이(공백 제거). 2글자 이름은 우연한 포함이 흔하다
  * — 카페 '담다'·'연다' 가 '연다방' 을 삼키는 식이라, 인지도 매칭의 `MIN_COUNTABLE_LENGTH`
  * 와 같은 3자 하한을 쓴다. **4로 올리면 안 된다** — '한라산'(3자)이 '한라산국립공원'을

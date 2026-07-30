@@ -4,6 +4,7 @@ import axios from 'axios';
 import { OPENING_HOURS_FIELD, parseOpeningHours } from './opening-hours.parser';
 import { isTravelCourseArticle } from './place-name-quality';
 import { isPlausibleKoreanCoordinate } from './place-eligibility';
+import { SAME_PLACE_RADIUS_M } from './near-duplicate';
 import { parseSigungu } from './place-seeds';
 import type { IngestPlace } from './ingestion.types';
 import type { Coordinates } from '@tripick/types';
@@ -189,12 +190,6 @@ export class KtoCallBudget {
 export class TourApiService {
   private readonly logger = new Logger(TourApiService.name);
   private readonly BASE = 'https://apis.data.go.kr/B551011/KorService2';
-  /**
-   * 이름 검색 후보를 같은 장소로 인정할 좌표 반경(m). KTO 좌표와 카카오/사용자 좌표는
-   * 지오코딩 출처가 달라 같은 장소도 수십~수백 m 어긋나므로, 적재 dedupe(≈100m)보다
-   * 여유 있게 잡되 인접 타지점(보통 수백 m~km)은 배제되도록 250m 로 둔다.
-   */
-  private static readonly MATCH_RADIUS_M = 250;
 
   constructor(private readonly config: ConfigService) {}
 
@@ -220,20 +215,26 @@ export class TourApiService {
   }
 
   /**
-   * 특정 법정동 시도(lDongRegnCd)의 관광 장소를 startPage 부터 최대 maxItems 건 수집한다.
-   * numOfRows=maxItems(≤100)로 페이지를 나눠, append 모드가 커서(nextPage)를 이어받아
-   * 매 실행 다른 페이지를 읽게 한다. 끝에 도달하면 nextPage=1 로 wrap.
-   * @returns places 와 다음 실행이 읽을 페이지(nextPage)
+   * 특정 법정동 시도(lDongRegnCd)의 관광 장소를 startOffset 행부터 최대 maxItems 건 수집한다.
+   * numOfRows=maxItems(≤100)로 페이지를 나눠, append 모드가 커서(nextOffset)를 이어받아
+   * 매 실행 다른 구간을 읽게 한다. 끝에 도달하면 nextOffset=0 으로 wrap.
+   *
+   * 커서를 **행 오프셋**으로 주고받는 이유 — 페이지 번호는 그 실행의 배치 크기에 묶여 있어서
+   * `--max` 를 바꾸면 같은 커서가 다른 구간을 뜻한다. KTO 는 pageNo·numOfRows 만 받으므로
+   * 오프셋을 페이지 경계로 **내림** 정렬해 쓴다 — 내림이면 이미 읽은 구간을 다시 확인할 뿐이고
+   * (텍스트 해시가 같아 unchanged), 올림이면 그 사이 행을 영구히 건너뛴다.
+   *
+   * @returns places 와 다음 실행이 읽을 행 오프셋(nextOffset)
    */
   async fetchByArea(
     lDongRegnCd: string,
     region: string,
     maxItems: number,
-    startPage = 1,
+    startOffset = 0,
     budget?: KtoCallBudget,
-  ): Promise<{ places: IngestPlace[]; nextPage: number; quotaExceeded: boolean }> {
+  ): Promise<{ places: IngestPlace[]; nextOffset: number; quotaExceeded: boolean }> {
     const apiKey = this.apiKey();
-    if (!apiKey) return { places: [], nextPage: startPage, quotaExceeded: false };
+    if (!apiKey) return { places: [], nextOffset: startOffset, quotaExceeded: false };
 
     const batchSize = Math.min(Math.max(1, maxItems), 100); // KTO numOfRows 상한 100
     const pagesToFetch = Math.max(1, Math.ceil(maxItems / batchSize));
@@ -241,7 +242,9 @@ export class TourApiService {
     // 영업시간은 목록(areaBasedList2)에 없고 detailIntro2 로만 온다. 타입별 필드명이
     // 달라 contentTypeId 를 장소와 함께 들고 있어야 한다.
     const pending: Array<{ place: IngestPlace; contentTypeId: string }> = [];
-    let page = startPage;
+    let page = Math.floor(Math.max(0, startOffset) / batchSize) + 1;
+    // 읽은 행 수. 페이지 경계로 내림 정렬한 시작점에서 출발한다.
+    let consumed = (page - 1) * batchSize;
     let ended = false;
     let quotaExceeded = false;
 
@@ -253,6 +256,7 @@ export class TourApiService {
           ended = true;
           break;
         }
+        consumed += rows.length;
         for (const row of rows) {
           const place = this.toIngestPlace(row, region);
           if (!place) continue;
@@ -276,7 +280,7 @@ export class TourApiService {
       }
     }
 
-    return { places: collected, nextPage: ended ? 1 : page, quotaExceeded };
+    return { places: collected, nextOffset: ended ? 0 : consumed, quotaExceeded };
   }
 
   /**
@@ -382,7 +386,7 @@ export class TourApiService {
    * 이름+좌표로 KTO 장소를 찾아 영업시간을 'HH:MM-HH:MM' 로 조회한다.
    * 적재 카탈로그(place_embeddings)에 없는 수동 추가 장소를 런타임에 보강하기 위한 경로.
    *
-   * searchKeyword2(이름) 결과 중 좌표가 coords 와 {@link MATCH_RADIUS_M} 이내인 가장 가까운
+   * searchKeyword2(이름) 결과 중 좌표가 coords 와 {@link SAME_PLACE_RADIUS_M} 이내인 가장 가까운
    * 후보만 채택한다 — 이름 검색은 동명·타지점을 함께 주므로(예: '불국사'→경주/서울)
    * 좌표 대조 없이는 오매칭 위험이 크다. 반경 밖이면 매칭 실패로 보고 undefined.
    * KTO 미등록 장소(카페·프랜차이즈 다수)는 검색 0건 → undefined.
@@ -445,7 +449,7 @@ export class TourApiService {
         const lng = Number(row.mapx);
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
         const distanceM = this.distanceMeters(coords, { lat, lng });
-        if (distanceM > TourApiService.MATCH_RADIUS_M) continue;
+        if (distanceM > SAME_PLACE_RADIUS_M) continue;
         if (!best || distanceM < best.distanceM) {
           best = {
             contentId: String(row.contentid),

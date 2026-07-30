@@ -9,8 +9,9 @@ import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { KtoCallBudget, TourApiService } from './tour-api.service';
 import { PopularPlaceService } from './popular-place.service';
 import { isSeoBusinessName } from './place-name-quality';
+import { SAME_PLACE_RADIUS_M, metersBetween, normalizeCatalogName } from './near-duplicate';
 import { inferPlaceTags, parseSigungu } from './place-seeds';
-import { SIDO_CODES } from './region-code';
+import { SIDO_CODES, placeRegionCodes } from './region-code';
 import type { IngestPlace, IngestRegionResult, IngestSource, IngestSummary } from './ingestion.types';
 
 export interface IngestOptions {
@@ -115,11 +116,13 @@ export class PlaceIngestionService {
       totalInserted: regions.reduce((sum, r) => sum + r.inserted, 0),
       totalUpdated: regions.reduce((sum, r) => sum + r.updated, 0),
       totalUnchanged: regions.reduce((sum, r) => sum + r.unchanged, 0),
+      totalDuplicates: regions.reduce((sum, r) => sum + r.duplicates, 0),
       totalDeleted: regions.reduce((sum, r) => sum + r.deleted, 0),
     };
     this.logger.log(
       `적재 완료: ${regions.length}개 지역, 수집 ${summary.totalFetched}건 → ` +
-        `신규 ${summary.totalInserted} / 갱신 ${summary.totalUpdated} / 유지 ${summary.totalUnchanged} (삭제 ${summary.totalDeleted})`,
+        `신규 ${summary.totalInserted} / 갱신 ${summary.totalUpdated} / 유지 ${summary.totalUnchanged} / ` +
+        `중복 ${summary.totalDuplicates} (삭제 ${summary.totalDeleted})`,
     );
     return summary;
   }
@@ -131,7 +134,11 @@ export class PlaceIngestionService {
    * 그대로 받는다 — popular 은 시도 코퍼스가 넓을수록 그 지역 대표 명소가 묻히기 때문이다
    * (실측: '강원도 여행지 추천' 코퍼스에서 설악산은 언급 8회로 129위, 상위는 시군구명과
    * 도립시설이 차지한다. 설악산 글은 '속초 여행'으로 쓰인다).
-   * tour 는 KTO areaCode 가 있어야 하므로 시도 단위만 가능하고, 안 잡히면 건너뛴다.
+   *
+   * tour 는 KTO 시도 코드(lDongRegnCd)가 있어야 하므로 시도 단위만 가능하다. 그때 **건너뛰는
+   * 건 tour 소스뿐이고 타깃은 살린다** — 예전엔 타깃 자체를 버려서 기본 소스(tour,kakao)로
+   * `--regions=속초` 를 주면 카카오·popular 수집까지 0건이 됐다. 시군구 타깃 적재는
+   * `--sources=popular` 처럼 tour 를 빼야만 가능한 상태였다.
    */
   private resolveRequestedTargets(
     sidos: Array<{ code: string; name: string }>,
@@ -142,16 +149,19 @@ export class PlaceIngestionService {
     const seen = new Set<string>();
     for (const raw of requested) {
       const matched = sidos.filter((s) => s.name.includes(raw));
-      if (matched.length === 0 && sources.includes('tour')) {
-        this.logger.warn(
-          `요청한 지역(${raw})이 KTO 시도 목록에 없어 건너뜁니다 — tour 소스는 시도 단위만 적재합니다.`,
+      if (matched.length === 0) {
+        const usable = sources.filter((source) => source !== 'tour');
+        if (usable.length === 0) {
+          this.logger.warn(
+            `요청한 지역(${raw})이 KTO 시도 목록에 없고 tour 만 요청됐습니다 — 적재할 소스가 없어 건너뜁니다.`,
+          );
+          continue;
+        }
+        this.logger.log(
+          `[${raw}] 시도가 아닌 지역 — 시군구 단위 타깃으로 ${usable.join('·')} 만 적재합니다(tour 는 시도 단위만 가능).`,
         );
-        continue;
       }
       const resolved = matched.length > 0 ? matched : [{ code: '', name: raw }];
-      if (matched.length === 0) {
-        this.logger.log(`[${raw}] 시도가 아닌 지역 — 시군구 단위 타깃으로 적재합니다.`);
-      }
       for (const target of resolved) {
         if (seen.has(target.name)) continue;
         seen.add(target.name);
@@ -211,18 +221,22 @@ export class PlaceIngestionService {
     // 소스 비중을 균형 있게(반반) 맞추고 위치 정확도를 확보한다.
     // append 모드에서 카카오도 이 배치(다른 페이지) 좌표를 따라가 새 지역을 탐색한다.
     let tourPlaces: IngestPlace[] = [];
-    if (sources.includes('tour')) {
+    // 시군구 단위 타깃('속초')·KTO 목록 없는 실행은 시도 코드가 비어 있다. 빈 lDongRegnCd 로
+    // 부르면 지역 필터 없는 전국 조회가 되어 타지역 장소가 이 라벨로 적재되므로 여기서 끊는다.
+    if (sources.includes('tour') && !areaCode) {
+      this.logger.warn(`[${region}] KTO 시도 코드가 없어 tour 수집을 건너뜁니다.`);
+    } else if (sources.includes('tour')) {
       // reseed 는 항상 처음부터. append 는 커서를 이어받되 reseed 와 겹치면 처음부터.
-      const startPage = append && !reseed ? await this.cursors.getNextPage(region, 'tour') : 1;
-      const res = await this.tourApi.fetchByArea(areaCode, region, maxPerRegion, startPage, budget);
+      const startOffset = append && !reseed ? await this.cursors.getNextOffset(region, 'tour') : 0;
+      const res = await this.tourApi.fetchByArea(areaCode, region, maxPerRegion, startOffset, budget);
       tourPlaces = res.places;
       collected.push(...tourPlaces);
       if (append) {
-        await this.cursors.setNextPage(region, 'tour', res.nextPage);
-        if (res.nextPage === 1 && startPage !== 1) {
+        await this.cursors.setNextOffset(region, 'tour', res.nextOffset);
+        if (res.nextOffset === 0 && startOffset !== 0) {
           this.logger.log(`[${region}] tour 마지막 페이지 도달 → 커서 리셋(다음 실행은 상단부터 재확인)`);
         } else {
-          this.logger.log(`[${region}] tour append: page ${startPage} → 다음 커서 ${res.nextPage}`);
+          this.logger.log(`[${region}] tour append: offset ${startOffset} → 다음 커서 ${res.nextOffset}`);
         }
       }
     }
@@ -245,6 +259,7 @@ export class PlaceIngestionService {
     let inserted = 0;
     let updated = 0;
     let unchanged = 0;
+    let duplicates = 0;
     // 재임베딩 없이 영업시간만 채운 건수 (해시가 같아 unchanged 로 분류된 기존 행)
     let openingHoursFilled = 0;
     for (const place of deduped) {
@@ -256,6 +271,27 @@ export class PlaceIngestionService {
         region: place.region,
         name: place.name,
       });
+
+      if (!existing) {
+        // ID 로는 못 찾았지만 같은 장소가 다른 소스 ID 로 이미 있을 수 있다(KTO 가 넣은 곳을
+        // 다음 실행의 카카오가 다시 주워 오는 경로). 새 행을 만들지 않고 건너뛴다.
+        //
+        // 왜 **갱신이 아니라 건너뛰기**인가 — 한 장소의 KTO 표현과 카카오 표현은 카테고리 상세·
+        // 주소 표기가 달라 텍스트가 다르다. 기존 행에 덮어쓰면 실행마다 두 소스가 같은 행의
+        // 텍스트를 번갈아 바꿔 매번 재임베딩되는 churn 이 된다. 먼저 들어온 표현을 정본으로 두면
+        // 해시가 안정되고 임베딩 호출도 안 쓴다.
+        const samePlace = await this.repository.findSamePlace(place.name, place.coordinates);
+        if (samePlace) {
+          // 영업시간만은 예외로 채운다 — 임베딩 텍스트 밖이라 재임베딩을 부르지 않고,
+          // KTO 만 주는 값이라 카카오 행에 영영 안 붙는 걸 막는다(비어 있을 때만).
+          if (place.openingHours && !samePlace.openingHours) {
+            await this.repository.updateOpeningHours(samePlace.id, place.openingHours);
+            openingHoursFilled += 1;
+          }
+          duplicates += 1;
+          continue;
+        }
+      }
 
       // 텍스트·모델이 모두 동일하면 재임베딩 없이 유지 (증분 적재의 핵심)
       if (existing && existing.textHash === textHash && existing.embeddingModel === model) {
@@ -303,10 +339,12 @@ export class PlaceIngestionService {
       inserted,
       updated,
       unchanged,
+      duplicates,
       deleted,
     };
     this.logger.log(
       `[${region}] 수집 ${result.fetched} → dedupe ${result.deduped} → 신규 ${inserted} / 갱신 ${updated} / 유지 ${unchanged} (삭제 ${deleted})` +
+        (duplicates > 0 ? ` · 기존 장소와 중복 ${duplicates}건 건너뜀` : '') +
         (openingHoursFilled > 0 ? ` · 영업시간 backfill ${openingHoursFilled}` : ''),
     );
     return result;
@@ -401,29 +439,36 @@ export class PlaceIngestionService {
 
   /**
    * ID(kakao_place_id / tourism_api_id) 기준 중복 제거에 더해,
-   * 이름+좌표(소수3자리, ≈100m) 기준 중복도 함께 제거한다.
+   * 이름+좌표(반경 {@link SAME_PLACE_RADIUS_M}) 기준 중복도 함께 제거한다.
    * → 소스가 달라(관광공사 vs 카카오) ID 가 다른 같은 물리적 장소도 하나로 합친다.
+   *
+   * 좌표를 소수 3자리 버킷으로 비교하던 시절엔 **DB 조회(findSamePlace)와 판정이 갈렸다** —
+   * 버킷은 경계에 걸친 쌍을 놓쳐서(실측 250m 이내 동명 쌍 138개 중 68개가 버킷 밖) 같은 실행에
+   * 둘 다 통과한 뒤 두 번째가 첫 번째 행을 덮어쓰는 낭비가 생긴다. 두 판정은 같은 규칙이어야 한다.
    */
   private dedupe(places: IngestPlace[]): IngestPlace[] {
     const seenIds = new Set<string>();
-    const seenGeo = new Set<string>();
+    const seenByName = new Map<string, Coordinates[]>();
     const result: IngestPlace[] = [];
     for (const place of places) {
       const idKey =
         (place.kakaoPlaceId && `k:${place.kakaoPlaceId}`) ||
         (place.tourismApiId && `t:${place.tourismApiId}`) ||
         '';
-      const geoKey = `g:${this.normalizeName(place.name)}@${place.coordinates.lat.toFixed(3)},${place.coordinates.lng.toFixed(3)}`;
-      if ((idKey && seenIds.has(idKey)) || seenGeo.has(geoKey)) continue;
+      if (idKey && seenIds.has(idKey)) continue;
+
+      const nameKey = normalizeCatalogName(place.name);
+      const sameName = seenByName.get(nameKey) ?? [];
+      if (sameName.some((seen) => metersBetween(seen, place.coordinates) <= SAME_PLACE_RADIUS_M)) {
+        continue;
+      }
+
       if (idKey) seenIds.add(idKey);
-      seenGeo.add(geoKey);
+      sameName.push(place.coordinates);
+      seenByName.set(nameKey, sameName);
       result.push(place);
     }
     return result;
-  }
-
-  private normalizeName(name: string): string {
-    return name.toLowerCase().replace(/\s+/g, '');
   }
 
   /** 적재 시작 전 임베딩 서버가 실제 벡터를 주는지 확인한다. 해시 폴백이면 중단. */
@@ -487,10 +532,20 @@ export class PlaceIngestionService {
   /**
    * 임베딩 대상 텍스트를 구성한다. 카테고리 상세(카카오 경로/KTO 유형명)와 지역(시도·시군구)을
    * 명시적으로 포함해 질의(destination:… taste:…)와 토큰이 겹치도록 하고 의미 신호를 강화한다.
+   *
+   * 지역은 수집 라벨이 아니라 **정본 코드**를 쓴다. 라벨은 그 행을 어떤 타깃으로 수집했는지에
+   * 따라 달라져서('속초' vs '강원특별자치도'), 같은 장소가 실행마다 다른 텍스트 해시를 갖고
+   * 매번 재임베딩됐다(증분 적재가 무력화되고 라벨이 뒤집힌다). 코드는 주소에서 파생되므로
+   * 어느 타깃으로 수집해도 같다 — 해시가 안정되고 unchanged 로 떨어진다.
    */
   private buildText(place: IngestPlace): string {
     const tags = inferPlaceTags(place).join(', ');
-    const regionLabel = [place.region, place.sigungu].filter(Boolean).join(' ');
+    const { regionCode, sigunguCode } = placeRegionCodes(
+      place.region,
+      place.sigungu ?? null,
+      place.address,
+    );
+    const regionLabel = [regionCode, sigunguCode].filter(Boolean).join(' ');
     return [
       place.name,
       place.categoryDetail || place.category,

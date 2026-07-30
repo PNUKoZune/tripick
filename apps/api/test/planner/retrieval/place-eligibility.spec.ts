@@ -20,6 +20,31 @@ describe('isEligibleItineraryCandidate', () => {
     ).toBe(false);
   });
 
+  it('숙박은 후보에서 뺀다 — toItemType 이 accommodation 을 관광지로 접는다', () => {
+    // 카카오 런타임 폴백은 category_group_code 제한 없이 훑어 AD5 문서를 준다
+    // ('속초 관광지' → 'OO관광호텔'). 규칙 이전에 적재된 행도 이 게이트에서 막힌다.
+    expect(
+      isEligibleItineraryCandidate({
+        name: '속초관광호텔',
+        category: 'accommodation',
+        categoryDetail: '숙박 > 호텔',
+      }),
+    ).toBe(false);
+    expect(
+      isEligibleItineraryCandidate({ name: '골드브라운호텔', category: 'accommodation' }),
+    ).toBe(false);
+  });
+
+  it('호텔 안의 식음 시설은 숙박이 아니다 (카테고리 정본을 본다)', () => {
+    expect(
+      isEligibleItineraryCandidate({
+        name: '워커힐 더뷰',
+        category: 'cafe',
+        categoryDetail: '음식점 > 카페',
+      }),
+    ).toBe(true);
+  });
+
   it('rejects legacy medical candidates even when category detail is missing', () => {
     expect(
       isEligibleItineraryCandidate({

@@ -38,6 +38,8 @@ export interface IngestRegionResult {
   updated: number;
   /** 텍스트 해시·모델 동일해 재임베딩 없이 유지 */
   unchanged: number;
+  /** ID 는 다르지만 이름+좌표가 같은 기존 행이 있어 새 행을 만들지 않은 건수 (소스 간 중복) */
+  duplicates: number;
   /** reseed 시 적재 전 삭제한 기존 벡터 수 */
   deleted: number;
 }
@@ -48,5 +50,6 @@ export interface IngestSummary {
   totalInserted: number;
   totalUpdated: number;
   totalUnchanged: number;
+  totalDuplicates: number;
   totalDeleted: number;
 }
