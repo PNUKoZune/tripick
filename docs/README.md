@@ -57,6 +57,7 @@
 - [preference/catalog-name-quality-v1.md](preference/catalog-name-quality-v1.md) — 카탈로그 이름 품질(일반어 상호 지역 특이도, SEO 상호·여행코스 기사 제거)
 - [preference/crag-term-weight-tuning-v1.md](preference/crag-term-weight-tuning-v1.md) — CRAG 항목 가중치 튜닝(retrieval 0.24→0.06, 유사도 정규화·죽은 가중 재분배 두 부정 결과)
 - [preference/embedding-server-separation-v1.md](preference/embedding-server-separation-v1.md) — 임베딩 서버 분리
+- [preference/place-catalog-integrity-v1.md](preference/place-catalog-integrity-v1.md) — 장소 카탈로그 정합성 점검(적재 타깃·reseed 키·auto-seed 게이트·해시 churn·커서 단위·숙박·소스 간 중복, 영업시간 역조회 6.7% 배제)
 
 ## 알림 · 날씨 · 혼잡 (Alerts)
 
