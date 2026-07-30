@@ -96,6 +96,77 @@ describe('PlaceIngestionService 지역 타깃 해석', () => {
 });
 
 /**
+ * 소스가 달라 ID 가 다른 같은 장소가 실행마다 새 행으로 쌓이던 회귀를 막는다.
+ * (한 실행 안의 dedupe 는 있었지만 DB 조회는 ID 로만 했다)
+ */
+describe('PlaceIngestionService 실행 간 중복', () => {
+  it('같은 장소가 다른 소스 ID 로 이미 있으면 새 행을 만들지 않는다', async () => {
+    const deps = mockDeps();
+    deps.repository.findSamePlace.mockResolvedValue({ id: 'existing-1', openingHours: null });
+    const service = build(deps);
+
+    const summary = await service.ingest({
+      regions: ['속초'],
+      sources: ['kakao'],
+      maxPerRegion: 4,
+    });
+
+    expect(deps.repository.upsertPlace).not.toHaveBeenCalled();
+    expect(summary.totalDuplicates).toBe(1);
+    expect(summary.totalInserted).toBe(0);
+    // 임베딩 호출은 시작 전 헬스체크 1회뿐 — 중복 후보에는 벡터를 만들지 않는다.
+    expect(deps.embeddings.embedWithSource).toHaveBeenCalledTimes(1);
+  });
+
+  it('중복이라도 기존 행에 없는 영업시간은 채운다 (재임베딩 없이)', async () => {
+    const deps = mockDeps();
+    deps.repository.findSamePlace.mockResolvedValue({ id: 'existing-1', openingHours: null });
+    deps.tourApi.fetchByArea.mockResolvedValue({
+      places: [
+        {
+          tourismApiId: 't-1',
+          name: '속초시립박물관',
+          category: 'attraction',
+          address: '강원특별자치도 속초시 신흥2길 16',
+          coordinates: { lat: 38.1934, lng: 128.6017 },
+          region: '강원특별자치도',
+          sigungu: '속초시',
+          openingHours: '09:00-18:00',
+          source: 'tour',
+        },
+      ],
+      nextOffset: 0,
+      quotaExceeded: false,
+    });
+    const service = build(deps);
+
+    await service.ingest({ regions: ['강원'], sources: ['tour'], maxPerRegion: 4 });
+
+    expect(deps.repository.updateOpeningHours).toHaveBeenCalledWith('existing-1', '09:00-18:00');
+    expect(deps.repository.upsertPlace).not.toHaveBeenCalled();
+  });
+
+  it('한 실행 안에서도 반경 규칙으로 접는다 (좌표 버킷 경계에 걸린 쌍)', async () => {
+    const deps = mockDeps();
+    // 같은 이름·144m 차이. 소수 3자리 버킷 비교였을 땐 서로 다른 버킷이라 둘 다 통과했다.
+    deps.kakaoLocal.searchAround.mockResolvedValue([
+      kakaoDoc('k-1', 38.2115),
+      kakaoDoc('k-2', 38.2128),
+    ]);
+    const service = build(deps);
+
+    const summary = await service.ingest({
+      regions: ['속초'],
+      sources: ['kakao'],
+      maxPerRegion: 4,
+    });
+
+    expect(summary.regions[0]!.deduped).toBe(1);
+    expect(deps.repository.upsertPlace).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
  * 임베딩 텍스트에 수집 라벨이 들어가 같은 장소가 타깃마다 다른 해시를 갖던 회귀를 막는다.
  * (해시가 흔들리면 증분 적재가 무력화되고 매 실행 재임베딩된다)
  */
@@ -118,6 +189,17 @@ describe('PlaceIngestionService 임베딩 텍스트 안정성', () => {
 
 type MockDeps = ReturnType<typeof mockDeps>;
 
+function kakaoDoc(kakaoPlaceId: string, lat: number) {
+  return {
+    kakaoPlaceId,
+    name: '속초 등대 전망대',
+    category: 'attraction',
+    categoryDetail: '여행 > 관광명소',
+    address: '강원특별자치도 속초시 영금정로 45',
+    coordinates: { lat, lng: 128.5989 },
+  };
+}
+
 function mockDeps() {
   return {
     config: { get: jest.fn((_key: string, fallback?: unknown) => fallback) },
@@ -128,16 +210,7 @@ function mockDeps() {
     },
     kakaoLocal: {
       resolveCenter: jest.fn().mockResolvedValue({ lat: 38.207, lng: 128.591 }),
-      searchAround: jest.fn().mockResolvedValue([
-        {
-          kakaoPlaceId: 'k-1',
-          name: '속초 등대 전망대',
-          category: 'attraction',
-          categoryDetail: '여행 > 관광명소',
-          address: '강원특별자치도 속초시 영금정로 45',
-          coordinates: { lat: 38.2115, lng: 128.5989 },
-        },
-      ]),
+      searchAround: jest.fn().mockResolvedValue([kakaoDoc('k-1', 38.2115)]),
     },
     popularPlaces: { isAvailable: true, collect: jest.fn().mockResolvedValue([]) },
     embeddings: {
@@ -149,6 +222,7 @@ function mockDeps() {
     repository: {
       deleteRegion: jest.fn().mockResolvedValue(0),
       findProvenance: jest.fn().mockResolvedValue(null),
+      findSamePlace: jest.fn().mockResolvedValue(null),
       upsertPlace: jest.fn().mockResolvedValue(undefined),
       updateOpeningHours: jest.fn().mockResolvedValue(undefined),
     },

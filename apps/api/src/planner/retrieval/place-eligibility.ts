@@ -13,6 +13,18 @@ const EXCLUDED_CATEGORY_KEYWORDS = [
   '클리닉',
 ];
 
+/**
+ * 서비스 범위 밖 카테고리. 숙박은 방문 일정 후보가 아니다 — v1 은 숙소를 일정 모델에 두지 않고
+ * `PlannerService.toItemType` 이 accommodation 을 'attraction' 으로 접으므로, 호텔이 후보로
+ * 들어오면 **'관광지'로 표시되는 일정 항목**이 된다.
+ *
+ * 적재 경로는 이미 막혀 있다(KTO contentTypeId 32 제외, 카카오 적재는 AD5 를 검색하지 않음,
+ * popular 은 축 카테고리 화이트리스트). 남은 구멍은 **검색 런타임 카카오 폴백**이다 —
+ * `KakaoLocalService.search` 는 category_group_code 제한 없이 키워드로 훑어서
+ * ('속초 관광지' → 'OO관광호텔') AD5 문서를 후보로 올린다. 규칙 이전에 적재된 행도 여기서 막힌다.
+ */
+const EXCLUDED_CATEGORIES = new Set(['accommodation']);
+
 const TRAVEL_CATEGORY_KEYWORDS = [
   '여행',
   '관광',
@@ -61,6 +73,8 @@ export function isEligibleItineraryCandidate(
   },
 ): boolean {
   if (place.coordinates && !isPlausibleKoreanCoordinate(place.coordinates)) return false;
+
+  if (EXCLUDED_CATEGORIES.has(place.category)) return false;
 
   // 행정구역명 자체는 방문할 장소가 아니다. 카카오에 '제주도'·'경상북도' 같은 이름으로 등록된
   // 문서가 있고, 인지도 매칭에서 코퍼스 언급을 통째로 흡수해 상위를 차지한다

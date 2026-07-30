@@ -9,6 +9,7 @@ import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { KtoCallBudget, TourApiService } from './tour-api.service';
 import { PopularPlaceService } from './popular-place.service';
 import { isSeoBusinessName } from './place-name-quality';
+import { SAME_PLACE_RADIUS_M, metersBetween, normalizeCatalogName } from './near-duplicate';
 import { inferPlaceTags, parseSigungu } from './place-seeds';
 import { SIDO_CODES, placeRegionCodes } from './region-code';
 import type { IngestPlace, IngestRegionResult, IngestSource, IngestSummary } from './ingestion.types';
@@ -115,11 +116,13 @@ export class PlaceIngestionService {
       totalInserted: regions.reduce((sum, r) => sum + r.inserted, 0),
       totalUpdated: regions.reduce((sum, r) => sum + r.updated, 0),
       totalUnchanged: regions.reduce((sum, r) => sum + r.unchanged, 0),
+      totalDuplicates: regions.reduce((sum, r) => sum + r.duplicates, 0),
       totalDeleted: regions.reduce((sum, r) => sum + r.deleted, 0),
     };
     this.logger.log(
       `적재 완료: ${regions.length}개 지역, 수집 ${summary.totalFetched}건 → ` +
-        `신규 ${summary.totalInserted} / 갱신 ${summary.totalUpdated} / 유지 ${summary.totalUnchanged} (삭제 ${summary.totalDeleted})`,
+        `신규 ${summary.totalInserted} / 갱신 ${summary.totalUpdated} / 유지 ${summary.totalUnchanged} / ` +
+        `중복 ${summary.totalDuplicates} (삭제 ${summary.totalDeleted})`,
     );
     return summary;
   }
@@ -256,6 +259,7 @@ export class PlaceIngestionService {
     let inserted = 0;
     let updated = 0;
     let unchanged = 0;
+    let duplicates = 0;
     // 재임베딩 없이 영업시간만 채운 건수 (해시가 같아 unchanged 로 분류된 기존 행)
     let openingHoursFilled = 0;
     for (const place of deduped) {
@@ -267,6 +271,27 @@ export class PlaceIngestionService {
         region: place.region,
         name: place.name,
       });
+
+      if (!existing) {
+        // ID 로는 못 찾았지만 같은 장소가 다른 소스 ID 로 이미 있을 수 있다(KTO 가 넣은 곳을
+        // 다음 실행의 카카오가 다시 주워 오는 경로). 새 행을 만들지 않고 건너뛴다.
+        //
+        // 왜 **갱신이 아니라 건너뛰기**인가 — 한 장소의 KTO 표현과 카카오 표현은 카테고리 상세·
+        // 주소 표기가 달라 텍스트가 다르다. 기존 행에 덮어쓰면 실행마다 두 소스가 같은 행의
+        // 텍스트를 번갈아 바꿔 매번 재임베딩되는 churn 이 된다. 먼저 들어온 표현을 정본으로 두면
+        // 해시가 안정되고 임베딩 호출도 안 쓴다.
+        const samePlace = await this.repository.findSamePlace(place.name, place.coordinates);
+        if (samePlace) {
+          // 영업시간만은 예외로 채운다 — 임베딩 텍스트 밖이라 재임베딩을 부르지 않고,
+          // KTO 만 주는 값이라 카카오 행에 영영 안 붙는 걸 막는다(비어 있을 때만).
+          if (place.openingHours && !samePlace.openingHours) {
+            await this.repository.updateOpeningHours(samePlace.id, place.openingHours);
+            openingHoursFilled += 1;
+          }
+          duplicates += 1;
+          continue;
+        }
+      }
 
       // 텍스트·모델이 모두 동일하면 재임베딩 없이 유지 (증분 적재의 핵심)
       if (existing && existing.textHash === textHash && existing.embeddingModel === model) {
@@ -314,10 +339,12 @@ export class PlaceIngestionService {
       inserted,
       updated,
       unchanged,
+      duplicates,
       deleted,
     };
     this.logger.log(
       `[${region}] 수집 ${result.fetched} → dedupe ${result.deduped} → 신규 ${inserted} / 갱신 ${updated} / 유지 ${unchanged} (삭제 ${deleted})` +
+        (duplicates > 0 ? ` · 기존 장소와 중복 ${duplicates}건 건너뜀` : '') +
         (openingHoursFilled > 0 ? ` · 영업시간 backfill ${openingHoursFilled}` : ''),
     );
     return result;
@@ -412,29 +439,36 @@ export class PlaceIngestionService {
 
   /**
    * ID(kakao_place_id / tourism_api_id) 기준 중복 제거에 더해,
-   * 이름+좌표(소수3자리, ≈100m) 기준 중복도 함께 제거한다.
+   * 이름+좌표(반경 {@link SAME_PLACE_RADIUS_M}) 기준 중복도 함께 제거한다.
    * → 소스가 달라(관광공사 vs 카카오) ID 가 다른 같은 물리적 장소도 하나로 합친다.
+   *
+   * 좌표를 소수 3자리 버킷으로 비교하던 시절엔 **DB 조회(findSamePlace)와 판정이 갈렸다** —
+   * 버킷은 경계에 걸친 쌍을 놓쳐서(실측 250m 이내 동명 쌍 138개 중 68개가 버킷 밖) 같은 실행에
+   * 둘 다 통과한 뒤 두 번째가 첫 번째 행을 덮어쓰는 낭비가 생긴다. 두 판정은 같은 규칙이어야 한다.
    */
   private dedupe(places: IngestPlace[]): IngestPlace[] {
     const seenIds = new Set<string>();
-    const seenGeo = new Set<string>();
+    const seenByName = new Map<string, Coordinates[]>();
     const result: IngestPlace[] = [];
     for (const place of places) {
       const idKey =
         (place.kakaoPlaceId && `k:${place.kakaoPlaceId}`) ||
         (place.tourismApiId && `t:${place.tourismApiId}`) ||
         '';
-      const geoKey = `g:${this.normalizeName(place.name)}@${place.coordinates.lat.toFixed(3)},${place.coordinates.lng.toFixed(3)}`;
-      if ((idKey && seenIds.has(idKey)) || seenGeo.has(geoKey)) continue;
+      if (idKey && seenIds.has(idKey)) continue;
+
+      const nameKey = normalizeCatalogName(place.name);
+      const sameName = seenByName.get(nameKey) ?? [];
+      if (sameName.some((seen) => metersBetween(seen, place.coordinates) <= SAME_PLACE_RADIUS_M)) {
+        continue;
+      }
+
       if (idKey) seenIds.add(idKey);
-      seenGeo.add(geoKey);
+      sameName.push(place.coordinates);
+      seenByName.set(nameKey, sameName);
       result.push(place);
     }
     return result;
-  }
-
-  private normalizeName(name: string): string {
-    return name.toLowerCase().replace(/\s+/g, '');
   }
 
   /** 적재 시작 전 임베딩 서버가 실제 벡터를 주는지 확인한다. 해시 폴백이면 중단. */

@@ -86,6 +86,26 @@ describe('PlaceEmbeddingRepository.countRegionCandidates', () => {
   });
 });
 
+describe('PlaceEmbeddingRepository.findSamePlace', () => {
+  it('이름은 정규화해 비교하고 반경 안의 가장 가까운 행을 준다', async () => {
+    const { repo, calls } = build([{ id: 'row-1', opening_hours: '09:00-18:00' }]);
+
+    await expect(repo.findSamePlace('광주 양동시장', { lat: 35.15, lng: 126.9 })).resolves.toEqual({
+      id: 'row-1',
+      openingHours: '09:00-18:00',
+    });
+    // 공백 제거·소문자는 적재 dedupe·정리 CLI 와 같은 규칙(normalizeCatalogName)이어야 한다.
+    expect(calls[0]!.params).toEqual(['광주양동시장', 35.15, 126.9, 250]);
+    expect(calls[0]!.sql).toContain('ORDER BY distance_m');
+  });
+
+  it('반경 안에 없으면 null', async () => {
+    const { repo } = build([]);
+
+    await expect(repo.findSamePlace('불국사', { lat: 35.79, lng: 129.33 })).resolves.toBeNull();
+  });
+});
+
 describe('PlaceEmbeddingRepository.seedRegion', () => {
   it('폴백 시드는 DB 에 넣지 않는다 (모든 지역 검색에 남는 unlabeled 행이 된다)', async () => {
     const { repo, calls } = build();

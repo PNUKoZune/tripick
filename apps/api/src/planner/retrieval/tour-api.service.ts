@@ -4,6 +4,7 @@ import axios from 'axios';
 import { OPENING_HOURS_FIELD, parseOpeningHours } from './opening-hours.parser';
 import { isTravelCourseArticle } from './place-name-quality';
 import { isPlausibleKoreanCoordinate } from './place-eligibility';
+import { SAME_PLACE_RADIUS_M } from './near-duplicate';
 import { parseSigungu } from './place-seeds';
 import type { IngestPlace } from './ingestion.types';
 import type { Coordinates } from '@tripick/types';
@@ -189,12 +190,6 @@ export class KtoCallBudget {
 export class TourApiService {
   private readonly logger = new Logger(TourApiService.name);
   private readonly BASE = 'https://apis.data.go.kr/B551011/KorService2';
-  /**
-   * 이름 검색 후보를 같은 장소로 인정할 좌표 반경(m). KTO 좌표와 카카오/사용자 좌표는
-   * 지오코딩 출처가 달라 같은 장소도 수십~수백 m 어긋나므로, 적재 dedupe(≈100m)보다
-   * 여유 있게 잡되 인접 타지점(보통 수백 m~km)은 배제되도록 250m 로 둔다.
-   */
-  private static readonly MATCH_RADIUS_M = 250;
 
   constructor(private readonly config: ConfigService) {}
 
@@ -391,7 +386,7 @@ export class TourApiService {
    * 이름+좌표로 KTO 장소를 찾아 영업시간을 'HH:MM-HH:MM' 로 조회한다.
    * 적재 카탈로그(place_embeddings)에 없는 수동 추가 장소를 런타임에 보강하기 위한 경로.
    *
-   * searchKeyword2(이름) 결과 중 좌표가 coords 와 {@link MATCH_RADIUS_M} 이내인 가장 가까운
+   * searchKeyword2(이름) 결과 중 좌표가 coords 와 {@link SAME_PLACE_RADIUS_M} 이내인 가장 가까운
    * 후보만 채택한다 — 이름 검색은 동명·타지점을 함께 주므로(예: '불국사'→경주/서울)
    * 좌표 대조 없이는 오매칭 위험이 크다. 반경 밖이면 매칭 실패로 보고 undefined.
    * KTO 미등록 장소(카페·프랜차이즈 다수)는 검색 0건 → undefined.
@@ -454,7 +449,7 @@ export class TourApiService {
         const lng = Number(row.mapx);
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
         const distanceM = this.distanceMeters(coords, { lat, lng });
-        if (distanceM > TourApiService.MATCH_RADIUS_M) continue;
+        if (distanceM > SAME_PLACE_RADIUS_M) continue;
         if (!best || distanceM < best.distanceM) {
           best = {
             contentId: String(row.contentid),

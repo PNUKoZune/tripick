@@ -9,6 +9,7 @@ import {
   normalizeDestinationRegion,
   regionPrefixStem,
 } from './place-seeds';
+import { SAME_PLACE_RADIUS_M, normalizeCatalogName } from './near-duplicate';
 import { destinationRegionFilter, placeRegionCodes, sidoCodesForLabel } from './region-code';
 import type { RawPlaceCandidate } from './types';
 
@@ -318,6 +319,43 @@ export class PlaceEmbeddingRepository {
           openingHours: row.opening_hours,
         }
       : null;
+  }
+
+  /**
+   * ID 가 다른 **같은 물리적 장소**의 기존 행을 이름+좌표로 찾는다. 없으면 null.
+   *
+   * 왜 필요한가 — 적재 dedupe(이름+좌표)는 **한 실행 안에서만** 돌고, DB 조회는 ID
+   * (kakao_place_id / tourism_api_id)로만 한다. 그래서 KTO 가 먼저 넣은 장소를 다음 실행의
+   * 카카오가 다른 ID 로 다시 넣어 같은 장소가 두 행이 됐다(실측 카탈로그에 250m 이내 동명 쌍
+   * 138개, 거의 전부 소스 교차). 검색 단계 collapseNearDuplicates 가 접어 주므로 사용자에게는
+   * 안 보이지만 카탈로그는 계속 커지고 후보 풀 자리를 나눠 쓴다.
+   *
+   * 거리 식은 near-duplicate 의 `metersBetween` 과 같은 평면 근사를 쓴다 — 같은 판정이
+   * JS·SQL 두 곳에서 갈리지 않아야 한다.
+   */
+  async findSamePlace(
+    name: string,
+    coordinates: Coordinates,
+  ): Promise<{ id: string; openingHours: string | null } | null> {
+    const rows: Array<{ id: string; opening_hours: string | null }> = await this.dataSource.query(
+      `SELECT id, opening_hours FROM (
+         SELECT id,
+                opening_hours,
+                sqrt(
+                  power((((coordinates->>'lat')::double precision) - $2) * 111000, 2)
+                  + power((((coordinates->>'lng')::double precision) - $3) * 88000, 2)
+                ) AS distance_m
+         FROM place_embeddings
+         WHERE replace(lower(name), ' ', '') = $1
+           AND coordinates IS NOT NULL
+       ) candidates
+       WHERE distance_m <= $4
+       ORDER BY distance_m
+       LIMIT 1`,
+      [normalizeCatalogName(name), coordinates.lat, coordinates.lng, SAME_PLACE_RADIUS_M],
+    );
+    const row = rows[0];
+    return row ? { id: row.id, openingHours: row.opening_hours } : null;
   }
 
   /**

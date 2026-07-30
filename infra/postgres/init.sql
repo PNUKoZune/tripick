@@ -91,6 +91,12 @@ CREATE INDEX IF NOT EXISTS idx_place_embeddings_region_name
 CREATE INDEX IF NOT EXISTS idx_place_embeddings_kakao_place_id
   ON place_embeddings (kakao_place_id);
 
+-- 소스 간 중복 판정용 정규화 이름 인덱스 (findSamePlace).
+-- 적재가 신규 후보마다 되묻는 조회라 없으면 매 건이 전체 스캔이고 카탈로그 크기에 선형으로 악화된다.
+-- 인덱스 식은 질의 식과 문자까지 같아야 계획기가 쓴다.
+CREATE INDEX IF NOT EXISTS idx_place_embeddings_normalized_name
+  ON place_embeddings ((replace(lower(name), ' ', '')));
+
 -- 적재 커서 (append 모드: 반복 실행 시 지역·소스별로 다음 지점부터 이어 적재)
 -- 단위는 페이지가 아니라 행 오프셋이다 — 페이지 번호는 그 실행의 배치 크기(--max)에 묶여
 -- 있어서, 쓴 실행과 읽는 실행의 --max 가 다르면 같은 숫자가 다른 구간을 뜻한다.
