@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 
-import { OPENING_HOURS_FIELD, parseOpeningHours } from '../../../src/planner/retrieval/opening-hours.parser';
+import { OPENING_HOURS_FIELD, isClosedAt, parseOpeningHours } from '../../../src/planner/retrieval/opening-hours.parser';
 
 describe('parseOpeningHours', () => {
   // 아래 입력은 KorService2 detailIntro2 실제 응답에서 그대로 가져온 값이다.
@@ -117,5 +117,34 @@ describe('parseOpeningHours', () => {
     it('여행코스(25)는 매핑하지 않는다 (taketime 은 소요시간)', () => {
       expect(OPENING_HOURS_FIELD['25']).toBeUndefined();
     });
+  });
+});
+
+describe('isClosedAt', () => {
+  /** 2026-08-01 KST 기준 시각 (UTC = KST-9) */
+  const at = (kstHour: number, kstMinute = 0): Date =>
+    new Date(Date.UTC(2026, 7, 1, (kstHour - 9 + 24) % 24, kstMinute));
+
+  it('영업시간 밖이면 true', () => {
+    expect(isClosedAt('07:00-18:00', at(21))).toBe(true);
+    expect(isClosedAt('09:00-18:00', at(6))).toBe(true);
+  });
+
+  it('영업시간 안(경계 포함)이면 false', () => {
+    expect(isClosedAt('07:00-18:00', at(12))).toBe(false);
+    expect(isClosedAt('07:00-18:00', at(7))).toBe(false);
+    expect(isClosedAt('07:00-18:00', at(18))).toBe(false);
+  });
+
+  it('판정 불가는 닫힘이 아니다 — 데이터 없음을 닫힘으로 읽으면 카카오 전용 후보 전체가 닫힘이 된다', () => {
+    expect(isClosedAt(undefined, at(21))).toBe(false);
+    expect(isClosedAt(null, at(21))).toBe(false);
+    expect(isClosedAt('', at(21))).toBe(false);
+    expect(isClosedAt('매일 07:00~18:00', at(21))).toBe(false); // 정본 형식 아님
+  });
+
+  it('상시 개방(00:00-23:59)은 어느 시각도 닫힘이 아니다', () => {
+    expect(isClosedAt('00:00-23:59', at(3))).toBe(false);
+    expect(isClosedAt('00:00-23:59', at(23, 58))).toBe(false);
   });
 });

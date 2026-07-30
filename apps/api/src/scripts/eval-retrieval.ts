@@ -48,6 +48,7 @@ import {
   placeRegionCodes,
   toSigunguCode,
 } from '../planner/retrieval/region-code';
+import { isClosedAt } from '../planner/retrieval/opening-hours.parser';
 import type { CandidatePlace } from '../planner/retrieval/types';
 
 /**
@@ -112,6 +113,16 @@ interface GoldenCase {
   tasteTags?: TasteTagDto;
   relevant: string[];
   forbidden?: string[];
+  /**
+   * 현재 위치. 카카오 폴백이 좌표 앵커(center+radius) 검색을 타게 하고 CRAG 거리 점수를 켠다.
+   * 이게 없으면 폴백은 키워드 전역 검색이라 **다른 지역 후보가 섞이는 경로**를 지난다.
+   */
+  currentLocation?: { lat: number; lng: number };
+  /**
+   * 방문 시각(ISO). 영업시간 가드(`availability`)는 이 값이 있을 때만 판정한다 —
+   * 없으면 전 후보 중립값이라 그 항의 변경을 지표가 감지할 수 없다.
+   */
+  startAt?: string;
 }
 
 interface CaseMetrics {
@@ -130,6 +141,20 @@ interface CaseMetrics {
   regionPrecision: number;
   /** 나오면 안 되는 장소가 결과에 든 수 */
   forbiddenHits: number;
+  /**
+   * 결과 중 방문 시각에 **영업시간 밖**인 장소 수 (`startAt` 없는 케이스는 항상 0).
+   * `availability` 감점이 실제로 후보를 밀어내는지 보는 지표 — 이게 없으면 그 항을 지워도
+   * 골든셋이 "무해" 라고 보고한다.
+   */
+  closedHits: number;
+  /**
+   * 영업시간 밖 장소 중 **가장 높은 순위**(1-based, 없으면 0).
+   *
+   * 개수만으로는 감점을 못 잡는다 — 실측에서 순창 `강천사계곡` 은 감점 0.037 로 3위→5위로
+   * 밀리지만 8칸 안에는 그대로 남아 `closedHits` 가 1 로 동일했다. 순위까지 봐야 그 항의
+   * 변경이 지표에 나타난다.
+   */
+  firstClosedRank: number;
   averageConfidence: number;
   sources: string[];
   fallbackUsed: boolean;
@@ -142,6 +167,9 @@ interface CaseMetrics {
    */
   top: Array<{
     name: string;
+    /** 지역 누수를 판정하는 근거. 이게 없으면 `inRegion` 이 틀렸을 때 원인을 못 찾는다. */
+    address: string;
+    source: string;
     category: string;
     confidence: number;
     inRegion: boolean;
@@ -242,6 +270,7 @@ async function evaluateCase(
       ? await deps.embeddings.embed(buildPreferenceText(testCase.tasteTags))
       : undefined;
 
+  const startAt = testCase.startAt ? new Date(testCase.startAt) : undefined;
   const result = await deps.retrieval.retrieve({
     userId: 'eval-harness',
     destination: testCase.destination,
@@ -250,6 +279,8 @@ async function evaluateCase(
     ...(testCase.trigger ? { trigger: testCase.trigger } : {}),
     ...(testCase.notes ? { notes: testCase.notes } : {}),
     ...(preferenceVector ? { preferenceVector } : {}),
+    ...(testCase.currentLocation ? { currentLocation: testCase.currentLocation } : {}),
+    ...(startAt ? { startAt } : {}),
   });
 
   const places = result.places;
@@ -292,6 +323,12 @@ async function evaluateCase(
     forbiddenHits: (testCase.forbidden ?? []).filter((name) =>
       places.some((place) => nameMatches(place.name, name)),
     ).length,
+    closedHits: startAt
+      ? places.filter((place) => isClosedAt(place.openingHours, startAt)).length
+      : 0,
+    firstClosedRank: startAt
+      ? places.findIndex((place) => isClosedAt(place.openingHours, startAt)) + 1
+      : 0,
     averageConfidence: result.trace.averageConfidence,
     sources: result.trace.sources,
     fallbackUsed: result.trace.fallbackUsed,
@@ -300,6 +337,8 @@ async function evaluateCase(
     missesInCatalog: misses.filter((name) => inCatalog.includes(name)),
     top: places.map((place) => ({
       name: place.name,
+      address: place.address ?? '',
+      source: place.source,
       category: place.category,
       confidence: place.confidence,
       inRegion: !expectedRegion ? true : inExpectedRegion(place, expectedRegion),
@@ -333,6 +372,7 @@ function printTable(metrics: CaseMetrics[], ks: number[]): void {
     'MRR'.padStart(5),
     'region'.padStart(7),
     'forb'.padStart(5),
+    'clsd'.padStart(7),
     'conf'.padStart(5),
     ' source',
   ].join(' ');
@@ -349,6 +389,7 @@ function printTable(metrics: CaseMetrics[], ks: number[]): void {
         m.mrr.toFixed(2).padStart(5),
         pct(m.regionPrecision).padStart(7),
         String(m.forbiddenHits).padStart(5),
+        (m.closedHits === 0 ? '0' : `${m.closedHits}@${m.firstClosedRank}`).padStart(7),
         m.averageConfidence.toFixed(2).padStart(5),
         ` ${m.sources.join('+') || 'none'}`,
       ].join(' '),
@@ -365,6 +406,12 @@ function aggregate(metrics: CaseMetrics[], ks: number[]) {
     mrr: mean(metrics.map((m) => m.mrr)),
     regionPrecision: mean(metrics.map((m) => m.regionPrecision)),
     forbiddenHits: metrics.reduce((sum, m) => sum + m.forbiddenHits, 0),
+    closedHits: metrics.reduce((sum, m) => sum + m.closedHits, 0),
+    // 여러 케이스를 섞으면 최상위 순위가 가장 나쁜(작은) 쪽이 대표값이다.
+    worstClosedRank: Math.min(
+      ...metrics.filter((m) => m.firstClosedRank > 0).map((m) => m.firstClosedRank),
+      Number.POSITIVE_INFINITY,
+    ),
     averageConfidence: mean(metrics.map((m) => m.averageConfidence)),
     pgvectorOnly: metrics.filter((m) => !m.fallbackUsed).length,
   };
@@ -375,7 +422,7 @@ function printAggregate(agg: ReturnType<typeof aggregate>, ks: number[]): void {
     `평균 ${ks.map((k) => `recall@${k} ${agg.recall[k]!.toFixed(3)}`).join(' | ')} | ` +
       `카탈로그내 recall ${agg.recallInCatalog.toFixed(3)} | 적재 커버리지 ${pct(agg.catalog)} | ` +
       `MRR ${agg.mrr.toFixed(3)} | 지역정합 ${pct(agg.regionPrecision)} | ` +
-      `금지어 ${agg.forbiddenHits} | conf ${agg.averageConfidence.toFixed(3)} | ` +
+      `금지어 ${agg.forbiddenHits} | 영업시간밖 ${agg.closedHits}${Number.isFinite(agg.worstClosedRank) ? `(최상위 ${agg.worstClosedRank}위)` : ''} | conf ${agg.averageConfidence.toFixed(3)} | ` +
       `pgvector 단독 ${agg.pgvectorOnly}/${agg.cases}`,
   );
 }

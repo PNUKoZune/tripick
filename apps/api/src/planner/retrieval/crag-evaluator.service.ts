@@ -10,6 +10,7 @@ import {
 import { inferPlaceTags, normalizeDestinationRegion, tasteTagsToKeywords } from './place-seeds';
 import { collapseNearDuplicates } from './near-duplicate';
 import { NEUTRAL_POPULARITY } from './naver-search.service';
+import { isClosedAt } from './opening-hours.parser';
 import { DEFAULT_RETRIEVAL_WEIGHT, termWeights, type TermWeights } from './retrieval-rank';
 import type { CandidatePlace, CragScore, RawPlaceCandidate, RetrievalContext } from './types';
 
@@ -328,16 +329,9 @@ export class CragEvaluatorService {
     penalties: string[],
   ): number {
     const neutral = 0.58;
-    if (!candidate.openingHours || !context.startAt) return neutral;
-
-    const match = candidate.openingHours.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
-    if (!match) return neutral;
-
-    const [, startHour, startMinute, endHour, endMinute] = match;
-    const visitMinutes = this.kstMinutes(context.startAt);
-    const start = Number(startHour) * 60 + Number(startMinute);
-    const end = Number(endHour) * 60 + Number(endMinute);
-    if (visitMinutes >= start && visitMinutes <= end) return neutral;
+    if (!context.startAt) return neutral;
+    // 판정은 평가 하네스와 공유한다 — 규칙이 두 곳에 있으면 지표가 감점 대상을 못 따라간다.
+    if (!isClosedAt(candidate.openingHours, context.startAt)) return neutral;
     penalties.push('closed-at-target-time');
     return 0.25;
   }
@@ -397,10 +391,6 @@ export class CragEvaluatorService {
       gyeongju: ['경주', 'gyeongju'],
       default: [],
     }[region] ?? [];
-  }
-
-  private kstMinutes(date: Date): number {
-    return ((date.getUTCHours() * 60 + date.getUTCMinutes()) + 9 * 60) % (24 * 60);
   }
 
   private distanceKm(from: Coordinates, to: Coordinates): number {

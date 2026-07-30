@@ -208,7 +208,7 @@ sokcho-mountain             16   0.10   0.40   0.75   80%  1.00    100%     0  0
 
 - ~~**`availability` 항 제거 검토**~~ — 제거가 아니라 **감점 전용 전환**으로 처리했다(§10).
 - ~~**`dataQuality` 항 제거 검토**~~ — 제거하고 좌표 검사를 적격성 게이트로 옮겼다(§11).
-- **골든셋에 폴백 케이스 추가** — 적재가 얇은 목적지 + `currentLocation` 으로 카카오 폴백을 타는 케이스, 그리고 방문 시각(`startAt`)이 있는 케이스. 이게 있어야 `locality`·`availability` 변경이 반증 가능해진다(§8 세 번째).
+- ~~**골든셋에 폴백 케이스 추가**~~ — 케이스 3개와 하네스 입력·지표를 추가했다(§12). 그 과정에서 **`locality` 가드가 4개 목적지 밖에서는 아예 실행되지 않는다**는 것이 드러났다(§12.4).
 - **임베딩 모델 교체 시 재측정** — §4 의 결론은 "이 모델의 밴드와 AUC 서열" 위에 서 있다. 모델을 바꾸면 [`measure-retrieval-similarity.ts`](../../apps/api/src/scripts/measure-retrieval-similarity.ts) 로 밴드·AUC 를 먼저 다시 재고, retrieval AUC 가 popularity 를 넘는지 확인한 뒤에 정규화를 재고할 것.
 
 ## 10. 후속 — `availability` 감점 전용 전환
@@ -315,3 +315,80 @@ accept 게이트(`CRAG_MIN_CONFIDENCE` 0.52)는 건드리지 않았다 — 선�
 - 좌표 불량 3행은 `cleanup:catalog --only=coords --apply` 로 삭제했다(10,481 → **10,478**행, 재실행 0건으로 멱등). 삭제 자체는 검색 결과를 바꾸지 않는다 — 지역 pre-filter 가 서울·세종 행을 제주 질의 후보 풀에 넣지 않고, 검색 적격성에서도 이미 빠지고 있었다.
 - **그 재측정에서 코퍼스 변동을 또 한 번 봤다.** 삭제 후 recall@5 가 0.231 → 0.222 로 움직였는데 원인은 삭제가 아니었다 — jeju 케이스에서 `비자림`(정답)의 점수·항목이 **전부 동일**한데 `새별오름` 의 popularity 가 0.955 → 1.000 으로 올라(conf 0.785 → 0.792) 한 칸 위로 끼어들면서 `비자림` 이 5위 → 6위로 밀렸다. 점수 분포가 0.787 vs 0.792 처럼 촘촘해서 **코퍼스 0.007 의 흔들림이 top-5 를 재배열하고 recall@5 를 0.009 움직인다.** §7.2 의 경고가 적용되는 구체적 사례다.
 - 이제 CRAG 항은 6개다(retrieval·taste·popularity·locality·context·availability). 남은 상수성 항은 `locality`(폴백 경로 전용 가드)와 `context`(트리거 조향)이고, 둘 다 골든셋으로 검증 불가라 §9 의 폴백·방문시각 케이스 추가가 선행이다.
+
+## 12. 후속 — 골든셋 폴백·방문시각 케이스
+
+### 12.1 하네스가 두 입력을 못 받고 있었다
+
+`locality` 는 **카카오 폴백 경로에서만**, `availability` 는 **방문 시각이 있을 때만** 발동한다. 그런데 골든셋 11케이스는 전부 pgvector 단독이고 `startAt` 도 없었다 — 즉 두 항을 지워도 지표가 "무해"라고 보고하는 상태였다.
+
+[`GoldenCase`](../../apps/api/src/scripts/eval-retrieval.ts) 에 `currentLocation`(좌표 앵커 폴백 + 거리 점수)과 `startAt`(ISO)을 받게 했다.
+
+### 12.2 개수 지표만으로는 감점을 못 잡는다
+
+`closedHits`(결과 중 영업시간 밖 장소 수)를 먼저 넣었는데, 감점을 무력화한 A/B 에서 **양쪽 다 1** 이었다. 순창 `강천사계곡`(07:00-18:00)은 감점 0.037 로 3위 → 5위로 밀리지만 8칸 안에는 그대로 남는다 — 다음 후보(`산솔` 0.596)와의 간격이 0.064 라 감점이 못 넘긴다.
+
+그래서 **순위까지 보는 `firstClosedRank`** 를 추가했다. 이제 A/B 가 갈린다:
+
+| | clsd 표기 | 뜻 |
+| --- | --- | --- |
+| 감점 있음(현행) | `1@5` | 영업시간 밖 1건, 최상위 5위 |
+| 감점 무력화 | `1@3` | 같은 1건이 3위로 올라옴 |
+
+판정 규칙은 [`isClosedAt`](../../apps/api/src/planner/retrieval/opening-hours.parser.ts) 으로 뽑아 **점수 계산과 하네스가 공유**한다. 하네스가 규칙을 다시 쓰면 감점 대상과 계측 대상이 어긋나 지표가 가드를 검증하지 못한다.
+
+### 12.3 추가한 케이스 3개
+
+| 케이스 | 무엇을 지나가는가 | 결과 |
+| --- | --- | --- |
+| `yeongju-thin-catalog` | 카탈로그 3행 → 폴백이 **앵커 없이** 키워드 검색 | `pgvector+kakao`, R\|cat 1.00, 지역정합 100% |
+| `taebaek-deviation-anchored` | 카탈로그 3행 + `currentLocation`(태백역) + `trigger: deviation` → **좌표 앵커** 검색 + 거리 점수 | `pgvector+kakao`, R\|cat 1.00, 지역정합 100% |
+| `sunchang-late-evening` | `startAt` 21:00 KST + `limit: 8` → 영업시간 가드 | `1@5` (§12.2) |
+
+`limit: 8` 인 이유는 순창 카탈로그가 40행이라 16칸이면 상위 절반이 그냥 다 들어와 순위가 결과를 못 가르기 때문이다.
+
+**forbidden 목록에는 목적지 지역에 동명 장소가 없는 이름만 적어야 한다.** 처음에 영주 케이스의 forbidden 에 `감천문화마을`(부산 명소)을 넣었더니 오알람이 떴다 — 카카오가 준 것은 **경북 예천군 감천면**의 같은 이름 마을이었고, 주소 기준 지역정합은 100% 로 옳게 판정하고 있었다. 하네스의 이름 부분일치는 동명 장소를 구분하지 못한다(§`MIN_NAME_MATCH_LENGTH` 와 같은 계열의 한계).
+
+### 12.4 드러난 것: `locality` 가드는 4개 목적지 밖에서 실행되지 않는다
+
+영주 케이스의 후보 16개 전부가 `locality = 0.62` 였다. 원인은 [`localityScore`](../../apps/api/src/planner/retrieval/crag-evaluator.service.ts) 첫 줄이다:
+
+```ts
+const region = normalizeDestinationRegion(context.destination);
+if (region === 'default') return 0.62;   // ← 여기서 끝난다
+```
+
+`normalizeDestinationRegion` 이 아는 목적지는 **seoul·busan·jeju·gyeongju 넷뿐**이고, `regionKeywords` 도 같은 넷이다. 그 밖의 목적지(영주·태백·순창·광주·전주·강릉·대구·여수·속초…)는 전 후보가 0.62 로 같아 **감점도 가점도 없다**. 14케이스 중 **10케이스**가 이 상태다.
+
+그래서 §8·§6 에서 "locality 는 폴백 경로 전용 가드라 검증 불가"라고 적은 것은 **절반만 맞았다** — 검증이 안 되는 게 아니라, 그 경로에서 애초에 **가드가 돌지 않는다.** 지역 판정의 정본 경로(`destinationRegionFilter`·`placeRegionCodes`, 전국 시도·시군구 코드)가 이미 있으므로 교체는 어렵지 않다. 다만 랭킹 동작이 10개 목적지에서 바뀌는 변경이라 별 작업으로 뒀다(§13).
+
+이번 두 폴백 케이스에서 **실제 지역 누수는 없었다**(카카오 키워드 검색이 목적지 이름을 포함해 대체로 같은 지역을 준다). 즉 지금 확인된 것은 "가드가 안 돈다"이고, "그래서 피해가 났다"는 아직 관측되지 않았다.
+
+### 12.5 새 기준선 (14케이스)
+
+```
+case                         n    R@5   R@10  R|cat   cat   MRR  region  forb    clsd  conf  source
+gyeongju-cultural           16   0.50   0.70   0.80  100%  1.00    100%     0       0  0.75  pgvector
+busan-beach                 16   0.40   0.50   0.67   90%  1.00    100%     0       0  0.75  pgvector
+jeju-nature                 16   0.10   0.20   0.50   40%  1.00    100%     0       0  0.76  pgvector
+seoul-city-nightview        16   0.10   0.20   0.33   60%  0.25    100%     0       0  0.73  pgvector
+gangneung-cafe-beach        16   0.20   0.50   0.60  100%  1.00    100%     0       0  0.69  pgvector
+jeonju-food-hanok           16   0.20   0.40   0.83   60%  1.00    100%     0       0  0.70  pgvector
+yeosu-romantic-island       16   0.40   0.60   0.75   80%  1.00    100%     0       0  0.66  pgvector
+daegu-nostalgic             16   0.10   0.10   0.10  100%  1.00    100%     0       0  0.61  pgvector
+gyeongju-weather-indoor     16   0.14   0.29   0.33   86%  0.50    100%     0       0  0.81  pgvector
+gwangju-culture             16   0.20   0.30   0.56   90%  0.50    100%     0       0  0.70  pgvector
+sokcho-mountain             16   0.10   0.40   0.75   80%  1.00    100%     0       0  0.68  pgvector
+yeongju-thin-catalog        16   0.50   0.50   1.00   17%  1.00    100%     0       0  0.59  pgvector+kakao
+taebaek-deviation-anchored  16   0.33   0.33   1.00   33%  1.00    100%     0       0  0.59  pgvector+kakao
+sunchang-late-evening        8   0.60   0.60   1.00   60%  0.50    100%     0     1@5  0.65  pgvector
+----
+평균 recall@5 0.277 | recall@10 0.401 | R|cat 0.659 | 커버리지 71% | MRR 0.839 | 지역정합 100% | 금지어 0 | 영업시간밖 1(최상위 5위) | conf 0.690 | pgvector 단독 12/14
+```
+
+⚠️ **세트가 바뀌었으니 이 문서 §5~§11 의 절대값과 비교하면 안 된다.** 새 케이스는 R\|cat 이 1.00 이고 커버리지가 17~60% 라 평균을 양방향으로 끌었다(R\|cat 0.566→0.659, 커버리지 81%→71%). 11케이스 기준 지표와 14케이스 기준 지표는 다른 자다.
+
+## 13. 남은 카드
+
+- **`locality` 를 정본 지역 코드로 교체** — §12.4. 4개 목적지 하드코딩(`normalizeDestinationRegion`·`regionKeywords`)을 `destinationRegionFilter`·`placeRegionCodes` 로 바꿔 전국에서 돌게 한다. 10개 목적지의 랭킹이 바뀌므로 A/B 필요.
+- **`availability` 감점 폭** — 지금은 순위를 3→5 로 옮기는 정도(총점 0.037)이고 후보를 밀어내진 못한다. 영업시간 밖 일정을 실제로 막는 건 `ConstraintEngine` 이므로 이대로 둘지, 감점을 키워 후보 단계에서 걸러낼지는 별 판단이다.

@@ -115,3 +115,29 @@ export function parseOpeningHours(raw?: string | null): string | undefined {
   if (end <= start) return undefined;
   return `${format(start)}-${format(end)}`;
 }
+
+/** 정본 형식(`HH:MM-HH:MM`)만 인정한다. 그 밖은 "판정 불가"이며 닫힘으로 취급하지 않는다. */
+const CANONICAL_RANGE = /^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/;
+
+function kstMinutes(date: Date): number {
+  return (date.getUTCHours() * 60 + date.getUTCMinutes() + 9 * 60) % (24 * 60);
+}
+
+/**
+ * 방문 시각(KST)에 영업시간 밖인지. 판정 불가(영업시간 없음·형식 불명)는 `false` —
+ * 데이터 없음을 닫힘으로 읽으면 카카오 전용 후보(영업시간을 영구히 못 얻는다) 전체가 닫힘이 된다.
+ *
+ * CRAG 점수와 평가 하네스가 **같은 판정을 써야 한다** — 하네스가 규칙을 다시 쓰면
+ * 감점 대상과 계측 대상이 어긋나 지표가 가드를 검증하지 못한다.
+ */
+export function isClosedAt(openingHours: string | undefined | null, visitAt: Date): boolean {
+  if (!openingHours) return false;
+  const match = openingHours.match(CANONICAL_RANGE);
+  if (!match) return false;
+
+  const [, startHour, startMinute, endHour, endMinute] = match;
+  const start = Number(startHour) * 60 + Number(startMinute);
+  const end = Number(endHour) * 60 + Number(endMinute);
+  const visit = kstMinutes(visitAt);
+  return visit < start || visit > end;
+}
