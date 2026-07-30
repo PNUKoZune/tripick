@@ -7,7 +7,8 @@ import {
   type MoodPreference,
   type ReplanTrigger,
 } from '@tripick/types';
-import { inferPlaceTags, normalizeDestinationRegion, tasteTagsToKeywords } from './place-seeds';
+import { inferPlaceTags, tasteTagsToKeywords } from './place-seeds';
+import { destinationRegionFilter, placeRegionCodes, type RegionFilter } from './region-code';
 import { collapseNearDuplicates } from './near-duplicate';
 import { NEUTRAL_POPULARITY } from './naver-search.service';
 import { isClosedAt } from './opening-hours.parser';
@@ -79,8 +80,11 @@ export class CragEvaluatorService {
 
   rank(candidates: RawPlaceCandidate[], context: RetrievalContext): CandidatePlace[] {
     const weights = this.weights();
-    const scored = this.deduplicate(candidates)
-      .map((candidate) => this.evaluate(candidate, context, weights))
+    const unique = this.deduplicate(candidates);
+    const expectedRegion = destinationRegionFilter(context.destination);
+    const regionJudgeable = this.localityJudgeable(unique, expectedRegion);
+    const scored = unique
+      .map((candidate) => this.evaluate(candidate, context, weights, expectedRegion, regionJudgeable))
       .sort((a, b) => b.confidence - a.confidence);
     // 근접 중복 접기는 **점수 정렬 뒤에** 온다 — 남는 대표가 그 무리에서 가장 높은 후보여야 한다.
     return collapseNearDuplicates(scored, context.destination);
@@ -104,6 +108,9 @@ export class CragEvaluatorService {
 
   /** 후보 풀이 반드시 담아야 하는 종류별 최소 수. 일정에 식사 슬롯과 볼거리가 둘 다 필요하다. */
   private static readonly POOL_MIN_PER_KIND = 2;
+
+  /** 지역 판정 불가(목적지·후보 어느 쪽이든) 시 쓰는 중립값. */
+  private static readonly NEUTRAL_LOCALITY = 0.62;
 
   /**
    * 점수 순으로 후보를 고르되, 종류별 최소 보유량을 보장한다.
@@ -169,6 +176,8 @@ export class CragEvaluatorService {
     candidate: RawPlaceCandidate,
     context: RetrievalContext,
     weights: TermWeights,
+    expectedRegion: RegionFilter,
+    regionJudgeable: boolean,
   ): CandidatePlace {
     const tags = candidate.tags?.length ? candidate.tags : inferPlaceTags(candidate);
     const matchedTags = this.matchedTags(tags, context);
@@ -176,7 +185,7 @@ export class CragEvaluatorService {
     const retrieval = this.retrievalScore(candidate);
     const personalization = this.personalizationScore(candidate);
     const taste = this.tasteScore(tags, context, personalization);
-    const locality = this.localityScore(candidate, context, penalties);
+    const locality = this.localityScore(candidate, expectedRegion, regionJudgeable, penalties);
     const contextScore = this.contextScore(candidate, tags, context);
     const availability = this.availabilityScore(candidate, context, penalties);
     const popularity = this.popularityScore(candidate, context, penalties);
@@ -263,20 +272,67 @@ export class CragEvaluatorService {
     return this.clamp((candidate.preferenceSimilarity + 1) / 2);
   }
 
+  /**
+   * 목적지와 후보를 **정본 지역 코드**로 비교한다 (적재·검색 pre-filter 와 같은 함수).
+   *
+   * 예전엔 `normalizeDestinationRegion` + 지역 키워드 사전이었는데, 그 두 곳이 아는 목적지가
+   * **seoul·busan·jeju·gyeongju 넷뿐**이라 그 밖의 목적지에서는 첫 줄에서 `'default'` 로 빠져
+   * **전 후보가 같은 값(0.62)** 이었다 — 즉 가드가 아예 돌지 않았다. 골든셋 14케이스 중 10케이스가
+   * 그 상태였고, 영주 케이스(카카오 폴백)에서 후보 16개 전원이 0.62 인 것으로 드러났다.
+   *
+   * ⚠️ **시도는 시도끼리, 시군구는 시군구끼리** 비교한다. 교차 비교하면 `경기 광주시`(시군구 '광주')
+   * 후보가 `광주광역시`(시도 '광주') 목적지와 맞는 것으로 읽힌다 — 통합 라벨 작업에서 한 번
+   * 데인 지점이다.
+   */
   private localityScore(
     candidate: RawPlaceCandidate,
-    context: RetrievalContext,
+    expected: RegionFilter,
+    judgeable: boolean,
     penalties: string[],
   ): number {
-    const region = normalizeDestinationRegion(context.destination);
-    if (region === 'default') return 0.62;
-    const haystack = `${candidate.name} ${candidate.address} ${candidate.destinationRegion ?? ''}`.toLowerCase();
-    const regionMatches =
-      candidate.destinationRegion?.toLowerCase() === region ||
-      this.regionKeywords(region).some((keyword) => haystack.includes(keyword));
-    if (regionMatches) return 0.92;
+    if (!judgeable) return CragEvaluatorService.NEUTRAL_LOCALITY;
+
+    const { regionCode, sigunguCode } = placeRegionCodes(
+      candidate.destinationRegion ?? null,
+      null,
+      candidate.address ?? null,
+    );
+    // 지역 라벨이 없는 행(폴백 시드)은 판정 불가 — 데이터 없음을 '다른 지역'으로 읽으면 안 된다.
+    if (!regionCode && !sigunguCode) return CragEvaluatorService.NEUTRAL_LOCALITY;
+
+    if (CragEvaluatorService.matchesRegion(expected, regionCode, sigunguCode)) return 0.92;
     penalties.push('destination-mismatch');
     return 0.32;
+  }
+
+  private static matchesRegion(
+    expected: RegionFilter,
+    regionCode: string | null,
+    sigunguCode: string | null,
+  ): boolean {
+    if (expected.sido) return regionCode === expected.sido;
+    if (expected.sigungu) return sigunguCode === expected.sigungu;
+    return false;
+  }
+
+  /**
+   * 목적지 코드로 후보를 가를 수 있는지. **한 후보도 안 맞으면 판정을 포기한다.**
+   *
+   * `destinationRegionFilter` 는 임의 문자열에서도 시군구 코드를 만들어 낸다('발리' → '발리').
+   * 그런 코드로 비교하면 전 후보가 일률 감점되는데, 일률 감점은 **순위를 못 바꾸면서**
+   * confidence 절대 수준만 0.06 내려 accept 게이트·폴백 임계를 흔든다(§dataQuality 제거에서
+   * 같은 함정을 겪었다). 그래서 아무도 안 맞으면 가드를 끈다.
+   */
+  private localityJudgeable(candidates: RawPlaceCandidate[], expected: RegionFilter): boolean {
+    if (!expected.sido && !expected.sigungu) return false;
+    return candidates.some((candidate) => {
+      const { regionCode, sigunguCode } = placeRegionCodes(
+        candidate.destinationRegion ?? null,
+        null,
+        candidate.address ?? null,
+      );
+      return CragEvaluatorService.matchesRegion(expected, regionCode, sigunguCode);
+    });
   }
 
   private contextScore(
@@ -381,16 +437,6 @@ export class CragEvaluatorService {
       unique.push(candidate);
     }
     return unique;
-  }
-
-  private regionKeywords(region: string): string[] {
-    return {
-      seoul: ['서울', 'seoul'],
-      busan: ['부산', 'busan'],
-      jeju: ['제주', 'jeju'],
-      gyeongju: ['경주', 'gyeongju'],
-      default: [],
-    }[region] ?? [];
   }
 
   private distanceKm(from: Coordinates, to: Coordinates): number {

@@ -440,4 +440,91 @@ describe('CragEvaluatorService', () => {
     expect(withWeight('  ').weights().retrieval).toBeCloseTo(DEFAULT_RETRIEVAL_WEIGHT, 10);
     expect(withWeight('abc').weights().retrieval).toBeCloseTo(DEFAULT_RETRIEVAL_WEIGHT, 10);
   });
+
+  /**
+   * locality 는 정본 지역 코드로 판정한다. 예전엔 `normalizeDestinationRegion` 이 아는
+   * 4개 목적지(서울·부산·제주·경주) 밖에서는 전 후보가 0.62 로 같아 **가드가 안 돌았다.**
+   */
+  describe('locality 지역 판정', () => {
+    const place = (
+      id: string,
+      address: string,
+      extra: Partial<RawPlaceCandidate> = {},
+    ): RawPlaceCandidate => ({
+      id,
+      name: `후보 ${id}`,
+      category: 'attraction',
+      address,
+      coordinates: { lat: 36.8, lng: 128.6 },
+      source: 'kakao',
+      tags: ['cultural'],
+      ...extra,
+    });
+
+    const context = (destination: string): RetrievalContext => ({
+      userId: 'user-1',
+      destination,
+      trigger: 'manual',
+    });
+
+    it('하드코딩 4곳 밖 목적지에서도 타지역 후보를 감점한다', () => {
+      const ranked = service.rank(
+        [
+          place('busan', '부산 사하구 감내2로 203'),
+          place('yeongju', '경북 영주시 순흥면 소백로 2740'),
+        ],
+        context('영주'),
+      );
+
+      const local = ranked.find((c) => c.id === 'yeongju')!;
+      const other = ranked.find((c) => c.id === 'busan')!;
+      expect(local.crag.locality).toBe(0.92);
+      expect(other.crag.locality).toBe(0.32);
+      expect(other.crag.penalties).toContain('destination-mismatch');
+      expect(ranked[0]!.id).toBe('yeongju');
+    });
+
+    it('시도와 시군구를 교차 비교하지 않는다 — 경기 광주시 ≠ 광주광역시', () => {
+      const ranked = service.rank(
+        [
+          place('gyeonggi', '경기 광주시 경안로 100'),
+          place('gwangju', '광주 동구 금남로 100'),
+        ],
+        context('광주'),
+      );
+
+      expect(ranked.find((c) => c.id === 'gwangju')!.crag.locality).toBe(0.92);
+      expect(ranked.find((c) => c.id === 'gyeonggi')!.crag.locality).toBe(0.32);
+    });
+
+    it('지역 라벨이 없는 후보는 감점이 아니라 중립 — 데이터 없음을 타지역으로 읽으면 안 된다', () => {
+      const ranked = service.rank(
+        [
+          place('unlabeled', ''),
+          place('yeongju', '경북 영주시 순흥면 소백로 2740'),
+        ],
+        context('영주'),
+      );
+
+      const unlabeled = ranked.find((c) => c.id === 'unlabeled')!;
+      expect(unlabeled.crag.locality).toBe(0.62);
+      expect(unlabeled.crag.penalties).not.toContain('destination-mismatch');
+    });
+
+    it('한 후보도 안 맞으면 가드를 끈다 — 일률 감점은 순위를 못 바꾸면서 confidence 레벨만 흔든다', () => {
+      // '발리' 같은 자유 입력도 `destinationRegionFilter` 는 시군구 코드를 만들어 낸다.
+      const ranked = service.rank(
+        [
+          place('busan', '부산 사하구 감내2로 203'),
+          place('seoul', '서울 종로구 사직로 161'),
+        ],
+        context('발리'),
+      );
+
+      for (const candidate of ranked) {
+        expect(candidate.crag.locality).toBe(0.62);
+        expect(candidate.crag.penalties).not.toContain('destination-mismatch');
+      }
+    });
+  });
 });
