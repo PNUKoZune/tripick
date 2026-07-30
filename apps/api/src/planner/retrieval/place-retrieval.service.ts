@@ -126,7 +126,9 @@ export class PlaceRetrievalService {
 
   private async seedLocalCatalogIfNeeded(destination: string): Promise<void> {
     if (!this.autoSeedEnabled()) return;
-    const count = await this.placeEmbeddings.countSeededRegion(destination);
+    // 게이트는 검색과 같은 정본 코드로 센다 — seed 슬러그 라벨만 세던 시절엔 적재된 카탈로그
+    // (라벨 '서울특별시')를 못 보고 매 지역에 시드를 덧칠했다.
+    const count = await this.placeEmbeddings.countRegionCandidates(destination);
     if (count > 0) return;
 
     try {

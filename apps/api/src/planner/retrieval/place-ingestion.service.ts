@@ -131,7 +131,11 @@ export class PlaceIngestionService {
    * 그대로 받는다 — popular 은 시도 코퍼스가 넓을수록 그 지역 대표 명소가 묻히기 때문이다
    * (실측: '강원도 여행지 추천' 코퍼스에서 설악산은 언급 8회로 129위, 상위는 시군구명과
    * 도립시설이 차지한다. 설악산 글은 '속초 여행'으로 쓰인다).
-   * tour 는 KTO areaCode 가 있어야 하므로 시도 단위만 가능하고, 안 잡히면 건너뛴다.
+   *
+   * tour 는 KTO 시도 코드(lDongRegnCd)가 있어야 하므로 시도 단위만 가능하다. 그때 **건너뛰는
+   * 건 tour 소스뿐이고 타깃은 살린다** — 예전엔 타깃 자체를 버려서 기본 소스(tour,kakao)로
+   * `--regions=속초` 를 주면 카카오·popular 수집까지 0건이 됐다. 시군구 타깃 적재는
+   * `--sources=popular` 처럼 tour 를 빼야만 가능한 상태였다.
    */
   private resolveRequestedTargets(
     sidos: Array<{ code: string; name: string }>,
@@ -142,16 +146,19 @@ export class PlaceIngestionService {
     const seen = new Set<string>();
     for (const raw of requested) {
       const matched = sidos.filter((s) => s.name.includes(raw));
-      if (matched.length === 0 && sources.includes('tour')) {
-        this.logger.warn(
-          `요청한 지역(${raw})이 KTO 시도 목록에 없어 건너뜁니다 — tour 소스는 시도 단위만 적재합니다.`,
+      if (matched.length === 0) {
+        const usable = sources.filter((source) => source !== 'tour');
+        if (usable.length === 0) {
+          this.logger.warn(
+            `요청한 지역(${raw})이 KTO 시도 목록에 없고 tour 만 요청됐습니다 — 적재할 소스가 없어 건너뜁니다.`,
+          );
+          continue;
+        }
+        this.logger.log(
+          `[${raw}] 시도가 아닌 지역 — 시군구 단위 타깃으로 ${usable.join('·')} 만 적재합니다(tour 는 시도 단위만 가능).`,
         );
-        continue;
       }
       const resolved = matched.length > 0 ? matched : [{ code: '', name: raw }];
-      if (matched.length === 0) {
-        this.logger.log(`[${raw}] 시도가 아닌 지역 — 시군구 단위 타깃으로 적재합니다.`);
-      }
       for (const target of resolved) {
         if (seen.has(target.name)) continue;
         seen.add(target.name);
@@ -211,7 +218,11 @@ export class PlaceIngestionService {
     // 소스 비중을 균형 있게(반반) 맞추고 위치 정확도를 확보한다.
     // append 모드에서 카카오도 이 배치(다른 페이지) 좌표를 따라가 새 지역을 탐색한다.
     let tourPlaces: IngestPlace[] = [];
-    if (sources.includes('tour')) {
+    // 시군구 단위 타깃('속초')·KTO 목록 없는 실행은 시도 코드가 비어 있다. 빈 lDongRegnCd 로
+    // 부르면 지역 필터 없는 전국 조회가 되어 타지역 장소가 이 라벨로 적재되므로 여기서 끊는다.
+    if (sources.includes('tour') && !areaCode) {
+      this.logger.warn(`[${region}] KTO 시도 코드가 없어 tour 수집을 건너뜁니다.`);
+    } else if (sources.includes('tour')) {
       // reseed 는 항상 처음부터. append 는 커서를 이어받되 reseed 와 겹치면 처음부터.
       const startPage = append && !reseed ? await this.cursors.getNextPage(region, 'tour') : 1;
       const res = await this.tourApi.fetchByArea(areaCode, region, maxPerRegion, startPage, budget);
