@@ -166,7 +166,6 @@ function candidate(id: string, name: string, category: string): CandidatePlace {
       locality: 0.9,
       context: 0.7,
       availability: 0.6,
-      dataQuality: 0.8,
       popularity: 0.7,
       matchedTags: ['cafe', 'beach'],
       penalties: [],

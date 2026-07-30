@@ -665,7 +665,6 @@ export class PlannerService {
           locality: 1,
           context: 1,
           availability: 1,
-          dataQuality: 1,
           popularity: 1,
           matchedTags: [],
           penalties: [],

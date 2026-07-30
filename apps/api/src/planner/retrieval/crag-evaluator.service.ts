@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   FOOD_PREFERENCES,
   type Coordinates,
@@ -6,9 +7,12 @@ import {
   type MoodPreference,
   type ReplanTrigger,
 } from '@tripick/types';
-import { inferPlaceTags, normalizeDestinationRegion, tasteTagsToKeywords } from './place-seeds';
+import { inferPlaceTags, tasteTagsToKeywords } from './place-seeds';
+import { destinationRegionFilter, placeRegionCodes, type RegionFilter } from './region-code';
 import { collapseNearDuplicates } from './near-duplicate';
 import { NEUTRAL_POPULARITY } from './naver-search.service';
+import { isClosedAt } from './opening-hours.parser';
+import { DEFAULT_RETRIEVAL_WEIGHT, termWeights, type TermWeights } from './retrieval-rank';
 import type { CandidatePlace, CragScore, RawPlaceCandidate, RetrievalContext } from './types';
 
 /**
@@ -52,9 +56,6 @@ const INDOOR_TAGS = new Set<string>([
 const DINING_CATEGORIES: ReadonlySet<string> = new Set(['restaurant', 'cafe']);
 const ATTRACTION_CATEGORIES: ReadonlySet<string> = new Set(['attraction']);
 
-/** CRAG 총점에서 네이버 대중 인지도 항이 차지하는 가중치. accept 게이트 보정과 공유. */
-export const POPULARITY_WEIGHT = 0.12;
-
 /** 트리거 없음(최초 생성) 및 트리거별 선호 신호가 없을 때 쓰는 중립 점수. */
 const NEUTRAL_TRIGGER_SCORE = 0.64;
 
@@ -75,16 +76,41 @@ const TRIGGER_SCORE: Record<ReplanTrigger, (tags: string[]) => number> = {
 
 @Injectable()
 export class CragEvaluatorService {
+  constructor(@Optional() private readonly config?: ConfigService) {}
+
   rank(candidates: RawPlaceCandidate[], context: RetrievalContext): CandidatePlace[] {
-    const scored = this.deduplicate(candidates)
-      .map((candidate) => this.evaluate(candidate, context))
+    const weights = this.weights();
+    const unique = this.deduplicate(candidates);
+    const expectedRegion = destinationRegionFilter(context.destination);
+    const regionJudgeable = this.localityJudgeable(unique, expectedRegion);
+    const scored = unique
+      .map((candidate) => this.evaluate(candidate, context, weights, expectedRegion, regionJudgeable))
       .sort((a, b) => b.confidence - a.confidence);
     // 근접 중복 접기는 **점수 정렬 뒤에** 온다 — 남는 대표가 그 무리에서 가장 높은 후보여야 한다.
     return collapseNearDuplicates(scored, context.destination);
   }
 
+  /**
+   * 실효 가중치. `CRAG_RETRIEVAL_WEIGHT` 로 retrieval 항만 조정하고 남은 몫은 비례 배분해
+   * 합 1 을 지킨다(=confidence 의 절대 의미 유지). accept 게이트도 이 값을 봐야 한다.
+   */
+  weights(): TermWeights {
+    return termWeights(this.readWeight('CRAG_RETRIEVAL_WEIGHT', DEFAULT_RETRIEVAL_WEIGHT));
+  }
+
+  private readWeight(key: string, fallback: number): number {
+    const raw = this.config?.get<string>(key);
+    // 빈 문자열·미설정은 Number('') === 0 이라 조용히 0 가중이 되므로 명시적으로 걸러낸다.
+    if (raw === undefined || raw === null || String(raw).trim() === '') return fallback;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : fallback;
+  }
+
   /** 후보 풀이 반드시 담아야 하는 종류별 최소 수. 일정에 식사 슬롯과 볼거리가 둘 다 필요하다. */
   private static readonly POOL_MIN_PER_KIND = 2;
+
+  /** 지역 판정 불가(목적지·후보 어느 쪽이든) 시 쓰는 중립값. */
+  private static readonly NEUTRAL_LOCALITY = 0.62;
 
   /**
    * 점수 순으로 후보를 고르되, 종류별 최소 보유량을 보장한다.
@@ -146,28 +172,32 @@ export class CragEvaluatorService {
     return -1;
   }
 
-  private evaluate(candidate: RawPlaceCandidate, context: RetrievalContext): CandidatePlace {
+  private evaluate(
+    candidate: RawPlaceCandidate,
+    context: RetrievalContext,
+    weights: TermWeights,
+    expectedRegion: RegionFilter,
+    regionJudgeable: boolean,
+  ): CandidatePlace {
     const tags = candidate.tags?.length ? candidate.tags : inferPlaceTags(candidate);
     const matchedTags = this.matchedTags(tags, context);
     const penalties: string[] = [];
     const retrieval = this.retrievalScore(candidate);
     const personalization = this.personalizationScore(candidate);
     const taste = this.tasteScore(tags, context, personalization);
-    const locality = this.localityScore(candidate, context, penalties);
+    const locality = this.localityScore(candidate, expectedRegion, regionJudgeable, penalties);
     const contextScore = this.contextScore(candidate, tags, context);
     const availability = this.availabilityScore(candidate, context, penalties);
-    const dataQuality = this.dataQualityScore(candidate, penalties);
     const popularity = this.popularityScore(candidate, context, penalties);
-    // 네이버 인지도 항(0.12)을 더해 마이너 장소를 후순위로 민다.
+    // 네이버 인지도 항을 더해 마이너 장소를 후순위로 민다.
     // 인덱스 비활성 시 popularity=중립값이라 나머지 항 비율만 유지되고 순위는 불변.
     const total = this.clamp(
-      retrieval * 0.24 +
-        taste * 0.2 +
-        popularity * POPULARITY_WEIGHT +
-        locality * 0.16 +
-        contextScore * 0.13 +
-        availability * 0.09 +
-        dataQuality * 0.06,
+      retrieval * weights.retrieval +
+        taste * weights.taste +
+        popularity * weights.popularity +
+        locality * weights.locality +
+        contextScore * weights.context +
+        availability * weights.availability,
     );
 
     const crag: CragScore = {
@@ -177,7 +207,6 @@ export class CragEvaluatorService {
       locality,
       context: contextScore,
       availability,
-      dataQuality,
       popularity,
       matchedTags,
       penalties,
@@ -243,20 +272,67 @@ export class CragEvaluatorService {
     return this.clamp((candidate.preferenceSimilarity + 1) / 2);
   }
 
+  /**
+   * 목적지와 후보를 **정본 지역 코드**로 비교한다 (적재·검색 pre-filter 와 같은 함수).
+   *
+   * 예전엔 `normalizeDestinationRegion` + 지역 키워드 사전이었는데, 그 두 곳이 아는 목적지가
+   * **seoul·busan·jeju·gyeongju 넷뿐**이라 그 밖의 목적지에서는 첫 줄에서 `'default'` 로 빠져
+   * **전 후보가 같은 값(0.62)** 이었다 — 즉 가드가 아예 돌지 않았다. 골든셋 14케이스 중 10케이스가
+   * 그 상태였고, 영주 케이스(카카오 폴백)에서 후보 16개 전원이 0.62 인 것으로 드러났다.
+   *
+   * ⚠️ **시도는 시도끼리, 시군구는 시군구끼리** 비교한다. 교차 비교하면 `경기 광주시`(시군구 '광주')
+   * 후보가 `광주광역시`(시도 '광주') 목적지와 맞는 것으로 읽힌다 — 통합 라벨 작업에서 한 번
+   * 데인 지점이다.
+   */
   private localityScore(
     candidate: RawPlaceCandidate,
-    context: RetrievalContext,
+    expected: RegionFilter,
+    judgeable: boolean,
     penalties: string[],
   ): number {
-    const region = normalizeDestinationRegion(context.destination);
-    if (region === 'default') return 0.62;
-    const haystack = `${candidate.name} ${candidate.address} ${candidate.destinationRegion ?? ''}`.toLowerCase();
-    const regionMatches =
-      candidate.destinationRegion?.toLowerCase() === region ||
-      this.regionKeywords(region).some((keyword) => haystack.includes(keyword));
-    if (regionMatches) return 0.92;
+    if (!judgeable) return CragEvaluatorService.NEUTRAL_LOCALITY;
+
+    const { regionCode, sigunguCode } = placeRegionCodes(
+      candidate.destinationRegion ?? null,
+      null,
+      candidate.address ?? null,
+    );
+    // 지역 라벨이 없는 행(폴백 시드)은 판정 불가 — 데이터 없음을 '다른 지역'으로 읽으면 안 된다.
+    if (!regionCode && !sigunguCode) return CragEvaluatorService.NEUTRAL_LOCALITY;
+
+    if (CragEvaluatorService.matchesRegion(expected, regionCode, sigunguCode)) return 0.92;
     penalties.push('destination-mismatch');
     return 0.32;
+  }
+
+  private static matchesRegion(
+    expected: RegionFilter,
+    regionCode: string | null,
+    sigunguCode: string | null,
+  ): boolean {
+    if (expected.sido) return regionCode === expected.sido;
+    if (expected.sigungu) return sigunguCode === expected.sigungu;
+    return false;
+  }
+
+  /**
+   * 목적지 코드로 후보를 가를 수 있는지. **한 후보도 안 맞으면 판정을 포기한다.**
+   *
+   * `destinationRegionFilter` 는 임의 문자열에서도 시군구 코드를 만들어 낸다('발리' → '발리').
+   * 그런 코드로 비교하면 전 후보가 일률 감점되는데, 일률 감점은 **순위를 못 바꾸면서**
+   * confidence 절대 수준만 0.06 내려 accept 게이트·폴백 임계를 흔든다(§dataQuality 제거에서
+   * 같은 함정을 겪었다). 그래서 아무도 안 맞으면 가드를 끈다.
+   */
+  private localityJudgeable(candidates: RawPlaceCandidate[], expected: RegionFilter): boolean {
+    if (!expected.sido && !expected.sigungu) return false;
+    return candidates.some((candidate) => {
+      const { regionCode, sigunguCode } = placeRegionCodes(
+        candidate.destinationRegion ?? null,
+        null,
+        candidate.address ?? null,
+      );
+      return CragEvaluatorService.matchesRegion(expected, regionCode, sigunguCode);
+    });
   }
 
   private contextScore(
@@ -280,35 +356,40 @@ export class CragEvaluatorService {
     return TRIGGER_SCORE[context.trigger](tags);
   }
 
+  /**
+   * 영업시간 판정. **감점 전용이다** — 판정 불가(데이터 없음·형식 불명·방문 시각 없음)와
+   * "열려 있음 확인"이 같은 값이고, 확인된 닫힘만 깎는다.
+   *
+   * 예전엔 열림 0.95 / 판정 불가 0.58 로 갈라 **영업시간 데이터가 있다는 사실 자체에 총점 0.041**
+   * 을 얹고 있었다(가중 0.111 × 0.37). popularity 의 '언급 0' 감점 영향폭(0.052)에 맞먹는
+   * 크기인데, 장소 품질이 아니라 **데이터 출처**에 붙는 가점이었다.
+   *
+   * 그 출처가 카테고리와 얽혀 있다는 게 문제다. 영업시간은 KTO 출처(4,501행)만 얻을 수 있고
+   * 카카오 전용(5,980행)은 [구글 Places 미채택](../../../../docs/plans/2026-07-21-open-backlog.md)
+   * 이후 영구히 못 얻는데, **카페는 전원 카카오 출처다** — 카탈로그 실측 가점률이
+   * 식당 199/2,548(7.8%) · 관광지 345/6,615(5.2%) · **카페 0/1,312(0%)** 였다. 즉 카페만
+   * 구조적으로 가점에서 배제된다. 일정에는 카페 슬롯도 필요하다(`selectTopDiverse` 가 식음
+   * 최소 보유량을 보장하는 이유).
+   *
+   * 중립값이 예전 다수값 0.58 그대로인 것도 의도다 — 후보 95%가 이 값이라, 여기를 올리면 순위는
+   * 그대로인데 confidence 절대 수준이 통째로 올라가 accept 게이트(`CRAG_MIN_CONFIDENCE`)와
+   * 폴백 판정(`CRAG_TARGET_CONFIDENCE`)이 함께 움직인다.
+   *
+   * 영업시간 밖 일정을 실제로 막는 것은 이 항(총점 차이 0.037)이 아니라
+   * [ConstraintEngine.checkOpeningHours](../constraint/constraint.engine.ts) 의 하드 검증이다.
+   * 역할이 다르다 — 점수는 "가능하면 안 뽑기", 제약은 "뽑혔으면 막기".
+   */
   private availabilityScore(
     candidate: RawPlaceCandidate,
     context: RetrievalContext,
     penalties: string[],
   ): number {
-    if (!candidate.openingHours) return 0.58;
-    if (!context.startAt) return 0.68;
-
-    const match = candidate.openingHours.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
-    if (!match) return 0.58;
-
-    const [, startHour, startMinute, endHour, endMinute] = match;
-    const visitMinutes = this.kstMinutes(context.startAt);
-    const start = Number(startHour) * 60 + Number(startMinute);
-    const end = Number(endHour) * 60 + Number(endMinute);
-    if (visitMinutes >= start && visitMinutes <= end) return 0.95;
+    const neutral = 0.58;
+    if (!context.startAt) return neutral;
+    // 판정은 평가 하네스와 공유한다 — 규칙이 두 곳에 있으면 지표가 감점 대상을 못 따라간다.
+    if (!isClosedAt(candidate.openingHours, context.startAt)) return neutral;
     penalties.push('closed-at-target-time');
     return 0.25;
-  }
-
-  private dataQualityScore(candidate: RawPlaceCandidate, penalties: string[]): number {
-    let score = 0.35;
-    if (candidate.name) score += 0.15;
-    if (candidate.address) score += 0.15;
-    if (candidate.coordinates) score += 0.2;
-    if (candidate.category) score += 0.1;
-    if (candidate.kakaoPlaceId || candidate.tourismApiId) score += 0.05;
-    if (!candidate.address) penalties.push('missing-address');
-    return this.clamp(score);
   }
 
   private distanceScore(from: Coordinates, to: Coordinates): number {
@@ -356,20 +437,6 @@ export class CragEvaluatorService {
       unique.push(candidate);
     }
     return unique;
-  }
-
-  private regionKeywords(region: string): string[] {
-    return {
-      seoul: ['서울', 'seoul'],
-      busan: ['부산', 'busan'],
-      jeju: ['제주', 'jeju'],
-      gyeongju: ['경주', 'gyeongju'],
-      default: [],
-    }[region] ?? [];
-  }
-
-  private kstMinutes(date: Date): number {
-    return ((date.getUTCHours() * 60 + date.getUTCMinutes()) + 9 * 60) % (24 * 60);
   }
 
   private distanceKm(from: Coordinates, to: Coordinates): number {

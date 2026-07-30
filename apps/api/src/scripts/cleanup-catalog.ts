@@ -17,7 +17,7 @@
  *
  * 옵션:
  *   --apply         실제로 삭제한다 (기본은 dry-run)
- *   --only=a,b      대상 부류 선택 (seo, course / 기본 둘 다)
+ *   --only=a,b      대상 부류 선택 (seo, course, coords / 기본 셋 다)
  *   --samples=30    보고할 표본 수 (기본 30)
  *
  * course 판정은 KTO 에 "이 시도의 여행코스 목록"을 되물어(areaBasedList2 contentTypeId=25)
@@ -33,8 +33,9 @@ import {
   isTravelCourseArticle,
 } from '../planner/retrieval/place-name-quality';
 import { TRAVEL_COURSE_CONTENT_TYPE, TourApiService } from '../planner/retrieval/tour-api.service';
+import { isPlausibleKoreanCoordinate } from '../planner/retrieval/place-eligibility';
 
-type Target = 'seo' | 'course';
+type Target = 'seo' | 'course' | 'coords';
 
 interface CatalogRow {
   id: string;
@@ -43,6 +44,7 @@ interface CatalogRow {
   category: string | null;
   destination_region: string | null;
   tourism_api_id: string | null;
+  coordinates: { lat: number; lng: number } | null;
 }
 
 interface Options {
@@ -52,7 +54,7 @@ interface Options {
 }
 
 function parseArgs(argv: string[]): Options {
-  const options: Options = { apply: false, targets: ['seo', 'course'], samples: 30 };
+  const options: Options = { apply: false, targets: ['seo', 'course', 'coords'], samples: 30 };
   for (const arg of argv) {
     const [rawKey, rawValue] = arg.replace(/^--/, '').split('=');
     const value = rawValue?.trim();
@@ -63,10 +65,11 @@ function parseArgs(argv: string[]): Options {
     if (!value) continue;
     if (rawKey === 'only') {
       const requested = value.split(',').map((s) => s.trim()).filter(Boolean);
-      const unknown = requested.filter((s) => s !== 'seo' && s !== 'course');
+      const valid = new Set<Target>(['seo', 'course', 'coords']);
+      const unknown = requested.filter((s) => !valid.has(s as Target));
       // 오타를 조용히 버리면 아무것도 안 지우고 성공한 것처럼 끝난다.
       if (unknown.length > 0) {
-        throw new Error(`알 수 없는 대상: ${unknown.join(', ')} (가능: seo, course)`);
+        throw new Error(`알 수 없는 대상: ${unknown.join(', ')} (가능: ${[...valid].join(', ')})`);
       }
       options.targets = requested as Target[];
     } else if (rawKey === 'samples') {
@@ -88,7 +91,7 @@ async function main() {
     const tourApi = app.get(TourApiService);
 
     const rows: CatalogRow[] = await dataSource.query(
-      `SELECT id, name, address, category, destination_region, tourism_api_id FROM place_embeddings`,
+      `SELECT id, name, address, category, destination_region, tourism_api_id, coordinates FROM place_embeddings`,
     );
     console.log(`\n카탈로그 ${rows.length}행 검사`);
 
@@ -98,6 +101,17 @@ async function main() {
       const hits = rows.filter((row) => isSeoBusinessName(row.name));
       for (const row of hits) doomed.set(row.id, { row, reason: 'seo' });
       report('SEO 상호', hits, options.samples);
+    }
+
+    if (options.targets.includes('coords')) {
+      // KTO placeholder 좌표(실측 3행이 전부 남중국해 `19.694, 117.993`). 지도 마커가 바다에
+      // 찍히고 이동시간이 수천 km 로 계산되므로 후보로 남길 이유가 없다. 적재·검색에도 게이트가
+      // 있지만(재적재하면 안 들어온다) 이미 들어온 행은 여기서 지운다.
+      const hits = rows.filter(
+        (row) => !row.coordinates || !isPlausibleKoreanCoordinate(row.coordinates),
+      );
+      for (const row of hits) doomed.set(row.id, { row, reason: 'coords' });
+      report('좌표 불량', hits, options.samples);
     }
 
     if (options.targets.includes('course')) {

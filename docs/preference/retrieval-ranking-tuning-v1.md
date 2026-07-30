@@ -197,8 +197,8 @@ sokcho-mountain             16   0.10   0.30   0.50   80%  0.25    100%     0
 ## 5. 알려진 한계
 
 - **`seoul-city-nightview` 는 여전히 `R|cat` 0.00.** 청계천·한강공원·북촌한옥마을·홍대·명동·서울숲이 적재돼 있는데 상위 16 밖이다. 서울은 후보 밀도가 압도적으로 높아(660행) 유사도 상위 48 안에 이들이 안 들어오는 것으로 보인다 — 후보 풀 자체를 못 통과하는 문제라 랭킹 가중으로는 못 고친다. §6 첫 항목.
-- **`retrieval` 항이 사실상 상수다.** pgvector 유사도가 전 후보 0.73~0.82(코사인 0.46~0.64)에 몰려 있어 가중 0.24 를 받으면서도 순위를 거의 못 가른다. 정규화나 곡선 재조정으로 변별력을 만들 수 있는데, 절대 confidence 의미와 accept 게이트(`CRAG_MIN_CONFIDENCE`)에 연동돼 있어 별 작업으로 뒀다.
-- **`locality`·`availability`·`dataQuality` 도 케이스 내에서 거의 균일하다**(예: 대구 전 후보 locality 0.62). 실질 변별은 인지도와 taste 두 항이 하고 있다.
+- ~~**`retrieval` 항이 사실상 상수다.**~~ **후속 작업에서 닫혔고, 처방은 이 문서의 추정과 반대였다** — 정규화로 변별력을 만드는 안은 전 구간 손해였고(항목별 AUC 가 popularity 0.838 > retrieval 0.656 이라 벡터 순서에 발언권을 주는 만큼 더 좋은 신호가 밀린다) 가중을 0.24→0.06 으로 **내리는** 쪽이 답이었다([`crag-term-weight-tuning-v1.md`](./crag-term-weight-tuning-v1.md)).
+- **`locality`·`availability`·`dataQuality` 도 케이스 내에서 거의 균일하다**(예: 대구 전 후보 locality 0.62). 실질 변별은 인지도와 taste 두 항이 하고 있다. 후속 측정에서 penalty 발동률이 locality 0/1441 · dataQuality 0/1441 · availability 1.6% 로 확인됐고, **그 가중을 일하는 항으로 옮겨도 순위는 안 바뀐다**(값이 같은 항은 총점을 같은 양 올릴 뿐)는 것까지 실측했다([`crag-term-weight-tuning-v1.md`](./crag-term-weight-tuning-v1.md) §6).
 - **같은 장소가 중복 후보로 자리를 먹는다.** 제주에서 '한라산' 행이 둘, '한라산국립공원'·'한라산 동능'까지 별 후보로 잡혀 16칸을 나눠 쓴다. 이름 기준 근접 중복 제거가 필요하다.
 - **골든셋 11케이스는 회귀 감지용**이다. 상수 튜닝을 통계적으로 하려면 30~50케이스가 필요하고, 개인화 품질은 이 세트로 측정 불가다(§3.6).
 
@@ -206,7 +206,7 @@ sokcho-mountain             16   0.10   0.30   0.50   80%  0.25    100%     0
 
 - **인지도를 후보 선발 단계에 얹는 안** — 프로토타입으로 측정하고 되돌렸다(§7).
 - **카탈로그의 SEO 상호·여행코스 글 행** — 후속 작업에서 처리했다: SEO 상호는 "단일 어절 + 짧은 이름" 으로 좁히고, 여행코스 기사는 KTO `contentTypeId=25` 를 되물어 확정한 뒤에만 이름 규칙을 적용한다([`catalog-name-quality-v1.md`](./catalog-name-quality-v1.md)).
-- **`retrieval` 항 변별력** — §5 두 번째 항목.
+- ~~**`retrieval` 항 변별력**~~ — 완료. 가중 0.24→0.06([`crag-term-weight-tuning-v1.md`](./crag-term-weight-tuning-v1.md)).
 - **근접 중복 제거** — 이름+좌표 기준. 적재 파이프라인에는 있는데(`dedupe`) 검색 결과에는 없다.
 - **`sigungu_code` 재파생** — 직전 작업에서 넘어온 항목. **popular 패스 짧은 일반어 컷** 은 후속 작업에서 지역 특이도 관문으로 처리했다([`catalog-name-quality-v1.md`](./catalog-name-quality-v1.md)).
 - **골든셋 확대와 개인화 지표** — 취향별 정답이 있는 케이스를 만들어야 blend weight 를 제대로 정할 수 있다.

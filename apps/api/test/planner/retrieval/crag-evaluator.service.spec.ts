@@ -1,6 +1,8 @@
 /// <reference types="jest" />
 
+import type { ConfigService } from '@nestjs/config';
 import { CragEvaluatorService } from '../../../src/planner/retrieval/crag-evaluator.service';
+import { DEFAULT_RETRIEVAL_WEIGHT } from '../../../src/planner/retrieval/retrieval-rank';
 import type { CandidatePlace, RawPlaceCandidate, RetrievalContext } from '../../../src/planner/retrieval/types';
 
 describe('CragEvaluatorService', () => {
@@ -294,7 +296,6 @@ describe('CragEvaluatorService', () => {
           locality: 0,
           context: 0,
           availability: 0,
-          dataQuality: 0,
           popularity: 0,
           matchedTags: [],
           penalties: [],
@@ -343,6 +344,187 @@ describe('CragEvaluatorService', () => {
         'a2',
         'a3',
       ]);
+    });
+  });
+
+  /**
+   * 영업시간 항은 감점 전용이다 — "데이터가 있다"에 가점하면 그건 장소 품질이 아니라
+   * 데이터 출처(KTO 관광지)에 붙는 가점이고, 카카오 전용 식당·카페는 영업시간을 영구히 못 얻어
+   * 체계적으로 후순위가 된다.
+   */
+  describe('availability 감점 전용', () => {
+    const withHours = (id: string, openingHours?: string): RawPlaceCandidate => ({
+      id,
+      name: `부산 후보 ${id}`,
+      category: 'attraction',
+      address: '부산 수영구 광안해변로 219',
+      coordinates: { lat: 35.1532, lng: 129.1185 },
+      source: 'pgvector',
+      similarity: 0.52,
+      tags: ['beach'],
+      destinationRegion: 'busan',
+      ...(openingHours ? { openingHours } : {}),
+    });
+
+    /** 2026-08-01 10:00 KST */
+    const visitAt = new Date('2026-08-01T01:00:00.000Z');
+
+    it('영업시간이 있고 열려 있어도 판정 불가 후보와 같은 점수 (출처 가점 없음)', () => {
+      const ranked = service.rank([withHours('open', '09:00-18:00'), withHours('unknown')], {
+        ...busanContext,
+        startAt: visitAt,
+      });
+
+      const open = ranked.find((c) => c.id === 'open')!;
+      const unknown = ranked.find((c) => c.id === 'unknown')!;
+      expect(open.crag.availability).toBe(unknown.crag.availability);
+      expect(open.confidence).toBe(unknown.confidence);
+      expect(open.crag.penalties).not.toContain('closed-at-target-time');
+    });
+
+    it('확인된 닫힘만 감점한다', () => {
+      const ranked = service.rank([withHours('closed', '19:00-23:00'), withHours('unknown')], {
+        ...busanContext,
+        startAt: visitAt,
+      });
+
+      const closed = ranked.find((c) => c.id === 'closed')!;
+      const unknown = ranked.find((c) => c.id === 'unknown')!;
+      expect(closed.crag.availability).toBeLessThan(unknown.crag.availability);
+      expect(closed.crag.penalties).toContain('closed-at-target-time');
+      expect(ranked[0]!.id).toBe('unknown');
+    });
+
+    it('방문 시각이 없으면 영업시간이 있어도 중립 — 후보 95%의 값과 같아야 게이트가 안 흔들린다', () => {
+      const [withData, withoutData] = [
+        service.rank([withHours('open', '09:00-18:00')], busanContext)[0]!,
+        service.rank([withHours('unknown')], busanContext)[0]!,
+      ];
+      expect(withData.crag.availability).toBe(withoutData.crag.availability);
+    });
+  });
+
+  /**
+   * retrieval 가중은 실측 근거로 0.24 → 0.06 으로 내렸다(`retrieval-rank.ts` 주석).
+   * 스윕 노브가 게이트를 흔들지 않는지 — 즉 남은 몫이 비례 배분되는지 — 를 서비스 경로에서 확인한다.
+   */
+  it('CRAG_RETRIEVAL_WEIGHT 를 바꿔도 confidence 수준은 유지된다 (합 1 비례 배분)', () => {
+    const withWeight = (value: string): CragEvaluatorService =>
+      new CragEvaluatorService({
+        get: (key: string) => (key === 'CRAG_RETRIEVAL_WEIGHT' ? value : undefined),
+      } as unknown as ConfigService);
+
+    const candidate: RawPlaceCandidate = {
+      id: 'c1',
+      name: '광안리 브런치 카페',
+      category: 'cafe',
+      address: '부산 수영구 광안해변로 219',
+      coordinates: { lat: 35.1532, lng: 129.1185 },
+      source: 'pgvector',
+      similarity: 0.52,
+      tags: ['cafe', 'beach', 'romantic'],
+      destinationRegion: 'busan',
+    };
+
+    const low = withWeight('0.06').rank([candidate], busanContext)[0]!;
+    const high = withWeight('0.24').rank([candidate], busanContext)[0]!;
+
+    // 가중을 4배 차이로 벌려도 총점은 게이트(0.52) 판정을 뒤집을 만큼 움직이지 않는다.
+    expect(Math.abs(low.confidence - high.confidence)).toBeLessThan(0.05);
+    expect(withWeight('0.06').weights().popularity).toBeGreaterThan(
+      withWeight('0.24').weights().popularity,
+    );
+
+    // 빈 문자열은 `Number('') === 0` 이라 검사 없이 쓰면 **retrieval 항이 조용히 사라진다**.
+    expect(withWeight('').weights().retrieval).toBeCloseTo(DEFAULT_RETRIEVAL_WEIGHT, 10);
+    expect(withWeight('  ').weights().retrieval).toBeCloseTo(DEFAULT_RETRIEVAL_WEIGHT, 10);
+    expect(withWeight('abc').weights().retrieval).toBeCloseTo(DEFAULT_RETRIEVAL_WEIGHT, 10);
+  });
+
+  /**
+   * locality 는 정본 지역 코드로 판정한다. 예전엔 `normalizeDestinationRegion` 이 아는
+   * 4개 목적지(서울·부산·제주·경주) 밖에서는 전 후보가 0.62 로 같아 **가드가 안 돌았다.**
+   */
+  describe('locality 지역 판정', () => {
+    const place = (
+      id: string,
+      address: string,
+      extra: Partial<RawPlaceCandidate> = {},
+    ): RawPlaceCandidate => ({
+      id,
+      name: `후보 ${id}`,
+      category: 'attraction',
+      address,
+      coordinates: { lat: 36.8, lng: 128.6 },
+      source: 'kakao',
+      tags: ['cultural'],
+      ...extra,
+    });
+
+    const context = (destination: string): RetrievalContext => ({
+      userId: 'user-1',
+      destination,
+      trigger: 'manual',
+    });
+
+    it('하드코딩 4곳 밖 목적지에서도 타지역 후보를 감점한다', () => {
+      const ranked = service.rank(
+        [
+          place('busan', '부산 사하구 감내2로 203'),
+          place('yeongju', '경북 영주시 순흥면 소백로 2740'),
+        ],
+        context('영주'),
+      );
+
+      const local = ranked.find((c) => c.id === 'yeongju')!;
+      const other = ranked.find((c) => c.id === 'busan')!;
+      expect(local.crag.locality).toBe(0.92);
+      expect(other.crag.locality).toBe(0.32);
+      expect(other.crag.penalties).toContain('destination-mismatch');
+      expect(ranked[0]!.id).toBe('yeongju');
+    });
+
+    it('시도와 시군구를 교차 비교하지 않는다 — 경기 광주시 ≠ 광주광역시', () => {
+      const ranked = service.rank(
+        [
+          place('gyeonggi', '경기 광주시 경안로 100'),
+          place('gwangju', '광주 동구 금남로 100'),
+        ],
+        context('광주'),
+      );
+
+      expect(ranked.find((c) => c.id === 'gwangju')!.crag.locality).toBe(0.92);
+      expect(ranked.find((c) => c.id === 'gyeonggi')!.crag.locality).toBe(0.32);
+    });
+
+    it('지역 라벨이 없는 후보는 감점이 아니라 중립 — 데이터 없음을 타지역으로 읽으면 안 된다', () => {
+      const ranked = service.rank(
+        [
+          place('unlabeled', ''),
+          place('yeongju', '경북 영주시 순흥면 소백로 2740'),
+        ],
+        context('영주'),
+      );
+
+      const unlabeled = ranked.find((c) => c.id === 'unlabeled')!;
+      expect(unlabeled.crag.locality).toBe(0.62);
+      expect(unlabeled.crag.penalties).not.toContain('destination-mismatch');
+    });
+
+    it('한 후보도 안 맞으면 가드를 끈다 — 일률 감점은 순위를 못 바꾸면서 confidence 레벨만 흔든다', () => {
+      // '발리' 같은 자유 입력도 `destinationRegionFilter` 는 시군구 코드를 만들어 낸다.
+      const ranked = service.rank(
+        [
+          place('busan', '부산 사하구 감내2로 203'),
+          place('seoul', '서울 종로구 사직로 161'),
+        ],
+        context('발리'),
+      );
+
+      for (const candidate of ranked) {
+        expect(candidate.crag.locality).toBe(0.62);
+        expect(candidate.crag.penalties).not.toContain('destination-mismatch');
+      }
     });
   });
 });

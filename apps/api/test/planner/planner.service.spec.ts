@@ -453,7 +453,6 @@ function place(id: string, name: string, category: string): CandidatePlace {
       locality: 0.9,
       context: 0.85,
       availability: 1,
-      dataQuality: 0.9,
       popularity: 0.8,
       matchedTags: ['cafe', 'beach'],
       penalties: [],

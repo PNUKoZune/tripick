@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { getSeedCandidates, tasteTagsToKeywords } from './place-seeds';
-import { CragEvaluatorService, POPULARITY_WEIGHT } from './crag-evaluator.service';
+import { CragEvaluatorService } from './crag-evaluator.service';
 import { KakaoLocalService } from './kakao-local.service';
 import { NaverSearchService, NEUTRAL_POPULARITY } from './naver-search.service';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
@@ -95,9 +95,12 @@ export class PlaceRetrievalService {
     // 인지도는 "소프트 재랭킹"이라 순위만 낮출 뿐 후보를 탈락시키면 안 된다.
     // 중립값 아래로 깎인 감점분은 accept 게이트에서만 되돌려, 언급 0 이라는 이유로
     // minimumConfidence 를 밑돌아 제거되는 일을 막는다(정렬 순서엔 감점 그대로 반영).
+    // 되돌리는 폭은 상수가 아니라 **실효 가중치**여야 한다 — CRAG_RETRIEVAL_WEIGHT 를 바꾸면
+    // 인지도 가중도 비례 배분으로 함께 움직이므로, 상수를 쓰면 과·소보정이 된다.
+    const popularityWeight = this.evaluator.weights().popularity;
     const gateConfidence = (candidate: CandidatePlace): number =>
       candidate.confidence +
-      POPULARITY_WEIGHT * Math.max(0, NEUTRAL_POPULARITY - candidate.crag.popularity);
+      popularityWeight * Math.max(0, NEUTRAL_POPULARITY - candidate.crag.popularity);
     const accepted = ranked.filter((candidate) => gateConfidence(candidate) >= minimumConfidence);
     const finalPool = accepted.length >= Math.min(4, limit) ? accepted : ranked;
     const places = this.evaluator.selectTopDiverse(finalPool, limit);
@@ -227,8 +230,21 @@ export class PlaceRetrievalService {
     return this.readNumber('CRAG_MIN_CONFIDENCE', 0.52);
   }
 
+  /**
+   * 이 값을 밑돌면 카카오·시드 폴백을 부른다.
+   *
+   * 0.64 → 0.61. **품질 기준을 낮춘 게 아니라 가중표 변경분을 되맞춘 것이다** — `dataQuality`
+   * 항(전 후보 1.000 인 상수)을 제거하자 남은 몫이 값이 1 보다 작은 항들로 비례 배분돼 모든 후보의
+   * confidence 가 일률적으로 **0.02 내려갔다**(케이스별 0.018~0.029). 임계는 절대값이라 그대로
+   * 두면 순위가 아무것도 안 바뀌었는데 폴백만 새로 걸린다 — 실측에서 daegu 케이스가
+   * top-8 평균 0.648 → 0.619 로 넘어가 카카오·시드를 불렀고, **결과 상위 5개와 지표는 완전히
+   * 동일**했다(외부 API 호출만 추가).
+   *
+   * ⚠️ 절대 임계는 가중표에 묶여 있다 — 항을 더하거나 빼면 여기도 같이 재보정해야 한다.
+   * accept 게이트(`CRAG_MIN_CONFIDENCE` 0.52)는 선택 후보 최저값이 0.589 로 여유가 커 그대로 뒀다.
+   */
   private targetConfidence(): number {
-    return this.readNumber('CRAG_TARGET_CONFIDENCE', 0.64);
+    return this.readNumber('CRAG_TARGET_CONFIDENCE', 0.61);
   }
 
   private autoSeedEnabled(): boolean {
