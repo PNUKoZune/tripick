@@ -276,10 +276,7 @@ export function PreferenceSetupForm() {
     savedPhotoUrls.length + previews.length + (canAddMore ? 1 : 0) + (showMoodSwatches ? 2 : 0);
   // 빈 슬롯은 실제로 더 올릴 수 있는 만큼만 그린다(총 10장 상한을 넘겨 기대를 주지 않도록).
   const ghostSlots = canAddMore
-    ? Math.min(
-        Math.max(0, 6 - filledTiles),
-        Math.max(0, photoAllowance - photos.length - 1),
-      )
+    ? Math.min(Math.max(0, 6 - filledTiles), Math.max(0, photoAllowance - photos.length - 1))
     : 0;
 
   // 저장 전 페이지 이탈(새로고침·탭 닫기·주소 이동) 시 브라우저 경고
@@ -477,8 +474,125 @@ export function PreferenceSetupForm() {
 
   return (
     <div className="wvr-scope space-y-8">
-      {/* 목업 화면 B 의 서사 순서를 따른다 — 사진 고르기 → 분석 중 → 분석 결과 → 직접 정하는 것들. */}
-      <SetupBlock title="사진으로 취향 분석" className="wvr-rise wvr-rise-1">
+      <SetupBlock title="테마/장소 선호도">
+        <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--ink-faint)]">
+          좋아하는 건 선호, 피하고 싶은 건 불호로 골라주세요. 고르지 않으면 중립이에요.
+        </p>
+        <div className="space-y-4">
+          {THEME_GROUPS.map((group) => (
+            <div key={group.key}>
+              <h3 className="mb-1.5 text-[13px] font-bold leading-5 text-[color:var(--ink-sub)]">
+                {group.label}
+              </h3>
+              <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-2">
+                {group.themes.map((theme) => (
+                  <ThemeStanceRow
+                    key={theme.value}
+                    label={theme.label}
+                    examples={theme.examples}
+                    stance={themeStance(theme.value)}
+                    onSelect={(stance) => setThemeStance(theme.value, stance)}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </SetupBlock>
+
+      <div className="grid gap-x-8 gap-y-8 lg:grid-cols-2">
+        <SetupBlock title="취침 / 기상 시간">
+          <div className="grid grid-cols-2 gap-3">
+            <TimeField
+              variant="soft"
+              label="취침"
+              value={form.sleepTime}
+              onChange={(sleepTime) => setForm((current) => ({ ...current, sleepTime }))}
+            />
+            <TimeField
+              variant="soft"
+              label="기상"
+              value={form.wakeTime}
+              onChange={(wakeTime) => setForm((current) => ({ ...current, wakeTime }))}
+            />
+          </div>
+          {/* 하루의 리듬 — 목업 가로 밴드를 실제 취침/기상 값으로 시각화(REQ-WVR-020, 읽기 전용 요약) */}
+          <RhythmBand wakeTime={form.wakeTime} sleepTime={form.sleepTime} />
+        </SetupBlock>
+
+        <SetupBlock title="선호 이동 수단">
+          {/* 목업 .seg — 아이콘+라벨 2열 세그먼트. 공용 SegmentedOption 은 구버전 파랑
+              (--blue-*)을 참조해 이 화면의 새 파랑과 어긋나므로 로컬 버튼으로 쓴다
+              (shared/ui 자체는 불변 — REQ-WVR-004 로컬 스코프 결정 유지). */}
+          <div className="grid grid-cols-2 gap-2" role="group" aria-label="선호 이동 수단">
+            {TRANSPORT_OPTIONS.map((option) => {
+              const Icon = TRANSPORT_ICONS[option.value];
+              const active = form.transportModes.includes(option.value);
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => toggleTransport(option.value)}
+                  className={`flex min-h-12 items-center justify-center gap-1.5 rounded-[14px] border text-[14.5px] font-bold tracking-[-0.01em] transition active:scale-[0.99] ${
+                    active
+                      ? 'border-[color:var(--primary)] bg-[color:var(--primary-tint)] text-[color:var(--primary-deep)]'
+                      : 'border-[color:var(--line)] bg-[color:var(--card)] text-[color:var(--ink-sub)]'
+                  }`}
+                >
+                  <Icon className="size-[18px] shrink-0" aria-hidden />
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </SetupBlock>
+
+        <SetupBlock title="여행 페이스">
+          <div className="grid grid-cols-3 gap-2">
+            {PACE_OPTIONS.map((option) => (
+              <ChoiceCard
+                key={option.value}
+                active={form.pace === option.value}
+                label={option.label}
+                hint={option.hint}
+                onClick={() => setSingle('pace', option.value)}
+              />
+            ))}
+          </div>
+        </SetupBlock>
+
+        <SetupBlock title="활동 강도">
+          <div className="grid grid-cols-3 gap-2">
+            {ACTIVITY_INTENSITY_OPTIONS.map((option) => (
+              <ChoiceCard
+                key={option.value}
+                active={form.activityIntensity === option.value}
+                label={option.label}
+                hint={option.hint}
+                onClick={() => setSingle('activityIntensity', option.value)}
+              />
+            ))}
+          </div>
+        </SetupBlock>
+
+        <SetupBlock title="어떤 분위기를 선호하세요?">
+          <div className="grid grid-cols-3 gap-2">
+            {CROWD_OPTIONS.map((option) => (
+              <ChoiceCard
+                key={option.value}
+                active={form.crowdPreference === option.value}
+                label={option.label}
+                hint={option.hint}
+                onClick={() => setSingle('crowdPreference', option.value)}
+              />
+            ))}
+          </div>
+        </SetupBlock>
+      </div>
+
+      {/* 사진 분석은 폼 마지막 단계 — 직접 정하는 항목을 먼저 채우고 사진으로 보강한다. */}
+      <SetupBlock title="사진으로 취향 분석">
         <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--ink-faint)]">
           좋아하는 장소·음식 사진을 올리면 취향을 자동으로 분석해요. (한 번에{' '}
           {MAX_PREFERENCE_UPLOAD}장, 총 {MAX_PREFERENCE_PHOTOS}장)
@@ -643,7 +757,9 @@ export function PreferenceSetupForm() {
 
         <p className="mt-3 flex items-start gap-1.5 text-[12px] font-medium leading-5 text-[color:var(--ink-faint)]">
           <FiLock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          <span>올린 사진은 취향 분석 용도로만 저장·사용돼요. 언제든 사진을 지우면 함께 삭제돼요.</span>
+          <span>
+            올린 사진은 취향 분석 용도로만 저장·사용돼요. 언제든 사진을 지우면 함께 삭제돼요.
+          </span>
         </p>
       </SetupBlock>
 
@@ -680,10 +796,7 @@ export function PreferenceSetupForm() {
           {analyzedTags ? (
             <div className="mt-4">
               <p className="flex items-center gap-1.5 text-[13px] font-bold text-[color:var(--ink-sub)]">
-                <span
-                  aria-hidden
-                  className="size-1.5 rounded-full bg-[color:var(--primary)]"
-                />
+                <span aria-hidden className="size-1.5 rounded-full bg-[color:var(--primary)]" />
                 이런 게 좋아요
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
@@ -764,124 +877,6 @@ export function PreferenceSetupForm() {
           ) : null}
         </section>
       ) : null}
-
-      <SetupBlock title="테마/장소 선호도">
-        <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--ink-faint)]">
-          좋아하는 건 선호, 피하고 싶은 건 불호로 골라주세요. 고르지 않으면 중립이에요.
-        </p>
-        <div className="space-y-4">
-          {THEME_GROUPS.map((group) => (
-            <div key={group.key}>
-              <h3 className="mb-1.5 text-[13px] font-bold leading-5 text-[color:var(--ink-sub)]">
-                {group.label}
-              </h3>
-              <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-2">
-                {group.themes.map((theme) => (
-                  <ThemeStanceRow
-                    key={theme.value}
-                    label={theme.label}
-                    examples={theme.examples}
-                    stance={themeStance(theme.value)}
-                    onSelect={(stance) => setThemeStance(theme.value, stance)}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </SetupBlock>
-
-      <div className="grid gap-x-8 gap-y-8 lg:grid-cols-2">
-        <SetupBlock title="취침 / 기상 시간">
-          <div className="grid grid-cols-2 gap-3">
-            <TimeField
-              variant="soft"
-              label="취침"
-              value={form.sleepTime}
-              onChange={(sleepTime) => setForm((current) => ({ ...current, sleepTime }))}
-            />
-            <TimeField
-              variant="soft"
-              label="기상"
-              value={form.wakeTime}
-              onChange={(wakeTime) => setForm((current) => ({ ...current, wakeTime }))}
-            />
-          </div>
-          {/* 하루의 리듬 — 목업 가로 밴드를 실제 취침/기상 값으로 시각화(REQ-WVR-020, 읽기 전용 요약) */}
-          <RhythmBand wakeTime={form.wakeTime} sleepTime={form.sleepTime} />
-        </SetupBlock>
-
-        <SetupBlock title="선호 이동 수단">
-          {/* 목업 .seg — 아이콘+라벨 2열 세그먼트. 공용 SegmentedOption 은 구버전 파랑
-              (--blue-*)을 참조해 이 화면의 새 파랑과 어긋나므로 로컬 버튼으로 쓴다
-              (shared/ui 자체는 불변 — REQ-WVR-004 로컬 스코프 결정 유지). */}
-          <div className="grid grid-cols-2 gap-2" role="group" aria-label="선호 이동 수단">
-            {TRANSPORT_OPTIONS.map((option) => {
-              const Icon = TRANSPORT_ICONS[option.value];
-              const active = form.transportModes.includes(option.value);
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => toggleTransport(option.value)}
-                  className={`flex min-h-12 items-center justify-center gap-1.5 rounded-[14px] border text-[14.5px] font-bold tracking-[-0.01em] transition active:scale-[0.99] ${
-                    active
-                      ? 'border-[color:var(--primary)] bg-[color:var(--primary-tint)] text-[color:var(--primary-deep)]'
-                      : 'border-[color:var(--line)] bg-[color:var(--card)] text-[color:var(--ink-sub)]'
-                  }`}
-                >
-                  <Icon className="size-[18px] shrink-0" aria-hidden />
-                  {option.label}
-                </button>
-              );
-            })}
-          </div>
-        </SetupBlock>
-
-        <SetupBlock title="여행 페이스">
-          <div className="grid grid-cols-3 gap-2">
-            {PACE_OPTIONS.map((option) => (
-              <ChoiceCard
-                key={option.value}
-                active={form.pace === option.value}
-                label={option.label}
-                hint={option.hint}
-                onClick={() => setSingle('pace', option.value)}
-              />
-            ))}
-          </div>
-        </SetupBlock>
-
-        <SetupBlock title="활동 강도">
-          <div className="grid grid-cols-3 gap-2">
-            {ACTIVITY_INTENSITY_OPTIONS.map((option) => (
-              <ChoiceCard
-                key={option.value}
-                active={form.activityIntensity === option.value}
-                label={option.label}
-                hint={option.hint}
-                onClick={() => setSingle('activityIntensity', option.value)}
-              />
-            ))}
-          </div>
-        </SetupBlock>
-
-        <SetupBlock title="어떤 분위기를 선호하세요?">
-          <div className="grid grid-cols-3 gap-2">
-            {CROWD_OPTIONS.map((option) => (
-              <ChoiceCard
-                key={option.value}
-                active={form.crowdPreference === option.value}
-                label={option.label}
-                hint={option.hint}
-                onClick={() => setSingle('crowdPreference', option.value)}
-              />
-            ))}
-          </div>
-        </SetupBlock>
-
-      </div>
 
       {toast ? (
         <Toast
@@ -1160,7 +1155,10 @@ function AnalysisProgress({ job }: { job: PreferenceAnalysisJobDto | null | unde
       {/* 대기 중엔 진행률을 알 수 없으므로 목업 .scan-track(좌우로 훑는 띠), 분석이
           시작되면 실제 analyzed/total 진행률 막대로 바꾼다. */}
       {queued ? (
-        <span className="wvr-scan-track block h-[3px] rounded-full bg-[color:var(--line)]" aria-hidden />
+        <span
+          className="wvr-scan-track block h-[3px] rounded-full bg-[color:var(--line)]"
+          aria-hidden
+        />
       ) : (
         <div
           className="h-[3px] w-full overflow-hidden rounded-full bg-[color:var(--line)]"
@@ -1180,8 +1178,8 @@ function AnalysisProgress({ job }: { job: PreferenceAnalysisJobDto | null | unde
         </div>
       )}
       <small className="text-[12px] leading-[1.55] text-[color:var(--ink-faint)]">
-        사진 한 장에 30초 정도 걸려요. 완료되면 알림으로 알려드릴게요 — 이 페이지를 떠나도
-        분석은 계속됩니다.
+        사진 한 장에 30초 정도 걸려요. 완료되면 알림으로 알려드릴게요 — 이 페이지를 떠나도 분석은
+        계속됩니다.
       </small>
     </div>
   );
@@ -1293,7 +1291,11 @@ function RhythmBand({ wakeTime, sleepTime }: { wakeTime: string; sleepTime: stri
         <span
           aria-hidden="true"
           className="absolute top-1/2 size-[18px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px]"
-          style={{ left: `${wakePct}%`, background: 'var(--card)', borderColor: 'var(--t-morning)' }}
+          style={{
+            left: `${wakePct}%`,
+            background: 'var(--card)',
+            borderColor: 'var(--t-morning)',
+          }}
         />
         <span
           aria-hidden="true"
@@ -1349,7 +1351,9 @@ function ThemeStanceRow({
   return (
     <div className="flex items-center justify-between gap-2 rounded-[12px] bg-[color:var(--card-soft)] px-3 py-1.5">
       <div className="flex min-w-0 items-baseline gap-1.5">
-        <span className="shrink-0 text-[14px] font-bold leading-6 text-[color:var(--ink)]">{label}</span>
+        <span className="shrink-0 text-[14px] font-bold leading-6 text-[color:var(--ink)]">
+          {label}
+        </span>
         <span className="truncate text-[11px] font-medium text-[color:var(--ink-faint)]">
           {examples.join(' · ')}
         </span>
@@ -1377,7 +1381,9 @@ function StanceButton({
 }) {
   const like = tone === 'like';
   const label = like ? '선호' : '불호';
-  const activeClass = like ? 'bg-[color:var(--primary)] text-white' : 'bg-[color:var(--danger)] text-white';
+  const activeClass = like
+    ? 'bg-[color:var(--primary)] text-white'
+    : 'bg-[color:var(--danger)] text-white';
   return (
     <button
       type="button"
