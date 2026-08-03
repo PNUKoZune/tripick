@@ -1,3 +1,4 @@
+import { LuStar } from 'react-icons/lu';
 import type { FriendDto } from '@tripick/types';
 
 import { FriendAvatar } from './friend-avatar';
@@ -13,14 +14,17 @@ export function FriendRow({ friend, trailing }: Props) {
       <FriendAvatar friend={friend} size="md" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="truncate text-[15px] font-bold text-[#191F28]">{friend.nickname}</span>
+          <span className="truncate text-[15px] font-bold text-[color:var(--ink,#191F28)]">
+            {friend.nickname}
+          </span>
           {friend.pinned ? (
-            <span className="text-[12px] text-[#FF8A00]" aria-label="즐겨찾기">
-              ★
-            </span>
+            <LuStar
+              className="size-3 shrink-0 fill-current text-[color:var(--accent-deep,#FF8A00)]"
+              aria-label="즐겨찾기"
+            />
           ) : null}
         </div>
-        <div className="mt-0.5 truncate text-[12px] text-[#8B95A1]">
+        <div className="mt-0.5 truncate text-[12px] text-[color:var(--ink-faint,#8B95A1)]">
           {friend.statusMessage ?? friend.handle}
         </div>
       </div>
