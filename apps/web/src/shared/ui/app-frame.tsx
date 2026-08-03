@@ -19,23 +19,35 @@ type NavIconName = (typeof NAV_ITEMS)[number]['icon'];
 /**
  * 페이지 셸: 모바일 = 430px 단일 컬럼 + 하단 탭, 데스크탑 = 사이드 네비 + border-x 카드.
  * `showNav={false}` 면 네비·셸 없이 자식만 풀-블리드 (랜딩/콜백용).
+ *
+ * `themed` 는 "이 화면 본문이 광안리의 하루 팔레트를 쓴다"는 선언이다. 켜면 셸 루트에
+ * `.wvr-scope` 가 붙어 배경·탭바·사이드 네비까지 그 팔레트(다크 포함)를 따라간다.
+ * 아직 정리되지 않은 화면(로그인·여행 목록 등)에서 켜면 본문만 라이트인 채 셸이 다크가 돼
+ * 더 어긋나므로, 본문 토큰화가 끝난 화면에서만 켠다. 기본값은 기존 동작(라이트 고정).
  */
 export function AppFrame({
   children,
   showNav = true,
+  themed = false,
 }: {
   children: ReactNode;
   showNav?: boolean;
+  themed?: boolean;
 }) {
   if (!showNav) {
-    return <main className="min-h-dvh bg-white">{children}</main>;
+    // themed 면 .wvr-scope 가 배경(--bg)까지 정하므로 bg 유틸리티를 겹쳐 주지 않는다.
+    return (
+      <main className={themed ? 'wvr-scope min-h-dvh' : 'min-h-dvh bg-[color:var(--app-surface)]'}>
+        {children}
+      </main>
+    );
   }
 
   return (
-    <div className="min-h-dvh bg-[#F7F8FA]">
-      <div className="mx-auto w-full max-w-[430px] bg-white pb-[88px] lg:grid lg:max-w-[1440px] lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:bg-transparent lg:px-6 lg:pb-0">
+    <div className={`min-h-dvh bg-[color:var(--app-bg)] ${themed ? 'wvr-scope' : ''}`}>
+      <div className="mx-auto w-full max-w-[430px] bg-[color:var(--app-surface)] pb-[88px] lg:grid lg:max-w-[1440px] lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:bg-transparent lg:px-6 lg:pb-0">
         <AppDesktopNavigation />
-        <div className="min-h-dvh lg:border-x lg:border-[#E5E8EB] lg:bg-white">
+        <div className="min-h-dvh lg:border-x lg:border-[color:var(--line-strong)] lg:bg-[color:var(--app-surface)]">
           {children}
         </div>
       </div>
@@ -63,19 +75,21 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <header className="px-4 pt-5 lg:border-b lg:border-[#E5E8EB] lg:bg-white lg:px-0 lg:pt-0">
+    <header className="px-4 pt-5 lg:border-b lg:border-[color:var(--line-strong)] lg:bg-[color:var(--app-surface)] lg:px-0 lg:pt-0">
       <div className="mx-auto flex w-full max-w-[1160px] items-center justify-between gap-3 pb-3 lg:gap-6 lg:px-8 lg:py-4 xl:px-10">
         <div className="min-w-0 flex-1">
+          {/* 색은 전역 토큰으로 — 라이트 값은 그대로고, .wvr-scope 안에서 렌더될 때만
+              그 스코프의 다크 값을 상속받아 제목이 배경에 묻히지 않는다. */}
           {label ? (
-            <div className="hidden text-[12px] font-semibold tracking-wide text-[#3182F6] lg:block">
+            <div className="hidden text-[12px] font-semibold tracking-wide text-[color:var(--blue-600)] lg:block">
               Tripick · {label}
             </div>
           ) : null}
-          <h1 className="text-[20px] font-bold text-[#191F28] lg:mt-0.5 lg:text-[22px] lg:leading-[30px]">
+          <h1 className="text-[20px] font-bold text-[color:var(--text-primary)] lg:mt-0.5 lg:text-[22px] lg:leading-[30px]">
             {title}
           </h1>
           {description ? (
-            <p className="mt-1 text-[13px] text-[#6B7684]">{description}</p>
+            <p className="mt-1 text-[13px] text-[color:var(--text-secondary)]">{description}</p>
           ) : null}
         </div>
         {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
@@ -108,7 +122,7 @@ export function AppBottomNavigation({ className = '' }: { className?: string }) 
   return (
     <nav
       aria-label="하단 탭"
-      className={`fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 border-t border-[color:var(--line)] bg-white/95 px-1.5 pb-[max(10px,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-xl ${className}`}
+      className={`fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 border-t border-[color:var(--line-strong)] bg-[color:var(--app-surface)]/95 px-1.5 pb-[max(10px,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-xl ${className}`}
     >
       <div className="grid h-[66px] grid-cols-5 items-stretch">
         {NAV_ITEMS.map((item) => {
@@ -147,7 +161,7 @@ function NavBadge({ count }: { count: number }) {
   return (
     <span
       aria-label={`읽지 않은 알림 ${count}개`}
-      className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#F04452] px-1 text-[10px] font-bold leading-none text-white"
+      className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[color:var(--danger,#F04452)] px-1 text-[10px] font-bold leading-none text-white"
     >
       {count > 9 ? '9+' : count}
     </span>
@@ -175,8 +189,8 @@ export function AppDesktopNavigation() {
                 aria-current={active ? 'page' : undefined}
                 className={`flex h-12 items-center gap-3 rounded-[16px] px-4 text-[15px] font-black transition-colors ${
                   active
-                    ? 'bg-white text-[color:var(--blue-600)]'
-                    : 'text-[color:var(--text-secondary)] hover:bg-white/70 hover:text-[color:var(--text-primary)]'
+                    ? 'bg-[color:var(--app-surface)] text-[color:var(--blue-600)]'
+                    : 'text-[color:var(--text-secondary)] hover:bg-[color:var(--app-surface)]/70 hover:text-[color:var(--text-primary)]'
                 }`}
               >
                 <NavIcon name={item.icon} active={active} />
@@ -184,7 +198,7 @@ export function AppDesktopNavigation() {
                 {badge > 0 ? (
                   <span
                     aria-label={`읽지 않은 알림 ${badge}개`}
-                    className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[#F04452] px-1.5 text-[11px] font-bold leading-none text-white"
+                    className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[color:var(--danger,#F04452)] px-1.5 text-[11px] font-bold leading-none text-white"
                   >
                     {badge > 99 ? '99+' : badge}
                   </span>
@@ -335,8 +349,9 @@ export function InlineNotice({
 }) {
   const toneClass = {
     blue: 'bg-[color:var(--blue-50)] text-[color:var(--blue-700)]',
-    red: 'bg-rose-50 text-rose-700',
-    green: 'bg-emerald-50 text-emerald-700',
+    // 비스코프 화면에서도 쓰이므로 폴백을 남긴다(라이트 값은 기존 rose/emerald 와 동급).
+    red: 'bg-[color:var(--danger-tint,#fff1f2)] text-[color:var(--danger,#be123c)]',
+    green: 'bg-[color:var(--ok,#047857)]/12 text-[color:var(--ok,#047857)]',
   }[tone];
 
   return (

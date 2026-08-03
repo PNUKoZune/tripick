@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
+import { LuChevronLeft } from 'react-icons/lu';
+
 import { AppFrame, PageContainer } from './app-frame';
 
 /**
@@ -25,28 +27,27 @@ export function DocumentPageShell({
   children: ReactNode;
 }) {
   return (
-    <AppFrame>
-      <header className="px-4 pt-5 lg:border-b lg:border-[#E5E8EB] lg:bg-white lg:px-0 lg:pt-0">
+    <AppFrame themed>
+      {/* 설정에서 들어오는 문서 페이지라 설정 화면과 같은 팔레트를 로컬 스코프로 적용한다. */}
+      <header className="px-4 pt-5 lg:border-b lg:border-[color:var(--line)] lg:bg-[color:var(--card)] lg:px-0 lg:pt-0">
         <div className="mx-auto flex w-full max-w-[1160px] items-center gap-2 pb-3 lg:gap-3 lg:px-8 lg:py-4 xl:px-10">
           <Link
             href={backHref}
             aria-label="뒤로"
-            className="flex size-9 shrink-0 items-center justify-center rounded-full hover:bg-[#FAFBFC] lg:size-auto lg:gap-1 lg:rounded-[12px] lg:border lg:border-[#E5E8EB] lg:bg-white lg:px-3 lg:py-2 lg:text-[13px] lg:font-semibold lg:text-[#6B7684] lg:hover:bg-[#FAFBFC] lg:hover:text-[#191F28]"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full text-[color:var(--ink)] hover:bg-[color:var(--card-soft)] lg:size-auto lg:gap-1 lg:rounded-[12px] lg:border lg:border-[color:var(--line)] lg:bg-[color:var(--card)] lg:px-3 lg:py-2 lg:text-[13px] lg:font-semibold lg:text-[color:var(--ink-sub)] lg:hover:bg-[color:var(--card-soft)] lg:hover:text-[color:var(--ink)]"
           >
-            <span aria-hidden className="text-[20px] text-[#191F28] lg:text-inherit">
-              ‹
-            </span>
+            <LuChevronLeft className="size-5 lg:size-4" aria-hidden />
             <span className="hidden lg:inline">{backLabel}</span>
           </Link>
           <div className="min-w-0 flex-1">
-            <div className="hidden text-[12px] font-semibold tracking-wide text-[#3182F6] lg:block">
+            <div className="hidden text-[12px] font-semibold tracking-wide text-[color:var(--primary)] lg:block">
               Tripick · {label}
             </div>
-            <h1 className="text-[20px] font-bold text-[#191F28] lg:mt-0.5 lg:text-[22px] lg:leading-[30px]">
+            <h1 className="text-[20px] font-bold text-[color:var(--ink)] lg:mt-0.5 lg:text-[22px] lg:leading-[30px]">
               {title}
             </h1>
             {description ? (
-              <p className="mt-1 text-[13px] text-[#6B7684]">{description}</p>
+              <p className="mt-1 text-[13px] text-[color:var(--ink-sub)]">{description}</p>
             ) : null}
           </div>
         </div>
@@ -59,19 +60,15 @@ export function DocumentPageShell({
 }
 
 /** 문서 한 절(제목 + 내용) 카드. */
-export function DocumentSection({
-  heading,
-  children,
-}: {
-  heading?: string;
-  children: ReactNode;
-}) {
+export function DocumentSection({ heading, children }: { heading?: string; children: ReactNode }) {
   return (
-    <section className="rounded-[16px] border border-[#E5E8EB] bg-white p-4 lg:p-5">
+    <section className="rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] p-4 lg:p-5">
       {heading ? (
-        <h2 className="mb-2 text-[15px] font-bold text-[#191F28]">{heading}</h2>
+        <h2 className="mb-2 text-[15px] font-bold text-[color:var(--ink)]">{heading}</h2>
       ) : null}
-      <div className="space-y-2 text-[14px] leading-[22px] text-[#4E5968]">{children}</div>
+      <div className="space-y-2 text-[14px] leading-[22px] text-[color:var(--ink-sub)]">
+        {children}
+      </div>
     </section>
   );
 }
@@ -87,7 +84,10 @@ export function DocumentList({ items }: { items: ReactNode[] }) {
     <ul className="space-y-1.5">
       {items.map((item, i) => (
         <li key={i} className="flex gap-2">
-          <span aria-hidden className="mt-[9px] size-1 shrink-0 rounded-full bg-[#C4CAD1]" />
+          <span
+            aria-hidden
+            className="mt-[9px] size-1 shrink-0 rounded-full bg-[color:var(--line-dot)]"
+          />
           <span>{item}</span>
         </li>
       ))}

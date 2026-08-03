@@ -102,7 +102,7 @@ export function LegalPrivacyView() {
         </DocumentParagraph>
         <DocumentParagraph>
           이메일:{' '}
-          <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-[#3182F6] hover:underline">
+          <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-[color:var(--primary)] hover:underline">
             {CONTACT_EMAIL}
           </a>
         </DocumentParagraph>

@@ -76,14 +76,14 @@ export function NotificationPreferencesList({ me, onError }: Props) {
   };
 
   return (
-    <div className="divide-y divide-[#F2F4F6]">
+    <div className="divide-y divide-[color:var(--line)]">
       {ROWS.map((row) => {
         const enabled = merged[row.key];
         return (
           <div key={row.key} className="flex items-start gap-3 px-1 py-3">
             <div className="min-w-0 flex-1">
-              <div className="text-[14px] font-bold text-[#191F28]">{row.label}</div>
-              <p className="mt-0.5 text-[12px] leading-[18px] text-[#6B7684]">
+              <div className="text-[14px] font-bold text-[color:var(--ink)]">{row.label}</div>
+              <p className="mt-0.5 text-[12px] leading-[18px] text-[color:var(--ink-sub)]">
                 {row.description}
               </p>
             </div>

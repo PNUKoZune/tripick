@@ -76,7 +76,7 @@ export function ProfileImageUploader({ me, onError }: Props) {
           onClick={() => me && setMenuOpen(true)}
           disabled={!me || pending}
           aria-label="프로필 사진 옵션"
-          className="relative ring-4 ring-white shadow-sm rounded-full transition hover:opacity-95 disabled:opacity-60"
+          className="relative rounded-full shadow-sm ring-4 ring-[color:var(--card,#FFFFFF)] transition hover:opacity-95 disabled:opacity-60"
         >
           <UserAvatar user={me} size="xl" />
           {pending ? (
@@ -90,7 +90,7 @@ export function ProfileImageUploader({ me, onError }: Props) {
           onClick={() => me && setMenuOpen(true)}
           disabled={!me || pending}
           aria-label="프로필 사진 옵션"
-          className="absolute -bottom-0.5 -right-0.5 flex size-7 items-center justify-center rounded-full border-2 border-white bg-[#3182F6] text-white shadow-sm transition hover:bg-[#1B64DA] disabled:opacity-60 lg:size-9 lg:-bottom-1 lg:-right-1"
+          className="absolute -bottom-0.5 -right-0.5 flex size-7 items-center justify-center rounded-full border-2 border-[color:var(--card,#FFFFFF)] bg-[color:var(--primary,#3182F6)] text-white shadow-sm transition hover:bg-[color:var(--primary-deep,#1B64DA)] disabled:opacity-60 lg:size-9 lg:-bottom-1 lg:-right-1"
         >
           <CameraBadgeIcon />
         </button>

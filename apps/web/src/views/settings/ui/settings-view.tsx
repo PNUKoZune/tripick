@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { LuChevronRight } from 'react-icons/lu';
 import { useQuery } from '@tanstack/react-query';
 
 import { SessionGuard } from '@/entities/session';
@@ -40,11 +41,11 @@ function SettingsContent() {
   const mutationError = firstErrorMessage(Object.values(featureErrors));
 
   return (
-    <AppFrame>
+    <AppFrame themed>
       <PageHeader title="설정" label="설정" description="계정·알림·앱 정보를 관리합니다." />
       <PageContainer>
         {loadError ? (
-          <div className="mb-4 rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-3 text-[13px] font-semibold text-[#F04452]">
+          <div className="mb-4 rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-3 text-[13px] font-semibold text-[color:var(--danger)]">
             {loadError}
           </div>
         ) : null}
@@ -52,8 +53,8 @@ function SettingsContent() {
         <div className="space-y-6">
           <section>
             <div className="mb-2 px-1">
-              <h2 className="text-[15px] font-bold text-[#191F28]">프로필</h2>
-              <p className="mt-0.5 text-[12px] leading-[18px] text-[#8B95A1]">
+              <h2 className="text-[15px] font-bold text-[color:var(--ink)]">프로필</h2>
+              <p className="mt-0.5 text-[12px] leading-[18px] text-[color:var(--ink-faint)]">
                 다른 멤버와 친구에게 보이는 정보예요.
               </p>
             </div>
@@ -78,7 +79,7 @@ function SettingsContent() {
             <InfoRow
               label="라이선스"
               value={
-                <Link href="#open-source" className="text-[#3182F6] hover:underline">
+                <Link href="#open-source" className="text-[color:var(--primary)] hover:underline">
                   오픈소스 라이선스
                 </Link>
               }
@@ -91,7 +92,7 @@ function SettingsContent() {
           </Section>
 
           {mutationError ? (
-            <div className="rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-4 text-[14px] font-semibold text-[#F04452]">
+            <div className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] font-semibold text-[color:var(--danger)]">
               {mutationError}
             </div>
           ) : null}
@@ -113,12 +114,14 @@ function Section({
   return (
     <section>
       <div className="mb-2 px-1">
-        <h2 className="text-[15px] font-bold text-[#191F28]">{title}</h2>
+        <h2 className="text-[15px] font-bold text-[color:var(--ink)]">{title}</h2>
         {description ? (
-          <p className="mt-0.5 text-[12px] leading-[18px] text-[#8B95A1]">{description}</p>
+          <p className="mt-0.5 text-[12px] leading-[18px] text-[color:var(--ink-faint)]">
+            {description}
+          </p>
         ) : null}
       </div>
-      <div className="overflow-hidden rounded-[16px] border border-[#E5E8EB] bg-white p-2">
+      <div className="overflow-hidden rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] p-2">
         {children}
       </div>
     </section>
@@ -129,12 +132,10 @@ function LinkRow({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
-      className="flex h-12 items-center justify-between rounded-[10px] px-3 text-[14px] font-semibold text-[#191F28] hover:bg-[#FAFBFC]"
+      className="flex h-12 items-center justify-between rounded-[10px] px-3 text-[14px] font-semibold text-[color:var(--ink)] hover:bg-[color:var(--card-soft)]"
     >
       <span>{label}</span>
-      <span className="text-[12px] text-[#8B95A1]" aria-hidden>
-        →
-      </span>
+      <LuChevronRight className="size-4 text-[color:var(--ink-faint)]" aria-hidden />
     </Link>
   );
 }
@@ -142,8 +143,8 @@ function LinkRow({ href, label }: { href: string; label: string }) {
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex h-12 items-center justify-between rounded-[10px] px-3 text-[14px]">
-      <span className="font-semibold text-[#6B7684]">{label}</span>
-      <span className="font-semibold text-[#191F28]">{value}</span>
+      <span className="font-semibold text-[color:var(--ink-sub)]">{label}</span>
+      <span className="font-semibold text-[color:var(--ink)]">{value}</span>
     </div>
   );
 }

@@ -20,10 +20,10 @@ export function RequestPasswordResetForm() {
 
   if (sentEmail) {
     return (
-      <div className="rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] p-5">
-        <h2 className="text-[16px] font-bold text-[#191F28]">메일을 보냈어요</h2>
-        <p className="mt-2 text-[13px] leading-[20px] text-[#4E5968]">
-          <span className="font-bold text-[#191F28]">{sentEmail}</span> 으로 비밀번호 재설정 안내를
+      <div className="rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card-soft)] p-5">
+        <h2 className="text-[16px] font-bold text-[color:var(--ink)]">메일을 보냈어요</h2>
+        <p className="mt-2 text-[13px] leading-[20px] text-[color:var(--ink-sub)]">
+          <span className="font-bold text-[color:var(--ink)]">{sentEmail}</span> 으로 비밀번호 재설정 안내를
           보냈어요. 메일함을 확인해 1시간 안에 재설정해주세요.
         </p>
       </div>
@@ -42,23 +42,23 @@ export function RequestPasswordResetForm() {
       className="space-y-3"
     >
       <label className="block">
-        <span className="mb-1 block text-[13px] font-bold text-[#191F28]">가입한 이메일</span>
+        <span className="mb-1 block text-[13px] font-bold text-[color:var(--ink)]">가입한 이메일</span>
         <input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
           placeholder="you@example.com"
-          className="h-12 w-full rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[15px] outline-none focus:border-[#3182F6]"
+          className="h-12 w-full rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[15px] outline-none focus:border-[color:var(--primary)]"
         />
       </label>
       {errorMessage ? (
-        <p className="text-[13px] font-semibold text-[#F04452]">{errorMessage}</p>
+        <p className="text-[13px] font-semibold text-[color:var(--danger)]">{errorMessage}</p>
       ) : null}
       <button
         type="submit"
         disabled={!canSubmit}
-        className="mt-2 h-12 w-full rounded-[12px] bg-[#3182F6] text-[15px] font-bold text-white hover:bg-[#1B64DA] disabled:bg-[#E5E8EB] disabled:text-[#B0B8C1]"
+        className="mt-2 h-12 w-full rounded-[12px] bg-[color:var(--btn-bg)] text-[15px] font-bold text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)] disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)]"
       >
         {mutation.isPending
           ? '보내는 중…'

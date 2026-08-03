@@ -4,6 +4,20 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  LuCheckCheck,
+  LuCircleCheck,
+  LuCloudRain,
+  LuInbox,
+  LuLuggage,
+  LuMapPin,
+  LuPencilLine,
+  LuSparkles,
+  LuTicket,
+  LuUserPlus,
+  LuUsers,
+} from 'react-icons/lu';
+import type { IconType } from 'react-icons';
 import type { InboxItemDto, InboxItemKind, NotificationCategory } from '@tripick/types';
 
 import { acceptFriend, removeFriend } from '@/entities/friend';
@@ -25,18 +39,35 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
   { value: 'action', label: '응답 필요' },
 ];
 
-const KIND_META: Record<InboxItemKind, { emoji: string; label: string; tone: string }> = {
-  friend_request: { emoji: '👋', label: '친구 요청', tone: '#3182F6' },
-  trip_invite: { emoji: '🎟️', label: '여행 초대', tone: '#7C3AED' },
-  replan_ready: { emoji: '✨', label: '재계획 알림', tone: '#00A86B' },
-  weather_alert: { emoji: '☔', label: '날씨 알림', tone: '#FF8A00' },
-  crowd_alert: { emoji: '👥', label: '혼잡 알림', tone: '#E0529C' },
-  arrival_alert: { emoji: '📍', label: '미도착 알림', tone: '#F04452' },
-  trip_reminder: { emoji: '🧳', label: '여행 알림', tone: '#1B64DA' },
-  schedule_change_request: { emoji: '📝', label: '변경 요청', tone: '#B45309' },
-  schedule_change_result: { emoji: '✅', label: '변경 결과', tone: '#00A86B' },
-  general: { emoji: '📬', label: '알림', tone: '#6B7684' },
+/**
+ * 알림 종류별 아이콘·색. 이모지는 기기·OS 마다 모양과 폭이 달라 목록 정렬이 흔들리고
+ * 이모지 폰트가 없는 환경에선 두부 글자가 되므로 react-icons 로 통일한다.
+ * tone 은 hex 가 아니라 "광안리의 하루" 팔레트 변수 — 라이트/다크가 토큰 한 곳에서 갈린다.
+ */
+const KIND_META: Record<InboxItemKind, { Icon: IconType; label: string; tone: string }> = {
+  friend_request: { Icon: LuUserPlus, label: '친구 요청', tone: 'var(--primary)' },
+  trip_invite: { Icon: LuTicket, label: '여행 초대', tone: 'var(--primary-deep)' },
+  replan_ready: { Icon: LuSparkles, label: '재계획 알림', tone: 'var(--ok)' },
+  weather_alert: { Icon: LuCloudRain, label: '날씨 알림', tone: 'var(--accent-deep)' },
+  crowd_alert: { Icon: LuUsers, label: '혼잡 알림', tone: 'var(--accent-deep)' },
+  arrival_alert: { Icon: LuMapPin, label: '미도착 알림', tone: 'var(--danger)' },
+  trip_reminder: { Icon: LuLuggage, label: '여행 알림', tone: 'var(--primary)' },
+  schedule_change_request: { Icon: LuPencilLine, label: '변경 요청', tone: 'var(--accent-deep)' },
+  schedule_change_result: { Icon: LuCircleCheck, label: '변경 결과', tone: 'var(--ok)' },
+  general: { Icon: LuInbox, label: '알림', tone: 'var(--ink-sub)' },
 };
+
+/**
+ * 서버는 알림 제목 앞에 이모지를 붙인다(예: `📍 1일차 — 광안리 미도착`). FCM 푸시
+ * 잠금화면에선 그 이모지가 눈길을 끌어 쓸모가 있지만, 인박스 목록은 왼쪽에 종류
+ * 아이콘이 따로 있어 중복이고 이모지 폰트가 없는 환경에선 두부 글자가 된다.
+ * 그래서 **표시할 때만** 선행 이모지를 떼고, 서버 문구(=푸시 제목)는 건드리지 않는다.
+ */
+const LEADING_EMOJI = /^(?:\p{Extended_Pictographic}[️‍\p{Extended_Pictographic}]*\s*)+/u;
+
+function stripLeadingEmoji(text: string): string {
+  return text.replace(LEADING_EMOJI, '').trimStart();
+}
 
 const CATEGORY_KINDS: Set<InboxItemKind> = new Set([
   'replan_ready',
@@ -166,9 +197,7 @@ function InboxContent() {
       // owner: planner 로 이동해 diff 를 확인하고 그 화면에서 승인/거절한다.
       if (!item.readAt) readMutation.mutate(item.id);
       const dayQuery = action.day ? `&day=${action.day}` : '';
-      router.push(
-        `/planner?tripId=${action.tripId}${dayQuery}&proposalId=${action.proposalId}`,
-      );
+      router.push(`/planner?tripId=${action.tripId}${dayQuery}&proposalId=${action.proposalId}`);
     } else if (action.type === 'reject-schedule-change' && action.proposalId) {
       if (!item.readAt) readMutation.mutate(item.id);
       rejectScheduleChangeMutation.mutate(action.proposalId);
@@ -204,8 +233,8 @@ function InboxContent() {
               onClick={() => setFilter(f.value)}
               className={`h-9 rounded-full border px-3 text-[13px] font-semibold transition ${
                 active
-                  ? 'border-[#3182F6] bg-[#EAF2FF] text-[#1B64DA]'
-                  : 'border-[#E5E8EB] bg-white text-[#6B7684] hover:bg-[#FAFBFC]'
+                  ? 'border-[color:var(--primary)] bg-[color:var(--primary-tint)] text-[color:var(--primary-deep)]'
+                  : 'border-[color:var(--line)] bg-[color:var(--card)] text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]'
               }`}
             >
               {f.label}
@@ -217,8 +246,9 @@ function InboxContent() {
             type="button"
             onClick={() => readAllMutation.mutate()}
             disabled={readAllMutation.isPending || unreadCount === 0}
-            className="h-9 rounded-[10px] border border-[#E5E8EB] px-3 text-[12px] font-bold text-[#6B7684] hover:bg-[#FAFBFC] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-9 items-center gap-1.5 rounded-[10px] border border-[color:var(--line)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--card-soft)] disabled:cursor-not-allowed disabled:opacity-50"
           >
+            <LuCheckCheck className="size-3.5" aria-hidden />
             모두 읽음
           </button>
         </div>
@@ -234,7 +264,9 @@ function InboxContent() {
           {availableKinds.map((kind) => (
             <CategoryChip
               key={kind}
-              label={`${KIND_META[kind].emoji} ${KIND_META[kind].label}`}
+              label={KIND_META[kind].label}
+              Icon={KIND_META[kind].Icon}
+              tone={KIND_META[kind].tone}
               active={kindFilter === kind}
               onClick={() => setKindFilter(kind)}
             />
@@ -243,22 +275,22 @@ function InboxContent() {
       ) : null}
 
       {loadError ? (
-        <div className="rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-4 text-[14px] text-[#F04452]">
+        <div className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]">
           {loadError}
         </div>
       ) : null}
 
       {!loadError && filteredItems.length === 0 ? (
-        <div className="rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] p-6 text-center">
-          <div className="text-[24px]">📭</div>
-          <div className="mt-2 text-[14px] font-bold text-[#191F28]">
+        <div className="rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card-soft)] p-6 text-center">
+          <LuInbox className="mx-auto size-6 text-[color:var(--ink-faint)]" aria-hidden />
+          <div className="mt-2 text-[14px] font-bold text-[color:var(--ink)]">
             {filter === 'unread'
               ? '읽지 않은 알림이 없어요'
               : filter === 'action'
                 ? '응답이 필요한 알림이 없어요'
                 : '받은 알림이 없어요'}
           </div>
-          <div className="mt-1 text-[13px] text-[#6B7684]">
+          <div className="mt-1 text-[13px] text-[color:var(--ink-sub)]">
             친구를 추가하거나 여행 일정을 만들어 보세요.
           </div>
         </div>
@@ -266,7 +298,9 @@ function InboxContent() {
 
       {grouped.map((group) => (
         <section key={group.label}>
-          <h2 className="px-1 pb-2 text-[12px] font-bold text-[#8B95A1]">{group.label}</h2>
+          <h2 className="px-1 pb-2 text-[12px] font-bold text-[color:var(--ink-faint)]">
+            {group.label}
+          </h2>
           <div className="space-y-2">
             {group.items.map((item) => (
               <InboxRow
@@ -291,7 +325,7 @@ function InboxContent() {
   );
 
   return (
-    <AppFrame>
+    <AppFrame themed>
       <PageHeader
         title="알림"
         label="알림"
@@ -300,12 +334,12 @@ function InboxContent() {
           <>
             <Link
               href="/friends"
-              className="hidden rounded-[14px] border border-[#E5E8EB] bg-white px-4 py-2 text-[14px] font-semibold text-[#191F28] hover:bg-[#FAFBFC] lg:inline-flex"
+              className="hidden rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card)] px-4 py-2 text-[14px] font-semibold text-[color:var(--ink)] hover:bg-[color:var(--card-soft)] lg:inline-flex"
             >
               친구 목록
             </Link>
             {unreadCount > 0 ? (
-              <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-[#3182F6] px-2 text-[12px] font-bold text-white lg:h-9 lg:min-w-9 lg:px-3 lg:text-[13px]">
+              <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-[color:var(--primary)] px-2 text-[12px] font-bold text-[color:var(--btn-text)] lg:h-9 lg:min-w-9 lg:px-3 lg:text-[13px]">
                 <span className="lg:hidden">{unreadCount}</span>
                 <span className="hidden lg:inline">{unreadCount} 새 알림</span>
               </span>
@@ -320,10 +354,15 @@ function InboxContent() {
 
 function CategoryChip({
   label,
+  Icon,
+  tone,
   active,
   onClick,
 }: {
   label: string;
+  /** 카테고리 칩에만 있고 "전체" 칩엔 없다. */
+  Icon?: IconType;
+  tone?: string;
   active: boolean;
   onClick: () => void;
 }) {
@@ -331,12 +370,19 @@ function CategoryChip({
     <button
       type="button"
       onClick={onClick}
-      className={`h-8 rounded-full border px-2.5 text-[12px] font-semibold transition ${
+      className={`flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-semibold transition ${
         active
-          ? 'border-[#3182F6] bg-[#EAF2FF] text-[#1B64DA]'
-          : 'border-[#E5E8EB] bg-white text-[#6B7684] hover:bg-[#FAFBFC]'
+          ? 'border-[color:var(--primary)] bg-[color:var(--primary-tint)] text-[color:var(--primary-deep)]'
+          : 'border-[color:var(--line)] bg-[color:var(--card)] text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]'
       }`}
     >
+      {Icon ? (
+        <Icon
+          className="size-3.5 shrink-0"
+          style={active ? undefined : { color: tone }}
+          aria-hidden
+        />
+      ) : null}
       {label}
     </button>
   );
@@ -355,34 +401,46 @@ function InboxRow({
 }) {
   const meta = KIND_META[item.kind];
   const unread = !item.readAt;
+  const Icon = meta.Icon;
   return (
     <div
       onClick={onClick}
       className={`flex items-start gap-3 rounded-[14px] border p-3 transition ${
         unread
-          ? 'border-[#BFD7FF] bg-[#F4F8FF] hover:bg-[#EAF2FF]'
-          : 'border-[#E5E8EB] bg-white hover:bg-[#FAFBFC]'
+          ? 'border-[color:var(--primary-tint)] bg-[color:var(--primary-tint)]'
+          : 'border-[color:var(--line)] bg-[color:var(--card)] hover:bg-[color:var(--card-soft)]'
       } ${CATEGORY_KINDS.has(item.kind) && unread ? 'cursor-pointer' : ''}`}
     >
       <span
         aria-hidden
-        className="flex size-10 shrink-0 items-center justify-center rounded-full text-[18px]"
-        style={{ background: `${meta.tone}1F`, color: meta.tone }}
+        className="flex size-10 shrink-0 items-center justify-center rounded-full"
+        style={{
+          // 아이콘 색을 그대로 옅게 깔아 종류별 톤을 유지한다(라이트/다크 모두 토큰 기반).
+          background: `color-mix(in srgb, ${meta.tone} 16%, transparent)`,
+          color: meta.tone,
+        }}
       >
-        {meta.emoji}
+        <Icon className="size-[18px]" />
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: meta.tone }}>
+          <span className="text-[11px] font-bold tracking-wide" style={{ color: meta.tone }}>
             {meta.label}
           </span>
           {unread ? (
-            <span className="inline-block size-1.5 rounded-full bg-[#F04452]" aria-label="unread" />
+            <span
+              className="inline-block size-1.5 rounded-full bg-[color:var(--danger)]"
+              aria-label="unread"
+            />
           ) : null}
-          <span className="ml-auto text-[11px] text-[#8B95A1]">{formatRelative(item.createdAt)}</span>
+          <span className="ml-auto text-[11px] text-[color:var(--ink-faint)]">
+            {formatRelative(item.createdAt)}
+          </span>
         </div>
-        <div className="mt-0.5 text-[14px] font-bold text-[#191F28]">{item.title}</div>
-        <p className="mt-0.5 text-[13px] leading-[20px] text-[#4E5968]">{item.body}</p>
+        <div className="mt-0.5 text-[14px] font-bold text-[color:var(--ink)]">
+          {stripLeadingEmoji(item.title)}
+        </div>
+        <p className="mt-0.5 text-[13px] leading-[20px] text-[color:var(--ink-sub)]">{item.body}</p>
         {item.actions.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-2">
             {item.actions.map((action) => {
@@ -402,8 +460,8 @@ function InboxRow({
                   }}
                   className={`h-9 rounded-[10px] px-3 text-[12px] font-bold transition ${
                     primary
-                      ? 'bg-[#3182F6] text-white hover:bg-[#1B64DA] disabled:opacity-50'
-                      : 'border border-[#E5E8EB] text-[#6B7684] hover:bg-[#FAFBFC]'
+                      ? 'bg-[color:var(--btn-bg)] text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)] disabled:opacity-50'
+                      : 'border border-[color:var(--line)] bg-[color:var(--card)] text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]'
                   }`}
                 >
                   {action.label}
@@ -424,8 +482,8 @@ function groupByDate(items: InboxItemDto[]): Array<{ label: string; items: Inbox
   const startOfWeek = startOfToday - 6 * 86_400_000;
 
   const buckets: Record<string, InboxItemDto[]> = {
-    '오늘': [],
-    '어제': [],
+    오늘: [],
+    어제: [],
     '이번 주': [],
     '그 이전': [],
   };

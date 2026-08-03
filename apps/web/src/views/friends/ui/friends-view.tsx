@@ -3,7 +3,7 @@
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LuCheck, LuCopy, LuPlane } from 'react-icons/lu';
+import { LuCheck, LuCopy, LuPlane, LuSearch, LuStar, LuUserPlus, LuX } from 'react-icons/lu';
 import type { FriendDto } from '@tripick/types';
 
 import {
@@ -84,14 +84,17 @@ function FriendsContent() {
     <div className="space-y-4">
       {myHandle ? <MyHandleShare handle={myHandle} /> : null}
 
-      <div className="rounded-[16px] border border-[#E5E8EB] bg-white p-3">
+      <div className="rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] p-3">
         <div className="flex items-center gap-2">
-          <span className="text-[20px]" aria-hidden>
-            ＋
+          <span
+            aria-hidden
+            className="flex size-6 items-center justify-center rounded-full bg-[color:var(--primary-tint)] text-[color:var(--primary)]"
+          >
+            <LuUserPlus className="size-3.5" />
           </span>
-          <span className="text-[13px] font-bold text-[#191F28]">친구 추가</span>
+          <span className="text-[13px] font-bold text-[color:var(--ink)]">친구 추가</span>
         </div>
-        <p className="mt-1 text-[12px] text-[#8B95A1]">
+        <p className="mt-1 text-[12px] text-[color:var(--ink-faint)]">
           상대방의 아이디(@)로 친구 요청을 보냅니다. 상대가 수락하면 친구가 돼요.
         </p>
         <div className="mt-2 flex items-center gap-2">
@@ -106,34 +109,37 @@ function FriendsContent() {
               }
             }}
             placeholder="예) koty 또는 @koty"
-            className="h-11 flex-1 rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[14px] font-medium text-[#191F28] outline-none placeholder:text-[#B0B8C1] focus:border-[#3182F6]"
+            className="h-11 flex-1 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[14px] font-medium text-[color:var(--ink)] outline-none placeholder:text-[color:var(--ink-faint)] focus:border-[color:var(--primary)]"
           />
           <button
             type="button"
             onClick={handleAdd}
             disabled={!addInput.trim() || addMutation.isPending}
-            className="h-11 rounded-[12px] bg-[#3182F6] px-4 text-[13px] font-bold text-white transition hover:bg-[#1B64DA] disabled:bg-[#E5E8EB] disabled:text-[#B0B8C1]"
+            className="h-11 rounded-[12px] bg-[color:var(--btn-bg)] px-4 text-[13px] font-bold text-[color:var(--btn-text)] transition hover:bg-[color:var(--btn-bg-press)] disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)]"
           >
             요청
           </button>
         </div>
         {mutationError ? (
-          <p className="mt-2 text-[12px] font-semibold text-[#F04452]">{mutationError}</p>
+          <p className="mt-2 text-[12px] font-semibold text-[color:var(--danger)]">
+            {mutationError}
+          </p>
         ) : null}
       </div>
 
-      <div className="rounded-[14px] bg-[#F2F4F6] px-4 py-2.5">
+      <div className="flex items-center gap-2 rounded-[14px] bg-[color:var(--card-soft)] px-4 py-2.5">
+        <LuSearch className="size-4 shrink-0 text-[color:var(--ink-faint)]" aria-hidden />
         <input
           type="text"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="이름 또는 ID 검색"
-          className="h-7 w-full bg-transparent text-[14px] font-semibold text-[#191F28] outline-none placeholder:text-[#8B95A1]"
+          className="h-7 w-full bg-transparent text-[14px] font-semibold text-[color:var(--ink)] outline-none placeholder:text-[color:var(--ink-faint)]"
         />
       </div>
 
       {loadError ? (
-        <div className="rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-4 text-[14px] text-[#F04452]">
+        <div className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]">
           {loadError}
         </div>
       ) : null}
@@ -149,7 +155,7 @@ function FriendsContent() {
                   <button
                     type="button"
                     onClick={() => acceptMutation.mutate(friend.id)}
-                    className="h-9 rounded-[10px] bg-[#3182F6] px-3 text-[12px] font-bold text-white hover:bg-[#1B64DA]"
+                    className="h-9 rounded-[10px] bg-[color:var(--btn-bg)] px-3 text-[12px] font-bold text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)]"
                   >
                     수락
                   </button>
@@ -157,7 +163,7 @@ function FriendsContent() {
                     type="button"
                     onClick={() => removeMutation.mutate(friend.id)}
                     aria-label={`${friend.nickname} 요청 거절`}
-                    className="h-9 rounded-[10px] border border-[#E5E8EB] px-3 text-[12px] font-bold text-[#6B7684] hover:bg-[#FAFBFC]"
+                    className="h-9 rounded-[10px] border border-[color:var(--line)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]"
                   >
                     거절
                   </button>
@@ -176,14 +182,14 @@ function FriendsContent() {
               friend={friend}
               trailing={
                 <div className="flex items-center gap-2">
-                  <span className="rounded-[8px] bg-[#F2F4F6] px-2 py-1 text-[11px] font-bold text-[#8B95A1]">
+                  <span className="rounded-[8px] bg-[color:var(--card-soft)] px-2 py-1 text-[11px] font-bold text-[color:var(--ink-faint)]">
                     수락 대기
                   </span>
                   <button
                     type="button"
                     onClick={() => removeMutation.mutate(friend.id)}
                     aria-label={`${friend.nickname} 요청 취소`}
-                    className="h-9 rounded-[10px] border border-[#E5E8EB] px-3 text-[12px] font-bold text-[#6B7684] hover:bg-[#FAFBFC]"
+                    className="h-9 rounded-[10px] border border-[color:var(--line)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]"
                   >
                     요청 취소
                   </button>
@@ -215,7 +221,7 @@ function FriendsContent() {
 
       <FriendSection title="친구" count={others.length}>
         {others.length === 0 && !loadError ? (
-          <p className="px-4 py-6 text-center text-[13px] text-[#8B95A1]">
+          <p className="px-4 py-6 text-center text-[13px] text-[color:var(--ink-faint)]">
             친구가 없어요. 핸들(@아이디)로 친구를 추가해보세요.
           </p>
         ) : (
@@ -239,14 +245,14 @@ function FriendsContent() {
   );
 
   return (
-    <AppFrame>
+    <AppFrame themed>
       <PageHeader
         title="친구"
         label="친구"
         description="카카오톡 친구 추가하듯, 아이디(@)로 친구를 추가하고 여행 멤버 후보로 둡니다."
         action={
           friends.length > 0 ? (
-            <span className="text-[13px] font-semibold text-[#6B7684]">
+            <span className="text-[13px] font-semibold text-[color:var(--ink-sub)]">
               전체 {friends.length}명
             </span>
           ) : null
@@ -267,12 +273,12 @@ function FriendSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-[16px] border border-[#E5E8EB] bg-white">
-      <div className="flex items-center justify-between border-b border-[#E5E8EB] bg-[#FAFBFC] px-4 py-2.5">
-        <h2 className="text-[13px] font-bold text-[#191F28]">{title}</h2>
-        <span className="text-[12px] font-semibold text-[#8B95A1]">{count}</span>
+    <section className="overflow-hidden rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)]">
+      <div className="flex items-center justify-between border-b border-[color:var(--line)] bg-[color:var(--card-soft)] px-4 py-2.5">
+        <h2 className="text-[13px] font-bold text-[color:var(--ink)]">{title}</h2>
+        <span className="text-[12px] font-semibold text-[color:var(--ink-faint)]">{count}</span>
       </div>
-      <div className="divide-y divide-[#F2F4F6]">{children}</div>
+      <div className="divide-y divide-[color:var(--line)]">{children}</div>
     </section>
   );
 }
@@ -294,7 +300,7 @@ function FriendRowMenu({
         type="button"
         onClick={() => onCreateTrip(friend.id)}
         aria-label={`${friend.nickname}와(과) 여행 만들기`}
-        className="flex size-9 items-center justify-center rounded-[10px] text-[#B0B8C1] transition hover:bg-[#EAF2FF] hover:text-[#3182F6]"
+        className="flex size-9 items-center justify-center rounded-[10px] text-[color:var(--ink-faint)] transition hover:bg-[color:var(--primary-tint)] hover:text-[color:var(--primary)]"
       >
         <LuPlane className="size-4" />
       </button>
@@ -302,13 +308,14 @@ function FriendRowMenu({
         type="button"
         onClick={() => onPin(friend.id)}
         aria-label={friend.pinned ? '즐겨찾기 해제' : '즐겨찾기'}
-        className={`flex size-9 items-center justify-center rounded-[10px] text-[16px] transition ${
+        className={`flex size-9 items-center justify-center rounded-[10px] transition ${
           friend.pinned
-            ? 'text-[#FF8A00]'
-            : 'text-[#B0B8C1] hover:bg-[#F7F8FA] hover:text-[#FF8A00]'
+            ? 'text-[color:var(--accent-deep)]'
+            : 'text-[color:var(--ink-faint)] hover:bg-[color:var(--accent-tint)] hover:text-[color:var(--accent-deep)]'
         }`}
       >
-        {friend.pinned ? '★' : '☆'}
+        {/* 켜짐은 채운 별, 꺼짐은 빈 별 — ★/☆ 문자는 폰트마다 크기·정렬이 달라 아이콘으로. */}
+        <LuStar className={`size-4 ${friend.pinned ? 'fill-current' : ''}`} />
       </button>
       <button
         type="button"
@@ -318,16 +325,9 @@ function FriendRowMenu({
           }
         }}
         aria-label={`${friend.nickname} 삭제`}
-        className="flex size-9 items-center justify-center rounded-[10px] text-[#B0B8C1] transition hover:bg-[#FFECEE] hover:text-[#F04452]"
+        className="flex size-9 items-center justify-center rounded-[10px] text-[color:var(--ink-faint)] transition hover:bg-[color:var(--danger-tint)] hover:text-[color:var(--danger)]"
       >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-          <path
-            d="M3 3l8 8M11 3l-8 8"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-          />
-        </svg>
+        <LuX className="size-4" />
       </button>
     </div>
   );
@@ -347,19 +347,19 @@ function MyHandleShare({ handle }: { handle: string }) {
   };
 
   return (
-    <div className="flex items-center gap-3 rounded-[16px] border border-[#E5E8EB] bg-white px-4 py-3">
+    <div className="flex items-center gap-3 rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] px-4 py-3">
       <div className="min-w-0 flex-1">
-        <div className="text-[12px] font-semibold text-[#8B95A1]">내 아이디</div>
-        <div className="truncate text-[15px] font-bold text-[#191F28]">@{handle}</div>
+        <div className="text-[12px] font-semibold text-[color:var(--ink-faint)]">내 아이디</div>
+        <div className="truncate text-[15px] font-bold text-[color:var(--ink)]">@{handle}</div>
       </div>
       <button
         type="button"
         onClick={copy}
-        className="flex h-9 items-center gap-1.5 rounded-[10px] bg-[#F2F4F6] px-3 text-[12px] font-bold text-[#4E5968] transition hover:bg-[#E5E8EB]"
+        className="flex h-9 items-center gap-1.5 rounded-[10px] bg-[color:var(--card-soft)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--line)]"
       >
         {copied ? (
           <>
-            <LuCheck className="size-4 text-[#00A86B]" />
+            <LuCheck className="size-4 text-[color:var(--ok)]" />
             복사됨
           </>
         ) : (

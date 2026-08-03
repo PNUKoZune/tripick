@@ -43,45 +43,45 @@ export function EmailLoginForm({ next = '/' }: Props) {
       className="space-y-3"
     >
       <label className="block">
-        <span className="mb-1 block text-[13px] font-bold text-[#191F28]">이메일</span>
+        <span className="mb-1 block text-[13px] font-bold text-[color:var(--ink)]">이메일</span>
         <input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
           placeholder="you@example.com"
-          className="h-12 w-full rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[15px] outline-none focus:border-[#3182F6]"
+          className="h-12 w-full rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[15px] outline-none focus:border-[color:var(--primary)]"
         />
       </label>
       <label className="block">
-        <span className="mb-1 block text-[13px] font-bold text-[#191F28]">비밀번호</span>
+        <span className="mb-1 block text-[13px] font-bold text-[color:var(--ink)]">비밀번호</span>
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="current-password"
           placeholder="••••••••"
-          className="h-12 w-full rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[15px] outline-none focus:border-[#3182F6]"
+          className="h-12 w-full rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[15px] outline-none focus:border-[color:var(--primary)]"
         />
       </label>
 
       {errorMessage ? (
-        <p className="text-[13px] font-semibold text-[#F04452]">{errorMessage}</p>
+        <p className="text-[13px] font-semibold text-[color:var(--danger)]">{errorMessage}</p>
       ) : null}
 
       <button
         type="submit"
         disabled={!canSubmit}
-        className="mt-2 h-12 w-full rounded-[12px] bg-[#3182F6] text-[15px] font-bold text-white hover:bg-[#1B64DA] disabled:bg-[#E5E8EB] disabled:text-[#B0B8C1]"
+        className="mt-2 h-12 w-full rounded-[12px] bg-[color:var(--btn-bg)] text-[15px] font-bold text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)] disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)]"
       >
         {mutation.isPending ? '로그인 중…' : retryAfter > 0 ? `${retryAfter}초 후 다시 시도` : '로그인'}
       </button>
 
       <div className="flex items-center justify-between pt-1 text-[13px]">
-        <Link href="/forgot-password" className="font-semibold text-[#6B7684] hover:text-[#3182F6]">
+        <Link href="/forgot-password" className="font-semibold text-[color:var(--ink-sub)] hover:text-[color:var(--primary)]">
           비밀번호를 잊으셨나요?
         </Link>
-        <Link href="/signup" className="font-semibold text-[#3182F6] hover:underline">
+        <Link href="/signup" className="font-semibold text-[color:var(--primary)] hover:underline">
           회원가입
         </Link>
       </div>

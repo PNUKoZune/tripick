@@ -8,12 +8,7 @@ import { ko } from 'react-day-picker/locale';
 import { format } from 'date-fns';
 import { LuChevronDown, LuPlus, LuX } from 'react-icons/lu';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type {
-  PlannerMemberDto,
-  ReplanBudget,
-  ReplanPace,
-  ReplanPlaceDto,
-} from '@tripick/types';
+import type { PlannerMemberDto, ReplanBudget, ReplanPace, ReplanPlaceDto } from '@tripick/types';
 
 import { fetchFriends } from '@/entities/friend';
 import { SessionGuard } from '@/entities/session';
@@ -191,7 +186,9 @@ function TripCreateContent({
 
   const removeDayRegion = (dayIndex: number, regionIndex: number) => {
     setDayRegionsList((prev) =>
-      prev.map((regions, i) => (i === dayIndex ? regions.filter((_, ri) => ri !== regionIndex) : regions)),
+      prev.map((regions, i) =>
+        i === dayIndex ? regions.filter((_, ri) => ri !== regionIndex) : regions,
+      ),
     );
   };
 
@@ -279,10 +276,16 @@ function TripCreateContent({
 
         <Field
           label="여행 지역"
-          hint={sameRegion ? '자동완성·지도에서 선택하거나 직접 입력할 수 있어요' : '일차마다 지역을 지정해요'}
+          hint={
+            sameRegion
+              ? '자동완성·지도에서 선택하거나 직접 입력할 수 있어요'
+              : '일차마다 지역을 지정해요'
+          }
         >
           <div className="mb-3 flex items-center justify-between rounded-[12px] bg-[color:var(--card-soft)] px-3.5 py-2.5">
-            <span className="text-[13px] font-semibold text-[color:var(--ink)]">모든 날 같은 지역</span>
+            <span className="text-[13px] font-semibold text-[color:var(--ink)]">
+              모든 날 같은 지역
+            </span>
             <button
               type="button"
               role="switch"
@@ -353,7 +356,9 @@ function TripCreateContent({
               <TimeField label="도착 시각" value={endTime} onChange={setEndTime} />
             </div>
             {timeError ? (
-              <p className="mt-2 text-[12px] font-semibold text-[color:var(--danger)]">{timeError}</p>
+              <p className="mt-2 text-[12px] font-semibold text-[color:var(--danger)]">
+                {timeError}
+              </p>
             ) : null}
           </div>
         </Field>
@@ -429,10 +434,11 @@ function TripCreateContent({
 
   // Toss식 disabled CTA — 여행 지역이 비었을 때만 비활성 사유를 알려준다(REQ-WVR-032, GWT-4).
   const destinationMissing = destination.trim().length === 0;
-  const ctaHelper = !canSubmit && destinationMissing ? '여행 지역을 입력하면 여행을 만들 수 있어요' : null;
+  const ctaHelper =
+    !canSubmit && destinationMissing ? '여행 지역을 입력하면 여행을 만들 수 있어요' : null;
 
   return (
-    <AppFrame>
+    <AppFrame themed>
       <div className="wvr-scope">
         {/* 헤더: 모바일 = 뒤로 + 작은 제목 / 데스크탑 = 뒤로 + 라벨/제목 + 우측 CTA */}
         <header className="px-4 pt-5 lg:border-b lg:border-[color:var(--line)] lg:bg-[color:var(--card)] lg:px-0 lg:pt-0">
@@ -476,7 +482,8 @@ function TripCreateContent({
           {/* 데스크탑 하단 CTA + 안내 문구 */}
           <div className="mt-6 hidden items-center justify-between gap-4 lg:flex">
             <p className="text-[12px] text-[color:var(--ink-faint)]">
-              {ctaHelper ?? '생성한 여행은 내 계정에 저장되고 친구 목록 기반으로 멤버를 관리합니다.'}
+              {ctaHelper ??
+                '생성한 여행은 내 계정에 저장되고 친구 목록 기반으로 멤버를 관리합니다.'}
             </p>
             <button
               type="button"
@@ -500,7 +507,9 @@ function TripCreateContent({
             {showLoading ? '생성 중…' : '여행 만들기'}
           </button>
           {ctaHelper ? (
-            <p className="mt-2 text-center text-[12.5px] text-[color:var(--ink-faint)]">{ctaHelper}</p>
+            <p className="mt-2 text-center text-[12.5px] text-[color:var(--ink-faint)]">
+              {ctaHelper}
+            </p>
           ) : null}
         </div>
 

@@ -35,6 +35,9 @@ const LOSS_ITEMS = [
 /**
  * 2단계 탈퇴 플로우. ① 사유 수집(건너뛰기 가능) → ② 삭제 범위 고지 + 확인 문구 입력.
  * 계정은 유예 없이 즉시 물리 삭제되므로, 실수로 누른 탈퇴를 확인 문구가 마지막으로 막는다.
+ *
+ * ModalShell 은 body 로 portal 되어 설정 화면의 `.wvr-scope` 밖에 렌더된다 — 아래
+ * `var(--token, #fallback)` 들이 폴백(라이트)으로 굳지 않도록 패널에 직접 스코프를 건다.
  */
 export function WithdrawalDialog({ pending, error, onClose, onSubmit }: Props) {
   const [step, setStep] = useState<'reason' | 'confirm'>('reason');
@@ -53,7 +56,7 @@ export function WithdrawalDialog({ pending, error, onClose, onSubmit }: Props) {
     <ModalShell
       label="회원 탈퇴"
       onDismiss={pending ? undefined : onClose}
-      panelClassName="flex max-h-[86vh] w-full max-w-[400px] flex-col overflow-hidden rounded-[20px] bg-[color:var(--card,#FFFFFF)] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
+      panelClassName="wvr-scope flex max-h-[86vh] w-full max-w-[400px] flex-col overflow-hidden rounded-[20px] bg-[color:var(--card,#FFFFFF)] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
     >
       {step === 'reason' ? (
         <ReasonStep
@@ -150,6 +153,8 @@ function ReasonStep({
         {detail.length}/{DETAIL_MAX_LENGTH}
       </span>
 
+      {/* 다음 버튼 배경은 --ink(다크에선 밝은 잉크) — 글자는 --btn-text(항상 흰색)가 아니라
+          카드색이어야 대비가 뒤집히지 않는다. 라이트에선 둘 다 흰색으로 값이 같다. */}
       <div className="mt-3 flex shrink-0 items-center gap-2">
         <button
           type="button"
@@ -161,7 +166,7 @@ function ReasonStep({
         <button
           type="button"
           onClick={onNext}
-          className="h-11 flex-1 rounded-[12px] bg-[color:var(--ink,#191F28)] text-[14px] font-bold text-[color:var(--btn-text,#FFFFFF)] hover:brightness-110"
+          className="h-11 flex-1 rounded-[12px] bg-[color:var(--ink,#191F28)] text-[14px] font-bold text-[color:var(--card,#FFFFFF)] hover:brightness-110"
         >
           {reason || detail.trim() ? '다음' : '건너뛰고 계속'}
         </button>

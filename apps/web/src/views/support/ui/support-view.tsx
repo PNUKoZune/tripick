@@ -1,8 +1,6 @@
-import {
-  DocumentPageShell,
-  DocumentParagraph,
-  DocumentSection,
-} from '@/shared/ui/document-page';
+import { LuMail } from 'react-icons/lu';
+
+import { DocumentPageShell, DocumentParagraph, DocumentSection } from '@/shared/ui/document-page';
 
 // TODO: 발신/고객문의 도메인 확정 시 실제 주소로 교체 (docs 백로그 "발신 도메인 확정")
 const SUPPORT_EMAIL = 'support@tripick.place';
@@ -40,11 +38,12 @@ export function SupportView() {
         </DocumentParagraph>
         <a
           href={`mailto:${SUPPORT_EMAIL}`}
-          className="mt-1 flex h-12 items-center justify-between rounded-[12px] bg-[#F2F4F6] px-4 text-[14px] font-semibold text-[#191F28] hover:bg-[#E9ECF0]"
+          className="mt-1 flex h-12 items-center justify-between rounded-[12px] bg-[color:var(--card-soft)] px-4 text-[14px] font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--line)]"
         >
           <span>{SUPPORT_EMAIL}</span>
-          <span aria-hidden className="text-[12px] text-[#8B95A1]">
-            메일 보내기 →
+          <span className="flex items-center gap-1.5 text-[12px] text-[color:var(--ink-faint)]">
+            <LuMail className="size-3.5" aria-hidden />
+            메일 보내기
           </span>
         </a>
       </DocumentSection>
@@ -53,8 +52,10 @@ export function SupportView() {
         <div className="space-y-4">
           {FAQ.map((item) => (
             <div key={item.q}>
-              <p className="text-[14px] font-bold text-[#191F28]">Q. {item.q}</p>
-              <p className="mt-1 text-[14px] leading-[22px] text-[#4E5968]">{item.a}</p>
+              <p className="text-[14px] font-bold text-[color:var(--ink)]">Q. {item.q}</p>
+              <p className="mt-1 text-[14px] leading-[22px] text-[color:var(--ink-sub)]">
+                {item.a}
+              </p>
             </div>
           ))}
         </div>

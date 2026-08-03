@@ -24,11 +24,11 @@ export function VerifyEmailView() {
   }, [token, mutation]);
 
   return (
-    <AppFrame showNav={false}>
+    <AppFrame showNav={false} themed>
       <div className="mx-auto flex min-h-dvh w-full max-w-[440px] flex-col justify-center px-5">
         <div className="text-center">
-          <div className="text-[13px] font-black text-[#3182F6]">TriPick</div>
-          <h1 className="mt-3 text-[24px] font-bold text-[#191F28]">이메일 인증</h1>
+          <div className="text-[13px] font-black text-[color:var(--primary)]">TriPick</div>
+          <h1 className="mt-3 text-[24px] font-bold text-[color:var(--ink)]">이메일 인증</h1>
         </div>
 
         <div className="mt-8">
@@ -70,18 +70,18 @@ function Block({
 }) {
   const toneClass =
     tone === 'success'
-      ? 'border-[#BCE9D6] bg-[#E5F7EE] text-[#00A86B]'
+      ? 'border-[color:var(--ok)]/40 bg-[color:var(--ok)]/12 text-[color:var(--ok)]'
       : tone === 'error'
-        ? 'border-[#FECDD3] bg-[#FFECEE] text-[#F04452]'
-        : 'border-[#E5E8EB] bg-[#FAFBFC] text-[#191F28]';
+        ? 'border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] text-[color:var(--danger)]'
+        : 'border-[color:var(--line)] bg-[color:var(--card-soft)] text-[color:var(--ink)]';
   return (
     <div className={`rounded-[16px] border p-5 ${toneClass}`}>
       <h2 className="text-[16px] font-bold">{title}</h2>
-      <p className="mt-2 text-[13px] leading-[20px] text-[#4E5968]">{body}</p>
+      <p className="mt-2 text-[13px] leading-[20px] text-[color:var(--ink-sub)]">{body}</p>
       {cta ? (
         <Link
           href={cta.href}
-          className="mt-3 inline-flex h-10 items-center rounded-[10px] bg-[#3182F6] px-4 text-[13px] font-bold text-white"
+          className="mt-3 inline-flex h-10 items-center rounded-[10px] bg-[color:var(--btn-bg)] px-4 text-[13px] font-bold text-[color:var(--btn-text)]"
         >
           {cta.label}
         </Link>

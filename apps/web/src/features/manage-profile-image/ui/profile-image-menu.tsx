@@ -23,20 +23,20 @@ export function ProfileImageMenu({
       label="프로필 사진"
       align="bottom"
       onDismiss={pending ? undefined : onClose}
-      panelClassName="w-full max-w-[400px] overflow-hidden rounded-t-[20px] bg-white pb-[max(12px,env(safe-area-inset-bottom))] shadow-[0_24px_60px_rgba(15,23,42,0.22)] sm:rounded-[20px] sm:pb-3"
+      panelClassName="wvr-scope w-full max-w-[400px] overflow-hidden rounded-t-[20px] bg-[color:var(--card,#FFFFFF)] pb-[max(12px,env(safe-area-inset-bottom))] shadow-[0_24px_60px_rgba(15,23,42,0.22)] sm:rounded-[20px] sm:pb-3"
     >
       <div className="px-5 pb-2 pt-5">
-        <h2 className="text-[16px] font-bold text-[#191F28]">프로필 사진</h2>
-        <p className="mt-1 text-[12px] text-[#8B95A1]">JPG, PNG, WebP · 최대 5MB</p>
+        <h2 className="text-[16px] font-bold text-[color:var(--ink,#191F28)]">프로필 사진</h2>
+        <p className="mt-1 text-[12px] text-[color:var(--ink-faint,#8B95A1)]">JPG, PNG, WebP · 최대 5MB</p>
       </div>
       <div className="flex flex-col px-3 pt-1">
         <button
           type="button"
           onClick={onPickFile}
           disabled={pending}
-          className="flex h-12 items-center gap-3 rounded-[12px] px-3 text-left text-[15px] font-semibold text-[#191F28] hover:bg-[#F2F4F6] disabled:opacity-50"
+          className="flex h-12 items-center gap-3 rounded-[12px] px-3 text-left text-[15px] font-semibold text-[color:var(--ink,#191F28)] hover:bg-[color:var(--card-soft,#F2F4F6)] disabled:opacity-50"
         >
-          <span className="flex size-8 items-center justify-center rounded-full bg-[#EAF2FF] text-[#3182F6]">
+          <span className="flex size-8 items-center justify-center rounded-full bg-[color:var(--primary-tint,#EAF2FF)] text-[color:var(--primary,#3182F6)]">
             <CameraIcon />
           </span>
           <span>프로필 사진 변경</span>
@@ -46,21 +46,21 @@ export function ProfileImageMenu({
             type="button"
             onClick={onRevert}
             disabled={pending}
-            className="flex h-12 items-center gap-3 rounded-[12px] px-3 text-left text-[15px] font-semibold text-[#F04452] hover:bg-[#FFECEE] disabled:opacity-50"
+            className="flex h-12 items-center gap-3 rounded-[12px] px-3 text-left text-[15px] font-semibold text-[color:var(--danger,#F04452)] hover:bg-[color:var(--danger-tint,#FFECEE)] disabled:opacity-50"
           >
-            <span className="flex size-8 items-center justify-center rounded-full bg-[#FFECEE] text-[#F04452]">
+            <span className="flex size-8 items-center justify-center rounded-full bg-[color:var(--danger-tint,#FFECEE)] text-[color:var(--danger,#F04452)]">
               <TrashIcon />
             </span>
             <span>기본 이미지로 복구</span>
           </button>
         ) : null}
       </div>
-      <div className="mt-2 border-t border-[#F2F4F6] p-3">
+      <div className="mt-2 border-t border-[color:var(--line,#F2F4F6)] p-3">
         <button
           type="button"
           onClick={onClose}
           disabled={pending}
-          className="flex h-11 w-full items-center justify-center rounded-[12px] text-[14px] font-bold text-[#6B7684] hover:bg-[#FAFBFC] disabled:opacity-50"
+          className="flex h-11 w-full items-center justify-center rounded-[12px] text-[14px] font-bold text-[color:var(--ink-sub,#6B7684)] hover:bg-[color:var(--card-soft,#FAFBFC)] disabled:opacity-50"
         >
           취소
         </button>
