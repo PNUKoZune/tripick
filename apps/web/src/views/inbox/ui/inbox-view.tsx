@@ -197,9 +197,7 @@ function InboxContent() {
       // owner: planner 로 이동해 diff 를 확인하고 그 화면에서 승인/거절한다.
       if (!item.readAt) readMutation.mutate(item.id);
       const dayQuery = action.day ? `&day=${action.day}` : '';
-      router.push(
-        `/planner?tripId=${action.tripId}${dayQuery}&proposalId=${action.proposalId}`,
-      );
+      router.push(`/planner?tripId=${action.tripId}${dayQuery}&proposalId=${action.proposalId}`);
     } else if (action.type === 'reject-schedule-change' && action.proposalId) {
       if (!item.readAt) readMutation.mutate(item.id);
       rejectScheduleChangeMutation.mutate(action.proposalId);
@@ -327,32 +325,29 @@ function InboxContent() {
   );
 
   return (
-    <AppFrame>
-      {/* 취향·플래너와 같은 "광안리의 하루" 팔레트를 이 화면에도 로컬 스코프로 적용한다. */}
-      <div className="wvr-scope min-h-dvh">
-        <PageHeader
-          title="알림"
-          label="알림"
-          description="친구 요청, 재계획, 일정 알림이 모입니다."
-          action={
-            <>
-              <Link
-                href="/friends"
-                className="hidden rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card)] px-4 py-2 text-[14px] font-semibold text-[color:var(--ink)] hover:bg-[color:var(--card-soft)] lg:inline-flex"
-              >
-                친구 목록
-              </Link>
-              {unreadCount > 0 ? (
-                <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-[color:var(--primary)] px-2 text-[12px] font-bold text-[color:var(--btn-text)] lg:h-9 lg:min-w-9 lg:px-3 lg:text-[13px]">
-                  <span className="lg:hidden">{unreadCount}</span>
-                  <span className="hidden lg:inline">{unreadCount} 새 알림</span>
-                </span>
-              ) : null}
-            </>
-          }
-        />
-        <PageContainer>{content}</PageContainer>
-      </div>
+    <AppFrame themed>
+      <PageHeader
+        title="알림"
+        label="알림"
+        description="친구 요청, 재계획, 일정 알림이 모입니다."
+        action={
+          <>
+            <Link
+              href="/friends"
+              className="hidden rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card)] px-4 py-2 text-[14px] font-semibold text-[color:var(--ink)] hover:bg-[color:var(--card-soft)] lg:inline-flex"
+            >
+              친구 목록
+            </Link>
+            {unreadCount > 0 ? (
+              <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-[color:var(--primary)] px-2 text-[12px] font-bold text-[color:var(--btn-text)] lg:h-9 lg:min-w-9 lg:px-3 lg:text-[13px]">
+                <span className="lg:hidden">{unreadCount}</span>
+                <span className="hidden lg:inline">{unreadCount} 새 알림</span>
+              </span>
+            ) : null}
+          </>
+        }
+      />
+      <PageContainer>{content}</PageContainer>
     </AppFrame>
   );
 }
@@ -382,7 +377,11 @@ function CategoryChip({
       }`}
     >
       {Icon ? (
-        <Icon className="size-3.5 shrink-0" style={active ? undefined : { color: tone }} aria-hidden />
+        <Icon
+          className="size-3.5 shrink-0"
+          style={active ? undefined : { color: tone }}
+          aria-hidden
+        />
       ) : null}
       {label}
     </button>
@@ -483,8 +482,8 @@ function groupByDate(items: InboxItemDto[]): Array<{ label: string; items: Inbox
   const startOfWeek = startOfToday - 6 * 86_400_000;
 
   const buckets: Record<string, InboxItemDto[]> = {
-    '오늘': [],
-    '어제': [],
+    오늘: [],
+    어제: [],
     '이번 주': [],
     '그 이전': [],
   };

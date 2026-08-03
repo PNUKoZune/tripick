@@ -19,7 +19,7 @@ export function PreferencesView() {
  */
 function PreferencesContent() {
   return (
-    <AppFrame>
+    <AppFrame themed>
       <div className="wvr-scope">
         <div className="flex items-center gap-1.5 px-2 pb-2 pt-3">
           <span className="flex-1 px-2">

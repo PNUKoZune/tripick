@@ -41,69 +41,63 @@ function SettingsContent() {
   const mutationError = firstErrorMessage(Object.values(featureErrors));
 
   return (
-    <AppFrame>
-      {/* 취향·알림과 같은 "광안리의 하루" 팔레트를 이 화면에도 로컬 스코프로 적용한다. */}
-      <div className="wvr-scope min-h-dvh">
-        <PageHeader title="설정" label="설정" description="계정·알림·앱 정보를 관리합니다." />
-        <PageContainer>
-          {loadError ? (
-            <div className="mb-4 rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-3 text-[13px] font-semibold text-[color:var(--danger)]">
-              {loadError}
+    <AppFrame themed>
+      <PageHeader title="설정" label="설정" description="계정·알림·앱 정보를 관리합니다." />
+      <PageContainer>
+        {loadError ? (
+          <div className="mb-4 rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-3 text-[13px] font-semibold text-[color:var(--danger)]">
+            {loadError}
+          </div>
+        ) : null}
+
+        <div className="space-y-6">
+          <section>
+            <div className="mb-2 px-1">
+              <h2 className="text-[15px] font-bold text-[color:var(--ink)]">프로필</h2>
+              <p className="mt-0.5 text-[12px] leading-[18px] text-[color:var(--ink-faint)]">
+                다른 멤버와 친구에게 보이는 정보예요.
+              </p>
+            </div>
+            <SettingsProfileHero me={me} onError={setError('profile')} />
+          </section>
+
+          <Section
+            title="알림 설정"
+            description="끄면 인박스와 푸시 모두 받지 않아요. 친구 요청은 친구 페이지에선 계속 보여요."
+          >
+            <NotificationPreferencesList me={me} onError={setError('notifications')} />
+          </Section>
+
+          <Section title="약관 및 정책">
+            <LinkRow href="/legal/terms" label="이용약관" />
+            <LinkRow href="/legal/privacy" label="개인정보처리방침" />
+            <LinkRow href="/support" label="고객센터" />
+          </Section>
+
+          <Section title="앱 정보">
+            <InfoRow label="버전" value={APP_VERSION} />
+            <InfoRow
+              label="라이선스"
+              value={
+                <Link href="#open-source" className="text-[color:var(--primary)] hover:underline">
+                  오픈소스 라이선스
+                </Link>
+              }
+            />
+          </Section>
+
+          <Section title="계정">
+            <SignOutButton />
+            <DeleteAccountButton onError={setError('delete-account')} />
+          </Section>
+
+          {mutationError ? (
+            <div className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] font-semibold text-[color:var(--danger)]">
+              {mutationError}
             </div>
           ) : null}
-
-          <div className="space-y-6">
-            <section>
-              <div className="mb-2 px-1">
-                <h2 className="text-[15px] font-bold text-[color:var(--ink)]">프로필</h2>
-                <p className="mt-0.5 text-[12px] leading-[18px] text-[color:var(--ink-faint)]">
-                  다른 멤버와 친구에게 보이는 정보예요.
-                </p>
-              </div>
-              <SettingsProfileHero me={me} onError={setError('profile')} />
-            </section>
-
-            <Section
-              title="알림 설정"
-              description="끄면 인박스와 푸시 모두 받지 않아요. 친구 요청은 친구 페이지에선 계속 보여요."
-            >
-              <NotificationPreferencesList me={me} onError={setError('notifications')} />
-            </Section>
-
-            <Section title="약관 및 정책">
-              <LinkRow href="/legal/terms" label="이용약관" />
-              <LinkRow href="/legal/privacy" label="개인정보처리방침" />
-              <LinkRow href="/support" label="고객센터" />
-            </Section>
-
-            <Section title="앱 정보">
-              <InfoRow label="버전" value={APP_VERSION} />
-              <InfoRow
-                label="라이선스"
-                value={
-                  <Link
-                    href="#open-source"
-                    className="text-[color:var(--primary)] hover:underline"
-                  >
-                    오픈소스 라이선스
-                  </Link>
-                }
-              />
-            </Section>
-
-            <Section title="계정">
-              <SignOutButton />
-              <DeleteAccountButton onError={setError('delete-account')} />
-            </Section>
-
-            {mutationError ? (
-              <div className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] font-semibold text-[color:var(--danger)]">
-                {mutationError}
-              </div>
-            ) : null}
-          </div>
-        </PageContainer>
-      </div>
+        </div>
+      </PageContainer>
     </AppFrame>
   );
 }

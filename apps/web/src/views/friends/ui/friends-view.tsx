@@ -245,23 +245,20 @@ function FriendsContent() {
   );
 
   return (
-    <AppFrame>
-      {/* 취향·알림·설정과 같은 "광안리의 하루" 팔레트를 이 화면에도 로컬 스코프로 적용한다. */}
-      <div className="wvr-scope min-h-dvh">
-        <PageHeader
-          title="친구"
-          label="친구"
-          description="카카오톡 친구 추가하듯, 아이디(@)로 친구를 추가하고 여행 멤버 후보로 둡니다."
-          action={
-            friends.length > 0 ? (
-              <span className="text-[13px] font-semibold text-[color:var(--ink-sub)]">
-                전체 {friends.length}명
-              </span>
-            ) : null
-          }
-        />
-        <PageContainer>{content}</PageContainer>
-      </div>
+    <AppFrame themed>
+      <PageHeader
+        title="친구"
+        label="친구"
+        description="카카오톡 친구 추가하듯, 아이디(@)로 친구를 추가하고 여행 멤버 후보로 둡니다."
+        action={
+          friends.length > 0 ? (
+            <span className="text-[13px] font-semibold text-[color:var(--ink-sub)]">
+              전체 {friends.length}명
+            </span>
+          ) : null
+        }
+      />
+      <PageContainer>{content}</PageContainer>
     </AppFrame>
   );
 }
