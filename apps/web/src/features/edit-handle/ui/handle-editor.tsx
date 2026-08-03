@@ -49,7 +49,7 @@ export function HandleEditor({ me, onError }: Props) {
       maxLength={20}
       disabled={!me}
       sanitize={(raw) => raw.toLowerCase().replace(/[^a-z0-9_]/g, '')}
-      textClassName="text-[13px] font-semibold text-[#8B95A1] lg:text-[14px]"
+      textClassName="text-[13px] font-semibold text-[color:var(--ink-faint,#8B95A1)] lg:text-[14px]"
     />
   );
 }

@@ -33,7 +33,7 @@ export function NicknameEditor({ me, onError }: Props) {
       placeholder="닉네임"
       maxLength={20}
       disabled={!me}
-      textClassName="text-[18px] font-bold text-[#191F28] lg:text-[22px]"
+      textClassName="text-[18px] font-bold text-[color:var(--ink,#191F28)] lg:text-[22px]"
     />
   );
 }
