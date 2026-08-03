@@ -105,10 +105,6 @@ export class BaseReplanRequestBodyDto implements Omit<ReplanRequestDto, 'trigger
 
   @IsOptional()
   @IsString()
-  deviatedItemId?: string;
-
-  @IsOptional()
-  @IsString()
   @MaxLength(300)
   note?: string;
 

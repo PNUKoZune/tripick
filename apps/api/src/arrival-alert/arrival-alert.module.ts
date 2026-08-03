@@ -9,8 +9,7 @@ import { InboxModule } from '../inbox/inbox.module';
 import { TripMembersModule } from '../trip-members/trip-members.module';
 import { ArrivalAlertProcessor } from './arrival-alert.processor';
 import { ArrivalAlertService } from './arrival-alert.service';
-import { LiveLocationController } from './live-location.controller';
-import { LiveLocationService } from './live-location.service';
+import { LiveLocationModule } from './live-location.module';
 import {
   ARRIVAL_ALERT_CRON,
   ARRIVAL_ALERT_QUEUE,
@@ -25,7 +24,8 @@ import {
  *
  * 트리거가 Planner 와 다른(스케줄+위치) 독립 도메인이라 별도 Module 로 둔다
  * (WeatherAlert·CrowdAlert 와 동형). 재계획을 자동 실행하지 않고, 일정 시작 시각에 근처에
- * 없는 사용자에게 변경 여부를 묻는 알림까지만 담당한다. 위치 인제스트(LiveLocation)도 여기 둔다.
+ * 없는 사용자에게 변경 여부를 묻는 알림까지만 담당한다. 위치 인제스트는 같은 폴더의
+ * LiveLocationModule 이 맡는다 — 이탈 재계획도 그 위치를 쓰므로 알림 스캐너와 분리했다.
  */
 @Module({
   imports: [
@@ -33,10 +33,10 @@ import {
     TypeOrmModule.forFeature([TripEntity, ItineraryItemEntity]),
     InboxModule,
     TripMembersModule,
+    LiveLocationModule,
   ],
-  controllers: [LiveLocationController],
-  providers: [ArrivalAlertService, ArrivalAlertProcessor, LiveLocationService],
-  exports: [ArrivalAlertService, LiveLocationService],
+  providers: [ArrivalAlertService, ArrivalAlertProcessor],
+  exports: [ArrivalAlertService],
 })
 export class ArrivalAlertModule implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ArrivalAlertModule.name);

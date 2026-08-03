@@ -57,7 +57,6 @@ const TRIGGER_MEMO_NOTE: Record<ReplanTrigger, string> = {
 
 interface GenerateOptions {
   trigger?: ReplanRequestDto['trigger'];
-  deviatedItemId?: string;
   currentLocation?: ReplanRequestDto['currentLocation'];
   /** 사용자 자유 텍스트 요청. 검색·프롬프트 notes 에 합쳐진다 */
   note?: string;
@@ -121,7 +120,6 @@ export class PlannerService {
 
     return this.buildAndStoreItinerary(trip, {
       trigger: request.trigger,
-      ...(request.deviatedItemId !== undefined ? { deviatedItemId: request.deviatedItemId } : {}),
       ...(request.currentLocation !== undefined ? { currentLocation: request.currentLocation } : {}),
       ...(request.note !== undefined ? { note: request.note } : {}),
       ...(request.targetDays !== undefined ? { targetDays: request.targetDays } : {}),

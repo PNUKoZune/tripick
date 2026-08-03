@@ -141,7 +141,7 @@ RN 웹뷰 감지 헬퍼가 `use-current-location`·`use-report-live-location`·`
 
 ## 9. 알려진 한계 / 후속 작업
 
-- ~~**"수락 → 재계획" 미배선**~~ — 해소됨. 알림 딥링크가 `trigger:'deviation'` 을 실어 planner 배너로 제안한다(자동 재계획은 여전히 없음): [`docs/alerts/alert-replan-wiring-v1.md`](./alert-replan-wiring-v1.md). 다만 **미도착 배너가 현재 위치를 안 보낸다** — `currentLocation`·`deviatedItemId` 가 빈 채로 나가는 건 후속(같은 문서 §8)
+- ~~**"수락 → 재계획" 미배선**~~ — 해소됨. 알림 딥링크가 `trigger:'deviation'` 을 실어 planner 배너로 제안한다(자동 재계획은 여전히 없음): [`docs/alerts/alert-replan-wiring-v1.md`](./alert-replan-wiring-v1.md). 위치도 해소 — `ReplanningService.enqueue` 가 미도착 판정에 쓰는 위치 캐시를 `deviation` 재계획 잡에 실어 준다(같은 문서 §8). 쓰이지 않던 `deviatedItemId` 는 제거
 - **iOS 백그라운드** — Android 는 foreground service 로 백그라운드·앱 스와이프까지 커버하지만, iOS 는 네이티브 추적 모듈이 없어 `watchPosition` + `UIBackgroundModes(location)` 폴백뿐이다. 앱 완전 종료 시 위치가 끊긴다. iOS significant-location-change 등은 후속
 - **임계값 캘리브레이션** — 유예 15분·반경 500m·신선도 10분은 초기값. 실제 발송량을 보고 튜닝 필요
 - **force-stop / OS 강제 종료** — 프로세스가 죽으면 어떤 보고도 못 한다. 내재적 한계로 문서화만
