@@ -76,7 +76,7 @@ export function ProfileImageUploader({ me, onError }: Props) {
           onClick={() => me && setMenuOpen(true)}
           disabled={!me || pending}
           aria-label="프로필 사진 옵션"
-          className="relative ring-4 ring-white shadow-sm rounded-full transition hover:opacity-95 disabled:opacity-60"
+          className="relative rounded-full shadow-sm ring-4 ring-[color:var(--card,#FFFFFF)] transition hover:opacity-95 disabled:opacity-60"
         >
           <UserAvatar user={me} size="xl" />
           {pending ? (

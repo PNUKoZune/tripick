@@ -5,7 +5,7 @@ type Size = 'md' | 'lg' | 'xl';
 const sizeClass: Record<Size, string> = {
   md: 'size-14 text-[18px]',
   lg: 'size-20 text-[24px]',
-  xl: 'size-20 text-[24px] lg:size-28 lg:text-[32px]',
+  xl: 'size-20 text-[24px] lg:size-24 lg:text-[28px]',
 };
 
 type Props = {
@@ -19,7 +19,7 @@ export function UserAvatar({ user, size = 'md', className = '' }: Props) {
   return (
     <div
       aria-hidden
-      className={`flex items-center justify-center overflow-hidden rounded-full bg-[#EAF2FF] font-bold text-[#1B64DA] ${sizeClass[size]} ${className}`}
+      className={`flex items-center justify-center overflow-hidden rounded-full bg-[color:var(--primary-tint,#EAF2FF)] font-bold text-[color:var(--primary-deep,#1B64DA)] ${sizeClass[size]} ${className}`}
     >
       {user?.profileImageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
