@@ -41,6 +41,18 @@ function toTimeString(date: Date | null): string | null {
   return `${hh}:${mm}`;
 }
 
+/**
+ * 입력 글자색만 페이지 토큰으로 되돌린다. 라이트에선 기존 색(#191F28)과 같은 값이고,
+ * 다크(.wvr-scope)에선 --text-primary 가 밝은 값으로 섀도잉돼 글자가 보인다.
+ * `-webkit-text-fill-color` 까지 같이 줘야 WebKit 계열에서 검정이 남지 않는다.
+ */
+const pickersInputColorSx = {
+  '& .MuiPickersInputBase-input': {
+    color: 'var(--text-primary)',
+    WebkitTextFillColor: 'var(--text-primary)',
+  },
+} as const;
+
 /** 여행 생성 폼: 흰 배경 아웃라인 인풋 */
 const outlinedSx: SxProps<Theme> = {
   '& .MuiOutlinedInput-root': {
@@ -70,6 +82,9 @@ const outlinedSx: SxProps<Theme> = {
   '& .MuiInputAdornment-root': { marginLeft: 0 },
   '& .MuiIconButton-root': { color: '#8B95A1', padding: '6px' },
   '& .MuiSvgIcon-root': { fontSize: 20 },
+  // MUI X v7 TimePicker 의 입력부는 OutlinedInput 이 아니라 PickersInputBase 다 —
+  // 위 .MuiOutlinedInput-* 선택자가 안 걸려 글자색이 MUI 기본값(rgba(0,0,0,.87))으로 남는다.
+  ...pickersInputColorSx,
 };
 
 /** 취향 설정: soft-bg 박스 안에서 테두리 없이 굵은 큰 글씨 */
@@ -94,6 +109,9 @@ const softSx: SxProps<Theme> = {
   '& .MuiInputAdornment-root': { marginLeft: 0 },
   '& .MuiIconButton-root': { color: 'var(--text-tertiary)', padding: '4px' },
   '& .MuiSvgIcon-root': { fontSize: 18 },
+  ...pickersInputColorSx,
+  // soft 변형은 박스 안에 테두리 없이 놓이는 의도 — Pickers 쪽 노치 테두리도 함께 지운다.
+  '& .MuiPickersOutlinedInput-notchedOutline': { border: 'none' },
 };
 
 /** MUI TimePicker(아날로그 TimeClock 팝업)로 시각 선택 (HH:mm). */

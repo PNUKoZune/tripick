@@ -53,7 +53,11 @@ async function main() {
   const session = await demoLogin();
 
   const browser = await chromium.launch();
-  const ctx = await browser.newContext({ viewport: { width: vw || 430, height: vh || 880 } });
+  const ctx = await browser.newContext({
+    viewport: { width: vw || 430, height: vh || 880 },
+    // SCHEME=dark 로 prefers-color-scheme 다크 화면을 그대로 찍는다(테마 토글 UI 가 없으므로).
+    colorScheme: process.env.SCHEME === 'dark' ? 'dark' : 'light',
+  });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
@@ -72,8 +76,14 @@ async function main() {
     // 임의 경로 스크린샷 모드
     await page.goto(`${WEB_BASE}${argPath}`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(1200);
+    // SCROLL_Y=1800 처럼 특정 지점을 뷰포트로 찍고 싶을 때(긴 폼의 중간 검수).
+    if (process.env.SCROLL_Y) {
+      await page.evaluate((y) => window.scrollTo(0, Number(y)), process.env.SCROLL_Y);
+      await page.waitForTimeout(400);
+    }
     const out = path.join(SHOTS, argOut ?? 'shot.png');
-    await page.screenshot({ path: out });
+    // FULL_PAGE=1 이면 스크롤 전체를 한 장으로(긴 폼 화면 검수용).
+    await page.screenshot({ path: out, fullPage: process.env.FULL_PAGE === '1' });
     console.log(`✅ screenshot → ${out}`);
   } else {
     // 스모크 모드: planner 재계획 배너(알림 딥링크) 검증

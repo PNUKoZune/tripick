@@ -45,9 +45,18 @@ function PreferencesContent() {
             style={{ width: '33.3%', background: 'var(--primary)' }}
           />
         </div>
-        <p className="px-4 pb-1 pt-3 text-[13px] leading-[1.5] text-[color:var(--ink-sub)]">
-          내 취향을 저장하면 일정 추천이 더 잘 맞아져요.
-        </p>
+        {/* 목업 frame-body 도입부(eyebrow → 질문형 헤드라인 → 보조 문구). 실제 화면은
+            사진 분석으로 시작해 직접 입력으로 이어지므로 질문도 사진을 향한다. */}
+        <div className="px-4 pb-1 pt-5">
+          <h1 className="wvr-rise wvr-rise-2 text-balance text-[23px] font-extrabold leading-[1.36] tracking-[-0.03em] text-[color:var(--ink)]">
+            어떤 장면에
+            <br />
+            오래 머무나요?
+          </h1>
+          <p className="wvr-rise wvr-rise-3 mt-2.5 text-[14.5px] leading-[1.62] text-[color:var(--ink-sub)]">
+            갤러리에서 좋아하는 사진을 골라 주세요. 질문 대신, 사진이 취향을 말해줘요.
+          </p>
+        </div>
       </div>
       <PageContainer>
         <PreferenceSetupForm />

@@ -5,7 +5,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FiAlertCircle,
   FiCheck,
-  FiImage,
   FiLoader,
   FiLock,
   FiPlus,
@@ -14,6 +13,8 @@ import {
   FiThumbsUp,
   FiX,
 } from 'react-icons/fi';
+import { LuBus, LuCar, LuFootprints, LuKeyRound } from 'react-icons/lu';
+import type { IconType } from 'react-icons';
 import {
   MAX_PREFERENCE_PHOTOS,
   MAX_PREFERENCE_UPLOAD,
@@ -51,7 +52,6 @@ import { getStoredSession } from '@/entities/session/model/session-storage';
 import { startDemoSession } from '@/entities/session/api/auth-api';
 import { queryKeys } from '@/shared/api/query-keys';
 import { downscaleImage, PREFERENCE_MAX_DIMENSION } from '@/shared/lib';
-import { SegmentedOption } from '@/shared/ui/app-frame';
 import { ConfirmDialog, ImageLightbox, TimeField, Toast } from '@/shared/ui';
 
 type ToastState = {
@@ -67,6 +67,18 @@ const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 /** 분석 잡 상태를 다시 물어보는 간격. 사진 1장에 30초 넘게 걸려 촘촘히 볼 이유가 없다. */
 const JOB_POLL_INTERVAL_MS = 3000;
+
+/**
+ * 목업(tripick-preference-mockup.html §.seg)의 이동수단 세그먼트는 라벨 옆에 픽토그램을
+ * 둔다. 옵션 정의(entities/preferences/model/options.ts)는 건드리지 않고 표시용 아이콘만
+ * 여기서 매핑한다 — 폼 상태·값은 그대로.
+ */
+const TRANSPORT_ICONS: Record<TransportPreference, IconType> = {
+  transit: LuBus,
+  car: LuCar,
+  walk: LuFootprints,
+  rental_car: LuKeyRound,
+};
 
 /** 잡이 만료·삭제돼 더 볼 게 없는 상태(404)인지. 그 외 오류는 일시적인 것으로 본다. */
 function isJobGone(error: unknown): boolean {
@@ -239,8 +251,36 @@ export function PreferenceSetupForm() {
     form.transportModes.length > 0 &&
     form.wakeTime !== form.sleepTime;
 
+  /**
+   * 저장 CTA 가 왜 막혀 있는지(또는 무엇이 아직 반영 안 됐는지) 알려주는 문구.
+   * 목업 .cta-hint 자리에 대응하며, `ready` 판정식에서 파생만 한다 — 새 폼 상태 없음.
+   */
+  const ctaHint = !ready
+    ? form.likedThemes.length === 0
+      ? '선호하는 테마를 하나 이상 골라야 저장할 수 있어요'
+      : form.transportModes.length === 0
+        ? '선호 이동 수단을 하나 이상 골라야 저장할 수 있어요'
+        : '취침·기상 시각을 서로 다르게 맞춰 주세요'
+    : photos.length > 0 && photosDirty
+      ? '추가한 사진은 “취향 분석하기”를 눌러야 취향에 반영돼요'
+      : null;
+
   // 저장되지 않은 변경(폼 편집 or 미분석 사진)이 있는지. 분석된 사진은 이미 서버에 반영됨.
   const dirty = JSON.stringify(form) !== JSON.stringify(savedForm) || photosDirty;
+
+  // 목업 pick-grid 는 3열 · 2행(6칸)을 늘 채운다 — 남는 칸은 "디자인된 여백"(빈 슬롯).
+  // 그리드에는 이미 반영된 사진(저장본)과 아직 분석 전인 사진(선택본)을 함께 올린다.
+  const canAddMore = photos.length < Math.min(MAX_PREFERENCE_UPLOAD, photoAllowance);
+  const showMoodSwatches = previews.length === 0 && savedPhotoUrls.length === 0;
+  const filledTiles =
+    savedPhotoUrls.length + previews.length + (canAddMore ? 1 : 0) + (showMoodSwatches ? 2 : 0);
+  // 빈 슬롯은 실제로 더 올릴 수 있는 만큼만 그린다(총 10장 상한을 넘겨 기대를 주지 않도록).
+  const ghostSlots = canAddMore
+    ? Math.min(
+        Math.max(0, 6 - filledTiles),
+        Math.max(0, photoAllowance - photos.length - 1),
+      )
+    : 0;
 
   // 저장 전 페이지 이탈(새로고침·탭 닫기·주소 이동) 시 브라우저 경고
   useEffect(() => {
@@ -437,6 +477,294 @@ export function PreferenceSetupForm() {
 
   return (
     <div className="wvr-scope space-y-8">
+      {/* 목업 화면 B 의 서사 순서를 따른다 — 사진 고르기 → 분석 중 → 분석 결과 → 직접 정하는 것들. */}
+      <SetupBlock title="사진으로 취향 분석" className="wvr-rise wvr-rise-1">
+        <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--ink-faint)]">
+          좋아하는 장소·음식 사진을 올리면 취향을 자동으로 분석해요. (한 번에{' '}
+          {MAX_PREFERENCE_UPLOAD}장, 총 {MAX_PREFERENCE_PHOTOS}장)
+        </p>
+        {analyzing ? <AnalysisProgress job={analysisJob} /> : null}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            addPhotos(event.target.files);
+            event.target.value = '';
+          }}
+        />
+        <div
+          onDragOver={(event) => event.preventDefault()}
+          onDragEnter={(event) => {
+            event.preventDefault();
+            setDragActive(true);
+          }}
+          onDragLeave={(event) => {
+            // 자식 요소로 이동할 때 깜빡임 방지
+            if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+              setDragActive(false);
+            }
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragActive(false);
+            addPhotos(event.dataTransfer.files);
+          }}
+          className={`rounded-[18px] p-1.5 transition ${
+            dragActive
+              ? 'bg-[color:var(--primary-tint)] ring-2 ring-[color:var(--primary)]'
+              : 'bg-transparent'
+          }`}
+        >
+          <div className="grid grid-cols-3 gap-2.5" role="group" aria-label="고른 사진">
+            {/* 이미 분석에 반영된 사진 — 지우기·태그 조정은 아래 분석 결과 카드에서 한다. */}
+            {savedPhotoUrls.map((url) => (
+              <button
+                key={url}
+                type="button"
+                onClick={() => setLightboxUrl(url)}
+                aria-label="사진 크게 보기"
+                className="relative aspect-square overflow-hidden rounded-[16px] bg-[color:var(--card-soft)]"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt="" className="size-full object-cover" />
+                <span
+                  aria-hidden
+                  className="absolute left-1.5 top-1.5 flex size-[22px] items-center justify-center rounded-full border-2 border-[color:var(--card)] bg-[color:var(--primary)] text-[color:var(--btn-text)]"
+                >
+                  <FiCheck className="size-3" />
+                </span>
+              </button>
+            ))}
+            {previews.map((url, index) => (
+              <div
+                key={url}
+                className="relative aspect-square overflow-hidden rounded-[16px] bg-[color:var(--card-soft)]"
+              >
+                <button
+                  type="button"
+                  onClick={() => setLightboxUrl(url)}
+                  aria-label="사진 크게 보기"
+                  className="size-full"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt="" className="size-full object-cover" />
+                </button>
+                <span
+                  aria-hidden
+                  className="absolute left-1.5 top-1.5 flex size-[22px] items-center justify-center rounded-full border-2 border-[color:var(--card)] bg-[color:var(--primary)] text-[color:var(--btn-text)]"
+                >
+                  <FiCheck className="size-3" />
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removePhoto(index)}
+                  aria-label="사진 제거"
+                  className="absolute right-1.5 top-1.5 flex size-[22px] items-center justify-center rounded-full bg-black/55 text-white"
+                >
+                  <FiX className="size-3" aria-hidden />
+                </button>
+              </div>
+            ))}
+            {canAddMore ? (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-[16px] border-[1.5px] border-dashed border-[color:var(--primary)] bg-[color:var(--primary-tint)] text-[color:var(--primary-deep)] transition hover:bg-[color:var(--card)]"
+              >
+                <span className="flex size-7 items-center justify-center rounded-full bg-[color:var(--card)] text-[color:var(--primary)]">
+                  <FiPlus className="size-3.5" aria-hidden />
+                </span>
+                <span className="text-center text-[11.5px] font-bold leading-[1.3]">
+                  갤러리에서
+                  <br />
+                  고르기
+                </span>
+              </button>
+            ) : null}
+            {/* 빈 상태 무드 스와치 — 어떤 사진을 올리면 좋을지 톤으로 암시(장식용, 목업의
+                sea/alley 스와치 언어). 사진이 하나라도 생기면 사라진다. */}
+            {showMoodSwatches ? (
+              <>
+                <MoodSwatch
+                  label="바다 감성"
+                  gradient="linear-gradient(165deg, var(--sky-top) 0%, var(--sea-1) 45%, var(--sea-3) 100%)"
+                />
+                <MoodSwatch
+                  label="골목 감성"
+                  gradient="linear-gradient(165deg, var(--hl) 0%, var(--accent) 55%, var(--accent-deep) 100%)"
+                />
+              </>
+            ) : null}
+            {Array.from({ length: ghostSlots }).map((_, index) => (
+              <GhostSlot key={index} slot={filledTiles + index + 1} />
+            ))}
+          </div>
+          <p className="mt-2 px-0.5 text-[12px] font-medium text-[color:var(--ink-faint)]">
+            사진을 여기로 끌어다 놓아도 돼요. 바다든 골목이든, 눈이 오래 머문 사진이면 충분해요.
+          </p>
+        </div>
+
+        {photos.length > 0 || savedPhotoUrls.length > 0 ? (
+          <p className="mt-3 flex items-baseline justify-between gap-2 px-0.5 text-[13px] text-[color:var(--ink-sub)]">
+            <span>
+              <strong className="font-bold text-[color:var(--ink)]">
+                {savedPhotoUrls.length + photos.length}장
+              </strong>{' '}
+              골랐어요
+              {photos.length > 0 ? ` · ${photos.length}장은 아직 분석 전이에요` : ''}
+            </span>
+            {/* 숫자만 mono — 한글까지 mono 로 두면 폴백 폰트에서 자간이 깨진다. */}
+            <span className="shrink-0 text-[12px] text-[color:var(--ink-faint)]">
+              <span className="font-mono tracking-[0.04em]">
+                {savedPhotoUrls.length + photos.length}
+              </span>{' '}
+              / 최대 <span className="font-mono tracking-[0.04em]">{MAX_PREFERENCE_PHOTOS}</span>
+            </span>
+          </p>
+        ) : null}
+
+        {photos.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => analyzePhotosMutation.mutate(photos)}
+            disabled={analyzePhotosMutation.isPending || analyzing}
+            className="mt-3 h-11 w-full rounded-[14px] bg-[color:var(--primary-tint)] text-[14px] font-bold text-[color:var(--primary-deep)] transition active:scale-[0.99] disabled:text-[color:var(--ink-faint)] lg:max-w-[280px]"
+          >
+            {analyzePhotosMutation.isPending
+              ? '올리는 중…'
+              : analyzing
+                ? '분석이 끝나면 이어서 올릴 수 있어요'
+                : `사진 ${photos.length}장으로 취향 분석하기`}
+          </button>
+        ) : null}
+
+        <p className="mt-3 flex items-start gap-1.5 text-[12px] font-medium leading-5 text-[color:var(--ink-faint)]">
+          <FiLock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          <span>올린 사진은 취향 분석 용도로만 저장·사용돼요. 언제든 사진을 지우면 함께 삭제돼요.</span>
+        </p>
+      </SetupBlock>
+
+      {/* 분석 결과 카드 — 목업 .result-card(완료 칩 · 겹친 썸네일 · 태그 그룹 · 정정 힌트) */}
+      {savedPhotoUrls.length > 0 || analyzedTags ? (
+        <section className="wvr-rise wvr-rise-2 rounded-[22px] border border-[color:var(--line)] bg-[color:var(--card)] p-5 shadow-[var(--shadow-card)]">
+          <span className="inline-flex items-center gap-1.5 rounded-[8px] bg-[color:var(--primary-tint)] px-2 py-1 text-[11px] font-bold text-[color:var(--primary)]">
+            <FiCheck className="size-3" aria-hidden />
+            {analyzing ? '사진 분석 중' : '사진 분석 완료'}
+          </span>
+          <h2 className="mt-2.5 text-[19px] font-extrabold leading-[1.4] tracking-[-0.025em] text-[color:var(--ink)]">
+            사진에서 이런 취향을 읽었어요
+          </h2>
+
+          {savedPhotoUrls.length > 0 ? (
+            <div className="mt-3.5 flex items-center">
+              {savedPhotoUrls.slice(0, 6).map((url, index) => (
+                <span
+                  key={url}
+                  className={`size-10 shrink-0 overflow-hidden rounded-[12px] border-2 border-[color:var(--card)] shadow-[0_0_0_1px_var(--line)] ${
+                    index > 0 ? '-ml-2.5' : ''
+                  }`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt="" className="size-full object-cover" />
+                </span>
+              ))}
+              <span className="ml-3 text-[12.5px] text-[color:var(--ink-faint)]">
+                고른 사진 {savedPhotoUrls.length}장
+              </span>
+            </div>
+          ) : null}
+
+          {analyzedTags ? (
+            <div className="mt-4">
+              <p className="flex items-center gap-1.5 text-[13px] font-bold text-[color:var(--ink-sub)]">
+                <span
+                  aria-hidden
+                  className="size-1.5 rounded-full bg-[color:var(--primary)]"
+                />
+                이런 게 좋아요
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {analyzedTags.food.map((tag) => (
+                  <TasteChip key={tag} label={TASTE_TAG_LABELS[tag] ?? tag} tone="warm" />
+                ))}
+                {[...analyzedTags.mood, ...analyzedTags.environment].map((tag) => (
+                  <TasteChip key={tag} label={TASTE_TAG_LABELS[tag] ?? tag} tone="cool" />
+                ))}
+                {analyzedTags.food.length +
+                  analyzedTags.mood.length +
+                  analyzedTags.environment.length ===
+                0 ? (
+                  <span className="text-[13px] font-medium text-[color:var(--ink-faint)]">
+                    뚜렷한 취향을 찾지 못했어요.
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {savedPhotoUrls.length > 0 ? (
+            <div className="mt-4 border-t border-dashed border-[color:var(--line)] pt-4">
+              <div className="mb-2 text-[12px] font-semibold text-[color:var(--ink-faint)]">
+                저장된 사진 {savedPhotoUrls.length}장 · 태그를 눌러 켜고 끌 수 있어요
+              </div>
+              <ul className="space-y-2">
+                {savedPhotoUrls.map((url) => {
+                  const photo = photoTagsByUrl.get(url);
+                  return (
+                    <SavedPhotoRow
+                      key={url}
+                      url={url}
+                      tags={photo?.tags ?? []}
+                      // 아직 분석되지 않은 사진은 "취향 없음" 이 아니라 그렇게 보여야 한다.
+                      // 잡이 돌거나 목록을 불러오는 중이면 아직 결론이 아니라 "분석 중".
+                      state={
+                        photo?.analyzed
+                          ? 'analyzed'
+                          : analyzing || photoTagsQuery.isLoading || !photo
+                            ? 'analyzing'
+                            : 'unanalyzed'
+                      }
+                      busy={togglePhotoTagMutation.isPending || deletePhotoMutation.isPending}
+                      onToggle={(tag, enabled) =>
+                        togglePhotoTagMutation.mutate({ url, tag, enabled })
+                      }
+                      onDelete={() => deletePhotoMutation.mutate(url)}
+                      onZoom={() => setLightboxUrl(url)}
+                    />
+                  );
+                })}
+              </ul>
+              {unanalyzedCount > 0 && !analyzing ? (
+                <button
+                  type="button"
+                  onClick={() => reanalyzePhotosMutation.mutate()}
+                  disabled={reanalyzePhotosMutation.isPending}
+                  className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-[14px] bg-[color:var(--card-soft)] text-[13px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--line)] active:scale-[0.99] disabled:text-[color:var(--ink-faint)] lg:max-w-[280px]"
+                >
+                  <FiRefreshCw
+                    className={`size-3.5 ${reanalyzePhotosMutation.isPending ? 'animate-spin' : ''}`}
+                    aria-hidden
+                  />
+                  {reanalyzePhotosMutation.isPending
+                    ? '요청하는 중…'
+                    : `분석 안 된 사진 ${unanalyzedCount}장 다시 분석`}
+                </button>
+              ) : null}
+              <p className="mt-3 flex items-start gap-2 text-[12.5px] leading-[1.55] text-[color:var(--ink-sub)]">
+                <FiAlertCircle
+                  className="mt-0.5 size-3.5 shrink-0 text-[color:var(--accent-deep)]"
+                  aria-hidden
+                />
+                <span>잘못 읽은 태그는 눌러서 끌 수 있어요. 일정에는 켜둔 태그만 반영돼요.</span>
+              </p>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       <SetupBlock title="테마/장소 선호도">
         <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--ink-faint)]">
           좋아하는 건 선호, 피하고 싶은 건 불호로 골라주세요. 고르지 않으면 중립이에요.
@@ -484,15 +812,30 @@ export function PreferenceSetupForm() {
         </SetupBlock>
 
         <SetupBlock title="선호 이동 수단">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {TRANSPORT_OPTIONS.map((option) => (
-              <SegmentedOption
-                key={option.value}
-                active={form.transportModes.includes(option.value)}
-                label={option.label}
-                onClick={() => toggleTransport(option.value)}
-              />
-            ))}
+          {/* 목업 .seg — 아이콘+라벨 2열 세그먼트. 공용 SegmentedOption 은 구버전 파랑
+              (--blue-*)을 참조해 이 화면의 새 파랑과 어긋나므로 로컬 버튼으로 쓴다
+              (shared/ui 자체는 불변 — REQ-WVR-004 로컬 스코프 결정 유지). */}
+          <div className="grid grid-cols-2 gap-2" role="group" aria-label="선호 이동 수단">
+            {TRANSPORT_OPTIONS.map((option) => {
+              const Icon = TRANSPORT_ICONS[option.value];
+              const active = form.transportModes.includes(option.value);
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => toggleTransport(option.value)}
+                  className={`flex min-h-12 items-center justify-center gap-1.5 rounded-[14px] border text-[14.5px] font-bold tracking-[-0.01em] transition active:scale-[0.99] ${
+                    active
+                      ? 'border-[color:var(--primary)] bg-[color:var(--primary-tint)] text-[color:var(--primary-deep)]'
+                      : 'border-[color:var(--line)] bg-[color:var(--card)] text-[color:var(--ink-sub)]'
+                  }`}
+                >
+                  <Icon className="size-[18px] shrink-0" aria-hidden />
+                  {option.label}
+                </button>
+              );
+            })}
           </div>
         </SetupBlock>
 
@@ -538,212 +881,6 @@ export function PreferenceSetupForm() {
           </div>
         </SetupBlock>
 
-        <SetupBlock title="사진으로 취향 분석">
-          <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--ink-faint)]">
-            좋아하는 장소·음식 사진을 올리면 취향을 자동으로 분석해요. (한 번에{' '}
-            {MAX_PREFERENCE_UPLOAD}장, 총 {MAX_PREFERENCE_PHOTOS}장)
-          </p>
-          {analyzing ? <AnalysisProgress job={analysisJob} /> : null}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            multiple
-            className="hidden"
-            onChange={(event) => {
-              addPhotos(event.target.files);
-              event.target.value = '';
-            }}
-          />
-          {savedPhotoUrls.length > 0 ? (
-            <div className="mb-3">
-              <div className="mb-1.5 text-[12px] font-semibold text-[color:var(--ink-faint)]">
-                저장된 사진 {savedPhotoUrls.length}장 · 태그를 눌러 켜고 끌 수 있어요
-              </div>
-              <ul className="space-y-2">
-                {savedPhotoUrls.map((url) => {
-                  const photo = photoTagsByUrl.get(url);
-                  return (
-                    <SavedPhotoRow
-                      key={url}
-                      url={url}
-                      tags={photo?.tags ?? []}
-                      // 아직 분석되지 않은 사진은 "취향 없음" 이 아니라 그렇게 보여야 한다.
-                      // 잡이 돌거나 목록을 불러오는 중이면 아직 결론이 아니라 "분석 중".
-                      state={
-                        photo?.analyzed
-                          ? 'analyzed'
-                          : analyzing || photoTagsQuery.isLoading || !photo
-                            ? 'analyzing'
-                            : 'unanalyzed'
-                      }
-                      busy={togglePhotoTagMutation.isPending || deletePhotoMutation.isPending}
-                      onToggle={(tag, enabled) =>
-                        togglePhotoTagMutation.mutate({ url, tag, enabled })
-                      }
-                      onDelete={() => deletePhotoMutation.mutate(url)}
-                      onZoom={() => setLightboxUrl(url)}
-                    />
-                  );
-                })}
-              </ul>
-              {unanalyzedCount > 0 && !analyzing ? (
-                <button
-                  type="button"
-                  onClick={() => reanalyzePhotosMutation.mutate()}
-                  disabled={reanalyzePhotosMutation.isPending}
-                  className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-[14px] bg-[color:var(--card-soft)] text-[13px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--line)] active:scale-[0.99] disabled:text-[color:var(--ink-faint)] lg:max-w-[280px]"
-                >
-                  <FiRefreshCw
-                    className={`size-3.5 ${reanalyzePhotosMutation.isPending ? 'animate-spin' : ''}`}
-                    aria-hidden
-                  />
-                  {reanalyzePhotosMutation.isPending
-                    ? '요청하는 중…'
-                    : `분석 안 된 사진 ${unanalyzedCount}장 다시 분석`}
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-          <div
-            onDragOver={(event) => event.preventDefault()}
-            onDragEnter={(event) => {
-              event.preventDefault();
-              setDragActive(true);
-            }}
-            onDragLeave={(event) => {
-              // 자식 요소로 이동할 때 깜빡임 방지
-              if (!event.currentTarget.contains(event.relatedTarget as Node)) {
-                setDragActive(false);
-              }
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              setDragActive(false);
-              addPhotos(event.dataTransfer.files);
-            }}
-            className={`rounded-[14px] border border-dashed p-3 transition ${
-              dragActive
-                ? 'border-[color:var(--primary)] bg-[color:var(--primary-tint)]'
-                : 'border-[color:var(--line)]'
-            }`}
-          >
-            <div className="flex flex-wrap gap-2">
-              {previews.map((url, index) => (
-                <div key={url} className="relative size-20 overflow-hidden rounded-[16px]">
-                  <button
-                    type="button"
-                    onClick={() => setLightboxUrl(url)}
-                    aria-label="사진 크게 보기"
-                    className="size-full"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={url} alt="" className="size-full object-cover" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removePhoto(index)}
-                    aria-label="사진 제거"
-                    className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-black/55 text-white"
-                  >
-                    <FiX className="size-3" aria-hidden />
-                  </button>
-                </div>
-              ))}
-              {photos.length < Math.min(MAX_PREFERENCE_UPLOAD, photoAllowance) ? (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex size-20 flex-col items-center justify-center gap-1.5 rounded-[16px] border border-dashed border-[color:var(--line-dot)] bg-[color:var(--card)] text-[color:var(--primary-deep)] transition-colors hover:border-[color:var(--primary)] hover:bg-[color:var(--primary-tint)]"
-                >
-                  <span className="flex size-8 items-center justify-center rounded-full bg-[color:var(--primary-tint)]">
-                    <FiImage className="size-4" aria-hidden />
-                  </span>
-                  <span className="text-[11px] font-semibold">사진 추가</span>
-                </button>
-              ) : null}
-              {/* 빈 상태 무드 스와치 — 어떤 사진을 올리면 좋을지 톤으로 암시(장식용, 목업의
-                  sea/alley 스와치 언어). 사진이 하나라도 생기면 사라진다. */}
-              {previews.length === 0 && savedPhotoUrls.length === 0 ? (
-                <>
-                  <div
-                    aria-hidden="true"
-                    className="relative flex size-20 items-end overflow-hidden rounded-[16px] opacity-80"
-                    style={{
-                      background:
-                        'linear-gradient(165deg, var(--sky-top) 0%, var(--sea-1) 45%, var(--sea-3) 100%)',
-                    }}
-                  >
-                    <span className="w-full px-2 pb-1.5 text-[10px] font-semibold text-white/90">
-                      바다 감성
-                    </span>
-                  </div>
-                  <div
-                    aria-hidden="true"
-                    className="relative flex size-20 items-end overflow-hidden rounded-[16px] opacity-80"
-                    style={{
-                      background:
-                        'linear-gradient(165deg, var(--hl) 0%, var(--accent) 55%, var(--accent-deep) 100%)',
-                    }}
-                  >
-                    <span className="w-full px-2 pb-1.5 text-[10px] font-semibold text-white/90">
-                      골목 감성
-                    </span>
-                  </div>
-                </>
-              ) : null}
-            </div>
-            <p className="mt-2 text-[12px] font-medium text-[color:var(--ink-faint)]">
-              사진을 여기로 끌어다 놓아도 돼요. 바다든 골목이든, 눈이 오래 머문 사진이면 충분해요.
-            </p>
-          </div>
-
-          {photos.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => analyzePhotosMutation.mutate(photos)}
-              disabled={analyzePhotosMutation.isPending || analyzing}
-              className="mt-3 h-11 w-full rounded-[14px] bg-[color:var(--primary-tint)] text-[14px] font-bold text-[color:var(--primary-deep)] transition active:scale-[0.99] disabled:text-[color:var(--ink-faint)] lg:max-w-[280px]"
-            >
-              {analyzePhotosMutation.isPending
-                ? '올리는 중…'
-                : analyzing
-                  ? '분석이 끝나면 이어서 올릴 수 있어요'
-                  : `사진 ${photos.length}장으로 취향 분석하기`}
-            </button>
-          ) : null}
-
-          {analyzedTags ? (
-            <div className="mt-3">
-              <div className="text-[12px] font-semibold text-[color:var(--ink-faint)]">분석된 취향 태그</div>
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {[...analyzedTags.food, ...analyzedTags.mood, ...analyzedTags.environment].map(
-                  (tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-full bg-[color:var(--primary-tint)] px-3 py-1 text-[13px] font-bold text-[color:var(--primary-deep)]"
-                    >
-                      {TASTE_TAG_LABELS[tag] ?? tag}
-                    </span>
-                  ),
-                )}
-                {analyzedTags.food.length +
-                  analyzedTags.mood.length +
-                  analyzedTags.environment.length ===
-                0 ? (
-                  <span className="text-[13px] font-medium text-[color:var(--ink-faint)]">
-                    뚜렷한 취향을 찾지 못했어요.
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          <p className="mt-3 flex items-start gap-1.5 text-[12px] font-medium leading-5 text-[color:var(--ink-faint)]">
-            <FiLock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            <span>올린 사진은 취향 분석 용도로만 저장·사용돼요. 언제든 사진을 지우면 함께 삭제돼요.</span>
-          </p>
-        </SetupBlock>
       </div>
 
       {toast ? (
@@ -756,6 +893,12 @@ export function PreferenceSetupForm() {
       ) : null}
       <div className="border-t border-[color:var(--line)] pt-6">
         <div className="space-y-2.5 lg:mx-auto lg:max-w-[420px]">
+          {/* 목업 .cta-hint — 왜 아직 저장할 수 없는지(또는 무엇이 안 반영됐는지) 알려준다. */}
+          {ctaHint ? (
+            <p className="text-center text-[12.5px] leading-[1.5] text-[color:var(--ink-faint)]">
+              {ctaHint}
+            </p>
+          ) : null}
           <button
             type="button"
             disabled={savePreferenceMutation.isPending || !ready}
@@ -1002,37 +1145,110 @@ function AnalysisProgress({ job }: { job: PreferenceAnalysisJobDto | null | unde
   const percent = total > 0 ? Math.round((analyzed / total) * 100) : 0;
 
   return (
-    <div className="mb-3 rounded-[14px] border border-[color:var(--primary-tint)] bg-[color:var(--primary-tint)] p-3">
-      <div className="flex items-center gap-2">
-        <FiLoader className="size-4 animate-spin text-[color:var(--primary-deep)]" aria-hidden />
-        <span className="text-[13px] font-bold text-[color:var(--primary-deep)]">
-          {queued ? '분석 대기 중이에요' : `취향 분석 중… ${analyzed}/${total}장`}
+    <div
+      className="mb-3 flex flex-col gap-2 rounded-[18px] border border-[color:var(--line)] bg-[color:var(--card)] p-4 shadow-[var(--shadow-card)]"
+      role="status"
+    >
+      <p className="flex items-center gap-2.5 text-[14px] font-bold tracking-[-0.015em] text-[color:var(--ink)]">
+        <span className="inline-flex gap-1" aria-hidden>
+          <i className="wvr-scan-dot size-1.5 rounded-full bg-[color:var(--primary)] opacity-40" />
+          <i className="wvr-scan-dot size-1.5 rounded-full bg-[color:var(--primary)] opacity-65 [animation-delay:0.2s]" />
+          <i className="wvr-scan-dot size-1.5 rounded-full bg-[color:var(--primary)] opacity-95 [animation-delay:0.4s]" />
         </span>
-      </div>
-      <div
-        className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/70"
-        role="progressbar"
-        aria-valuenow={percent}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label="취향 분석 진행률"
-      >
+        {queued ? '분석 대기 중이에요' : `취향 분석 중… ${analyzed}/${total}장`}
+      </p>
+      {/* 대기 중엔 진행률을 알 수 없으므로 목업 .scan-track(좌우로 훑는 띠), 분석이
+          시작되면 실제 analyzed/total 진행률 막대로 바꾼다. */}
+      {queued ? (
+        <span className="wvr-scan-track block h-[3px] rounded-full bg-[color:var(--line)]" aria-hidden />
+      ) : (
         <div
-          className="h-full rounded-full bg-[color:var(--primary)] transition-[width] duration-500"
-          style={{ width: `${queued ? 0 : percent}%` }}
-        />
-      </div>
-      <p className="mt-2 text-[12px] font-medium leading-4 text-[color:var(--primary-deep)]/80">
+          className="h-[3px] w-full overflow-hidden rounded-full bg-[color:var(--line)]"
+          role="progressbar"
+          aria-valuenow={percent}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="취향 분석 진행률"
+        >
+          <div
+            className="h-full rounded-full transition-[width] duration-500"
+            style={{
+              width: `${percent}%`,
+              background: 'linear-gradient(90deg, var(--t-morning), var(--primary))',
+            }}
+          />
+        </div>
+      )}
+      <small className="text-[12px] leading-[1.55] text-[color:var(--ink-faint)]">
         사진 한 장에 30초 정도 걸려요. 완료되면 알림으로 알려드릴게요 — 이 페이지를 떠나도
         분석은 계속됩니다.
-      </p>
+      </small>
     </div>
   );
 }
 
-function SetupBlock({ title, children }: { title: string; children: React.ReactNode }) {
+/** 목업 .tile--ghost — 아직 비어 있는 사진 슬롯(장식용, 클릭 대상 아님). */
+function GhostSlot({ slot }: { slot: number }) {
   return (
-    <section className="rounded-[22px] border border-[color:var(--line)] bg-[color:var(--card)] p-5 shadow-[var(--shadow-card)]">
+    <div
+      aria-hidden
+      className="relative aspect-square rounded-[16px] border-[1.5px] border-dashed border-[color:var(--line-dot)]"
+      style={{
+        background:
+          'radial-gradient(closest-side at 32% 30%, var(--primary-tint), transparent 72%), radial-gradient(closest-side at 72% 76%, var(--accent-tint), transparent 74%), var(--bg)',
+      }}
+    >
+      <span className="absolute bottom-1 right-2 font-mono text-[10.5px] font-semibold tracking-[0.06em] text-[color:var(--ink-faint)] opacity-70">
+        {String(slot).padStart(2, '0')}
+      </span>
+    </div>
+  );
+}
+
+/** 어떤 사진을 올리면 좋을지 톤으로만 암시하는 빈 상태 스와치(장식용). */
+function MoodSwatch({ label, gradient }: { label: string; gradient: string }) {
+  return (
+    <div
+      aria-hidden
+      className="relative flex aspect-square items-end overflow-hidden rounded-[16px] opacity-80"
+      style={{ background: gradient }}
+    >
+      <span className="w-full px-2 pb-1.5 text-[10px] font-semibold text-white/90">{label}</span>
+    </div>
+  );
+}
+
+/**
+ * 목업 .tag — 분석된 취향 태그 칩. 음식 계열은 sunset 톤(.tag--warm),
+ * 무드·환경 계열은 primary 톤으로 갈라 한 덩어리로 뭉치지 않게 한다.
+ */
+function TasteChip({ label, tone }: { label: string; tone: 'warm' | 'cool' }) {
+  return (
+    <span
+      className={`inline-flex items-baseline rounded-full px-3 py-1.5 text-[13px] font-bold leading-[1.35] tracking-[-0.01em] ${
+        tone === 'warm'
+          ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent-deep)]'
+          : 'bg-[color:var(--primary-tint)] text-[color:var(--primary-deep)]'
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function SetupBlock({
+  title,
+  className = '',
+  children,
+}: {
+  title: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      className={`rounded-[22px] border border-[color:var(--line)] bg-[color:var(--card)] p-5 shadow-[var(--shadow-card)] ${className}`}
+    >
       <h2 className="mb-3 text-[18px] font-black leading-6 text-[color:var(--ink)]">{title}</h2>
       {children}
     </section>
@@ -1050,7 +1266,7 @@ function RhythmBand({ wakeTime, sleepTime }: { wakeTime: string; sleepTime: stri
   return (
     <div className="mt-4">
       <div
-        className="mb-1.5 flex justify-between font-mono text-[10.5px] text-[color:var(--ink-faint)]"
+        className="mb-1.5 flex justify-between text-[10.5px] text-[color:var(--ink-faint)]"
         aria-hidden="true"
       >
         <span>0시</span>
@@ -1085,10 +1301,27 @@ function RhythmBand({ wakeTime, sleepTime }: { wakeTime: string; sleepTime: stri
           style={{ left: `${sleepPct}%`, background: 'var(--card)', borderColor: 'var(--t-dusk)' }}
         />
       </div>
-      <p className="mt-2 text-[12.5px] text-[color:var(--ink-faint)]">
+      {/* 목업 .band-times — 각 핸들 아래에 붙는 시각 라벨(읽기 전용, 값은 위 TimeField 가 정본).
+          양끝에서 잘리지 않게 위치를 8~92% 로 가둔다. */}
+      <div className="relative mt-2.5 h-8" aria-hidden>
+        <TimeChip label="기상" time={wakeTime} percent={wakePct} />
+        <TimeChip label="취침" time={sleepTime} percent={sleepPct} />
+      </div>
+      <p className="mt-1 text-[12.5px] text-[color:var(--ink-faint)]">
         일정은 이 리듬 안에서만 짜 드려요.
       </p>
     </div>
+  );
+}
+
+function TimeChip({ label, time, percent }: { label: string; time: string; percent: number }) {
+  return (
+    <span
+      className="absolute top-0 inline-flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-[color:var(--line)] bg-[color:var(--card)] px-2.5 py-1 text-[12px] font-bold text-[color:var(--ink-sub)]"
+      style={{ left: `${Math.min(92, Math.max(8, percent))}%` }}
+    >
+      {label} <span className="font-mono text-[12px] text-[color:var(--ink)]">{time}</span>
+    </span>
   );
 }
 
