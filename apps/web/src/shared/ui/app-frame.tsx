@@ -35,7 +35,12 @@ export function AppFrame({
   themed?: boolean;
 }) {
   if (!showNav) {
-    return <main className="min-h-dvh bg-[color:var(--app-surface)]">{children}</main>;
+    // themed 면 .wvr-scope 가 배경(--bg)까지 정하므로 bg 유틸리티를 겹쳐 주지 않는다.
+    return (
+      <main className={themed ? 'wvr-scope min-h-dvh' : 'min-h-dvh bg-[color:var(--app-surface)]'}>
+        {children}
+      </main>
+    );
   }
 
   return (
@@ -344,8 +349,9 @@ export function InlineNotice({
 }) {
   const toneClass = {
     blue: 'bg-[color:var(--blue-50)] text-[color:var(--blue-700)]',
-    red: 'bg-rose-50 text-rose-700',
-    green: 'bg-emerald-50 text-emerald-700',
+    // 비스코프 화면에서도 쓰이므로 폴백을 남긴다(라이트 값은 기존 rose/emerald 와 동급).
+    red: 'bg-[color:var(--danger-tint,#fff1f2)] text-[color:var(--danger,#be123c)]',
+    green: 'bg-[color:var(--ok,#047857)]/12 text-[color:var(--ok,#047857)]',
   }[tone];
 
   return (

@@ -58,8 +58,8 @@ export function KakaoCallbackView() {
   }
 
   return (
-    <AppFrame showNav={false}>
-      <section className="flex min-h-screen items-center justify-center bg-white px-5">
+    <AppFrame showNav={false} themed>
+      <section className="flex min-h-screen items-center justify-center px-5">
         <section className="w-full max-w-[360px]">
           <div className="text-[13px] font-black leading-5 text-[color:var(--blue-600)]">
             Tripick
