@@ -100,6 +100,11 @@ export interface PlannerDayDto {
   dateLabel: string;
 }
 
+/**
+ * 여행 일자별 날씨. 여행 상세(PlannerTripDto)에 함께 실리지 않고
+ * `GET /main-planner/trips/:tripId/weather` 로 따로 받는다 — 기상청 응답이 느리거나
+ * 없을 때 일정 조회 자체가 그 대기에 묶이지 않게 분리한 것.
+ */
 export interface PlannerWeatherDto {
   day: number;
   label: string;
@@ -127,7 +132,6 @@ export interface PlannerTripMetaDto {
     totalItems: number;
     estimatedTravelKm: number;
   };
-  weather: PlannerWeatherDto[];
 }
 
 /**

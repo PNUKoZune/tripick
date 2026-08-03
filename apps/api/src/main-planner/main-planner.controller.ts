@@ -66,6 +66,12 @@ export class MainPlannerController {
     return this.mainPlannerService.getTrip(user, tripId);
   }
 
+  @Get('trips/:tripId/weather')
+  @ApiOperation({ summary: '여행 일자별 날씨 (상세와 분리된 지연 로드)' })
+  getTripWeather(@CurrentUser() user: UserEntity, @Param('tripId') tripId: string) {
+    return this.mainPlannerService.getTripWeather(user, tripId);
+  }
+
   @Get('trips/:tripId/items/:itemId/alternatives')
   @ApiOperation({ summary: '일정 항목 대안 추천 (취향 기반 CRAG, note: 사용자 조건)' })
   getAlternatives(

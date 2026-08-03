@@ -41,6 +41,7 @@ import type {
   PlannerSwapResponseDto,
   PlannerTripDto,
   PlannerTripProgressDto,
+  PlannerWeatherDto,
   SharedItineraryDto,
   TripShareResponseDto,
   PreferenceCoordinationDto,
@@ -786,13 +787,17 @@ export class MainPlannerService {
     };
   }
 
-  private async toPlannerTrip(
+  /**
+   * 날씨는 여기서 채우지 않는다 — 기상청 조회를 이 응답에 묶으면 예보가 늦거나 막힐 때
+   * 일정 조회 전체가 같이 지연된다. 클라이언트가 getTripWeather 로 따로 받는다.
+   */
+  private toPlannerTrip(
     trip: TripEntity,
     members: TripMemberDto[],
     items: ItineraryItemEntity[],
     tasteTags?: PlannerTripDto['meta']['tasteTags'],
     isOwner = false,
-  ): Promise<PlannerTripDto> {
+  ): PlannerTripDto {
     const days = this.buildDays(trip.startDate, trip.endDate);
     const markers = this.withNormalizedMarkerPositions(
       items.map((item, index) => this.toMarker(item, index, index === 0 ? 'current' : 'primary')),
@@ -823,9 +828,19 @@ export class MainPlannerService {
           totalItems: items.length,
           estimatedTravelKm: Math.round((totalTravelMin / 12) * 10) / 10,
         },
-        weather: await this.buildWeather(center, days),
       },
     };
+  }
+
+  /**
+   * 여행 일자별 날씨만 따로 조회한다(상세 조회에서 분리한 지연 로드 경로).
+   * 좌표는 상세와 같은 기준(일정 항목 평균 → 없으면 목적지 폴백)으로 잡아 값이 갈리지 않게 한다.
+   */
+  async getTripWeather(user: UserEntity, tripId: string): Promise<PlannerWeatherDto[]> {
+    const trip = await this.tripsService.findOneForViewer(tripId, user.id);
+    const items = await this.findItems(tripId);
+    const days = this.buildDays(trip.startDate, trip.endDate);
+    return this.buildWeather(this.mapCenter(items, trip.destination), days);
   }
 
   /**
@@ -836,7 +851,7 @@ export class MainPlannerService {
   private async buildWeather(
     center: PlannerTripDto['mapCenter'],
     days: Array<{ day: number; dateLabel: string; iso: string }>,
-  ): Promise<PlannerTripDto['meta']['weather']> {
+  ): Promise<PlannerWeatherDto[]> {
     const fallback = (day: { day: number; dateLabel: string }) => ({
       day: day.day,
       label: `${day.dateLabel} 날씨 확인 전`,
