@@ -24,6 +24,7 @@ export const queryKeys = {
   planner: {
     trips: ['planner', 'trips'] as const,
     trip: (tripId: string) => ['planner', 'trips', tripId] as const,
+    weather: (tripId: string) => ['planner', 'trips', tripId, 'weather'] as const,
     members: (tripId: string) => ['planner', 'trips', tripId, 'members'] as const,
     coordination: (tripId: string) => ['planner', 'trips', tripId, 'coordination'] as const,
     share: (tripId: string) => ['planner', 'trips', tripId, 'share'] as const,

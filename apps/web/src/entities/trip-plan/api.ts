@@ -13,6 +13,7 @@ import type {
   PlannerSwapResponseDto,
   PlannerTripDto,
   PlannerUpdateItemRequestDto,
+  PlannerWeatherDto,
   ReplanJobDto,
   ReplanRequestDto,
   SharedItineraryDto,
@@ -29,6 +30,14 @@ export function fetchPlannerTrips() {
 
 export function fetchPlannerTrip(tripId: string) {
   return api.get<PlannerTripDto>(`/main-planner/trips/${tripId}`);
+}
+
+/**
+ * 일자별 날씨. 상세 조회에 싣지 않고 따로 받는다 — 기상청이 느리거나 막혀도
+ * 일정 화면이 그 대기에 묶이지 않아야 한다.
+ */
+export function fetchPlannerTripWeather(tripId: string) {
+  return api.get<PlannerWeatherDto[]>(`/main-planner/trips/${tripId}/weather`);
 }
 
 export function fetchPlannerAlternatives(tripId: string, itemId: string, note?: string) {

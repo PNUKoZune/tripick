@@ -1,6 +1,7 @@
 export {
   fetchPlannerTrips,
   fetchPlannerTrip,
+  fetchPlannerTripWeather,
   fetchPlannerAlternatives,
   resolvePlannerPlace,
   swapPlannerItem,

@@ -1,11 +1,14 @@
 'use client';
 
 import { FiDroplet, FiInfo } from 'react-icons/fi';
+import { useQuery } from '@tanstack/react-query';
 
 import type { PlannerTripDto, PlannerTripMetaDto } from '@tripick/types';
 
 import { MemberAvatars } from '@/entities/member';
 import { TASTE_TAG_LABELS } from '@/entities/preferences/model/options';
+import { fetchPlannerTripWeather } from '@/entities/trip-plan';
+import { queryKeys } from '@/shared/api/query-keys';
 import { Chip, SurfaceCard } from '@/shared/ui';
 
 type Props = {
@@ -52,10 +55,42 @@ export function TripInfoPanel({ trip }: Props) {
         </div>
       </SurfaceCard>
 
-      <SurfaceCard padding="sm">
-        <SectionLabel title="날씨 정보" description="여행 날짜별 확인 상태입니다." />
+      <WeatherCard tripId={trip.id} dayCount={trip.days.length} />
+    </div>
+  );
+}
+
+/**
+ * 날씨만 별도 조회한다. 여행 상세 응답에서 분리했기 때문에 이 카드가 로딩·실패해도
+ * 일정·지도 등 나머지 화면은 이미 그려진 상태를 유지한다.
+ */
+function WeatherCard({ tripId, dayCount }: { tripId: string; dayCount: number }) {
+  const { data: weather, isPending, isError } = useQuery({
+    queryKey: queryKeys.planner.weather(tripId),
+    queryFn: () => fetchPlannerTripWeather(tripId),
+    // 단기예보 발표 주기(3시간)보다 짧게만 잡아 탭을 오갈 때 매번 재조회하지 않는다.
+    staleTime: 30 * 60 * 1000,
+  });
+
+  return (
+    <SurfaceCard padding="sm">
+      <SectionLabel title="날씨 정보" description="여행 날짜별 확인 상태입니다." />
+      {isError ? (
+        <div className="mt-2 rounded-[12px] border border-[#E5E8EB] bg-[#FAFBFC] px-3 py-2 text-[13px] text-[#8B95A1]">
+          날씨를 불러오지 못했어요. 잠시 뒤 다시 확인해주세요.
+        </div>
+      ) : isPending ? (
+        <ul aria-hidden className="mt-2 space-y-2">
+          {Array.from({ length: Math.max(dayCount, 1) }).map((_, index) => (
+            <li
+              key={index}
+              className="h-[41px] animate-pulse rounded-[12px] border border-[#E5E8EB] bg-[#FAFBFC]"
+            />
+          ))}
+        </ul>
+      ) : (
         <ul className="mt-2 space-y-2">
-          {meta.weather.map((w) => (
+          {weather.map((w) => (
             <li
               key={w.day}
               className="flex items-center justify-between rounded-[12px] border border-[#E5E8EB] bg-[#FAFBFC] px-3 py-2"
@@ -65,9 +100,7 @@ export function TripInfoPanel({ trip }: Props) {
                   {w.emoji}
                 </span>
                 <span className="text-[14px] font-semibold text-[#191F28]">{w.label}</span>
-                {!w.forecasted ? (
-                  <WeatherHint />
-                ) : null}
+                {!w.forecasted ? <WeatherHint /> : null}
               </div>
               <div className="flex items-center gap-2">
                 {typeof w.precipitationProbability === 'number' ? (
@@ -81,8 +114,8 @@ export function TripInfoPanel({ trip }: Props) {
             </li>
           ))}
         </ul>
-      </SurfaceCard>
-    </div>
+      )}
+    </SurfaceCard>
   );
 }
 

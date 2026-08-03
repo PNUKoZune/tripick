@@ -14,6 +14,10 @@ import {
 } from '@tripick/utils';
 import type { ParsedForecast, MidLandItem, MidTaItem } from '@tripick/utils';
 
+// 기상청(apis.data.go.kr)은 장애 시 TCP 만 물고 응답을 주지 않는다. 타임아웃이 없으면
+// 여행 상세 조회(toPlannerTrip → buildWeather)가 그 소켓에 무한 대기로 묶인다.
+const REQUEST_TIMEOUT_MS = 10_000;
+
 @Injectable()
 export class WeatherHelper implements OnModuleDestroy {
   private readonly logger = new Logger(WeatherHelper.name);
@@ -29,6 +33,10 @@ export class WeatherHelper implements OnModuleDestroy {
   private readonly MID_CACHE_TTL_SEC = 12 * 60 * 60;
   // 육상·기온 중 한쪽만 성공한 부분 결과는 곧 재조회하도록 짧게만 캐싱한다.
   private readonly MID_PARTIAL_TTL_SEC = 30 * 60;
+  // 기상청 무응답 직후 잠깐은 조회를 건너뛴다. 없으면 장애 동안 여행 상세 조회가
+  // 매번 REQUEST_TIMEOUT_MS 를 새로 물어 화면이 열릴 때마다 10초씩 멈춘다.
+  private readonly OUTAGE_TTL_SEC = 60;
+  private readonly OUTAGE_KEY = 'weather:outage';
   private readonly redis: Redis;
 
   constructor(private readonly config: ConfigService) {
@@ -70,6 +78,9 @@ export class WeatherHelper implements OnModuleDestroy {
     if (cached) {
       return cached;
     }
+    if (await this.isOutage()) {
+      return new Map();
+    }
 
     try {
       const res = await axios.get<{
@@ -100,6 +111,7 @@ export class WeatherHelper implements OnModuleDestroy {
           nx,
           ny,
         },
+        timeout: REQUEST_TIMEOUT_MS,
       });
 
       const items = res.data.response.body.items.item;
@@ -108,6 +120,7 @@ export class WeatherHelper implements OnModuleDestroy {
       return forecasts;
     } catch (err) {
       this.logger.error(`기상청 API 조회 실패 (nx=${nx}, ny=${ny}):`, err);
+      await this.markOutageIfUnreachable(err);
       return new Map();
     }
   }
@@ -135,6 +148,9 @@ export class WeatherHelper implements OnModuleDestroy {
     const cached = await this.readCache(cacheKey);
     if (cached) {
       return cached;
+    }
+    if (await this.isOutage()) {
+      return new Map();
     }
 
     try {
@@ -178,10 +194,12 @@ export class WeatherHelper implements OnModuleDestroy {
           regId,
           tmFc,
         },
+        timeout: REQUEST_TIMEOUT_MS,
       });
       return res.data.response?.body?.items?.item?.[0];
     } catch (err) {
       this.logger.warn(`중기예보 오퍼레이션 조회 실패 (${url}, regId=${regId}):`, err);
+      await this.markOutageIfUnreachable(err);
       return undefined;
     }
   }
@@ -210,6 +228,31 @@ export class WeatherHelper implements OnModuleDestroy {
       merged.set(key, forecast);
     }
     return merged;
+  }
+
+  /**
+   * 직전 조회가 무응답(타임아웃·네트워크 단절)으로 끝났는지 확인한다.
+   * Redis 장애 시엔 false 로 답해 실호출을 막지 않는다.
+   */
+  private async isOutage(): Promise<boolean> {
+    try {
+      return (await this.redis.exists(this.OUTAGE_KEY)) === 1;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 무응답 계열 에러만 장애로 기록한다. 4xx·파싱 실패 등 "응답은 왔는데 쓸 수 없는"
+   * 경우는 재조회가 싸므로 굳이 건너뛰지 않는다.
+   */
+  private async markOutageIfUnreachable(err: unknown): Promise<void> {
+    if (axios.isAxiosError(err) && err.response) return;
+    try {
+      await this.redis.set(this.OUTAGE_KEY, '1', 'EX', this.OUTAGE_TTL_SEC);
+    } catch {
+      // 마킹 실패는 조회 결과에 영향을 주지 않는다.
+    }
   }
 
   /** Redis 에 캐시된 예보맵을 복원한다. 미스/장애 시 null 을 반환해 실호출로 넘긴다. */
