@@ -66,16 +66,18 @@ export function PageHeader({
     <header className="px-4 pt-5 lg:border-b lg:border-[#E5E8EB] lg:bg-white lg:px-0 lg:pt-0">
       <div className="mx-auto flex w-full max-w-[1160px] items-center justify-between gap-3 pb-3 lg:gap-6 lg:px-8 lg:py-4 xl:px-10">
         <div className="min-w-0 flex-1">
+          {/* 색은 전역 토큰으로 — 라이트 값은 그대로고, .wvr-scope 안에서 렌더될 때만
+              그 스코프의 다크 값을 상속받아 제목이 배경에 묻히지 않는다. */}
           {label ? (
-            <div className="hidden text-[12px] font-semibold tracking-wide text-[#3182F6] lg:block">
+            <div className="hidden text-[12px] font-semibold tracking-wide text-[color:var(--blue-600)] lg:block">
               Tripick · {label}
             </div>
           ) : null}
-          <h1 className="text-[20px] font-bold text-[#191F28] lg:mt-0.5 lg:text-[22px] lg:leading-[30px]">
+          <h1 className="text-[20px] font-bold text-[color:var(--text-primary)] lg:mt-0.5 lg:text-[22px] lg:leading-[30px]">
             {title}
           </h1>
           {description ? (
-            <p className="mt-1 text-[13px] text-[#6B7684]">{description}</p>
+            <p className="mt-1 text-[13px] text-[color:var(--text-secondary)]">{description}</p>
           ) : null}
         </div>
         {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
