@@ -8,7 +8,6 @@ const EMPTY_TAGS: TasteTagDto = { food: [], mood: [], environment: [], confidenc
 const BASE_PROFILE: PreferenceProfileDto = {
   sleepTime: '23:00',
   wakeTime: '07:30',
-  transportModes: [],
   likedThemes: [],
   dislikedThemes: [],
   pace: 'balanced',

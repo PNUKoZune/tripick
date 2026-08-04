@@ -5,16 +5,8 @@ import type {
   FoodPreference,
   MoodPreference,
   ThemePreference,
-  TransportPreference,
   TravelPace,
 } from '@tripick/types';
-
-export const TRANSPORT_OPTIONS: Array<{ value: TransportPreference; label: string }> = [
-  { value: 'transit', label: '대중교통' },
-  { value: 'car', label: '자가용' },
-  { value: 'walk', label: '도보' },
-  { value: 'rental_car', label: '렌터카' },
-];
 
 type ThemeTaste = {
   food: FoodPreference[];

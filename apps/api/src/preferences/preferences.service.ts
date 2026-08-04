@@ -18,7 +18,6 @@ const EMPTY_TASTE_TAGS: TasteTagDto = {
 const DEFAULT_PROFILE: PreferenceProfileDto = {
   sleepTime: '23:00',
   wakeTime: '07:30',
-  transportModes: [],
   likedThemes: [],
   dislikedThemes: [],
   pace: 'balanced',
@@ -81,13 +80,10 @@ export class PreferencesService {
       confidence: incomingTasteTags.confidence ?? pref?.tasteTags.confidence ?? 0,
     };
 
+    // 저장값·입력을 통째로 펼치지 않고 필드마다 명시해 합친다 — 아래에서 모든 필드를
+    // 어차피 다시 쓰므로 spread 는 이제 없어진 키(transportModes)만 jsonb 에 남긴다.
     const nextProfile: PreferenceProfileDto = {
       ...DEFAULT_PROFILE,
-      ...(pref?.profile ?? {}),
-      ...(dto?.profile ?? {}),
-      transportModes: [
-        ...new Set(dto?.profile?.transportModes ?? pref?.profile?.transportModes ?? []),
-      ],
       likedThemes: [...new Set(dto?.profile?.likedThemes ?? pref?.profile?.likedThemes ?? [])],
       dislikedThemes: [
         ...new Set(dto?.profile?.dislikedThemes ?? pref?.profile?.dislikedThemes ?? []),

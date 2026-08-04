@@ -51,7 +51,6 @@ export const ALL_TASTE_TAGS: readonly TasteTagValue[] = [
   ...MOOD_PREFERENCES,
   ...ENVIRONMENT_PREFERENCES,
 ];
-export type TransportPreference = 'transit' | 'walk' | 'car' | 'rental_car';
 
 /**
  * 관심 테마 (대분류 → 세부 테마). 각 테마는 기본 중립이며 선호/불호로 나뉜다.
@@ -124,7 +123,6 @@ export interface PreferenceDto {
 export interface PreferenceProfileDto {
   sleepTime: string;
   wakeTime: string;
-  transportModes: TransportPreference[];
   /** 선호하는 관심 테마 */
   likedThemes: ThemePreference[];
   /** 불호하는 관심 테마 */

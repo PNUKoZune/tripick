@@ -116,8 +116,8 @@ export class MainPlannerService {
       endDate: dto.endDate,
       wakeTime: preference?.profile?.wakeTime ?? '08:00',
       sleepTime: preference?.profile?.sleepTime ?? '23:00',
-      transportMode:
-        dto.transportMode ?? this.resolveTransportMode(preference?.profile?.transportModes?.[0]),
+      // 이동 수단은 여행마다 달라져 취향(프로필)에 두지 않는다 — 생성 폼에서 안 고르면 대중교통.
+      transportMode: dto.transportMode ?? 'transit',
       ...(notes ? { notes } : {}),
     } satisfies CreateTripDto);
 
@@ -1497,12 +1497,6 @@ export class MainPlannerService {
 
   private transportLabel(mode: TripEntity['transportMode']): string {
     return { walk: '도보 중심', transit: '대중교통', car: '차량 이동' }[mode];
-  }
-
-  private resolveTransportMode(mode?: string): TripEntity['transportMode'] {
-    if (mode === 'walk') return 'walk';
-    if (mode === 'car' || mode === 'rental_car') return 'car';
-    return 'transit';
   }
 
   private coverEmoji(destination: string): string {

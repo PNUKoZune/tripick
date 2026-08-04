@@ -13,7 +13,6 @@ export type PreferenceFormState = PreferenceProfileDto;
 export const DEFAULT_PREFERENCE_FORM: PreferenceFormState = {
   sleepTime: '23:00',
   wakeTime: '07:30',
-  transportModes: ['transit', 'walk'],
   likedThemes: [],
   dislikedThemes: [],
   pace: 'balanced',

@@ -17,7 +17,6 @@ describe('UpdatePreferenceBodyDto', () => {
       profile: {
         wakeTime: '07:30',
         sleepTime: '23:00',
-        transportModes: ['transit'],
         likedThemes: ['cafe_dessert'],
         pace: 'balanced',
       },
