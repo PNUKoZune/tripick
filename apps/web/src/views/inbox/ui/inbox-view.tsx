@@ -13,9 +13,11 @@ import {
   LuMapPin,
   LuPencilLine,
   LuSparkles,
+  LuTags,
   LuTicket,
   LuUserPlus,
   LuUsers,
+  LuX,
 } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 import type { InboxItemDto, InboxItemKind, NotificationCategory } from '@tripick/types';
@@ -38,6 +40,11 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
   { value: 'unread', label: '읽지 않음' },
   { value: 'action', label: '응답 필요' },
 ];
+
+/** '응답 필요' 판정 정본은 서버가 실어 보내는 requiresResponse (딥링크 open-* 은 false). */
+function needsResponse(item: InboxItemDto): boolean {
+  return item.actions.some((action) => action.requiresResponse);
+}
 
 /**
  * 알림 종류별 아이콘·색. 이모지는 기기·OS 마다 모양과 폭이 달라 목록 정렬이 흔들리고
@@ -101,7 +108,8 @@ function InboxContent() {
     queryFn: fetchInbox,
     staleTime: 30 * 1000,
   });
-  const items = data?.items ?? [];
+  // `?? []` 를 그대로 쓰면 매 렌더 새 배열이라 아래 useMemo 들이 전부 무효화된다.
+  const items = useMemo(() => data?.items ?? [], [data]);
   const unreadCount = data?.unreadCount ?? 0;
   const loadError = error instanceof Error ? error.message : null;
 
@@ -159,17 +167,36 @@ function InboxContent() {
     setKindFilter('all');
   }
 
+  // 두 필터는 독립된 축이다 — 종류(칩)로 먼저 좁히고, 그 안에서 상태(세그먼트)로 다시 좁힌다.
+  const kindScoped = useMemo(
+    () => (kindFilter === 'all' ? items : items.filter((item) => item.kind === kindFilter)),
+    [items, kindFilter],
+  );
+
+  // 세그먼트 배지 숫자. 선택된 종류 안에서 세므로 "누르면 몇 개 보인다" 와 항상 일치한다.
+  const counts = useMemo<Record<Filter, number>>(
+    () => ({
+      all: kindScoped.length,
+      unread: kindScoped.filter((item) => !item.readAt).length,
+      action: kindScoped.filter(needsResponse).length,
+    }),
+    [kindScoped],
+  );
+
   const filteredItems = useMemo(() => {
-    return items.filter((item) => {
-      if (kindFilter !== 'all' && item.kind !== kindFilter) return false;
+    return kindScoped.filter((item) => {
       if (filter === 'unread') return !item.readAt;
-      // '응답 필요' = 수락/거절처럼 사용자 응답을 기다리는 액션이 있는 것만. 딥링크(open-*)는
-      // 제외 — 서버가 tripId 붙은 알림 대부분에 '여행 보기' 를 달아주므로 액션 유무로 세면
-      // 전체 목록과 같아진다. 판정 정본은 서버가 실어 보내는 requiresResponse.
-      if (filter === 'action') return item.actions.some((action) => action.requiresResponse);
+      if (filter === 'action') return needsResponse(item);
       return true;
     });
-  }, [items, filter, kindFilter]);
+  }, [kindScoped, filter]);
+
+  const filterActive = filter !== 'all' || kindFilter !== 'all';
+
+  function resetFilters() {
+    setFilter('all');
+    setKindFilter('all');
+  }
 
   const grouped = useMemo(() => groupByDate(filteredItems), [filteredItems]);
 
@@ -226,56 +253,94 @@ function InboxContent() {
 
   const content = (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        {FILTERS.map((f) => {
-          const active = f.value === filter;
-          return (
-            <button
-              key={f.value}
-              type="button"
-              onClick={() => setFilter(f.value)}
-              className={`h-9 rounded-full border px-3 text-[13px] font-semibold transition ${
-                active
-                  ? 'border-[color:var(--primary)] bg-[color:var(--primary-tint)] text-[color:var(--primary-deep)]'
-                  : 'border-[color:var(--line)] bg-[color:var(--card)] text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]'
-              }`}
-            >
-              {f.label}
-            </button>
-          );
-        })}
-        <div className="ml-auto flex items-center gap-2">
+      {/*
+        두 필터는 축이 다르다(상태 vs 종류). 같은 pill 두 줄로 두면 서로 대등한 선택지처럼 보여
+        구분이 안 되므로, 상태는 하나의 세그먼트 트랙(택1)으로 묶고 종류는 그 아래 라벨 붙은
+        칩 행으로 내려 위계를 준다. 둘을 한 툴바 카드에 담아 목록과도 분리한다.
+      */}
+      <div className="rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] p-2">
+        <div className="flex items-center gap-2">
+          <div
+            role="group"
+            aria-label="알림 상태 필터"
+            className="flex items-center gap-0.5 rounded-full border border-[color:var(--line)] bg-[color:var(--card-soft)] p-1"
+          >
+            {FILTERS.map((f) => {
+              const active = f.value === filter;
+              const count = counts[f.value];
+              return (
+                <button
+                  key={f.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setFilter(f.value)}
+                  // 다크에선 --card 와 --card-soft 차이가 작아 그림자만으로는 올라온 티가 안 난다.
+                  // 활성에 테두리를 줘 구분하고, 비활성은 transparent 테두리로 높이를 맞춘다.
+                  className={`flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[13px] transition ${
+                    active
+                      ? 'border-[color:var(--line)] bg-[color:var(--card)] font-bold text-[color:var(--primary-deep)] shadow-[var(--shadow-card)]'
+                      : 'border-transparent font-semibold text-[color:var(--ink-faint)] hover:text-[color:var(--ink-sub)]'
+                  }`}
+                >
+                  <span className="whitespace-nowrap">{f.label}</span>
+                  {count > 0 ? (
+                    <span
+                      className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] font-bold tabular-nums ${
+                        active
+                          ? 'bg-[color:var(--primary)] text-[color:var(--btn-text)]'
+                          : 'bg-[color:var(--line)] text-[color:var(--ink-sub)]'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
           <button
             type="button"
             onClick={() => readAllMutation.mutate()}
             disabled={readAllMutation.isPending || unreadCount === 0}
-            className="flex h-9 items-center gap-1.5 rounded-[10px] border border-[color:var(--line)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--card-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="모두 읽음"
+            className="ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] border border-[color:var(--line)] px-2.5 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--card-soft)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <LuCheckCheck className="size-3.5" aria-hidden />
-            모두 읽음
+            {/* 좁은 폭(웹뷰 430px)에선 아이콘만 — 세그먼트 트랙이 배지까지 안고 있어 자리가 없다. */}
+            <span className="hidden sm:inline">모두 읽음</span>
           </button>
         </div>
-      </div>
 
-      {availableKinds.length > 1 ? (
-        <div className="flex flex-wrap gap-1.5">
-          <CategoryChip
-            label="전체"
-            active={kindFilter === 'all'}
-            onClick={() => setKindFilter('all')}
-          />
-          {availableKinds.map((kind) => (
-            <CategoryChip
-              key={kind}
-              label={KIND_META[kind].label}
-              Icon={KIND_META[kind].Icon}
-              tone={KIND_META[kind].tone}
-              active={kindFilter === kind}
-              onClick={() => setKindFilter(kind)}
-            />
-          ))}
-        </div>
-      ) : null}
+        {availableKinds.length > 1 ? (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-[color:var(--line)] pt-2">
+            <span
+              className="mr-0.5 inline-flex items-center gap-1 text-[11px] font-bold text-[color:var(--ink-faint)]"
+              aria-hidden
+            >
+              <LuTags className="size-3" />
+              종류
+            </span>
+            <div role="group" aria-label="알림 종류 필터" className="flex flex-wrap gap-1.5">
+              <CategoryChip
+                label="전체"
+                active={kindFilter === 'all'}
+                onClick={() => setKindFilter('all')}
+              />
+              {availableKinds.map((kind) => (
+                <CategoryChip
+                  key={kind}
+                  label={KIND_META[kind].label}
+                  Icon={KIND_META[kind].Icon}
+                  tone={KIND_META[kind].tone}
+                  active={kindFilter === kind}
+                  // 선택된 칩을 다시 누르면 해제(전체) — 칩에 × 를 띄워 그 동작을 알린다.
+                  onClick={() => setKindFilter(kindFilter === kind ? 'all' : kind)}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
 
       {loadError ? (
         <div className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]">
@@ -287,15 +352,23 @@ function InboxContent() {
         <div className="rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card-soft)] p-6 text-center">
           <LuInbox className="mx-auto size-6 text-[color:var(--ink-faint)]" aria-hidden />
           <div className="mt-2 text-[14px] font-bold text-[color:var(--ink)]">
-            {filter === 'unread'
-              ? '읽지 않은 알림이 없어요'
-              : filter === 'action'
-                ? '응답이 필요한 알림이 없어요'
-                : '받은 알림이 없어요'}
+            {emptyTitle(filter, kindFilter)}
           </div>
+          {/* 필터 때문에 빈 화면인지, 정말 알림이 없는지를 문구로 갈라준다. */}
           <div className="mt-1 text-[13px] text-[color:var(--ink-sub)]">
-            친구를 추가하거나 여행 일정을 만들어 보세요.
+            {filterActive
+              ? '다른 조건에는 알림이 있을 수 있어요.'
+              : '친구를 추가하거나 여행 일정을 만들어 보세요.'}
           </div>
+          {filterActive ? (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="mt-3 h-9 rounded-[10px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--card-soft)]"
+            >
+              필터 초기화
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -373,10 +446,11 @@ function CategoryChip({
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-semibold transition ${
+      aria-pressed={active}
+      className={`flex h-7 items-center gap-1 rounded-full border px-2 text-[12px] font-semibold transition ${
         active
           ? 'border-[color:var(--primary)] bg-[color:var(--primary-tint)] text-[color:var(--primary-deep)]'
-          : 'border-[color:var(--line)] bg-[color:var(--card)] text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]'
+          : 'border-[color:var(--line)] bg-[color:var(--card-soft)] text-[color:var(--ink-sub)] hover:bg-[color:var(--pressed-bg)]'
       }`}
     >
       {Icon ? (
@@ -387,6 +461,8 @@ function CategoryChip({
         />
       ) : null}
       {label}
+      {/* '전체' 칩은 해제 대상이 아니라 리셋 자체라 × 를 붙이지 않는다. */}
+      {active && Icon ? <LuX className="size-3 shrink-0 opacity-70" aria-hidden /> : null}
     </button>
   );
 }
@@ -476,6 +552,25 @@ function InboxRow({
       </div>
     </div>
   );
+}
+
+/**
+ * 주격 조사 이/가 선택. 카테고리 라벨은 받침이 갈린다('여행 초대'→가, '날씨 알림'→이).
+ * 한글 음절은 (코드 - 0xAC00) % 28 이 0 이면 받침 없음.
+ */
+function withSubject(word: string): string {
+  const last = word.charCodeAt(word.length - 1) - 0xac00;
+  const hasFinal = last >= 0 && last < 11172 && last % 28 !== 0;
+  return `${word}${hasFinal ? '이' : '가'}`;
+}
+
+/** 빈 목록 문구. 종류 필터가 걸려 있으면 어떤 종류가 비었는지까지 말해준다. */
+function emptyTitle(filter: Filter, kindFilter: KindFilter): string {
+  const scope = kindFilter === 'all' ? '' : `${KIND_META[kindFilter].label} 중 `;
+  if (filter === 'unread') return `${scope}읽지 않은 알림이 없어요`;
+  if (filter === 'action') return `${scope}응답이 필요한 알림이 없어요`;
+  if (kindFilter === 'all') return '받은 알림이 없어요';
+  return `${withSubject(KIND_META[kindFilter].label)} 없어요`;
 }
 
 function groupByDate(items: InboxItemDto[]): Array<{ label: string; items: InboxItemDto[] }> {
