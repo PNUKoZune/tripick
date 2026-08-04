@@ -21,4 +21,13 @@ Sentry.init({
     if (ctx.name.includes('/api/v1/health')) return 0;
     return environment === 'development' ? 1.0 : 0.1;
   },
+  // 나가는 요청에 트레이스 헤더(`sentry-trace`·`baggage`)를 붙일 대상. 기본값은 "전부"인데,
+  // data.go.kr 게이트웨이가 **헤더 값에 `nvironment=` 문자열이 있으면** HTTP 400
+  // INVALID_REQUEST_PARAMETER_ERROR 로 거절한다 — `baggage` 에 항상 들어가는
+  // `sentry-environment=...` 가 그대로 걸려 한국관광공사(지역 목록·관광정보·집중률)와
+  // 기상청 단기예보 호출이 전부 죽었다. WAF 규칙이라 파라미터·키와 무관하게 재현된다.
+  // 백엔드가 호출하는 외부 API 는 어차피 Sentry 계측 대상이 아니라 트레이스를 이어붙일 이유가
+  // 없으므로, 우리 서비스(로컬 LLM·오브젝트 스토리지)로만 전파를 제한한다.
+  // 수신 쪽(web → api) 분산 트레이스는 이 옵션과 무관하게 계속 이어진다.
+  tracePropagationTargets: [/^\//, /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/],
 });
