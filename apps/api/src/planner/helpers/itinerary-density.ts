@@ -43,6 +43,23 @@ export function targetItemsPerDay(
 }
 
 /**
+ * 남은 활동 시간(분)에 현실적으로 들어가는 항목 수 상한.
+ *
+ * `targetItemsPerDay` 와 달리 **강도별 최소치(3/4/5)를 보장하지 않는다** — 오늘 일정을
+ * "지금 이후"로 다시 짤 때는 남은 시간이 두 시간뿐일 수 있고, 그때도 4개를 배치하면
+ * ScheduleConstraint 가 뒤 항목을 취침 직전으로 몰아 이동시간 위반이 나고 결정적 폴백까지
+ * 실패해 요청 자체가 죽는다. 한 곳도 못 담으면 0 을 돌려 호출자가 그 일차를 건너뛰게 한다.
+ */
+export function itemsFittingRemaining(remainingMin: number): number {
+  if (remainingMin < MIN_VISIT_MINUTES) return 0;
+  const slotSpan = ESTIMATED_VISIT_MINUTES + ESTIMATED_TRAVEL_MINUTES;
+  // 첫 장소까지의 이동은 남은 시간에 포함되지 않으므로 한 구간을 더해 역산한다.
+  const fitting = Math.floor((remainingMin + ESTIMATED_TRAVEL_MINUTES) / slotSpan);
+  // 체류시간을 최소치까지 줄이면 한 곳은 들어가므로 1 을 하한으로 둔다.
+  return Math.min(MAX_ITEMS_PER_DAY, Math.max(1, fitting));
+}
+
+/**
  * LLM을 사용할 수 없을 때도 하루가 일찍 끝나지 않도록 체류시간 합계를 활동 구간의
  * 약 80%로 맞춘다. 나머지 시간은 장소 간 이동으로 채워지는 것을 전제로 한다.
  */

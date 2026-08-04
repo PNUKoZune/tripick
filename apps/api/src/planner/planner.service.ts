@@ -10,16 +10,27 @@ import { ScheduleConstraint } from './helpers/schedule.constraint';
 import {
   defaultVisitDuration,
   distributeFallbackDurations,
+  itemsFittingRemaining,
   minimumItemsPerDay,
   targetItemsPerDay,
 } from './helpers/itinerary-density';
+import { ARRIVAL_RADIUS_M } from '../arrival-alert/arrival-alert.constants';
 import { ConstraintEngine, type ValidationResult } from './constraint/constraint.engine';
 import { PlannerAgentService } from './agent/planner-agent.service';
 import type { PlannedCandidate } from './agent/planner-agent.service';
 import { PlaceRetrievalService } from './retrieval/place-retrieval.service';
 import { TripEntity } from '../trips/trip.entity';
 import { TripDayEntity } from '../trips/trip-day.entity';
-import { addDaysToIsoDate, countTripDays } from '@tripick/utils';
+import {
+  addDaysToIsoDate,
+  countTripDays,
+  getAwakeWindow,
+  getKstMinutes,
+  haversineMeters,
+  minutesSinceWake,
+  minutesToTime,
+  toKstIsoDate,
+} from '@tripick/utils';
 import type {
   CreateItineraryItemDto,
   ItineraryItemDto,
@@ -55,6 +66,34 @@ const TRIGGER_MEMO_NOTE: Record<ReplanTrigger, string> = {
   crowd: '혼잡 예상을 고려해 붐비지 않는 대체 장소·시간대 우선',
 };
 
+/**
+ * 오늘을 다시 짤 때 "지금" 에 더하는 준비 여유(분). 첫 장소까지의 이동은 별도로 더하므로
+ * 이 값은 "요청하고 일어나는 시간" 만 덮는다.
+ */
+const REPLAN_START_LEAD_MIN = 10;
+
+/**
+ * 앵커된 일차 항목의 최소 체류시간(분). 남은 시간에 맞춰 체류를 줄이되 이보다 짧게는 쓰지 않고
+ * 항목을 뺀다 — 15분짜리 관광지 방문은 일정이라기보다 노이즈다.
+ */
+const MIN_ANCHORED_VISIT_MIN = 45;
+
+/**
+ * 오늘 일차의 재계획 앵커.
+ *
+ * 하루가 이미 진행된 상태에서 다시 짜면 아침부터 채워선 안 된다 — 지난 시각에 일정이 박히고
+ * 영업시간 판정도 아침 기준으로 돌아간다. 그래서 "지금 이후" 만 계획하고, 이미 끝난 항목은
+ * 그대로 남긴다.
+ */
+interface DayAnchor {
+  /** 이 일차 계획을 시작할 시각("HH:MM", KST) */
+  startTime: string;
+  /** 남은 활동 구간에 담을 항목 수 상한. 0 이면 이 일차는 아예 다시 짜지 않는다. */
+  maxItems: number;
+  /** 그대로 남길 기존 항목 — 이미 끝난 것 + 지금 방문 중인 것(order 오름차순) */
+  doneItems: ItineraryItemEntity[];
+}
+
 interface GenerateOptions {
   trigger?: ReplanRequestDto['trigger'];
   currentLocation?: ReplanRequestDto['currentLocation'];
@@ -74,6 +113,8 @@ interface DraftBuildContext {
   /** 이번 생성이 실제로 채우는 일차 목록(오름차순). 전체 생성이면 1..dayCount */
   planDays: number[];
   itemsPerDay: number;
+  /** 오늘에 해당하는 일차의 시작 시각·개수 상한. 없는 일차는 기상 시각 + 하루 목표 개수. */
+  anchorByDay: Map<number, DayAnchor>;
   wakeTime: string;
   sleepTime: string;
   tasteTags: TasteTagDto | undefined;
@@ -137,15 +178,38 @@ export class PlannerService {
     // 저장된 취향 벡터로 pgvector 검색을 개인화 (블렌딩 + 리랭킹)
     const preferenceVector = await this.preferencesService.getPreferenceVector(trip.userId);
     const dayCount = countTripDays(trip.startDate, trip.endDate);
-    // 이번에 다시 짤 일차. 부분 재계획이면 나머지 일차는 저장된 일정을 그대로 둔다.
-    const planDays = this.resolvePlanDays(options.targetDays, dayCount);
-    const partial = planDays.length < dayCount;
     const wakeTime = trip.wakeTime ?? '08:30';
     const sleepTime = trip.sleepTime ?? '22:00';
     const pace = options.preferences?.pace ?? preference?.profile?.pace;
     // 강도별 3/4/5개는 최소 밀도다. 활동 시간이 길면 하루가 일찍 끝나지 않도록 늘린다.
     const minimumDailyItems = minimumItemsPerDay(pace);
     const itemsPerDay = targetItemsPerDay(pace, wakeTime, sleepTime);
+    // 저장된 기존 항목. 사용자 memo 보존 + 유지되는 일차·이미 지난 항목 파악에 쓴다.
+    const existingItems = await this.itineraryService.findByTrip(trip.id, trip.userId);
+    // 이번에 다시 짤 일차. 부분 재계획이면 나머지 일차는 저장된 일정을 그대로 둔다.
+    const requestedDays = this.resolvePlanDays(options.targetDays, dayCount);
+    // 요청 일차 중 "오늘" 이 있으면 아침이 아니라 지금 이후만 다시 짠다.
+    const anchorByDay = this.resolveDayAnchors({
+      trip,
+      planDays: requestedDays,
+      wakeTime,
+      sleepTime,
+      existingItems,
+      ...(options.currentLocation !== undefined ? { currentLocation: options.currentLocation } : {}),
+      now: new Date(),
+    });
+    // 남은 활동 시간에 한 곳도 안 들어가는 일차는 건드리지 않는다 — 저장된 일정을 지우고
+    // 아무것도 못 넣는 게 최악이라, 그 일차는 그대로 두고 나머지만 다시 짠다.
+    const planDays = requestedDays.filter((day) => anchorByDay.get(day)?.maxItems !== 0);
+    if (planDays.length === 0) {
+      this.logger.log(
+        `Skipped replan for trip ${trip.id} — 대상 일차(${requestedDays.join(',')})에 남은 활동 시간이 없음`,
+      );
+      return [...existingItems]
+        .sort((a, b) => a.day - b.day || a.order - b.order)
+        .map((item) => this.toItemDto(item));
+    }
+    const partial = planDays.length < dayCount;
     // 여행 고정 노트 + 재계획 요청 노트 + 구조화 옵션을 하나의 지시문으로 합쳐 검색·프롬프트에 반영
     const combinedNotes = this.buildCombinedNotes(trip.notes, options);
     // 검색 컨텍스트 중 지역(destination)·개수(limit) 외 공통 항목. 단일/일자별 두 경로가 공유한다.
@@ -153,7 +217,12 @@ export class PlannerService {
       userId: trip.userId,
       notes: combinedNotes,
       // 부분 재계획이면 여행 시작일이 아니라 다시 짜는 첫 일차 기준으로 영업시간·가용성을 본다.
-      startAt: this.makeDateTime(this.offsetDate(trip.startDate, planDays[0]! - 1), wakeTime),
+      // 오늘을 다시 짜는 경우엔 기상 시각이 아니라 앵커(지금 이후)가 기준이다 — 아침 기준으로
+      // 보면 저녁에만 문 여는 곳이 떨어지고 이미 닫은 곳이 살아남는다.
+      startAt: this.makeDateTime(
+        this.offsetDate(trip.startDate, planDays[0]! - 1),
+        this.dayStartTime(anchorByDay, planDays[0]!, wakeTime),
+      ),
       ...(tasteTags !== undefined ? { tasteTags } : {}),
       ...(preferenceVector ? { preferenceVector } : {}),
       ...(options.trigger !== undefined ? { trigger: options.trigger } : {}),
@@ -162,10 +231,12 @@ export class PlannerService {
 
     // 반드시 포함할 장소는 최상위 후보로 시드해 배치 우선순위를 높인다
     const mustCandidates = this.buildMustIncludeCandidates(options.mustIncludePlaces);
-    // 저장된 기존 항목. 사용자 memo 보존 + (부분 재계획 시) 유지되는 일차 파악에 쓴다.
-    const existingItems = await this.itineraryService.findByTrip(trip.id, trip.userId);
     // 부분 재계획에서 다시 짜지 않는 일차의 항목들 — 그대로 남기고 중복 배치도 막는다.
     const keptItems = partial ? existingItems.filter((item) => !planDays.includes(item.day)) : [];
+    // 오늘 일차에서 이미 끝난(또는 방문 중인) 항목. 그대로 남기므로 후보에서도 빼야
+    // 같은 장소가 오늘 두 번 배치되지 않는다.
+    const doneItems = planDays.flatMap((day) => anchorByDay.get(day)?.doneItems ?? []);
+    const untouchedItems = [...keptItems, ...doneItems];
     // 일자별 지역 매핑(trip_days). 미설정이면 모든 날 = trip.destination 으로 채워진다.
     const dayRegions = await this.resolveDayRegions(trip, dayCount);
     // 서로 다른 지역이 2개 이상이면 일자별 경로, 아니면 기존 단일 풀 + AI 플래너 경로.
@@ -180,17 +251,22 @@ export class PlannerService {
       // 다시 짜는 일차의 지역만 조회한다(index 는 planDays 와 1:1).
       const planDayRegions = planDays.map((day) => dayRegions[day - 1] ?? [trip.destination]);
       poolsByDay = (await this.retrievePerDay(planDayRegions, sharedRetrieval, itemsPerDay)).map(
-        (pool) => this.excludeKeptPlaces(pool, keptItems),
+        (pool) => this.excludeKeptPlaces(pool, untouchedItems),
       );
       candidates = [...mustCandidates, ...poolsByDay.flat()];
       traceLabel = `per-day[${planDayRegions.map((regions) => regions.join('/')).join(' | ')}]`;
     } else {
+      // 앵커된 일차는 남은 시간만큼만 담으므로 일차별 목표를 합쳐 필요한 후보 수를 낸다.
+      const totalTargetItems = planDays.reduce(
+        (sum, day) => sum + this.dayItemTarget(anchorByDay, day, itemsPerDay),
+        0,
+      );
       const retrieval = await this.placeRetrieval.retrieve({
         ...sharedRetrieval,
         destination: trip.destination,
-        limit: Math.max(planDays.length * itemsPerDay + 4, 12),
+        limit: Math.max(totalTargetItems + 4, 12),
       });
-      candidates = [...mustCandidates, ...this.excludeKeptPlaces(retrieval.places, keptItems)];
+      candidates = [...mustCandidates, ...this.excludeKeptPlaces(retrieval.places, untouchedItems)];
       traceLabel = `${trip.destination} sources=${retrieval.trace.sources.join('+') || 'none'} avg=${retrieval.trace.averageConfidence.toFixed(2)}`;
     }
 
@@ -217,11 +293,16 @@ export class PlannerService {
     // 후보 수·day 검증(1..dayCount)과도 어긋나지 않는다. 실제 날짜는 dayDates 로 함께 넘긴다 —
     // 시작·종료일 두 값은 [1,3] 같은 비연속 범위를 표현하지 못해 dayCount 와 어긋났다.
     const agentPlan = perDayMode
-      ? this.buildPerDayDeterministicPlan(poolsByDay!, itemsPerDay, planDays)
+      ? this.buildPerDayDeterministicPlan(poolsByDay!, itemsPerDay, planDays, anchorByDay)
       : this.remapPlanDays(
           await this.plannerAgent.plan({
             destination: trip.destination,
             dayDates: planDates,
+            // 앵커된 일차는 시작 시각·개수가 다르다. 안 넘기면 LLM 이 아침 리듬(브런치 카페 →
+            // 점심 → 오후 명소)으로 하루를 짜고, 뒤에서 앞부터 잘라내므로 저녁 재계획에
+            // 아침 슬롯이 남는다.
+            dayStartTimes: planDays.map((day) => this.dayStartTime(anchorByDay, day, wakeTime)),
+            dayItemTargets: planDays.map((day) => this.dayItemTarget(anchorByDay, day, itemsPerDay)),
             wakeTime,
             sleepTime,
             transportMode: trip.transportMode,
@@ -242,6 +323,7 @@ export class PlannerService {
       dayCount,
       planDays,
       itemsPerDay,
+      anchorByDay,
       wakeTime,
       sleepTime,
       tasteTags,
@@ -263,6 +345,7 @@ export class PlannerService {
               poolsByDay!.map((pool) => this.rotate(pool, attempt)),
               itemsPerDay,
               planDays,
+              anchorByDay,
             ),
             mustCandidates,
             planDays,
@@ -284,12 +367,19 @@ export class PlannerService {
     // (예약 시간·준비물 등)를 이어받는다. replaceTripItems 가 기존 항목을 전부 삭제하므로
     // 여기서 미리 보존하지 않으면 사용자 메모가 사라진다.
     const memoByPlace = this.indexMemosByPlace(existingItems);
+    // 오늘 이미 끝난 항목은 새 일정 앞에 그대로 다시 넣는다 — 저장이 대상 일차를 통째로
+    // 갈아끼우므로(replaceDayItems), 여기서 싣지 않으면 사용자가 오늘 다녀온 기록이 사라진다.
+    // 새 항목의 order 는 남긴 개수만큼 뒤로 밀어 하루 순서가 이어지게 한다.
+    const doneStoreItems = doneItems.map((item) => this.toStoreItem(item));
+    const orderOffsetByDay = new Map(
+      planDays.map((day) => [day, anchorByDay.get(day)?.doneItems.length ?? 0]),
+    );
     const toStore: CreateItineraryItemDto[] = finalItems.map((item) => {
       const preservedMemo = memoByPlace.get(this.placeMemoKey(item));
       return {
         tripId: item.tripId,
         day: item.day,
-        order: item.order,
+        order: item.order + (orderOffsetByDay.get(item.day) ?? 0),
         type: item.type,
         name: item.name,
         address: item.address,
@@ -305,10 +395,13 @@ export class PlannerService {
       } as CreateItineraryItemDto;
     });
 
+    const storePayload = [...doneStoreItems, ...toStore].sort(
+      (a, b) => a.day - b.day || a.order - b.order,
+    );
     // 부분 재계획은 대상 일차만 갈아끼운다. 전체 재계획은 기존대로 통째로 교체.
     const saved = partial
-      ? await this.itineraryService.replaceDayItems(trip.id, planDays, toStore)
-      : await this.itineraryService.replaceTripItems(trip.id, toStore);
+      ? await this.itineraryService.replaceDayItems(trip.id, planDays, storePayload)
+      : await this.itineraryService.replaceTripItems(trip.id, storePayload);
     this.logger.log(
       `Generated ${saved.length} itinerary items for trip ${trip.id} (days ${planDays.join(',')}) using CRAG ${traceLabel}`,
     );
@@ -317,6 +410,133 @@ export class PlannerService {
     return [...keptItems, ...saved]
       .sort((a, b) => a.day - b.day || a.order - b.order)
       .map((item) => this.toItemDto(item));
+  }
+
+  /**
+   * 요청 일차 중 "오늘"(KST)에 해당하는 일차의 재계획 앵커를 만든다. 오늘이 아닌 일차는
+   * 지도에 넣지 않으며(= 기존대로 기상 시각부터 하루 전체), 기상 전이면 앵커 자체가 불필요하다.
+   *
+   * 시작 시각은 `지금 + 준비 여유`이고, 지금 방문 중인 항목이 있으면 그게 끝난 뒤로 미룬다.
+   * 남은 활동 시간에 한 곳도 안 들어가면 `maxItems: 0` 으로 두어 호출자가 그 일차를
+   * 아예 건드리지 않게 한다(저장된 일정을 지우고 빈 하루를 남기는 게 최악이다).
+   */
+  private resolveDayAnchors(params: {
+    trip: TripEntity;
+    planDays: number[];
+    wakeTime: string;
+    sleepTime: string;
+    existingItems: ItineraryItemEntity[];
+    currentLocation?: GenerateOptions['currentLocation'];
+    now: Date;
+  }): Map<number, DayAnchor> {
+    const { trip, planDays, wakeTime, sleepTime, existingItems, currentLocation, now } = params;
+    const anchors = new Map<number, DayAnchor>();
+    const window = getAwakeWindow(wakeTime, sleepTime);
+    const nowMinutes = getKstMinutes(now);
+    // 기상 전이면 하루가 아직 시작되지 않았다 — 평소대로 아침부터 채운다.
+    // (자정을 넘는 활동 구간에서도 벽시계 비교로 맞다: 취침 01:00 여행의 00:30 은 그 날
+    //  기상 08:00 이전이므로 앵커 없이 하루 전체를 짜는 게 옳다.)
+    if (nowMinutes <= window.wakeMinutes) return anchors;
+
+    const todayIso = toKstIsoDate(now);
+    for (const day of planDays) {
+      if (this.offsetDate(trip.startDate, day - 1) !== todayIso) continue;
+
+      const doneItems = this.resolveDoneItems(existingItems, day, now, currentLocation);
+      // 방문 중인 항목이 있으면 그게 끝난 뒤부터, 없으면 지금 + 준비 여유부터 시작한다.
+      const lastDoneEnd = doneItems.reduce((latest, item) => Math.max(latest, this.itemEndAt(item)), 0);
+      const startAt = new Date(
+        Math.max(now.getTime() + REPLAN_START_LEAD_MIN * 60_000, lastDoneEnd),
+      );
+      const startMinutes = getKstMinutes(startAt);
+      const remainMin =
+        window.lengthMinutes - minutesSinceWake(startMinutes, window.wakeMinutes);
+      anchors.set(day, {
+        startTime: minutesToTime(startMinutes),
+        maxItems: remainMin > 0 ? itemsFittingRemaining(remainMin) : 0,
+        doneItems,
+      });
+    }
+    return anchors;
+  }
+
+  /**
+   * 그 일차에서 다시 짜지 않고 남길 항목 — ① 이미 끝난 항목(방문 완료로 본다)
+   * ② 지금 진행 중이면서 사용자가 그 좌표 근처에 있는 항목(방문 중).
+   *
+   * 진행 중인데 근처에 없으면 남기지 않는다 — 그게 바로 미도착 상황이고, 다시 짜 달라는 게
+   * 이탈 재계획 요청 자체다. 위치를 모르면(현재 위치 없음) 같은 이유로 남기지 않는다.
+   */
+  private resolveDoneItems(
+    items: ItineraryItemEntity[],
+    day: number,
+    now: Date,
+    currentLocation?: GenerateOptions['currentLocation'],
+  ): ItineraryItemEntity[] {
+    return items
+      .filter((item) => item.day === day)
+      .filter((item) => {
+        const startedAt = new Date(item.scheduledAt).getTime();
+        if (startedAt >= now.getTime()) return false;
+        if (this.itemEndAt(item) <= now.getTime()) return true;
+        if (!currentLocation) return false;
+        return haversineMeters(currentLocation, item.coordinates) <= ARRIVAL_RADIUS_M;
+      })
+      .sort((a, b) => a.order - b.order);
+  }
+
+  /** 항목이 끝나는 시각(epoch ms). */
+  private itemEndAt(item: ItineraryItemEntity): number {
+    return new Date(item.scheduledAt).getTime() + item.durationMin * 60_000;
+  }
+
+  /** 그 일차의 활동 구간이 끝나는 시각(epoch ms). 취침이 자정을 넘어도 구간 길이로 계산한다. */
+  private dayEndAt(context: DraftBuildContext, day: number): number {
+    const window = getAwakeWindow(context.wakeTime, context.sleepTime);
+    const wakeAt = this.makeDateTime(
+      this.offsetDate(context.trip.startDate, day - 1),
+      context.wakeTime,
+    );
+    return wakeAt.getTime() + window.lengthMinutes * 60_000;
+  }
+
+  /** 그 일차 계획의 시작 시각. 앵커가 없으면 기상 시각. */
+  private dayStartTime(
+    anchorByDay: Map<number, DayAnchor>,
+    day: number,
+    wakeTime: string,
+  ): string {
+    return anchorByDay.get(day)?.startTime ?? wakeTime;
+  }
+
+  /** 그 일차에 담을 항목 수 상한. 앵커가 없으면 하루 목표 개수. */
+  private dayItemTarget(
+    anchorByDay: Map<number, DayAnchor>,
+    day: number,
+    itemsPerDay: number,
+  ): number {
+    return anchorByDay.get(day)?.maxItems ?? itemsPerDay;
+  }
+
+  /** 남길 기존 항목을 저장 payload 로 되돌린다(시각·체류·메모 그대로). */
+  private toStoreItem(item: ItineraryItemEntity): CreateItineraryItemDto {
+    return {
+      tripId: item.tripId,
+      day: item.day,
+      order: item.order,
+      type: item.type,
+      name: item.name,
+      address: item.address,
+      coordinates: item.coordinates,
+      scheduledAt: new Date(item.scheduledAt).toISOString(),
+      durationMin: item.durationMin,
+      ...(item.travelTimeMin ? { travelTimeMin: item.travelTimeMin } : {}),
+      ...(item.openingHours ? { openingHours: item.openingHours } : {}),
+      ...(item.phoneNumber ? { phoneNumber: item.phoneNumber } : {}),
+      ...(item.kakaoPlaceId ? { kakaoPlaceId: item.kakaoPlaceId } : {}),
+      ...(item.imageUrl ? { imageUrl: item.imageUrl } : {}),
+      ...(item.memo ? { memo: item.memo } : {}),
+    } as CreateItineraryItemDto;
   }
 
   /** 저장된 일정 항목 엔티티를 응답 DTO 로 변환한다. */
@@ -386,32 +606,46 @@ export class PlannerService {
     plan: PlannedCandidate[],
     context: DraftBuildContext,
   ): Promise<ItineraryItemDto[]> {
-    const { trip, planDays, itemsPerDay, wakeTime, tasteTags, options, weatherHint } = context;
+    const { trip, planDays, itemsPerDay, anchorByDay, wakeTime, tasteTags, options, weatherHint } =
+      context;
     const created: CreateItineraryItemDto[] = [];
 
     for (const day of planDays) {
+      const startTime = this.dayStartTime(anchorByDay, day, wakeTime);
       const dayPlan = plan
         .filter((item) => item.day === day)
         .sort((a, b) => a.order - b.order)
-        .slice(0, itemsPerDay);
-      let currentAt = this.makeDateTime(this.offsetDate(trip.startDate, day - 1), wakeTime);
+        .slice(0, this.dayItemTarget(anchorByDay, day, itemsPerDay));
+      let currentAt = this.makeDateTime(this.offsetDate(trip.startDate, day - 1), startTime);
+      // 앵커된 일차는 취침까지 남은 시간이 짧아 체류시간을 줄이거나 뒤 항목을 버려야 한다.
+      // 그대로 넘기면 ScheduleConstraint 가 항목을 취침 직전으로 당겨 "지금" 보다 이른 시각에
+      // 일정이 박히고, 이동시간 위반으로 검증까지 실패한다.
+      const dayEndAt = anchorByDay.has(day) ? this.dayEndAt(context, day) : null;
 
       for (let order = 0; order < dayPlan.length; order += 1) {
         const planned = dayPlan[order]!;
         const seed = planned.candidate;
-        const durationMin = planned.durationMin;
         const previous = created[created.length - 1];
         const sameDayPrevious = previous?.day === day ? previous : undefined;
-        const travelTimeMin = sameDayPrevious
-          ? await this.estimateTravelTime(
-              sameDayPrevious.coordinates,
-              seed.coordinates,
-              trip.transportMode,
-            )
+        // 앵커된 일차의 첫 항목은 사용자의 현재 위치에서 출발한다 — 첫 이동을 빼면
+        // "지금 그 장소에 이미 도착해 있다" 를 가정하게 된다.
+        const from =
+          sameDayPrevious?.coordinates ??
+          (dayEndAt && order === 0 ? options.currentLocation : undefined);
+        const travelTimeMin = from
+          ? await this.estimateTravelTime(from, seed.coordinates, trip.transportMode)
           : 0;
 
         currentAt = new Date(currentAt.getTime() + travelTimeMin * 60000);
         currentAt = this.alignToOpeningHours(currentAt, seed.openingHours);
+
+        let durationMin = planned.durationMin;
+        if (dayEndAt) {
+          const remainMin = Math.floor((dayEndAt - currentAt.getTime()) / 60_000);
+          // 45분도 안 남으면 이 항목부터는 오늘 안에 넣을 수 없다.
+          if (remainMin < MIN_ANCHORED_VISIT_MIN) break;
+          durationMin = Math.max(MIN_ANCHORED_VISIT_MIN, Math.min(durationMin, remainMin));
+        }
 
         const item: CreateItineraryItemDto = {
           tripId: trip.id,
@@ -506,12 +740,15 @@ export class PlannerService {
     context: DraftBuildContext,
   ): PlannedCandidate[] {
     const planned: PlannedCandidate[] = [];
-    context.planDays.forEach((day, dayIndex) => {
-      const offset = dayIndex * context.itemsPerDay;
-      const dayCandidates = candidates.slice(offset, offset + context.itemsPerDay);
+    // 일차마다 담을 개수가 다를 수 있어(앵커된 오늘은 남은 시간만큼) 오프셋을 누적한다.
+    let offset = 0;
+    context.planDays.forEach((day) => {
+      const dayTarget = this.dayItemTarget(context.anchorByDay, day, context.itemsPerDay);
+      const dayCandidates = candidates.slice(offset, offset + dayTarget);
+      offset += dayTarget;
       const durations = distributeFallbackDurations(
         dayCandidates.map((candidate) => candidate.category),
-        context.wakeTime,
+        this.dayStartTime(context.anchorByDay, day, context.wakeTime),
         context.sleepTime,
       );
       dayCandidates.forEach((candidate, index) => {
@@ -605,11 +842,12 @@ export class PlannerService {
     poolsByDay: CandidatePlace[][],
     itemsPerDay: number,
     planDays: number[],
+    anchorByDay: Map<number, DayAnchor>,
   ): PlannedCandidate[] {
     const planned: PlannedCandidate[] = [];
     poolsByDay.forEach((pool, dayIndex) => {
       const day = planDays[dayIndex] ?? dayIndex + 1;
-      pool.slice(0, itemsPerDay).forEach((candidate, index) => {
+      pool.slice(0, this.dayItemTarget(anchorByDay, day, itemsPerDay)).forEach((candidate, index) => {
         planned.push({
           candidate,
           day,
