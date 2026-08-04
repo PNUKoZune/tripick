@@ -1,8 +1,11 @@
 /// <reference types="jest" />
 
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
 import { ReplanningService } from '../../src/replanning/replanning.service';
-import { REPLAN_LOCATION_MAX_DISTANCE_M } from '../../src/replanning/replanning.constants';
+import {
+  REPLAN_LOCATION_MAX_DISTANCE_M,
+  REPLAN_QUEUE_TIMEOUT_MS,
+} from '../../src/replanning/replanning.constants';
 import type { LiveLocation } from '../../src/arrival-alert/live-location.service';
 import type { ReplanRequestDto } from '@tripick/types';
 
@@ -260,6 +263,17 @@ describe('ReplanningService — 진행 중 재계획 dedup', () => {
     expect(jobKey(manual.queue)).toBe('trip-1-2');
   });
 
+  it('완료·실패 잡 보관 정책을 지정한다 — 없으면 Redis 에 무한 적재된다', async () => {
+    const { service, queue } = build();
+
+    await service.enqueue('u1', request({ trigger: 'manual' }));
+
+    expect(queue.add.mock.calls[0][2]).toMatchObject({
+      removeOnComplete: { age: 3600, count: 100 },
+      removeOnFail: { age: 86400 },
+    });
+  });
+
   it('레이스 가드 jobId 는 범위를 구분한다 — 1일차 → 곧바로 2일차가 합쳐지면 안 된다', async () => {
     const day1 = build();
     await day1.service.enqueue('u1', request({ trigger: 'manual', targetDays: [1] }));
@@ -272,5 +286,34 @@ describe('ReplanningService — 진행 중 재계획 dedup', () => {
     // 정렬해 한 범위가 한 키로 모인다
     expect(jobKey(day23.queue)).toBe('trip-1-2.3');
     expect(jobKey(whole.queue)).toBe('trip-1-all');
+  });
+});
+
+describe('ReplanningService — 잡 등록 실패 처리', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('등록이 실패하면 503 으로 알린다 — 잡이 안 걸렸는데 성공 응답을 주면 안 된다', async () => {
+    const { service, queue } = build();
+    queue.add.mockRejectedValueOnce(new Error('redis down'));
+
+    await expect(service.enqueue('u1', request({ trigger: 'manual' }))).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
+  it('Redis 무응답이면 매달리지 않고 상한에서 끊는다 — 사용자가 스피너만 보게 두지 않는다', async () => {
+    jest.useFakeTimers();
+    try {
+      const { service, queue } = build();
+      // 던지지도 끝나지도 않는 add (ioredis 오프라인 큐 버퍼링 재현)
+      queue.add.mockImplementationOnce(() => new Promise(() => {}));
+
+      const pending = service.enqueue('u1', request({ trigger: 'manual' }));
+      const assertion = expect(pending).rejects.toBeInstanceOf(ServiceUnavailableException);
+      await jest.advanceTimersByTimeAsync(REPLAN_QUEUE_TIMEOUT_MS + 1);
+      await assertion;
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

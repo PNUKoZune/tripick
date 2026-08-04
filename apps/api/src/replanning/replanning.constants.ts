@@ -2,7 +2,7 @@ export const REPLAN_QUEUE = 'replan';
 export const REPLAN_JOB = 'replan-job';
 
 /**
- * 큐 조회 상한(ms). Redis 가 죽어 있으면 BullMQ 조회는 던지지도 끝나지도 않고 매달리므로
+ * 큐 조회·등록 상한(ms). Redis 가 죽어 있으면 BullMQ 호출은 던지지도 끝나지도 않고 매달리므로
  * 재계획 요청 자체가 그대로 멈춘다(`withTimeout` 주석 참고).
  */
 export const REPLAN_QUEUE_TIMEOUT_MS = 10_000;

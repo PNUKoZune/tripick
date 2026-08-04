@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
@@ -47,8 +52,25 @@ export class ReplanningService {
     // 비어 보인다) 남겨 둔 레이스 가드다. 대상 일차는 키에 넣는다 — 이 창 안에서도
     // "1일차 → 곧바로 2일차" 는 별개 작업이라 합쳐지면 두 번째가 조용히 버려진다.
     const bucket = Math.floor(Date.now() / 10_000);
-    const job = await this.queue.add(REPLAN_JOB, request, {
-      jobId: `${dto.tripId}-${scopeKey(dto.targetDays)}-${bucket}`,
+    const job = await withTimeout(
+      this.queue.add(REPLAN_JOB, request, {
+        jobId: `${dto.tripId}-${scopeKey(dto.targetDays)}-${bucket}`,
+        // 잡 자체는 조회 API 가 없고 결과는 WS·인박스로 간다 — 사후 확인용으로만 잠깐 남긴다.
+        // 지정하지 않으면 완료·실패 잡이 Redis 에 무한 적재된다(다른 큐는 모두 지정돼 있다).
+        removeOnComplete: { age: 3600, count: 100 },
+        removeOnFail: { age: 86400 },
+      }),
+      REPLAN_QUEUE_TIMEOUT_MS,
+      '재계획 잡 등록 응답 없음',
+    ).catch((err: unknown) => {
+      // Redis 가 죽어 있으면 add 는 던지지도 끝나지도 않는다 — 상한이 없으면 이 HTTP 요청이
+      // 영영 매달려 사용자는 스피너만 본다. 잡이 안 걸렸음을 분명히 알린다.
+      this.logger.error(
+        `재계획 잡 등록 실패 (trip ${dto.tripId}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      throw new ServiceUnavailableException(
+        '지금은 재계획을 시작할 수 없습니다. 잠시 후 다시 시도해주세요.',
+      );
     });
     return {
       jobId: String(job.id),
