@@ -17,7 +17,6 @@ import {
   LuTicket,
   LuUserPlus,
   LuUsers,
-  LuX,
 } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 import type { InboxItemDto, InboxItemKind, NotificationCategory } from '@tripick/types';
@@ -284,8 +283,10 @@ function InboxContent() {
                 >
                   <span className="whitespace-nowrap">{f.label}</span>
                   {count > 0 ? (
+                    // leading-none + pt-[1px]: 기본 line-height(16.5px)와 폰트 ascent/descent
+                    // 비대칭 때문에 숫자 잉크가 원 중심보다 1.25px 떠 보인다. 광학 중심 보정.
                     <span
-                      className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] font-bold tabular-nums ${
+                      className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 pt-[1px] text-[11px] font-bold leading-none tabular-nums ${
                         active
                           ? 'bg-[color:var(--primary)] text-[color:var(--btn-text)]'
                           : 'bg-[color:var(--line)] text-[color:var(--ink-sub)]'
@@ -333,7 +334,7 @@ function InboxContent() {
                   Icon={KIND_META[kind].Icon}
                   tone={KIND_META[kind].tone}
                   active={kindFilter === kind}
-                  // 선택된 칩을 다시 누르면 해제(전체) — 칩에 × 를 띄워 그 동작을 알린다.
+                  // 선택된 칩을 다시 누르면 해제(전체). 아이콘 없이 토글만 둔다.
                   onClick={() => setKindFilter(kindFilter === kind ? 'all' : kind)}
                 />
               ))}
@@ -461,8 +462,6 @@ function CategoryChip({
         />
       ) : null}
       {label}
-      {/* '전체' 칩은 해제 대상이 아니라 리셋 자체라 × 를 붙이지 않는다. */}
-      {active && Icon ? <LuX className="size-3 shrink-0 opacity-70" aria-hidden /> : null}
     </button>
   );
 }
