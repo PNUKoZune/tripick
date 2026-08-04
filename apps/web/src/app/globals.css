@@ -89,6 +89,27 @@ nextjs-portal {
   display: none !important;
 }
 
+/* 고정 높이 원형·pill 배지 안의 "숫자" 광학 중심 보정.
+   flex 가 세로 중앙을 맞추는 건 라인박스인데, 숫자는 baseline 위 cap-height 만
+   차지하고 그 아래 descent 공간은 비어 있어 글리프가 위로 떠 보인다.
+   어긋난 양 = (descent - ascent)/2 + cap/2 (기본 line-height 1.5 면 여기에 반칸 더).
+   line-height:1 로 라인박스를 줄이고 padding-top:1px 로 내용 상자를 0.5px 내려 상쇄한다.
+
+   주의 — 보정량은 브라우저가 폰트 메트릭을 사이즈별 정수로 반올림해서 크기마다 다르다.
+   Pretendard 실측(Chromium):
+     10px  ascent 10 / descent 2 / cap 8 → 이미 0px, leading-none 만 (num-badge 쓰면 0.5px 내려감)
+     11px  ascent 10 / descent 3 / cap 8 → 0.5px 뜸, num-badge 로 0px
+     12px  ascent 11 / descent 3 / cap 9 → 0.5px 뜸, num-badge 로 0px
+   새 사이즈를 쓸 땐 붙이고 끝내지 말고 잉크 중심을 실측할 것(박스 rect 는 항상 정중앙이라
+   getBoundingClientRect 로는 안 보인다 — canvas measureText 의 actualBoundingBox 로 잰다).
+
+   숫자 전용이다. 한글은 받침이 descent 를 채워 이 보정이 오히려 아래로 밀린다.
+   높이가 auto 인 요소엔 쓰지 않는다(패딩만큼 커진다). */
+@utility num-badge {
+  line-height: 1;
+  padding-top: 1px;
+}
+
 /* ============================================================
    SPEC-WEB-VISUAL-REDESIGN-001 — "광안리의 하루" 확장 팔레트
    대상 5개 화면(랜딩 · 취향 입력 · 여행 조건 · 결과/플래너 · 재계획 시트)에

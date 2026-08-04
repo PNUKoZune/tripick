@@ -283,10 +283,8 @@ function InboxContent() {
                 >
                   <span className="whitespace-nowrap">{f.label}</span>
                   {count > 0 ? (
-                    // leading-none + pt-[1px]: 기본 line-height(16.5px)와 폰트 ascent/descent
-                    // 비대칭 때문에 숫자 잉크가 원 중심보다 1.25px 떠 보인다. 광학 중심 보정.
                     <span
-                      className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 pt-[1px] text-[11px] font-bold leading-none tabular-nums ${
+                      className={`num-badge inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] font-bold tabular-nums ${
                         active
                           ? 'bg-[color:var(--primary)] text-[color:var(--btn-text)]'
                           : 'bg-[color:var(--line)] text-[color:var(--ink-sub)]'
@@ -417,7 +415,8 @@ function InboxContent() {
             </Link>
             {unreadCount > 0 ? (
               <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-[color:var(--primary)] px-2 text-[12px] font-bold text-[color:var(--btn-text)] lg:h-9 lg:min-w-9 lg:px-3 lg:text-[13px]">
-                <span className="lg:hidden">{unreadCount}</span>
+                {/* 숫자만인 모바일 표기에만 광학 보정 — 한글이 섞인 데스크탑 표기는 그대로. */}
+                <span className="num-badge lg:hidden">{unreadCount}</span>
                 <span className="hidden lg:inline">{unreadCount} 새 알림</span>
               </span>
             ) : null}
