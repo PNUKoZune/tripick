@@ -2,7 +2,7 @@ import { BullModule, InjectQueue } from '@nestjs/bullmq';
 import { Logger, Module, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
-import { withTimeout } from '../common/with-timeout';
+import { upsertRepeatSchedules, type RepeatSchedule } from '../common/repeat-schedule';
 import { TripEntity } from '../trips/trip.entity';
 import { NotificationEntity } from '../inbox/notification.entity';
 import { InboxModule } from '../inbox/inbox.module';
@@ -20,12 +20,6 @@ import {
   TRIP_REMINDER_CRON,
   TRIP_REMINDER_SCAN_JOB,
 } from './notification-scheduler.constants';
-
-/** 반복 등록할 잡 1건의 정의. */
-interface RepeatableJob {
-  name: string;
-  cron: string;
-}
 
 /**
  * 알림 스케줄러 모듈.
@@ -49,7 +43,7 @@ export class NotificationSchedulerModule implements OnModuleInit, OnModuleDestro
   private retryTimer: NodeJS.Timeout | null = null;
   private destroyed = false;
 
-  private readonly jobs: RepeatableJob[] = [
+  private readonly jobs: RepeatSchedule[] = [
     { name: TRIP_REMINDER_SCAN_JOB, cron: TRIP_REMINDER_CRON },
     { name: NOTIFICATION_ARCHIVE_JOB, cron: NOTIFICATION_ARCHIVE_CRON },
   ];
@@ -79,30 +73,14 @@ export class NotificationSchedulerModule implements OnModuleInit, OnModuleDestro
   }
 
   /**
-   * 반복 잡들을 등록한다. jobId 를 고정해 재기동마다 중복 등록되지 않게 한다.
-   * cron 을 바꾸면 BullMQ 가 같은 key 의 스케줄을 갱신한다.
+   * 반복 잡들을 등록한다. 스케줄러 ID 를 고정해 재기동·cron 변경에도 항목이 하나로 유지된다.
    * 하나라도 실패하면 지수 백오프로 전체를 재시도해, Redis 가 늦게 떠도 결국 살아난다.
    */
   private async registerSchedule(attempt = 1): Promise<void> {
     if (this.destroyed) return;
 
     try {
-      for (const job of this.jobs) {
-        await withTimeout(
-          this.queue.add(
-            job.name,
-            {},
-            {
-              // cron 을 KST 로 고정한다 — tz 미지정 시 서버 로컬(UTC 컨테이너면 9시간 어긋남).
-              repeat: { pattern: job.cron, tz: 'Asia/Seoul' },
-              jobId: job.name,
-              removeOnComplete: true,
-              removeOnFail: 20,
-            },
-          ),
-          SCHEDULE_REGISTER_TIMEOUT_MS,
-        );
-      }
+      await upsertRepeatSchedules(this.queue, this.jobs, SCHEDULE_REGISTER_TIMEOUT_MS);
       this.registered = true;
       this.logger.log(
         `알림 스케줄러 반복 잡 등록 완료 (리마인더: ${TRIP_REMINDER_CRON}, 아카이브: ${NOTIFICATION_ARCHIVE_CRON})`,

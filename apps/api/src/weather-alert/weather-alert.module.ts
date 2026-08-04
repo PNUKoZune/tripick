@@ -2,7 +2,7 @@ import { BullModule, InjectQueue } from '@nestjs/bullmq';
 import { Logger, Module, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
-import { withTimeout } from '../common/with-timeout';
+import { upsertRepeatSchedules } from '../common/repeat-schedule';
 import { ItineraryItemEntity } from '../itinerary/itinerary-item.entity';
 import { TripEntity } from '../trips/trip.entity';
 import { InboxModule } from '../inbox/inbox.module';
@@ -70,8 +70,9 @@ export class WeatherAlertModule implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 반복 스캔 잡을 등록한다. jobId 를 고정해 재기동마다 중복 등록되지 않게 한다.
-   * cron 을 바꾸면 BullMQ 가 같은 key 의 스케줄을 갱신한다.
+   * 반복 스캔 잡을 등록한다. 스케줄러 ID 를 고정해 재기동·cron 변경에도 항목이 하나로 유지된다
+   * (cron 을 바꿔도 옛 스케줄이 남던 문제는 `upsertRepeatSchedules` 주석 참고).
+   * 발표 시각(02·05·08…)이 KST 기준이라 tz 도 그 안에서 KST 로 고정한다.
    *
    * 등록될 때까지 지수 백오프로 재시도해, Redis 가 늦게 떠도 스케줄이 결국 살아난다.
    */
@@ -79,19 +80,9 @@ export class WeatherAlertModule implements OnModuleInit, OnModuleDestroy {
     if (this.destroyed) return;
 
     try {
-      await withTimeout(
-        this.queue.add(
-          WEATHER_ALERT_SCAN_JOB,
-          {},
-          {
-            // cron 을 KST 로 고정한다 — tz 미지정 시 서버 로컬(UTC 컨테이너면 발표시각과 9시간
-            // 어긋나 발표 직후 실행 의도가 깨짐). 발표 시각(02·05·08…)은 KST 기준이다.
-            repeat: { pattern: WEATHER_ALERT_CRON, tz: 'Asia/Seoul' },
-            jobId: WEATHER_ALERT_SCAN_JOB,
-            removeOnComplete: true,
-            removeOnFail: 20,
-          },
-        ),
+      await upsertRepeatSchedules(
+        this.queue,
+        [{ name: WEATHER_ALERT_SCAN_JOB, cron: WEATHER_ALERT_CRON }],
         SCHEDULE_REGISTER_TIMEOUT_MS,
       );
       this.registered = true;

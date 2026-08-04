@@ -2,7 +2,7 @@ import { BullModule, InjectQueue } from '@nestjs/bullmq';
 import { Logger, Module, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
-import { withTimeout } from '../common/with-timeout';
+import { upsertRepeatSchedules } from '../common/repeat-schedule';
 import { ItineraryItemEntity } from '../itinerary/itinerary-item.entity';
 import { TripEntity } from '../trips/trip.entity';
 import { InboxModule } from '../inbox/inbox.module';
@@ -66,23 +66,17 @@ export class CrowdAlertModule implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 반복 스캔 잡 등록. jobId 고정으로 재기동마다 중복 등록되지 않게 하고, 실패 시 지수 백오프 재시도. */
+  /**
+   * 반복 스캔 잡 등록. 스케줄러 ID 고정으로 재기동·cron 변경에도 항목이 하나로 유지되고,
+   * 실패 시 지수 백오프로 재시도한다. 스캔이 두 벌 돌면 KTO 일 예산(900콜)을 두 배로 쓴다.
+   */
   private async registerSchedule(attempt = 1): Promise<void> {
     if (this.destroyed) return;
 
     try {
-      await withTimeout(
-        this.queue.add(
-          CROWD_ALERT_SCAN_JOB,
-          {},
-          {
-            // cron 을 KST 로 고정한다 — tz 미지정 시 서버 로컬(UTC 컨테이너면 KST 와 9시간 어긋남).
-            repeat: { pattern: CROWD_ALERT_CRON, tz: 'Asia/Seoul' },
-            jobId: CROWD_ALERT_SCAN_JOB,
-            removeOnComplete: true,
-            removeOnFail: 20,
-          },
-        ),
+      await upsertRepeatSchedules(
+        this.queue,
+        [{ name: CROWD_ALERT_SCAN_JOB, cron: CROWD_ALERT_CRON }],
         SCHEDULE_REGISTER_TIMEOUT_MS,
       );
       this.registered = true;
