@@ -3,8 +3,11 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, DiscoveryModule } from '@nestjs/core';
+// setup 서브패스로만 import 한다 — 메인 엔트리는 @nestjs/common 을 OpenTelemetry 패치 전에 끌어온다.
+import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { SentryWorkerErrors } from './common/sentry/sentry-worker-errors';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { Redis } from 'ioredis';
 import { redisConnection } from './common/redis.config';
@@ -34,6 +37,11 @@ import { InboxModule } from './inbox/inbox.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+
+    // 요청 트레이싱 인터셉터를 전역 등록. init 자체는 src/instrument.ts 에서 이미 끝났다.
+    SentryModule.forRoot(),
+    // SentryWorkerErrors 가 BullMQ 워커를 찾는 데 쓴다.
+    DiscoveryModule,
 
     // 전역 기본 레이트리밋: 60초당 120 요청/IP. 개별 라우트는 @Throttle 로 더 빡빡하게.
     // 저장소는 Redis — 다중 인스턴스에서도 카운트를 공유한다 (BullMQ 와 같은 Redis).
@@ -107,6 +115,10 @@ import { InboxModule } from './inbox/inbox.module';
   providers: [
     // 전역 가드로 모든 HTTP 라우트에 throttler 적용 (WS 는 통과)
     { provide: APP_GUARD, useClass: HttpThrottlerGuard },
+    // 처리되지 않은 예외를 Sentry 로 보낸 뒤 Nest 기본 응답으로 넘긴다.
+    // 커스텀 필터가 없어 그대로 얹을 수 있다 — 나중에 생기면 @SentryExceptionCaptured() 로 옮길 것.
+    { provide: APP_FILTER, useClass: SentryGlobalFilter },
+    SentryWorkerErrors,
   ],
 })
 export class AppModule {}

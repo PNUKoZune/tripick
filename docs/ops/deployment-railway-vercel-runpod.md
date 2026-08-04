@@ -239,7 +239,10 @@ CLAUDE.md 아키텍처에 "Redis Adapter / Pub-Sub Sync" 가 명시되어 있으
 | `CORS_ORIGIN` | (기본값) | Vercel 도메인 (쉼표 구분) |
 | `ODSAY_SERVICE_URL` | `http://localhost:4000` | **ODsay 콘솔 등록 도메인과 정확히 일치** |
 | `JWT_SECRET` / `JWT_REFRESH_SECRET` | `change-me-*` | 별도 생성한 시크릿 |
-| `SENTRY_DSN` | (비움) | (비움) — Sentry 미연동, 10절 참조 |
+| `SENTRY_DSN` (api) | api 프로젝트 DSN | 동일 — 비우면 SDK 가 no-op |
+| `SENTRY_ENVIRONMENT` (api) | (비움 → `NODE_ENV`) | `production` |
+| `NEXT_PUBLIC_SENTRY_DSN` (web) | web 프로젝트 DSN | 동일 — **api 와 다른 프로젝트** |
+| `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN` (web) | (비움 → 업로드 off) | Vercel 에 셋 다 주입해야 소스맵이 붙는다 |
 
 ### ODsay 주의
 
@@ -313,7 +316,9 @@ Geolocation 은 HTTPS 환경에서만 동작하나, Vercel 은 기본 HTTPS 이�
   부하 증가 시 Worker 를 별도 Railway 서비스로 분리하는 것을 검토한다.
 - **마이그레이션이 부팅 시 실행된다** — replica 1 전제(5-2). 인스턴스를 늘리면
   배포 파이프라인의 독립 단계로 분리해야 한다
-- **Sentry 미연동** — `@sentry/nestjs`·`@sentry/nextjs` 의존성이 없고 초기화 코드도 없다.
-  `SENTRY_DSN` 을 넣어도 아무 일도 일어나지 않으므로, 에러 모니터링이 필요하면 별도 작업이 필요하다
-  (CLAUDE.md MONITORING LAYER 은 목표 구성이며 현재 미구현)
+- **Sentry 소스맵 업로드는 환경변수 주입 전까지 꺼져 있다** — 에러·트레이싱 자체는 web·api 모두
+  연동됐다(각 앱의 DSN 만 넣으면 동작). 다만 web 의 소스맵 업로드는 `SENTRY_ORG`·`SENTRY_PROJECT`·
+  `SENTRY_AUTH_TOKEN` 이 **모두** 있을 때만 켜지므로, Vercel 에 셋을 넣기 전까지 프로덕션 스택
+  트레이스는 난독화된 번들 기준으로 보인다. api 는 릴리스 헬스를 위해 `RAILWAY_GIT_COMMIT_SHA`
+  (또는 `SENTRY_RELEASE`)를 릴리스로 쓴다
 - **RunPod 엔드포인트 URL 변동** — Pod 재시작 시 주소가 바뀌면 Railway 환경변수 갱신이 필요하다
