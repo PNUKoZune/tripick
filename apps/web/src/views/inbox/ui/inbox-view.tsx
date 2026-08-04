@@ -163,7 +163,10 @@ function InboxContent() {
     return items.filter((item) => {
       if (kindFilter !== 'all' && item.kind !== kindFilter) return false;
       if (filter === 'unread') return !item.readAt;
-      if (filter === 'action') return item.actions.length > 0;
+      // '응답 필요' = 수락/거절처럼 사용자 응답을 기다리는 액션이 있는 것만. 딥링크(open-*)는
+      // 제외 — 서버가 tripId 붙은 알림 대부분에 '여행 보기' 를 달아주므로 액션 유무로 세면
+      // 전체 목록과 같아진다. 판정 정본은 서버가 실어 보내는 requiresResponse.
+      if (filter === 'action') return item.actions.some((action) => action.requiresResponse);
       return true;
     });
   }, [items, filter, kindFilter]);

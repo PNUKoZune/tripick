@@ -36,17 +36,45 @@ export const REPLAN_TRIGGER_BY_CATEGORY: Partial<Record<NotificationCategory, Re
   arrival_alert: 'deviation',
 };
 
+/** UI 에서 어떤 동작을 그릴지 결정 */
+export type InboxActionType =
+  | 'open-trip' // tripId 가지고 /planner 이동
+  | 'open-friends' // /friends 이동
+  | 'accept-friend' // friend.id 로 PATCH /friends/:id/accept
+  | 'reject-friend' // friend.id 로 DELETE /friends/:id
+  | 'accept-trip-invite' // tripId + tripMemberId 로 invite 수락
+  | 'reject-trip-invite' // tripId + tripMemberId 로 invite 거절
+  | 'review-schedule-change' // owner: proposalId 로 planner 이동해 diff 확인 후 승인/거절
+  | 'reject-schedule-change'; // owner: proposalId 로 제안 즉시 거절
+
+/**
+ * 액션이 "사용자 응답을 기다리는가" — 인박스 '응답 필요' 필터의 정본.
+ *
+ * `open-*` 은 딥링크(내비게이션)일 뿐이다. 날씨·혼잡·미도착 알림도 자동 재계획 없이
+ * "일정 바꿀까요?" 를 제안만 하므로 응답 대기가 아니다. 액션 유무(`actions.length`)로
+ * 판정하면 tripId 붙은 알림 거의 전부가 '응답 필요'로 잡혀 전체 목록과 같아진다.
+ *
+ * Set 이 아니라 Record 로 두는 이유: 액션 타입을 새로 추가하면 여기서 컴파일이 깨져
+ * 응답 대기 여부를 반드시 정하게 된다.
+ */
+export const ACTION_REQUIRES_RESPONSE: Record<InboxActionType, boolean> = {
+  'open-trip': false,
+  'open-friends': false,
+  'accept-friend': true,
+  'reject-friend': true,
+  'accept-trip-invite': true,
+  'reject-trip-invite': true,
+  'review-schedule-change': true,
+  'reject-schedule-change': true,
+};
+
 export interface InboxItemActionDto {
-  /** UI 에서 어떤 동작을 그릴지 결정 */
-  type:
-    | 'open-trip' // tripId 가지고 /planner 이동
-    | 'open-friends' // /friends 이동
-    | 'accept-friend' // friend.id 로 PATCH /friends/:id/accept
-    | 'reject-friend' // friend.id 로 DELETE /friends/:id
-    | 'accept-trip-invite' // tripId + tripMemberId 로 invite 수락
-    | 'reject-trip-invite' // tripId + tripMemberId 로 invite 거절
-    | 'review-schedule-change' // owner: proposalId 로 planner 이동해 diff 확인 후 승인/거절
-    | 'reject-schedule-change'; // owner: proposalId 로 제안 즉시 거절
+  type: InboxActionType;
+  /**
+   * 이 액션이 사용자 응답을 기다리는지. 서버가 `ACTION_REQUIRES_RESPONSE` 로 채워 보내며
+   * 클라이언트는 액션 타입 분류를 다시 알 필요 없이 이 값만 보고 '응답 필요' 를 가른다.
+   */
+  requiresResponse: boolean;
   label: string;
   /** 액션 동작에 필요한 식별자 */
   tripId?: string;

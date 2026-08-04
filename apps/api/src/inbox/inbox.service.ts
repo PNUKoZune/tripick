@@ -7,13 +7,16 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { UserEntity } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
 import { NotificationEntity } from './notification.entity';
-import { REPLAN_TRIGGER_BY_CATEGORY } from '@tripick/types';
+import { ACTION_REQUIRES_RESPONSE, REPLAN_TRIGGER_BY_CATEGORY } from '@tripick/types';
 import type {
   CreateNotificationDto,
   InboxItemActionDto,
   InboxItemDto,
   InboxSummaryDto,
 } from '@tripick/types';
+
+/** 액션 빌더가 만드는 초안 — `requiresResponse` 는 `stampActions` 가 채운다. */
+type InboxActionDraft = Omit<InboxItemActionDto, 'requiresResponse'>;
 
 @Injectable()
 export class InboxService {
@@ -231,16 +234,16 @@ export class InboxService {
       body: notification.body,
       createdAt: notification.createdAt.toISOString(),
       readAt: notification.readAt?.toISOString() ?? null,
-      actions: this.actionsForNotification(notification),
+      actions: this.stampActions(this.actionsForNotification(notification)),
       ...(notification.payload ? { payload: notification.payload } : {}),
     };
   }
 
   private fromFriend(friend: FriendEntity): InboxItemDto {
-    const actions: InboxItemActionDto[] = [
+    const actions = this.stampActions([
       { type: 'accept-friend', label: '수락', friendId: friend.id },
       { type: 'reject-friend', label: '거절', friendId: friend.id },
-    ];
+    ]);
     return {
       id: `friend-${friend.id}`,
       kind: 'friend_request',
@@ -252,7 +255,18 @@ export class InboxService {
     };
   }
 
-  private actionsForNotification(notification: NotificationEntity): InboxItemActionDto[] {
+  /**
+   * 액션 초안에 `requiresResponse` 를 찍는다. 각 빌더가 직접 쓰게 하면 새 액션에서 빠뜨리기
+   * 쉬우므로 직렬화 직전 한 곳에서 `ACTION_REQUIRES_RESPONSE` 를 참조한다.
+   */
+  private stampActions(drafts: InboxActionDraft[]): InboxItemActionDto[] {
+    return drafts.map((draft) => ({
+      ...draft,
+      requiresResponse: ACTION_REQUIRES_RESPONSE[draft.type],
+    }));
+  }
+
+  private actionsForNotification(notification: NotificationEntity): InboxActionDraft[] {
     const tripId = notification.payload?.tripId;
     const tripMemberId = notification.payload?.tripMemberId;
     if (notification.category === 'trip_invite' && tripId && tripMemberId) {
