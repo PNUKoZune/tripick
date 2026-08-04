@@ -107,6 +107,7 @@
   - **X 닫기 버튼**(우상단, 항상 노출) — 지도가 상단을 채워 백드롭이 좁을 때 스크롤 없이 닫기
   - **등장 애니메이션 완화**: 이징 `cubic-bezier(0.32, 0.72, 0, 1)`, 모바일 오픈 440ms(닫힘 320ms 유지) — 급격한 easeOutQuint 로 "확" 튀던 느낌 제거
 - **재계획 중복 제출 방지**(P3-12): `ReplanningService.enqueue` jobId 를 `${tripId}-${trigger}-${10초버킷}` 로 묶어 BullMQ가 연속 클릭/중복 제출을 하나의 잡으로 dedup (웨이팅·이탈·manual 모든 트리거 적용).
+  - **현재**: dedup 은 진행 중인 잡 조회가 담당하고(트리거 무관·대상 일차 겹침 기준), jobId 는 `${tripId}-${scope}-${10초버킷}` 레이스 가드로 축소됐다 ([backlog](../plans/2026-07-21-open-backlog.md)).
 
 ## 10. API / 타입
 

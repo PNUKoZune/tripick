@@ -288,7 +288,7 @@ function PlannerContent({
   const activeSidePanel = isWideDesktop ? 'schedule' : sidePanel;
   const sidebarVisible = isWideDesktop || !sidebarCollapsed;
   const [placeToast, setPlaceToast] = useState<{
-    tone: 'success' | 'warning' | 'error';
+    tone: 'primary' | 'success' | 'warning' | 'error';
     title: string;
     message?: string;
   } | null>(null);
@@ -790,12 +790,22 @@ function PlannerContent({
         isOwner={isOwner}
         trigger={replanTrigger}
         onProposed={handleProposed}
-        onRequested={(scopeLabel) =>
-          setPlaceToast({
-            tone: 'success',
-            title: `AI가 ${scopeLabel}을 다시 짜고 있어요`,
-            message: '완료되면 일정에 자동으로 반영돼요.',
-          })
+        // deduped = 이미 도는 재계획에 합쳐진 요청. 같은 토스트를 띄우면 이번에 적은 요청이
+        // 반영된 줄 알고 결과를 기다리게 되므로 진행 중임을 분명히 말한다.
+        onRequested={(scopeLabel, deduped) =>
+          setPlaceToast(
+            deduped
+              ? {
+                  tone: 'primary',
+                  title: '이미 재계획이 진행 중이에요',
+                  message: '지금 요청은 진행 중인 재계획에 합쳐졌어요. 완료된 뒤 다시 요청해 주세요.',
+                }
+              : {
+                  tone: 'success',
+                  title: `AI가 ${scopeLabel}을 다시 짜고 있어요`,
+                  message: '완료되면 일정에 자동으로 반영돼요.',
+                },
+          )
         }
       />
 
