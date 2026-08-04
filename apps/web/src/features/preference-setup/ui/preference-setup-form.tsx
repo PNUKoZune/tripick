@@ -13,8 +13,6 @@ import {
   FiThumbsUp,
   FiX,
 } from 'react-icons/fi';
-import { LuBus, LuCar, LuFootprints, LuKeyRound } from 'react-icons/lu';
-import type { IconType } from 'react-icons';
 import {
   MAX_PREFERENCE_PHOTOS,
   MAX_PREFERENCE_UPLOAD,
@@ -23,7 +21,6 @@ import {
   type TasteTagDto,
   type TasteTagValue,
   type ThemePreference,
-  type TransportPreference,
 } from '@tripick/types';
 import {
   ACTIVITY_INTENSITY_OPTIONS,
@@ -31,7 +28,6 @@ import {
   PACE_OPTIONS,
   TASTE_TAG_LABELS,
   THEME_GROUPS,
-  TRANSPORT_OPTIONS,
 } from '@/entities/preferences/model/options';
 import {
   analyzePreferenceImages,
@@ -67,18 +63,6 @@ const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 /** 분석 잡 상태를 다시 물어보는 간격. 사진 1장에 30초 넘게 걸려 촘촘히 볼 이유가 없다. */
 const JOB_POLL_INTERVAL_MS = 3000;
-
-/**
- * 목업(tripick-preference-mockup.html §.seg)의 이동수단 세그먼트는 라벨 옆에 픽토그램을
- * 둔다. 옵션 정의(entities/preferences/model/options.ts)는 건드리지 않고 표시용 아이콘만
- * 여기서 매핑한다 — 폼 상태·값은 그대로.
- */
-const TRANSPORT_ICONS: Record<TransportPreference, IconType> = {
-  transit: LuBus,
-  car: LuCar,
-  walk: LuFootprints,
-  rental_car: LuKeyRound,
-};
 
 /** 잡이 만료·삭제돼 더 볼 게 없는 상태(404)인지. 그 외 오류는 일시적인 것으로 본다. */
 function isJobGone(error: unknown): boolean {
@@ -246,10 +230,7 @@ export function PreferenceSetupForm() {
   // 저장된 사진을 뺀 잔여 슬롯. 0 이면 기존 사진을 지워야 더 올릴 수 있다.
   const photoAllowance = Math.max(0, MAX_PREFERENCE_PHOTOS - savedPhotoUrls.length);
 
-  const ready =
-    form.likedThemes.length > 0 &&
-    form.transportModes.length > 0 &&
-    form.wakeTime !== form.sleepTime;
+  const ready = form.likedThemes.length > 0 && form.wakeTime !== form.sleepTime;
 
   /**
    * 저장 CTA 가 왜 막혀 있는지(또는 무엇이 아직 반영 안 됐는지) 알려주는 문구.
@@ -258,9 +239,7 @@ export function PreferenceSetupForm() {
   const ctaHint = !ready
     ? form.likedThemes.length === 0
       ? '선호하는 테마를 하나 이상 골라야 저장할 수 있어요'
-      : form.transportModes.length === 0
-        ? '선호 이동 수단을 하나 이상 골라야 저장할 수 있어요'
-        : '취침·기상 시각을 서로 다르게 맞춰 주세요'
+      : '취침·기상 시각을 서로 다르게 맞춰 주세요'
     : photos.length > 0 && photosDirty
       ? '추가한 사진은 “취향 분석하기”를 눌러야 취향에 반영돼요'
       : null;
@@ -443,7 +422,7 @@ export function PreferenceSetupForm() {
     if (!ready) {
       setToast({
         title: '확인 필요',
-        message: '선호 테마와 이동수단을 하나 이상 고르고, 취침·기상 시각을 다르게 설정해주세요.',
+        message: '선호 테마를 하나 이상 고르고, 취침·기상 시각을 다르게 설정해주세요.',
         tone: 'error',
       });
       return;
@@ -501,92 +480,58 @@ export function PreferenceSetupForm() {
       </SetupBlock>
 
       <div className="grid gap-x-8 gap-y-8 lg:grid-cols-2">
-        <SetupBlock title="취침 / 기상 시간">
-          <div className="grid grid-cols-2 gap-3">
-            <TimeField
-              variant="soft"
-              label="취침"
-              value={form.sleepTime}
-              onChange={(sleepTime) => setForm((current) => ({ ...current, sleepTime }))}
+        {/* 옆 "여행 스타일" 카드가 조금 더 길어 남는 높이가 이 카드 아래에 몰린다.
+            안쪽을 세로 flex 로 잡고 리듬 밴드를 mt-auto 로 내려, 남는 여백을 시간 입력과
+            밴드 사이로 흘려보낸다(카드 바닥에 뭉치지 않게). */}
+        <SetupBlock title="취침 / 기상 시간" className="flex flex-col">
+          <div className="flex flex-1 flex-col">
+            <div className="grid grid-cols-2 gap-3">
+              <TimeField
+                variant="soft"
+                label="취침"
+                value={form.sleepTime}
+                onChange={(sleepTime) => setForm((current) => ({ ...current, sleepTime }))}
+              />
+              <TimeField
+                variant="soft"
+                label="기상"
+                value={form.wakeTime}
+                onChange={(wakeTime) => setForm((current) => ({ ...current, wakeTime }))}
+              />
+            </div>
+            {/* 하루의 리듬 — 목업 가로 밴드를 실제 취침/기상 값으로 시각화(REQ-WVR-020, 읽기 전용 요약) */}
+            <div className="mt-auto">
+              <RhythmBand wakeTime={form.wakeTime} sleepTime={form.sleepTime} />
+            </div>
+          </div>
+        </SetupBlock>
+
+        {/* 페이스·활동 강도·분위기는 3지선다 한 줄짜리라 카드를 따로 두면 카드마다 여백만
+            남는다(특히 홀수라 마지막 칸이 통째로 빈다). 한 카드 안 소제목으로 묶어 취침/기상
+            카드와 높이를 맞춘다. */}
+        <SetupBlock title="여행 스타일">
+          <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--ink-faint)]">
+            하루에 몇 곳을, 얼마나 힘 있게, 어떤 분위기로 다닐지 정해요.
+          </p>
+          <div className="space-y-3.5">
+            <StyleGroup
+              label="여행 페이스"
+              options={PACE_OPTIONS}
+              value={form.pace}
+              onSelect={(value) => setSingle('pace', value)}
             />
-            <TimeField
-              variant="soft"
-              label="기상"
-              value={form.wakeTime}
-              onChange={(wakeTime) => setForm((current) => ({ ...current, wakeTime }))}
+            <StyleGroup
+              label="활동 강도"
+              options={ACTIVITY_INTENSITY_OPTIONS}
+              value={form.activityIntensity}
+              onSelect={(value) => setSingle('activityIntensity', value)}
             />
-          </div>
-          {/* 하루의 리듬 — 목업 가로 밴드를 실제 취침/기상 값으로 시각화(REQ-WVR-020, 읽기 전용 요약) */}
-          <RhythmBand wakeTime={form.wakeTime} sleepTime={form.sleepTime} />
-        </SetupBlock>
-
-        <SetupBlock title="선호 이동 수단">
-          {/* 목업 .seg — 아이콘+라벨 2열 세그먼트. 공용 SegmentedOption 은 구버전 파랑
-              (--blue-*)을 참조해 이 화면의 새 파랑과 어긋나므로 로컬 버튼으로 쓴다
-              (shared/ui 자체는 불변 — REQ-WVR-004 로컬 스코프 결정 유지). */}
-          <div className="grid grid-cols-2 gap-2" role="group" aria-label="선호 이동 수단">
-            {TRANSPORT_OPTIONS.map((option) => {
-              const Icon = TRANSPORT_ICONS[option.value];
-              const active = form.transportModes.includes(option.value);
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => toggleTransport(option.value)}
-                  className={`flex min-h-12 items-center justify-center gap-1.5 rounded-[14px] border text-[14.5px] font-bold tracking-[-0.01em] transition active:scale-[0.99] ${
-                    active
-                      ? 'border-[color:var(--primary)] bg-[color:var(--primary-tint)] text-[color:var(--primary-deep)]'
-                      : 'border-[color:var(--line)] bg-[color:var(--card)] text-[color:var(--ink-sub)]'
-                  }`}
-                >
-                  <Icon className="size-[18px] shrink-0" aria-hidden />
-                  {option.label}
-                </button>
-              );
-            })}
-          </div>
-        </SetupBlock>
-
-        <SetupBlock title="여행 페이스">
-          <div className="grid grid-cols-3 gap-2">
-            {PACE_OPTIONS.map((option) => (
-              <ChoiceCard
-                key={option.value}
-                active={form.pace === option.value}
-                label={option.label}
-                hint={option.hint}
-                onClick={() => setSingle('pace', option.value)}
-              />
-            ))}
-          </div>
-        </SetupBlock>
-
-        <SetupBlock title="활동 강도">
-          <div className="grid grid-cols-3 gap-2">
-            {ACTIVITY_INTENSITY_OPTIONS.map((option) => (
-              <ChoiceCard
-                key={option.value}
-                active={form.activityIntensity === option.value}
-                label={option.label}
-                hint={option.hint}
-                onClick={() => setSingle('activityIntensity', option.value)}
-              />
-            ))}
-          </div>
-        </SetupBlock>
-
-        <SetupBlock title="어떤 분위기를 선호하세요?">
-          <div className="grid grid-cols-3 gap-2">
-            {CROWD_OPTIONS.map((option) => (
-              <ChoiceCard
-                key={option.value}
-                active={form.crowdPreference === option.value}
-                label={option.label}
-                hint={option.hint}
-                onClick={() => setSingle('crowdPreference', option.value)}
-              />
-            ))}
+            <StyleGroup
+              label="분위기"
+              options={CROWD_OPTIONS}
+              value={form.crowdPreference}
+              onSelect={(value) => setSingle('crowdPreference', value)}
+            />
           </div>
         </SetupBlock>
       </div>
@@ -937,15 +882,6 @@ export function PreferenceSetupForm() {
     setResetDialogOpen(false);
   }
 
-  function toggleTransport(value: TransportPreference) {
-    setForm((current) => ({
-      ...current,
-      transportModes: current.transportModes.includes(value)
-        ? current.transportModes.filter((item) => item !== value)
-        : [...current.transportModes, value],
-    }));
-  }
-
   function addPhotos(files: FileList | null) {
     if (!files) return;
     const incoming = Array.from(files);
@@ -1014,6 +950,42 @@ export function PreferenceSetupForm() {
   }
 }
 
+/**
+ * "여행 스타일" 카드 안의 3지선다 한 줄(소제목 + 선택 카드 3개).
+ * 값 타입은 그룹마다 다르므로(TravelPace·ActivityIntensity·CrowdPreference) 제네릭으로
+ * 묶어 `pace` 자리에 `hotspot` 이 들어가는 식의 교차 대입을 타입으로 막는다.
+ */
+function StyleGroup<T extends string>({
+  label,
+  options,
+  value,
+  onSelect,
+}: {
+  label: string;
+  options: ReadonlyArray<{ value: T; label: string; hint: string }>;
+  value: T;
+  onSelect: (value: T) => void;
+}) {
+  return (
+    <div>
+      <h3 className="mb-1.5 text-[13px] font-bold leading-5 text-[color:var(--ink-sub)]">
+        {label}
+      </h3>
+      <div className="grid grid-cols-3 gap-2" role="group" aria-label={label}>
+        {options.map((option) => (
+          <ChoiceCard
+            key={option.value}
+            active={value === option.value}
+            label={option.label}
+            hint={option.hint}
+            onClick={() => onSelect(option.value)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ChoiceCard({
   active,
   label,
@@ -1029,6 +1001,7 @@ function ChoiceCard({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={`flex flex-col items-center justify-center gap-0.5 rounded-[16px] px-3 py-3 text-center transition ${
         active
           ? 'bg-[color:var(--primary-tint)] text-[color:var(--primary-deep)] ring-2 ring-[color:var(--primary)]'

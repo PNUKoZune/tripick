@@ -74,7 +74,6 @@ describe('Travel AI planner E2E', () => {
         dislikedThemes: ['themepark'],
         wakeTime: '09:00',
         sleepTime: '22:00',
-        transportModes: ['transit'],
       },
     });
 

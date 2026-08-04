@@ -12,7 +12,6 @@ function storedPreference(profile: Partial<PreferenceProfileDto>): Partial<Prefe
     profile: {
       sleepTime: '23:00',
       wakeTime: '07:30',
-      transportModes: [],
       likedThemes: [],
       dislikedThemes: [],
       pace: 'balanced',

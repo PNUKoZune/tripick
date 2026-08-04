@@ -27,7 +27,6 @@ import {
   type TasteTagValue,
   type ThemePreference,
   type TogglePhotoTagDto,
-  type TransportPreference,
   type TravelPace,
   type UpdatePreferenceDto,
 } from '@tripick/types';
@@ -37,13 +36,6 @@ import { HH_MM, STORAGE_URL } from '../../common/validation/patterns';
 const FOOD = FOOD_PREFERENCES;
 const MOOD = MOOD_PREFERENCES;
 const ENVIRONMENT = ENVIRONMENT_PREFERENCES;
-
-const TRANSPORT = [
-  'transit',
-  'walk',
-  'car',
-  'rental_car',
-] as const satisfies readonly TransportPreference[];
 
 const THEMES = [
   'mountain_forest',
@@ -109,11 +101,6 @@ export class PreferenceProfileBodyDto implements Partial<PreferenceProfileDto> {
   @IsOptional()
   @Matches(HH_MM)
   wakeTime?: string;
-
-  @IsOptional()
-  @IsArray()
-  @IsIn(TRANSPORT, { each: true })
-  transportModes?: TransportPreference[];
 
   @IsOptional()
   @IsArray()
