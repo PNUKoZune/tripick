@@ -77,7 +77,7 @@ export function TripMapPanel({ trip, items, onSelectItem }: Props) {
                   className="flex min-w-0 flex-1 items-center gap-3 text-left"
                 >
                   <span
-                    className={`flex size-7 shrink-0 items-center justify-center rounded-full border text-[12px] font-bold ${
+                    className={`num-badge flex size-7 shrink-0 items-center justify-center rounded-full border text-[12px] font-bold ${
                       isSelected
                         ? 'bg-[#1B64DA] text-white border-[#1B64DA]'
                         : 'bg-[#3182F6] text-white border-[#1B64DA]'

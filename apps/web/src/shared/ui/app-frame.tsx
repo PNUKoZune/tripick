@@ -161,6 +161,8 @@ function NavBadge({ count }: { count: number }) {
   return (
     <span
       aria-label={`읽지 않은 알림 ${count}개`}
+      // 10px 은 폰트 메트릭(ascent 10 / descent 2)이 마침 대칭이라 leading-none 만으로 정중앙이다.
+      // num-badge 를 붙이면 padding 만큼 0.5px 내려간다 — 실측값이라 사이즈 바꾸면 다시 재야 한다.
       className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[color:var(--danger,#F04452)] px-1 text-[10px] font-bold leading-none text-white"
     >
       {count > 9 ? '9+' : count}
@@ -198,7 +200,7 @@ export function AppDesktopNavigation() {
                 {badge > 0 ? (
                   <span
                     aria-label={`읽지 않은 알림 ${badge}개`}
-                    className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[color:var(--danger,#F04452)] px-1.5 text-[11px] font-bold leading-none text-white"
+                    className="num-badge ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[color:var(--danger,#F04452)] px-1.5 text-[11px] font-bold text-white"
                   >
                     {badge > 99 ? '99+' : badge}
                   </span>

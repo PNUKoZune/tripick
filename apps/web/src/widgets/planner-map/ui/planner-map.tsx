@@ -175,7 +175,7 @@ export function PlannerMap({
       const content = document.createElement('div');
       content.className = `flex flex-col items-center gap-1 ${onMarkerClickRef.current ? 'cursor-pointer' : ''}`;
       content.innerHTML = `
-        <span class="flex size-7 items-center justify-center rounded-full border text-[12px] font-bold transition-transform ${style.dot}">${marker.order > 0 ? marker.order : '·'}</span>
+        <span class="num-badge flex size-7 items-center justify-center rounded-full border text-[12px] font-bold transition-transform ${style.dot}">${marker.order > 0 ? marker.order : '·'}</span>
         <span class="inline-block max-w-[112px] truncate rounded-md border px-1.5 py-0.5 text-[11px] font-semibold ${style.label}">${escapeHtml(marker.label)}</span>
       `;
       if (onMarkerClickRef.current) {
@@ -426,7 +426,7 @@ function FallbackMap({ markers, showCurrentDot, selectedMarkerId, onMarkerClick 
             style={{ left: `${marker.x * 100}%`, top: `${marker.y * 100}%` }}
           >
             <span
-              className={`flex size-7 items-center justify-center rounded-full border text-[12px] font-bold transition-transform ${style.dot}`}
+              className={`num-badge flex size-7 items-center justify-center rounded-full border text-[12px] font-bold transition-transform ${style.dot}`}
             >
               {marker.order > 0 ? marker.order : '·'}
             </span>

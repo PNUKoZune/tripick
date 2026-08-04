@@ -1,6 +1,7 @@
 /// <reference types="jest" />
 
 import { InboxService } from './inbox.service';
+import type { NotificationEntity } from './notification.entity';
 import type { UserEntity } from '../users/user.entity';
 
 /**
@@ -46,5 +47,66 @@ describe('InboxService.notifyFriendRequest', () => {
 
     expect(realtimeGateway.pushInboxToast).not.toHaveBeenCalled();
     expect(notificationService.sendToUser).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 인박스 '응답 필요' 필터가 딥링크 알림까지 다 잡던 회귀 방지.
+ * 판정 정본은 서버가 실어 보내는 requiresResponse 이고, open-* 은 내비게이션이라 false 다.
+ */
+describe('InboxService 액션 requiresResponse', () => {
+  const service = new InboxService(
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+
+  function notification(
+    category: NotificationEntity['category'],
+    payload: Record<string, string>,
+  ): NotificationEntity {
+    return {
+      id: 'n-1',
+      category,
+      title: '제목',
+      body: '본문',
+      payload,
+      createdAt: new Date('2026-08-04T00:00:00Z'),
+      readAt: null,
+    } as NotificationEntity;
+  }
+
+  it('여행 초대의 수락·거절은 응답 대기다', () => {
+    const item = service['fromNotification'](
+      notification('trip_invite', { tripId: 't-1', tripMemberId: 'm-1' }),
+    );
+
+    expect(item.actions.map((a) => [a.type, a.requiresResponse])).toEqual([
+      ['accept-trip-invite', true],
+      ['reject-trip-invite', true],
+    ]);
+  });
+
+  it('미도착 알림의 일정 변경 딥링크는 응답 대기가 아니다', () => {
+    const item = service['fromNotification'](
+      notification('arrival_alert', { tripId: 't-1', day: '2' }),
+    );
+
+    expect(item.actions).toHaveLength(1);
+    expect(item.actions[0]).toMatchObject({ type: 'open-trip', requiresResponse: false });
+  });
+
+  it('친구 요청 가상 row 도 응답 대기로 표시된다', () => {
+    const item = service['fromFriend']({
+      id: 'f-1',
+      nickname: '앨리스',
+      handle: '@alice',
+      statusMessage: null,
+      createdAt: new Date('2026-08-04T00:00:00Z'),
+    } as never);
+
+    expect(item.actions.every((a) => a.requiresResponse)).toBe(true);
   });
 });
