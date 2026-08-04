@@ -1,3 +1,6 @@
+// 반드시 첫 줄 — Sentry/OpenTelemetry 가 Nest 보다 먼저 모듈을 패치해야 자동 계측이 붙는다.
+import './instrument';
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';

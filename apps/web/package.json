@@ -16,6 +16,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/material": "^9.2.0",
     "@mui/x-date-pickers": "^9.9.0",
+    "@sentry/nextjs": "^10.69.0",
     "@tanstack/react-query": "^5.100.11",
     "@tripick/types": "workspace:*",
     "@tripick/utils": "workspace:*",
