@@ -126,7 +126,7 @@
 
 - ~~**배너는 "이 날" 을 말하지만 재계획은 여행 전체**~~ — 해소: [`docs/planner/day-scoped-replan-v1.md`](../planner/day-scoped-replan-v1.md). `targetDays` 로 대상 일차만 재생성하고, 알림 딥링크의 일차가 재계획 모달의 기본 범위가 된다
 - ~~**미도착 배너가 현재 위치를 안 보낸다**~~ — 해소: [`ReplanningService.enqueue`](../../apps/api/src/replanning/replanning.service.ts) 가 `deviation` 재계획에 미도착 판정용 위치 캐시(`LiveLocationService`)를 실어 준다. 배너까지 스레딩하지 않은 이유는 RN 에선 네이티브가 위치를 보고해 웹뷰 JS 에 좌표가 없기 때문이고, 신선도(10분)·대상 일차 장소로부터 30km 가드로 여행지 밖 요청엔 앵커를 걸지 않는다. `deviatedItemId` 는 읽는 코드도 보내는 코드도 없는 죽은 필드였어 함께 제거했다 — 미도착 맥락이 실제로 필요한 자리는 "지금 이후만 재계획"(하루가 여전히 `wakeTime` 부터 다시 짜인다)이고 그건 항목 ID 가 아니라 시작 시각 앵커를 요구한다([backlog](../plans/2026-07-21-open-backlog.md))
-- **jobId 중복 제거가 트리거별로 갈린다** — `${tripId}-${trigger}-${bucket}` 이라 배너(`weather`)와 FAB(`manual`) 로 연달아 제출하면 두 잡이 모두 큐에 들어가 전체 재생성이 두 번 돈다
+- ~~**jobId 중복 제거가 트리거별로 갈린다**~~ — 해소: dedup 을 시간 창 키가 아니라 **진행 중인 잡 조회**로 바꿨다([`ReplanningService.findInFlight`](../../apps/api/src/replanning/replanning.service.ts)). 같은 여행에서 대상 일차가 겹치는 잡이 이미 큐(waiting·active·delayed)에 있으면 새로 등록하지 않고 그 잡을 `deduped: true` 로 돌려준다. 트리거는 보지 않는다 — 무엇 때문에 눌렀든 같은 일차를 다시 짜는 작업이면 중복이다
 - **재계획 트리거 키워드에 `맛집` 계열이 없다** — weather·deviation·crowd 셋 다. 후보 풀에 restaurant 가 얇아 식사 슬롯이 빌 수 있다. 값 변경은 후보 풀이 실제로 바뀌는 동작 변경이라 이번 범위에서 빼고 `TRIGGER_KEYWORDS` 에 NOTE 로만 남겼다
 
 ## 9. 변경 파일

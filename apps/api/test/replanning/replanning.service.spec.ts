@@ -23,8 +23,35 @@ function loc(base: { lat: number; lng: number }): LiveLocation {
   return { lat: base.lat, lng: base.lng, ts: Date.now() };
 }
 
-function build(opts: { items?: any[]; location?: LiveLocation | null; canAccess?: boolean } = {}) {
-  const queue = { add: jest.fn(async () => ({ id: 'job-1' })) } as any;
+/** 큐에 남아 있는 잡(진행 중 dedup 조회용). */
+function inFlightJob(
+  data: Partial<ReplanRequestDto> & { tripId: string },
+  opts: { id?: string; state?: string } = {},
+) {
+  return {
+    id: opts.id ?? 'job-running',
+    timestamp: Date.now() - 5_000,
+    data: { trigger: 'manual', ...data } as ReplanRequestDto,
+    getState: jest.fn(async () => opts.state ?? 'active'),
+  };
+}
+
+function build(
+  opts: {
+    items?: any[];
+    location?: LiveLocation | null;
+    canAccess?: boolean;
+    /** 큐에 이미 들어 있는 잡. `'fail'` 이면 조회 자체가 실패한다(Redis 무응답) */
+    inFlight?: ReturnType<typeof inFlightJob>[] | 'fail';
+  } = {},
+) {
+  const queue = {
+    add: jest.fn(async () => ({ id: 'job-1' })),
+    getJobs: jest.fn(async () => {
+      if (opts.inFlight === 'fail') throw new Error('redis down');
+      return opts.inFlight ?? [];
+    }),
+  } as any;
   const itemsRepo = {
     find: jest.fn(async () => opts.items ?? [item(1, DAY1), item(2, DAY2)]),
   } as any;
@@ -122,5 +149,128 @@ describe('ReplanningService — 이탈 재계획 위치 주입', () => {
     await expect(service.enqueue('u1', request())).rejects.toBeInstanceOf(ForbiddenException);
     expect(liveLocation.getFresh).not.toHaveBeenCalled();
     expect(queue.add).not.toHaveBeenCalled();
+  });
+});
+
+describe('ReplanningService — 진행 중 재계획 dedup', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  /** jobId 에서 10초 버킷을 뗀 부분(= 여행·범위 키). */
+  function jobKey(queue: any): string {
+    const jobId: string = queue.add.mock.calls[0][2].jobId;
+    return jobId.slice(0, jobId.lastIndexOf('-'));
+  }
+
+  it('트리거가 달라도 같은 일차면 진행 중인 잡을 돌려준다 — 배너(weather) → FAB(manual)', async () => {
+    const { service, queue } = build({
+      inFlight: [inFlightJob({ tripId: 'trip-1', trigger: 'weather', targetDays: [2] })],
+    });
+
+    const result = await service.enqueue('u1', request({ trigger: 'manual', targetDays: [2] }));
+
+    expect(queue.add).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ jobId: 'job-running', deduped: true, status: 'processing' });
+    // 트리거는 실제로 도는 잡의 것 — 이번 요청 것이 아니다.
+    expect(result.trigger).toBe('weather');
+  });
+
+  it('대기 중인 잡은 pending 으로 돌려준다', async () => {
+    const { service } = build({
+      inFlight: [inFlightJob({ tripId: 'trip-1' }, { state: 'waiting' })],
+    });
+
+    await expect(service.enqueue('u1', request({ trigger: 'manual' }))).resolves.toMatchObject({
+      status: 'pending',
+      deduped: true,
+    });
+  });
+
+  it('10초 창을 넘겨 다시 눌러도 합쳐진다 — 재계획은 분 단위라 창으로는 못 막는다', async () => {
+    const running = inFlightJob({ tripId: 'trip-1', targetDays: [1] });
+    running.timestamp = Date.now() - 90_000;
+    const { service, queue } = build({ inFlight: [running] });
+
+    await service.enqueue('u1', request({ trigger: 'manual', targetDays: [1] }));
+
+    expect(queue.add).not.toHaveBeenCalled();
+  });
+
+  it('겹치지 않는 일차는 별개 작업이라 그대로 등록한다', async () => {
+    const { service, queue } = build({
+      inFlight: [inFlightJob({ tripId: 'trip-1', targetDays: [1] })],
+    });
+
+    const result = await service.enqueue('u1', request({ trigger: 'manual', targetDays: [2] }));
+
+    expect(queue.add).toHaveBeenCalled();
+    expect(result.deduped).toBeUndefined();
+  });
+
+  it('한쪽이 전체 재계획이면 어느 일차와도 겹친다', async () => {
+    // 전체 진행 중 + 일부 요청
+    const whole = build({ inFlight: [inFlightJob({ tripId: 'trip-1' })] });
+    await whole.service.enqueue('u1', request({ trigger: 'manual', targetDays: [3] }));
+    expect(whole.queue.add).not.toHaveBeenCalled();
+
+    // 일부 진행 중 + 전체 요청
+    const partial = build({ inFlight: [inFlightJob({ tripId: 'trip-1', targetDays: [3] })] });
+    await partial.service.enqueue('u1', request({ trigger: 'manual' }));
+    expect(partial.queue.add).not.toHaveBeenCalled();
+  });
+
+  it('다른 여행의 잡은 막지 않는다', async () => {
+    const { service, queue } = build({
+      inFlight: [inFlightJob({ tripId: 'trip-2', targetDays: [1] })],
+    });
+
+    await service.enqueue('u1', request({ trigger: 'manual', targetDays: [1] }));
+
+    expect(queue.add).toHaveBeenCalled();
+  });
+
+  it('조회 사이에 끝난 잡이면 정상 등록한다 — 지나간 결과를 기다리게 두면 안 된다', async () => {
+    for (const state of ['completed', 'failed'] as const) {
+      const { service, queue } = build({
+        inFlight: [inFlightJob({ tripId: 'trip-1' }, { state })],
+      });
+
+      await service.enqueue('u1', request({ trigger: 'manual' }));
+
+      expect(queue.add).toHaveBeenCalled();
+    }
+  });
+
+  it('큐 조회가 실패해도(Redis 무응답) 요청을 죽이지 않고 등록한다', async () => {
+    const { service, queue } = build({ inFlight: 'fail' });
+
+    await expect(service.enqueue('u1', request({ trigger: 'manual' }))).resolves.toMatchObject({
+      jobId: 'job-1',
+      status: 'pending',
+    });
+    expect(queue.add).toHaveBeenCalled();
+  });
+
+  it('레이스 가드 jobId 에 트리거가 없다 — 같은 창의 weather·manual 이 한 잡으로 합쳐진다', async () => {
+    const weather = build();
+    await weather.service.enqueue('u1', request({ trigger: 'weather', targetDays: [2] }));
+    const manual = build();
+    await manual.service.enqueue('u1', request({ trigger: 'manual', targetDays: [2] }));
+
+    expect(jobKey(weather.queue)).toBe('trip-1-2');
+    expect(jobKey(manual.queue)).toBe('trip-1-2');
+  });
+
+  it('레이스 가드 jobId 는 범위를 구분한다 — 1일차 → 곧바로 2일차가 합쳐지면 안 된다', async () => {
+    const day1 = build();
+    await day1.service.enqueue('u1', request({ trigger: 'manual', targetDays: [1] }));
+    const day23 = build();
+    await day23.service.enqueue('u1', request({ trigger: 'manual', targetDays: [3, 2] }));
+    const whole = build();
+    await whole.service.enqueue('u1', request({ trigger: 'manual' }));
+
+    expect(jobKey(day1.queue)).toBe('trip-1-1');
+    // 정렬해 한 범위가 한 키로 모인다
+    expect(jobKey(day23.queue)).toBe('trip-1-2.3');
+    expect(jobKey(whole.queue)).toBe('trip-1-all');
   });
 });

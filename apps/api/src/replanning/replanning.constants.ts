@@ -2,6 +2,12 @@ export const REPLAN_QUEUE = 'replan';
 export const REPLAN_JOB = 'replan-job';
 
 /**
+ * 큐 조회 상한(ms). Redis 가 죽어 있으면 BullMQ 조회는 던지지도 끝나지도 않고 매달리므로
+ * 재계획 요청 자체가 그대로 멈춘다(`withTimeout` 주석 참고).
+ */
+export const REPLAN_QUEUE_TIMEOUT_MS = 10_000;
+
+/**
  * 서버가 자동 주입하는 현재 위치를 인정하는 최대 거리(m) — 재계획 대상 일차 장소 중
  * 가장 가까운 곳까지의 거리 기준.
  *

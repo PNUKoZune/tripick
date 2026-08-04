@@ -5,6 +5,7 @@ import { LuSparkles } from 'react-icons/lu';
 import type {
   PlannerDayDto,
   ReplanBudget,
+  ReplanJobDto,
   ReplanPace,
   ReplanPlaceDto,
   ReplanPreferencesDto,
@@ -23,8 +24,11 @@ type Props = {
   days?: PlannerDayDto[];
   /** 모달을 열 때 기본 선택할 일차 (보통 화면에서 보고 있는 일차) */
   defaultDay?: number;
-  /** 재계획 요청 전송 성공 시 호출 (토스트 등). scopeLabel 은 "2일차 일정"·"전체 일정" */
-  onRequested?: (scopeLabel: string) => void;
+  /**
+   * 재계획 요청 전송 성공 시 호출 (토스트 등). scopeLabel 은 "2일차 일정"·"전체 일정".
+   * `deduped` 면 새 잡이 아니라 **이미 도는 재계획**에 합쳐진 것 — 이번 입력은 반영되지 않는다.
+   */
+  onRequested?: (scopeLabel: string, deduped: boolean) => void;
   /** owner 면 즉시 재계획, 아니면 owner 승인 대기 제안으로 보낸다 */
   isOwner?: boolean;
   /** 재계획 트리거. 기본 'manual'. 알림 배너에서 열리면 weather·crowd·deviation 로 넘어온다 */
@@ -117,9 +121,9 @@ export function ReplanModal({
       preferences,
     };
     mutation.mutate(payload, {
-      onSuccess: () => {
+      onSuccess: (result) => {
         // owner 만 "AI가 다시 짜는 중" 토스트. 제안 모드는 훅이 onProposed 로 알린다.
-        if (isOwner) onRequested?.(scopeLabel);
+        if (isOwner) onRequested?.(scopeLabel, Boolean((result as ReplanJobDto).deduped));
         onClose();
       },
     });
