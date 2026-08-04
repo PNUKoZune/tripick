@@ -9,6 +9,7 @@ import {
   FiLock,
   FiPlus,
   FiRefreshCw,
+  FiRotateCcw,
   FiThumbsDown,
   FiThumbsUp,
   FiX,
@@ -452,7 +453,10 @@ export function PreferenceSetupForm() {
   }
 
   return (
-    <div className="wvr-scope space-y-8">
+    // wvr-scope 를 여기 다시 붙이지 않는다 — 이 화면 셸(AppFrame themed)이 이미 스코프라
+    // 토큰은 그대로 상속되고, 중첩하면 `.wvr-scope{background:var(--bg)}` 가 --app-surface
+    // 컬럼 위에 --bg 사각형을 덧칠해 카드 없는 구간(CTA 아래)이 검은 블록으로 뜬다.
+    <div className="space-y-8">
       <SetupBlock title="테마/장소 선호도">
         <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--ink-faint)]">
           좋아하는 건 선호, 피하고 싶은 건 불호로 골라주세요. 고르지 않으면 중립이에요.
@@ -831,11 +835,14 @@ export function PreferenceSetupForm() {
           onClose={() => setToast(null)}
         />
       ) : null}
+      {/* 폼 푸터 — 모바일은 세로(안내 → 저장 → 되돌리기), 데스크탑은 오른쪽 정렬 한 줄.
+          되돌리기를 저장과 같은 크기의 덩어리로 두면 1차 액션이 둘로 보여, 텍스트 버튼으로
+          낮춘다. DOM 순서는 모바일 기준이고 lg 에서만 order 로 되돌리기를 저장 왼쪽에 둔다. */}
       <div className="border-t border-[color:var(--line)] pt-6">
-        <div className="space-y-2.5 lg:mx-auto lg:max-w-[420px]">
+        <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-end lg:gap-3">
           {/* 목업 .cta-hint — 왜 아직 저장할 수 없는지(또는 무엇이 안 반영됐는지) 알려준다. */}
           {ctaHint ? (
-            <p className="text-center text-[12.5px] leading-[1.5] text-[color:var(--ink-faint)]">
+            <p className="text-center text-[12.5px] leading-[1.5] text-[color:var(--ink-faint)] lg:order-1 lg:mr-auto lg:text-left">
               {ctaHint}
             </p>
           ) : null}
@@ -843,15 +850,16 @@ export function PreferenceSetupForm() {
             type="button"
             disabled={savePreferenceMutation.isPending || !ready}
             onClick={handleSubmit}
-            className="h-14 w-full rounded-[18px] bg-[color:var(--btn-bg)] text-[16px] font-bold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none"
+            className="h-14 w-full rounded-[18px] bg-[color:var(--btn-bg)] text-[16px] font-bold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none lg:order-3 lg:h-12 lg:w-auto lg:min-w-[200px] lg:px-8 lg:text-[15px]"
           >
             {savePreferenceMutation.isPending ? '저장 중' : '취향 저장'}
           </button>
           <button
             type="button"
             onClick={() => setResetDialogOpen(true)}
-            className="h-12 w-full rounded-[18px] bg-[color:var(--card-soft)] text-[15px] font-semibold text-[color:var(--ink-sub)] transition-colors hover:bg-[color:var(--line)]"
+            className="mx-auto flex h-11 items-center justify-center gap-1.5 rounded-[14px] px-4 text-[13.5px] font-semibold text-[color:var(--ink-faint)] transition-colors hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink-sub)] lg:order-2 lg:mx-0"
           >
+            <FiRotateCcw className="size-3.5" aria-hidden />
             기본값 되돌리기
           </button>
         </div>
