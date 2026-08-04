@@ -98,6 +98,53 @@ describe('PlannerAgentService', () => {
     );
   });
 
+  it('tells the model where a partially spent day starts and how many slots are left', async () => {
+    mockedAxios.post.mockResolvedValueOnce({
+      data: { choices: [{ message: { content: JSON.stringify({ items: [] }) } }] },
+    });
+
+    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
+    // 오늘을 15:10 부터 다시 짜는 재계획 — 남은 시간에 한 곳만 들어간다.
+    await service.plan({ ...baseOptions(), dayStartTimes: ['15:10'], dayItemTargets: [1] });
+
+    const prompt = (mockedAxios.post.mock.calls[0]![1] as any).messages[1].content as string;
+    expect(prompt).toContain('"startTime":"15:10"');
+    expect(prompt).toContain('"targetItems":1');
+    // 하루가 이미 진행된 날에만 붙는 규칙.
+    expect(prompt).toContain('아침 시간대(카페 브런치 등)를 다시 배치하지 않는다');
+  });
+
+  it('keeps the full-day prompt untouched when no day is anchored', async () => {
+    mockedAxios.post.mockResolvedValueOnce({
+      data: { choices: [{ message: { content: JSON.stringify({ items: [] }) } }] },
+    });
+
+    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
+    await service.plan(baseOptions());
+
+    const prompt = (mockedAxios.post.mock.calls[0]![1] as any).messages[1].content as string;
+    expect(prompt).toContain('"startTime":"09:00"');
+    expect(prompt).not.toContain('아침 시간대(카페 브런치 등)를 다시 배치하지 않는다');
+  });
+
+  it('slices the deterministic fallback per day target instead of a fixed size', async () => {
+    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'false' }));
+    const plan = await service.plan({
+      ...baseOptions(),
+      dayDates: ['2026-07-01', '2026-07-02'],
+      dayCount: 2,
+      // 첫 일차는 남은 시간이 짧아 1곳, 다음 일차는 하루 목표(2곳).
+      dayStartTimes: ['15:10', '09:00'],
+      dayItemTargets: [1, 2],
+    });
+
+    // 후보가 2개뿐이므로 1일차 1곳 + 2일차 1곳. 오프셋을 누적하지 않으면 같은 후보가 두 번 쓰인다.
+    expect(plan.map((item) => `${item.day}:${item.candidate.id}`)).toEqual([
+      '1:busan-cafe',
+      '2:busan-food',
+    ]);
+  });
+
   it('falls back to deterministic CRAG order when the LLM is disabled', async () => {
     const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'false' }));
     const plan = await service.plan(baseOptions());
