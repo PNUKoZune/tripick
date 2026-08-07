@@ -27,7 +27,7 @@ import { UsersService } from './users.service';
 import { UserEntity } from './user.entity';
 import { WithdrawUserDto } from './dto/withdraw-user.dto';
 import { UpdateNotificationPreferencesBodyDto } from './dto/update-notification-preferences.dto';
-import type { UpdateUserDto } from '@tripick/types';
+import { UpdateUserBodyDto } from './dto/update-user.dto';
 
 interface UploadedImage {
   buffer: Buffer;
@@ -53,7 +53,7 @@ export class UsersController {
 
   @Patch('me')
   @ApiOperation({ summary: '내 프로필 수정' })
-  async updateMe(@CurrentUser() user: UserEntity, @Body() dto: UpdateUserDto) {
+  async updateMe(@CurrentUser() user: UserEntity, @Body() dto: UpdateUserBodyDto) {
     return this.usersService.publicProfile(await this.usersService.update(user.id, dto));
   }
 

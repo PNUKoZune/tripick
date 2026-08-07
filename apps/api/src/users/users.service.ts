@@ -10,6 +10,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { randomBytes } from 'node:crypto';
+import { isUniqueViolation } from '../common/db-errors';
 import { StorageService } from '../storage/storage.service';
 import { FcmTokenService } from '../notification/fcm-token.service';
 import { RefreshTokenEntity } from '../auth/entities/refresh-token.entity';
@@ -124,19 +125,43 @@ export class UsersService implements OnModuleInit {
     return this.repo.save(user);
   }
 
-  /** 신규 이메일 가입. 비밀번호는 인증 전이므로 pending 으로만 저장한다. */
+  /**
+   * 신규 이메일 가입. 비밀번호는 인증 전이므로 pending 으로만 저장한다.
+   *
+   * 같은 이메일로 동시에 두 요청이 들어오면 한쪽은 유니크 제약에 걸린다 — 그걸 그대로
+   * 흘리면 500 이 난다. 이메일 충돌은 "이미 있는 계정"이므로 null 을 돌려주고 호출부가
+   * 기존 계정 경로를 타게 하고, 핸들 충돌은 다른 후보로 다시 시도한다(핸들은 자동 생성값이라
+   * 사용자에게 알릴 것이 없다).
+   */
   async createEmailUser(params: {
     email: string;
     passwordHash: string;
     nickname: string;
-  }): Promise<UserEntity> {
-    const user = this.repo.create({
-      email: params.email,
-      pendingPasswordHash: params.passwordHash,
-      nickname: params.nickname,
-      handle: await this.generateUniqueHandle(localPart(params.email) || params.nickname),
-    });
-    return this.repo.save(user);
+  }): Promise<UserEntity | null> {
+    const base = localPart(params.email) || params.nickname;
+    const HANDLE_ATTEMPTS = 4;
+    for (let attempt = 0; attempt < HANDLE_ATTEMPTS; attempt++) {
+      // 마지막 시도는 랜덤 접미사로 확정 — 핸들만 계속 부딪히는 극단적 경우 대비.
+      const handle =
+        attempt < HANDLE_ATTEMPTS - 1
+          ? await this.generateUniqueHandle(base)
+          : `${slugifyHandle(base)}${randomBytes(4).toString('hex')}`;
+      try {
+        return await this.repo.save(
+          this.repo.create({
+            email: params.email,
+            pendingPasswordHash: params.passwordHash,
+            nickname: params.nickname,
+            handle,
+          }),
+        );
+      } catch (error) {
+        if (isUniqueViolation(error, 'email')) return null;
+        if (isUniqueViolation(error, 'handle') && attempt < HANDLE_ATTEMPTS - 1) continue;
+        throw error;
+      }
+    }
+    return null;
   }
 
   /** 비밀번호 즉시 확정(재설정 플로우). 이메일 소유 증명이 끝난 상태 → 인증도 같이 처리. */
@@ -176,9 +201,6 @@ export class UsersService implements OnModuleInit {
     }
     if (dto.handle !== undefined) {
       user.handle = await this.validateHandle(dto.handle, id);
-    }
-    if (dto.profileImageUrl !== undefined) {
-      user.profileImageUrl = dto.profileImageUrl;
     }
     return this.repo.save(user);
   }

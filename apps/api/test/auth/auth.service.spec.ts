@@ -141,6 +141,28 @@ describe('AuthService — email signup', () => {
   });
 
   /**
+   * 같은 이메일로 동시에 가입하면 한쪽이 유니크 제약에 걸린다. 그대로 흘리면 500 이라,
+   * 진 쪽은 "이미 있는 계정" 경로로 넘어가 신규 가입과 같은 응답을 내야 한다.
+   */
+  it('does not blow up when it loses a concurrent signup race', async () => {
+    const { service, usersService, emailService } = createHarness();
+    usersService.findByEmail
+      .mockResolvedValueOnce(null) // 최초 조회: 없음
+      .mockResolvedValueOnce(user({ email: 'a@b.com' })); // 경쟁자가 만든 계정 재조회
+    usersService.createEmailUser.mockResolvedValue(null); // 유니크 충돌로 생성 실패
+
+    const res = await service.signupWithEmail({
+      email: 'a@b.com',
+      password: 'abc12345',
+      nickname: '앨리스',
+    } as any);
+
+    expect(res).toMatchObject({ ok: true, email: 'a@b.com' });
+    expect(emailService.sendAccountExistsNotice).toHaveBeenCalledTimes(1);
+    expect(emailService.sendVerification).not.toHaveBeenCalled();
+  });
+
+  /**
    * 계정 탈취 경로: 공격자가 피해자 이메일로 가입 → 피해자에게 "가입 인증" 메일 도착 →
    * 피해자가 누르는 순간 공격자 비밀번호가 활성화. 기존 계정은 손대지 않아야 한다.
    */
@@ -199,6 +221,35 @@ describe('AuthService — email login', () => {
     expect(res.user).toMatchObject({ id: 'u9', hasPassword: true });
     // 최초 발급은 familyId 확정을 위해 2번 저장한다.
     expect(refreshRepo.save).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('AuthService — login timing', () => {
+  /**
+   * 없는 계정에서 bcrypt(cost 12)를 건너뛰면 응답이 눈에 띄게 빨라져, 시간차만으로
+   * 가입 여부를 훑을 수 있다. 두 경로 모두 해시 비교를 한 번씩 치러야 한다.
+   */
+  it('still hashes when the account does not exist', async () => {
+    const { service, usersService } = createHarness();
+    const realHash = await bcrypt.hash('somethingelse', 12);
+
+    async function timeFailedLogin(): Promise<number> {
+      const started = process.hrtime.bigint();
+      await expect(
+        service.loginWithEmail({ email: 'x@b.com', password: 'guess1234' } as any),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      return Number(process.hrtime.bigint() - started) / 1e6;
+    }
+
+    usersService.findByEmail.mockResolvedValue(user({ passwordHash: realHash }));
+    const wrongPasswordMs = await timeFailedLogin();
+
+    usersService.findByEmail.mockResolvedValue(null);
+    const missingAccountMs = await timeFailedLogin();
+
+    // bcrypt(cost 12)는 이 환경에서 100ms 안팎이다. 더미 비교를 안 하면 1ms 도 안 걸린다.
+    expect(wrongPasswordMs).toBeGreaterThan(20);
+    expect(missingAccountMs).toBeGreaterThan(20);
   });
 });
 

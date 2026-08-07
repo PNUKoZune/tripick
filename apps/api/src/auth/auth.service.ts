@@ -32,6 +32,11 @@ import type {
 } from '@tripick/types';
 
 const BCRYPT_COST = 12;
+/**
+ * 존재하지 않는 계정의 로그인 시도에 비교 비용을 맞추기 위한 더미 해시(같은 cost).
+ * 임의 문자열을 해싱한 값이라 어떤 비밀번호와도 매치되지 않는다.
+ */
+const DUMMY_PASSWORD_HASH = '$2b$12$wrlYsup.IgWNCmwr2WfDBu7tmvjWXnoardK5j5XxbIrNEs6Ffp3ce';
 const VERIFY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -74,29 +79,29 @@ export class AuthService {
     if (!nickname) throw new BadRequestException('닉네임을 입력해주세요.');
     if (nickname.length > 20) throw new BadRequestException('닉네임은 20자 이내로 입력해주세요.');
 
-    const existing = await this.usersService.findByEmail(email);
-    if (existing) {
-      // 이미 있는 계정에는 절대 비밀번호를 심지 않는다. 예전에는 pending 으로 받아 두고
-      // 인증 링크로 승격했는데, 그 링크는 **계정 주인**에게 간다 — 주인이 "가입 인증"
-      // 메일로 알고 누르는 순간 공격자가 넣은 비밀번호가 활성화돼 계정이 넘어갔다.
-      // 대신 주인에게 상황만 알리고, 비밀번호 설정은 재설정 플로우로 보낸다.
-      await this.emailService.sendAccountExistsNotice(email, {
-        hasPassword: Boolean(existing.passwordHash),
-        resetUrl: `${this.getWebAppUrl()}/forgot-password`,
-        loginUrl: `${this.getWebAppUrl()}/login`,
-      });
-    } else {
+    let existing = await this.usersService.findByEmail(email);
+    if (!existing) {
       const passwordHash = await bcrypt.hash(dto.password, BCRYPT_COST);
-      const user = await this.usersService.createEmailUser({ email, passwordHash, nickname });
-      await this.dispatchVerification(user);
+      const created = await this.usersService.createEmailUser({ email, passwordHash, nickname });
+      if (created) {
+        await this.dispatchVerification(created);
+        return signupResult(email);
+      }
+      // 동시 가입 경쟁에서 졌다(유니크 충돌) — 상대가 방금 만든 계정을 다시 읽어
+      // 아래 기존 계정 경로로 간다. 예전엔 이 충돌이 그대로 올라가 500 이 났다.
+      existing = await this.usersService.findByEmail(email);
     }
 
-    // 두 갈래가 완전히 같은 응답을 낸다 — 다르면 그 자체로 가입 여부 조회 API 가 된다.
-    return {
-      ok: true,
-      message: '인증 메일을 보냈어요. 메일을 확인해 가입을 완료해주세요.',
-      email,
-    };
+    // 이미 있는 계정에는 절대 비밀번호를 심지 않는다. 예전에는 pending 으로 받아 두고
+    // 인증 링크로 승격했는데, 그 링크는 **계정 주인**에게 간다 — 주인이 "가입 인증"
+    // 메일로 알고 누르는 순간 공격자가 넣은 비밀번호가 활성화돼 계정이 넘어갔다.
+    // 대신 주인에게 상황만 알리고, 비밀번호 설정은 재설정 플로우로 보낸다.
+    await this.emailService.sendAccountExistsNotice(email, {
+      hasPassword: Boolean(existing?.passwordHash),
+      resetUrl: `${this.getWebAppUrl()}/forgot-password`,
+      loginUrl: `${this.getWebAppUrl()}/login`,
+    });
+    return signupResult(email);
   }
 
   async loginWithEmail(dto: EmailLoginDto, ctx: TokenContext = {}): Promise<LoginResponseDto> {
@@ -110,6 +115,11 @@ export class AuthService {
       // 403 으로 던져야 클라이언트가 메시지를 그대로 노출(401 은 만료 안내로 치환됨).
       if (user?.pendingPasswordHash && (await bcrypt.compare(dto.password, user.pendingPasswordHash))) {
         throw new ForbiddenException('이메일 인증을 완료해야 로그인할 수 있어요. 메일함을 확인해주세요.');
+      }
+      // 계정이 없어도 해시 비교 비용을 똑같이 치른다. 바로 던지면 cost 12 짜리 bcrypt 를
+      // 건너뛰어 응답이 눈에 띄게 빨라지고, 그 시간차만으로 가입 여부를 훑을 수 있다.
+      if (!user?.pendingPasswordHash) {
+        await bcrypt.compare(dto.password, DUMMY_PASSWORD_HASH);
       }
       throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않아요.');
     }
@@ -577,6 +587,15 @@ function sha256(input: string): string {
 
 function generateRandomToken(bytes = 32): string {
   return randomBytes(bytes).toString('base64url');
+}
+
+/** 신규 가입과 기존 계정이 완전히 같은 응답을 내야 한다 — 다르면 그 자체로 가입 여부 조회 API 가 된다. */
+function signupResult(email: string): AuthOpResultDto {
+  return {
+    ok: true,
+    message: '인증 메일을 보냈어요. 메일을 확인해 가입을 완료해주세요.',
+    email,
+  };
 }
 
 function normalizeEmail(raw: string | undefined): string {

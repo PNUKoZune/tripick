@@ -32,11 +32,14 @@ export interface UserDto {
   updatedAt: string;
 }
 
+/**
+ * 프로필 이미지는 여기 없다 — 전용 업로드/삭제 엔드포인트(`/users/me/profile-image`)만
+ * 바꿀 수 있다. 이 경로로 열어 두면 임의 외부 URL 을 프로필 사진으로 앉힐 수 있다.
+ */
 export interface UpdateUserDto {
   nickname?: string;
   /** 영문 소문자/숫자/밑줄 3~20자. 중복 불가. */
   handle?: string;
-  profileImageUrl?: string;
 }
 
 export interface UpdateNotificationPreferencesDto {
