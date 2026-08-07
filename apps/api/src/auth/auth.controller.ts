@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  HttpException,
   HttpStatus,
   Post,
   Query,
@@ -17,6 +18,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { CookieOptions, Request, Response } from 'express';
 import { AuthService, type TokenContext } from './auth.service';
 import { KakaoExchangeService } from './kakao-exchange.service';
+import { EmailSendLimiterService, type MailPurpose } from './email-send-limiter.service';
 import {
   EmailLoginBodyDto,
   EmailSignupBodyDto,
@@ -42,6 +44,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly kakaoExchange: KakaoExchangeService,
+    private readonly mailLimiter: EmailSendLimiterService,
     private readonly config: ConfigService,
   ) {}
 
@@ -75,7 +78,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle(perMinute(3)) // 메일 발송 남용 방지
   @ApiOperation({ summary: '이메일 인증 메일 재발송' })
-  resendVerification(@Body() dto: ResendVerificationBodyDto) {
+  async resendVerification(
+    @Body() dto: ResendVerificationBodyDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.assertMailQuota(dto.email, 'verify', res);
     return this.authService.resendVerification(dto.email);
   }
 
@@ -83,7 +90,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle(perMinute(3)) // 메일 발송 남용 방지
   @ApiOperation({ summary: '비밀번호 재설정 메일 발송' })
-  forgotPassword(@Body() dto: RequestPasswordResetBodyDto) {
+  async forgotPassword(
+    @Body() dto: RequestPasswordResetBodyDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.assertMailQuota(dto.email, 'reset', res);
     return this.authService.requestPasswordReset(dto.email);
   }
 
@@ -180,6 +191,20 @@ export class AuthController {
   @ApiOperation({ summary: '로그아웃 (refresh token 폐기)' })
   async logout(@Body() dto: LogoutBodyDto) {
     await this.authService.logout(dto.refreshToken ?? '');
+  }
+
+  /**
+   * 수신 주소 기준 메일 한도. 라우트의 `@Throttle` 은 IP 기준이라 IP 를 갈아 가며
+   * 같은 주소로 메일을 몰 수 있어, 주소별로 한 번 더 센다.
+   */
+  private async assertMailQuota(email: string, purpose: MailPurpose, res: Response): Promise<void> {
+    const { allowed, retryAfter } = await this.mailLimiter.consume(email, purpose);
+    if (allowed) return;
+    res.setHeader('Retry-After', String(retryAfter));
+    throw new HttpException(
+      '이 주소로 메일을 너무 많이 보냈어요. 잠시 후 다시 시도해주세요.',
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
   }
 
   /** 콜백(`/api/v1/auth/kakao/callback`)에만 실리도록 경로를 좁힌다. */

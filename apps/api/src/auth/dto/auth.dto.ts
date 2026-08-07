@@ -1,5 +1,10 @@
 import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
+import {
+  NICKNAME_MAX_LENGTH,
+  NICKNAME_REQUIRED,
+  NICKNAME_TOO_LONG,
+} from '../../users/nickname.constants';
 import type {
   EmailLoginDto,
   EmailSignupDto,
@@ -44,8 +49,8 @@ export class EmailSignupBodyDto extends EmailBody implements EmailSignupDto {
 
   @Transform(trim)
   @IsString()
-  @IsNotEmpty({ message: '닉네임을 입력해주세요.' })
-  @MaxLength(20, { message: '닉네임은 20자 이내로 입력해주세요.' })
+  @IsNotEmpty({ message: NICKNAME_REQUIRED })
+  @MaxLength(NICKNAME_MAX_LENGTH, { message: NICKNAME_TOO_LONG })
   nickname: string;
 }
 

@@ -20,6 +20,11 @@ import { EmailService } from '../email/email.service';
 import { refreshTokenSecret } from '../common/jwt-secrets';
 import { EmailTokenEntity, type EmailTokenPurpose } from './entities/email-token.entity';
 import { RefreshTokenEntity } from './entities/refresh-token.entity';
+import {
+  NICKNAME_MAX_LENGTH,
+  NICKNAME_REQUIRED,
+  NICKNAME_TOO_LONG,
+} from '../users/nickname.constants';
 import type {
   AuthOpResultDto,
   AuthTokens,
@@ -76,8 +81,8 @@ export class AuthService {
     const nickname = (dto.nickname ?? '').trim();
     assertValidEmail(email);
     assertValidPassword(dto.password);
-    if (!nickname) throw new BadRequestException('닉네임을 입력해주세요.');
-    if (nickname.length > 20) throw new BadRequestException('닉네임은 20자 이내로 입력해주세요.');
+    if (!nickname) throw new BadRequestException(NICKNAME_REQUIRED);
+    if (nickname.length > NICKNAME_MAX_LENGTH) throw new BadRequestException(NICKNAME_TOO_LONG);
 
     let existing = await this.usersService.findByEmail(email);
     if (!existing) {
@@ -135,9 +140,12 @@ export class AuthService {
     const token = (rawToken ?? '').trim();
     if (!token) throw new BadRequestException('인증 토큰이 없어요.');
 
-    const record = await this.consumeEmailToken(token, 'verify_email');
+    // 소비 전에 사용자부터 확인한다 — 순서가 반대면 계정이 없을 때 토큰만 태워지고
+    // 사용자는 이미 죽은 링크를 들고 재발송을 받아야 한다.
+    const record = await this.findUsableEmailToken(token, 'verify_email');
     const user = await this.usersService.findById(record.userId);
     if (!user) throw new NotFoundException('사용자를 찾을 수 없어요.');
+    await this.consumeEmailToken(record);
     // markEmailVerified 가 인증 처리 + pending 비밀번호 승격을 함께 수행한다.
     // (이미 인증된 카카오 계정에 비밀번호를 연동한 경우도 여기서 활성화됨)
     await this.usersService.markEmailVerified(user.id);
@@ -177,7 +185,10 @@ export class AuthService {
     if (!token) throw new BadRequestException('토큰이 없어요.');
     assertValidPassword(newPassword);
 
-    const record = await this.consumeEmailToken(token, 'reset_password');
+    const record = await this.findUsableEmailToken(token, 'reset_password');
+    const user = await this.usersService.findById(record.userId);
+    if (!user) throw new NotFoundException('사용자를 찾을 수 없어요.');
+    await this.consumeEmailToken(record);
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
     await this.usersService.setPassword(record.userId, passwordHash);
     // 비밀번호 변경 = 다른 디바이스 모두 로그아웃
@@ -435,7 +446,8 @@ export class AuthService {
     await this.emailService.sendPasswordReset(user.email, link);
   }
 
-  private async consumeEmailToken(
+  /** 아직 쓸 수 있는 토큰 조회. 소비는 하지 않는다 — 부수효과 전에 사전 조건을 다 보려고 분리했다. */
+  private async findUsableEmailToken(
     raw: string,
     purpose: EmailTokenPurpose,
   ): Promise<EmailTokenEntity> {
@@ -446,7 +458,11 @@ export class AuthService {
     if (row.expiresAt.getTime() < Date.now()) {
       throw new BadRequestException('토큰이 만료됐어요. 다시 요청해주세요.');
     }
-    // 원자적 소비: 동시 요청이 둘 다 통과하지 못하도록 consumedAt IS NULL 조건으로만 갱신.
+    return row;
+  }
+
+  /** 원자적 소비: 동시 요청이 둘 다 통과하지 못하도록 consumedAt IS NULL 조건으로만 갱신. */
+  private async consumeEmailToken(row: EmailTokenEntity): Promise<void> {
     const result = await this.emailTokenRepo
       .createQueryBuilder()
       .update()
@@ -457,7 +473,6 @@ export class AuthService {
       throw new BadRequestException('이미 사용된 토큰이에요.');
     }
     row.consumedAt = new Date();
-    return row;
   }
 
   private async expirePendingTokens(
@@ -488,7 +503,6 @@ export class AuthService {
       ...(user.email ? { email: user.email } : {}),
       emailVerified: Boolean(user.emailVerifiedAt),
       hasPassword: Boolean(user.passwordHash),
-      isDemo: Boolean(user.isDemo),
     };
   }
 

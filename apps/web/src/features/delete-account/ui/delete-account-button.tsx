@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { FiChevronRight, FiUserX } from 'react-icons/fi';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { logout } from '@/entities/session/api/auth-api';
+import { clearLocalSession } from '@/entities/session/api/auth-api';
 import { withdrawMe, type WithdrawUserDto } from '@/entities/user';
 import { WithdrawalDialog } from './withdrawal-dialog';
 
@@ -20,8 +20,9 @@ export function DeleteAccountButton({ onError }: Props) {
 
   const mutation = useMutation({
     mutationFn: (dto: WithdrawUserDto) => withdrawMe(dto),
-    onSuccess: async () => {
-      await logout();
+    onSuccess: () => {
+      // 서버는 탈퇴 처리에서 계정·세션·FCM 토큰을 이미 지웠다. 로컬만 비우면 된다.
+      clearLocalSession();
       queryClient.clear();
       router.replace('/start');
       onError?.(null);

@@ -51,8 +51,6 @@ export class UserEntity {
   @Column({ type: 'timestamptz', nullable: true })
   emailVerifiedAt?: Date;
 
-  @Column({ default: false })
-  isDemo: boolean;
 
   @Column()
   nickname: string;

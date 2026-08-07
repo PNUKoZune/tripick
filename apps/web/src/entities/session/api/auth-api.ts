@@ -74,6 +74,16 @@ export async function exchangeKakaoCode(code: string): Promise<LoginResponseDto>
 
 // ─── 세션 종료 / 토큰 갱신 ───────────────────────────────────
 
+/**
+ * 서버 호출 없이 이 기기의 흔적만 지운다. 탈퇴처럼 **서버 쪽이 이미 정리된** 경우에 쓴다 —
+ * 그때 `logout()` 을 부르면 삭제된 계정으로 FCM 해제·refresh 폐기 요청이 나가 401 을 맞고,
+ * 클라이언트가 다시 refresh 를 시도하는 헛된 왕복이 세 번 돈다.
+ */
+export function clearLocalSession(): void {
+  clearLastFcmToken();
+  clearSession();
+}
+
 /** 서버에 refresh token 폐기 요청 + 로컬 세션 제거. 실패해도 로컬은 비운다. */
 export async function logout(): Promise<void> {
   const session = getStoredSession();

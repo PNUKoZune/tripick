@@ -4,11 +4,10 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { randomBytes } from 'node:crypto';
 import { isUniqueViolation } from '../common/db-errors';
 import { StorageService } from '../storage/storage.service';
@@ -19,6 +18,7 @@ import { UserEntity } from './user.entity';
 import { WithdrawalReasonEntity } from './withdrawal-reason.entity';
 import { WithdrawUserDto } from './dto/withdraw-user.dto';
 import { DEFAULT_NOTIFICATION_PREFERENCES } from './notification-preferences.constants';
+import { NICKNAME_MAX_LENGTH, NICKNAME_REQUIRED, NICKNAME_TOO_LONG } from './nickname.constants';
 import { NOTIFICATION_PREFERENCE_KEYS } from './dto/update-notification-preferences.dto';
 import {
   WITHDRAWAL_CONFIRM_PHRASE,
@@ -38,7 +38,7 @@ export type PublicProfile = Omit<
 >;
 
 @Injectable()
-export class UsersService implements OnModuleInit {
+export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
   constructor(
@@ -54,16 +54,6 @@ export class UsersService implements OnModuleInit {
     private readonly fcmTokens: FcmTokenService,
   ) {}
 
-  /** 핸들 없이 만들어진 기존 사용자들에 핸들 backfill (synchronize 환경 기준 1회성). */
-  async onModuleInit(): Promise<void> {
-    const legacy = await this.repo.find({ where: { handle: IsNull() } });
-    if (legacy.length === 0) return;
-    for (const user of legacy) {
-      user.handle = await this.generateUniqueHandle(this.handleBaseFor(user));
-      await this.repo.save(user);
-    }
-    this.logger.log(`Backfilled handle for ${legacy.length} user(s)`);
-  }
 
   async findById(id: string): Promise<UserEntity | null> {
     return this.repo.findOneBy({ id });
@@ -192,10 +182,10 @@ export class UsersService implements OnModuleInit {
     if (dto.nickname !== undefined) {
       const trimmed = dto.nickname.trim();
       if (!trimmed) {
-        throw new BadRequestException('닉네임을 입력해주세요.');
+        throw new BadRequestException(NICKNAME_REQUIRED);
       }
-      if (trimmed.length > 20) {
-        throw new BadRequestException('닉네임은 20자 이내로 입력해주세요.');
+      if (trimmed.length > NICKNAME_MAX_LENGTH) {
+        throw new BadRequestException(NICKNAME_TOO_LONG);
       }
       user.nickname = trimmed;
     }
@@ -218,9 +208,6 @@ export class UsersService implements OnModuleInit {
     return handle;
   }
 
-  private handleBaseFor(user: UserEntity): string {
-    return localPart(user.email) || user.nickname || user.kakaoId || 'user';
-  }
 
   /** base 를 슬러그화하고 충돌 시 숫자 suffix 를 붙여 유니크 핸들 생성. */
   private async generateUniqueHandle(base: string): Promise<string> {

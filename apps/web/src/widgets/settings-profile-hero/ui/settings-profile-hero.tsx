@@ -56,11 +56,7 @@ export function SettingsProfileHero({ me, onError }: Props) {
                 <span>{formatJoinedSince(me.createdAt)}</span>
               </MetaChip>
             ) : null}
-            {me?.isDemo ? (
-              <span className="inline-flex h-7 items-center rounded-full bg-[color:var(--accent-tint)] px-2.5 text-[12px] font-semibold text-[color:var(--accent-deep)]">
-                데모 계정
-              </span>
-            ) : me?.kakaoId ? (
+            {me?.kakaoId ? (
               // 카카오 브랜드 색은 라이트·다크와 무관하게 고정(로고 색 규정) — 토큰화 대상 아님.
               // 투명도를 주면 다크 배경과 섞여 탁한 올리브가 되므로 불투명 노랑을 쓴다.
               <span className="inline-flex h-7 items-center gap-1 rounded-full bg-[#FEE500] px-2.5 text-[12px] font-semibold text-[#191919]">

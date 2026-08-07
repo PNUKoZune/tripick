@@ -26,7 +26,6 @@ export interface SessionUserDto {
   email?: string;
   emailVerified: boolean;
   hasPassword: boolean;
-  isDemo: boolean;
 }
 
 export interface LoginResponseDto {

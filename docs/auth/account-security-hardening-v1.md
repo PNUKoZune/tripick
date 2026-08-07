@@ -22,12 +22,12 @@
 - `/auth/*`·`/users/me` DTO 클래스화(전역 ValidationPipe 실동작)
 - 알림 설정 jsonb 키·값 제한, `profileImageUrl` 임의 지정 차단
 - 동시 가입 유니크 충돌 500 제거, 로그인 타이밍 차 제거
+- 주소별 메일 발송 제한, 핸들 백필 마이그레이션 이전, 토큰 소비 순서, 닉네임 규칙 공용화, 탈퇴 후 헛돈 왕복 제거, `isDemo` 컬럼 제거
 
 제외 / 후속:
 
 - **access 토큰 무효화** — 로그아웃은 여전히 refresh 만 폐기한다(§7)
-- **`isDemo` 컬럼 제거** — 데모 계정을 일반 계정으로 운영하기로 해서 표시용으로 남겼다(§4.1)
-- 이메일 주소 기준 발송 제한(현재 IP 기준만), 핸들 백필의 마이그레이션 이전 — §7
+- **access 토큰 무효화** 외에는 §7 의 후속 항목을 이번에 모두 처리했다(§4.10)
 
 ## 2. 배경 — 검토에서 나온 것
 
@@ -142,6 +142,17 @@
 - **동시 가입**: 이메일 유니크 충돌은 "이미 있는 계정" 경로로 넘겨 §4.2 와 같은 응답을 내고, 핸들 충돌은 다른 후보로 재시도한다. 인덱스 이름은 TypeORM 이 해시로 만들어(`IDX_c25bc63d…`) 코드에 박을 수 없어서, Postgres `detail` 의 컬럼명으로 가른다(`common/db-errors`)
 - **로그인 타이밍**: 없는 계정은 bcrypt 를 건너뛰어 즉시 401 이 돌아왔다. 같은 cost 의 더미 해시와 비교해 비용을 맞춘다
 
+### 4.10 남은 낮은 등급 정리
+
+앞의 항목들과 성격은 다르지만 같은 검토에서 나온 것들이라 함께 처리했다.
+
+- **주소별 메일 제한**(`EmailSendLimiterService`): 라우트의 `@Throttle` 은 IP 기준이라 IP 를 갈아 가며 한 주소로 메일을 몰 수 있었다. 주소당 시간당 5회로 한 번 더 센다. 카운트는 **계정 존재 여부와 무관하게** 올린다 — 실제로 보낼 때만 세면 429 가 곧 "그 주소는 가입돼 있음" 신호가 된다. Redis 장애 시엔 통과시킨다(IP 제한은 살아 있고, 부가 방어 때문에 재설정을 막을 이유가 없다)
+- **핸들 백필을 마이그레이션으로**: `onModuleInit` 이 매 기동마다 `handle IS NULL` 을 훑었다. 유니크 인덱스가 부분 인덱스(`WHERE handle IS NOT NULL`)라 이 조건은 인덱스를 못 타 seq scan 이었다. 1회성이므로 마이그레이션으로 옮기고 훅을 제거했다
+- **토큰 소비 순서**: `verifyEmail`·`resetPassword` 가 토큰을 먼저 소비하고 사용자를 조회해서, 계정이 없으면 토큰만 태워졌다. `findUsableEmailToken`(조회) / `consumeEmailToken`(원자적 소비)로 나눠 사전 조건을 다 본 뒤 소비한다
+- **닉네임 규칙 공용화**: 20자 제한이 네 곳(가입 서비스·수정 서비스·두 DTO)에 복붙돼 있었다. `users/nickname.constants.ts` 로 모으고 길이는 `packages/types` 의 `NICKNAME_MAX_LENGTH` 를 FE 입력 `maxLength` 와 공유한다
+- **탈퇴 후 헛돈 왕복**: 탈퇴 성공 뒤 `logout()` 을 불러 이미 삭제된 계정으로 FCM 해제·refresh 폐기가 나가 401 → refresh 재시도까지 세 번이 헛돌았다. 서버가 이미 정리했으므로 `clearLocalSession()` 으로 로컬만 비운다
+- **`isDemo` 제거**: 데모 로그인이 사라지면서 이 값을 켜 주는 코드가 없어졌다. 항상 false 인 컬럼과 그에 딸린 "데모 계정" 배지를 지웠다(마이그레이션 동반)
+
 ## 5. 운영 영향 (배포 전 확인)
 
 이번 변경에는 **환경·운영 쪽 선행 조건**이 있다.
@@ -152,11 +163,12 @@
 | `KAKAO_CALLBACK_URL` | 시작 URL 이 여기서 파생된다. 카카오 콘솔 등록값과 정확히 일치해야 함 |
 | `POST /auth/demo` | **제거됨.** 이 엔드포인트를 쓰던 스모크 체크·스크립트는 실제 계정 로그인으로 교체 |
 | `seed:demo-live` | `SEED_USER_EMAIL` 필수. 해당 계정이 가입·인증돼 있어야 함 |
-| Redis | 카카오 로그인 교환에 필요(이메일 로그인은 무관) |
+| Redis | 카카오 로그인 교환 + 주소별 메일 제한에 필요(둘 다 없으면 degrade, 이메일 로그인은 무관) |
+| 마이그레이션 | `BackfillHandlesDropIsDemo` — 핸들 백필 + `users.isDemo` 삭제. 배포 시 자동 적용 |
 
 ## 6. 검증
 
-`pnpm --filter @tripick/api test` 707 통과(검토 전 679 → 신규 28), `tsc --noEmit` API·web 클린, eslint 0 errors, Next 프로덕션 빌드 통과, e2e 스펙 68개 컴파일 확인.
+`pnpm --filter @tripick/api test` 708 통과(검토 전 679 → 신규 29), `tsc --noEmit` API·web 클린, eslint 0 errors, Next 프로덕션 빌드 통과, e2e 스펙 68개 컴파일 확인.
 
 주요 시나리오는 로컬 서버에 실제 요청을 보내 확인했다.
 
@@ -176,17 +188,18 @@
 | 알림 설정 임의 키·비-boolean | 400 |
 | `PATCH /users/me { profileImageUrl }` | 400 `property profileImageUrl should not exist` |
 | 로그인 응답 시간(각 6회 중앙값) | 존재 계정 175.5ms / 없는 계정 173.8ms |
+| 같은 주소로 재설정 메일 7회(IP 분산) | 5회까지 200, 이후 429 + `Retry-After: 3600`. 다른 주소는 영향 없음 |
+| 마이그레이션 백필(빈 DB + 경계값 6행) | NULL 0 · 중복 0 · 규칙 위반 0. `alice`/`taken1`/`taken2`/`user`/`ab0`/20자 컷 — 서비스 로직과 동일 |
+| 마이그레이션 `down()` | `isDemo` 복구, 백필된 핸들은 유지(친구 식별자라 되돌리지 않음) |
+| `isDemo` 제거 후 `/users/me` | 키 부재 확인 |
+| 닉네임 21자 (가입·수정) | 두 경로 모두 같은 문구로 400 |
 
 로그인 타이밍 테스트는 더미 비교를 빼면 `0.15ms` 로 즉시 실패하는 것까지 확인해, 회귀를 실제로 잡는지 검증했다.
 
 ## 7. 알려진 한계 / 후속 작업
 
-- **로그아웃이 access 토큰을 무효화하지 않는다.** refresh 만 폐기하고 access 는 최대 7일 유효하다. 진행 중 여행의 위치 보고가 리프레시 없이 돌아야 해서 TTL 을 길게 잡은 트레이드오프인데, 지금까지 문서에 없어 여기 적는다. 줄이려면 access 를 짧게 하고 위치 보고 경로에 갱신을 붙여야 한다
-- **메일 발송 제한이 IP 기준뿐이다.** `forgot-password`·`resend-verification` 이 분당 3회지만 이메일 주소 기준 제한이 없어, IP 를 바꾸면 특정 주소로 메일을 몰 수 있다
-- **핸들 백필이 부팅마다 전체 스캔**(`UsersService.onModuleInit`). 1회성 작업이라 마이그레이션으로 옮기는 게 맞다
-- **`verifyEmail` 이 토큰을 먼저 소비**한다. 사용자가 없으면 토큰만 태워진다 — 순서를 뒤집는 게 낫다
-- **닉네임 20자 규칙이 세 곳에 복붙**돼 있다(signup 서비스·update 서비스·DTO). 공용 상수로 뺄 것
-- `isDemo` 는 이제 코드가 켜 주지 않는다. 데모 계정에는 운영자가 직접 켜야 한다
+- **로그아웃이 access 토큰을 무효화하지 않는다.** refresh 만 폐기하고 access 는 최대 7일 유효하다. 진행 중 여행의 위치 보고가 리프레시 없이 돌아야 해서 TTL 을 길게 잡은 트레이드오프인데, 지금까지 문서에 없어 여기 적는다. 줄이려면 access 를 짧게 하고 위치 보고 경로에 갱신을 붙여야 한다 — **이 문서에서 유일하게 남은 항목**이고, 위치 추적 설계와 얽혀 있어 별도 작업이다
+- 주소별 메일 제한은 정상 사용자의 재시도도 시간당 5회로 묶는다. 메일이 늦게 오는 환경에서 민원이 생기면 창을 조정할 것(`EmailSendLimiterService`)
 
 ## 8. 변경 파일
 
@@ -196,6 +209,9 @@ apps/api/src/common/db-errors.ts                      (신규 — 유니크 위�
 apps/api/src/auth/dto/auth.dto.ts                     (신규 — /auth/* 요청 DTO)
 apps/api/src/auth/kakao-exchange.service.ts           (신규 — 1회용 교환 코드)
 apps/api/src/users/dto/update-user.dto.ts             (신규 — profileImageUrl 제외)
+apps/api/src/auth/email-send-limiter.service.ts       (신규 — 주소별 메일 제한)
+apps/api/src/users/nickname.constants.ts              (신규 — 닉네임 규칙 단일 출처)
+apps/api/src/database/migrations/1786100000000-BackfillHandlesDropIsDemo.ts  (신규)
 apps/api/src/users/dto/update-notification-preferences.dto.ts  (신규 — 키·값 제한)
 apps/api/src/auth/auth.controller.ts                  (state 쿠키·교환 엔드포인트·DTO, /auth/demo 제거)
 apps/api/src/auth/auth.service.ts                     (가입 경로 재구성, state·startUrl,
@@ -205,8 +221,9 @@ apps/api/src/auth/strategies/jwt.strategy.ts          (시크릿 통합)
 apps/api/src/realtime/realtime.module.ts              (시크릿 통합 — 놓쳤던 네 번째 자리)
 apps/api/src/users/users.controller.ts                (publicProfile 누락 보정, DTO)
 apps/api/src/users/users.service.ts                   (데모 사용자 제거, 유니크 충돌 처리,
-                                                       알림 설정 좁히기, profileImageUrl 제거)
-apps/api/src/users/user.entity.ts                     (pendingPasswordHash 사용 규칙)
+                                                       알림 설정 좁히기, profileImageUrl 제거,
+                                                       부팅 백필 훅 제거)
+apps/api/src/users/user.entity.ts                     (pendingPasswordHash 사용 규칙, isDemo 제거)
 apps/api/src/email/email.service.ts                   (sendAccountExistsNotice)
 apps/api/src/scripts/seed-demo-live.ts                (SEED_USER_EMAIL)
 apps/api/.env.example                                 (시크릿 교체 안내)
@@ -218,10 +235,14 @@ apps/web/src/views/auth-kakao-callback/ui/kakao-callback-view.tsx  (코드 교�
 apps/web/src/views/login/ui/login-view.tsx            (카카오 오류 표시)
 apps/web/src/views/landing/ui/landing-view.tsx        ("로그인 없이 체험" 문구 정정)
 apps/web/src/features/preference-setup/ui/preference-setup-form.tsx  (암묵적 세션 생성 제거)
+apps/web/src/features/delete-account/ui/delete-account-button.tsx    (탈퇴 후 로컬만 정리)
+apps/web/src/widgets/settings-profile-hero/ui/settings-profile-hero.tsx  (데모 배지 제거)
+apps/web/src/features/{email-signup,edit-nickname}/ui/*.tsx          (maxLength 공유 상수)
 
 packages/types/src/auth.ts                            (DemoLoginDto·authorizeUrl 제거, startUrl·
                                                        KakaoExchangeDto 추가)
-packages/types/src/user.ts                            (UpdateUserDto 에서 profileImageUrl 제거)
+packages/types/src/user.ts                            (UpdateUserDto 에서 profileImageUrl 제거,
+                                                       isDemo 제거, NICKNAME_MAX_LENGTH 추가)
 
 apps/api/test/auth/kakao-exchange.service.spec.ts     (신규)
 apps/api/test/common/jwt-secrets.spec.ts              (신규)

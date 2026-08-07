@@ -9,7 +9,7 @@ const config = { get: () => undefined } as unknown as ConfigService;
 
 const SESSION: LoginResponseDto = {
   tokens: { accessToken: 'access', refreshToken: 'refresh' },
-  user: { id: 'u1', nickname: '앨리스', emailVerified: true, hasPassword: true, isDemo: false },
+  user: { id: 'u1', nickname: '앨리스', emailVerified: true, hasPassword: true },
 };
 
 /** GETDEL 시맨틱만 흉내내는 최소 Redis 스텁. */

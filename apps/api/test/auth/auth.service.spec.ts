@@ -2,8 +2,8 @@
 
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
@@ -34,7 +34,7 @@ function queryBuilder(execResult: { affected?: number } = { affected: 1 }) {
 }
 
 function user(over: Partial<UserEntity> = {}): UserEntity {
-  return { id: 'u1', nickname: '앨리스', isDemo: false, ...over } as UserEntity;
+  return { id: 'u1', nickname: '앨리스', ...over } as UserEntity;
 }
 
 function createHarness(configOverrides: Record<string, string> = {}) {
@@ -445,6 +445,7 @@ describe('AuthService — password reset & verify', () => {
       consumedAt: null,
       expiresAt: new Date(Date.now() + 60_000),
     });
+    usersService.findById.mockResolvedValue(user());
     const qb = queryBuilder();
     refreshRepo.createQueryBuilder.mockReturnValue(qb);
 
@@ -453,6 +454,27 @@ describe('AuthService — password reset & verify', () => {
     expect(usersService.setPassword).toHaveBeenCalledWith('u1', expect.any(String));
     expect(qb.execute).toHaveBeenCalled(); // revokeAll
     expect(res.ok).toBe(true);
+  });
+
+  /**
+   * 소비를 먼저 하면 계정이 없을 때 토큰만 태워지고, 사용자는 이미 죽은 링크를 들고
+   * 재발송을 받아야 한다. 사전 조건을 다 본 뒤에 소비해야 한다.
+   */
+  it('does not burn the token when the account is gone', async () => {
+    const { service, emailTokenRepo, usersService } = createHarness();
+    emailTokenRepo.findOne.mockResolvedValue({
+      id: 'et-1',
+      userId: 'u1',
+      purpose: 'verify_email',
+      consumedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    usersService.findById.mockResolvedValue(null);
+    const qb = queryBuilder();
+    emailTokenRepo.createQueryBuilder.mockReturnValue(qb);
+
+    await expect(service.verifyEmail('tok')).rejects.toBeInstanceOf(NotFoundException);
+    expect(qb.execute).not.toHaveBeenCalled(); // consumedAt 갱신이 없어야 한다
   });
 
   it('rejects an already-consumed verification token', async () => {

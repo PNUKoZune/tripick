@@ -1,5 +1,6 @@
 import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { NICKNAME_MAX_LENGTH, NICKNAME_REQUIRED, NICKNAME_TOO_LONG } from '../nickname.constants';
 import type { UpdateUserDto as UpdateUserShape } from '@tripick/types';
 
 /**
@@ -13,8 +14,8 @@ export class UpdateUserBodyDto implements UpdateUserShape {
   @IsOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
-  @MinLength(1, { message: '닉네임을 입력해주세요.' })
-  @MaxLength(20, { message: '닉네임은 20자 이내로 입력해주세요.' })
+  @MinLength(1, { message: NICKNAME_REQUIRED })
+  @MaxLength(NICKNAME_MAX_LENGTH, { message: NICKNAME_TOO_LONG })
   nickname?: string;
 
   @IsOptional()

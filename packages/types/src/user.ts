@@ -18,6 +18,9 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferencesDto = {
   friend_request: true,
 };
 
+/** 닉네임 최대 길이. FE 입력 maxLength 와 BE 검증이 같은 값을 본다. */
+export const NICKNAME_MAX_LENGTH = 20;
+
 export interface UserDto {
   id: string;
   kakaoId: string;
@@ -26,7 +29,6 @@ export interface UserDto {
   handle?: string;
   profileImageUrl?: string;
   email?: string;
-  isDemo?: boolean;
   notificationPreferences?: NotificationPreferencesDto;
   createdAt: string;
   updatedAt: string;
