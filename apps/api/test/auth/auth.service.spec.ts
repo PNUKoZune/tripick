@@ -37,22 +37,24 @@ function user(over: Partial<UserEntity> = {}): UserEntity {
   return { id: 'u1', nickname: '앨리스', isDemo: false, ...over } as UserEntity;
 }
 
-function createHarness() {
+function createHarness(configOverrides: Record<string, string> = {}) {
   const usersService = {
     findByEmail: jest.fn(),
     findById: jest.fn(),
     createEmailUser: jest.fn(),
-    setPendingPassword: jest.fn(),
     markEmailVerified: jest.fn(),
     setPassword: jest.fn(),
-    findOrCreateDemoUser: jest.fn(),
     findOrCreateByKakao: jest.fn(),
   };
   const jwtService = {
     signAsync: jest.fn(async (payload: any, opts?: any) => `jwt(${payload.sub})${opts ? '-r' : ''}`),
     verify: jest.fn(),
   };
-  const emailService = { sendVerification: jest.fn(), sendPasswordReset: jest.fn() };
+  const emailService = {
+    sendVerification: jest.fn(),
+    sendPasswordReset: jest.fn(),
+    sendAccountExistsNotice: jest.fn(),
+  };
   const refreshRepo = {
     create: jest.fn((v: any) => v),
     save: jest.fn(async (v: any) => ({ id: v.id ?? 'rt-1', ...v })),
@@ -68,7 +70,7 @@ function createHarness() {
   const service = new AuthService(
     usersService as any,
     jwtService as any,
-    config(),
+    config(configOverrides),
     emailService as any,
     refreshRepo as any,
     emailTokenRepo as any,
@@ -98,12 +100,26 @@ describe('AuthService — email signup', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('conflicts when the email already has a password', async () => {
-    const { service, usersService } = createHarness();
-    usersService.findByEmail.mockResolvedValue(user({ passwordHash: 'x' }));
-    await expect(
-      service.signupWithEmail({ email: 'a@b.com', password: 'abc12345', nickname: '앨리스' } as any),
-    ).rejects.toBeInstanceOf(ConflictException);
+  // 예전엔 여기서 409 를 던져 "이 이메일 가입돼 있음"이 그대로 새어 나갔다.
+  it('answers an existing account exactly like a fresh signup', async () => {
+    const { service, usersService, emailService } = createHarness();
+    usersService.findByEmail.mockResolvedValue(null);
+    usersService.createEmailUser.mockResolvedValue(user({ email: 'a@b.com' }));
+    const fresh = await service.signupWithEmail({
+      email: 'a@b.com',
+      password: 'abc12345',
+      nickname: '앨리스',
+    } as any);
+
+    usersService.findByEmail.mockResolvedValue(user({ email: 'a@b.com', passwordHash: 'x' }));
+    const taken = await service.signupWithEmail({
+      email: 'a@b.com',
+      password: 'abc12345',
+      nickname: '앨리스',
+    } as any);
+
+    expect(taken).toEqual(fresh);
+    expect(emailService.sendAccountExistsNotice).toHaveBeenCalledTimes(1);
   });
 
   it('creates a new email user and dispatches a verification mail', async () => {
@@ -124,14 +140,23 @@ describe('AuthService — email signup', () => {
     expect(res).toMatchObject({ ok: true, email: 'a@b.com' });
   });
 
-  it('stores only a pending password for an existing kakao user', async () => {
-    const { service, usersService } = createHarness();
-    usersService.findByEmail.mockResolvedValue(user({ email: 'a@b.com' })); // passwordHash 없음 = 카카오 가입자
-    usersService.setPendingPassword.mockResolvedValue(user({ email: 'a@b.com' }));
+  /**
+   * 계정 탈취 경로: 공격자가 피해자 이메일로 가입 → 피해자에게 "가입 인증" 메일 도착 →
+   * 피해자가 누르는 순간 공격자 비밀번호가 활성화. 기존 계정은 손대지 않아야 한다.
+   */
+  it('never plants a password on an existing account', async () => {
+    const { service, usersService, emailService } = createHarness();
+    usersService.findByEmail.mockResolvedValue(user({ email: 'a@b.com' })); // 카카오 가입자(비밀번호 없음)
 
-    await service.signupWithEmail({ email: 'a@b.com', password: 'abc12345', nickname: '앨리스' } as any);
-    expect(usersService.setPendingPassword).toHaveBeenCalledTimes(1);
+    await service.signupWithEmail({
+      email: 'a@b.com',
+      password: 'attacker1',
+      nickname: '공격자',
+    } as any);
+
     expect(usersService.createEmailUser).not.toHaveBeenCalled();
+    expect(emailService.sendVerification).not.toHaveBeenCalled();
+    expect(emailService.sendAccountExistsNotice).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -273,9 +298,23 @@ describe('AuthService — logout & kakao status', () => {
     );
   });
 
-  it('throws when building the authorize URL while unconfigured', () => {
+  it('throws when starting kakao auth while unconfigured', () => {
     const { service } = createHarness();
-    expect(() => service.getKakaoAuthUrl()).toThrow(BadRequestException);
+    expect(() => service.startKakaoAuth()).toThrow(BadRequestException);
+  });
+
+  // state 가 authorize URL 에만 있고 콜백에서 대조되지 않으면 로그인 CSRF 가 열린다.
+  it('binds a fresh state to every authorize URL', () => {
+    const { service } = createHarness({
+      KAKAO_REST_API_KEY: 'key',
+      KAKAO_CALLBACK_URL: 'http://localhost:4000/api/v1/auth/kakao/callback',
+    });
+
+    const first = service.startKakaoAuth();
+    const second = service.startKakaoAuth();
+
+    expect(first.state).not.toBe(second.state);
+    expect(new URL(first.authorizeUrl).searchParams.get('state')).toBe(first.state);
   });
 });
 

@@ -1,10 +1,14 @@
 /**
- * 데모 계정(kakaoId=demo-user)에 "여행 중(Live)" 화면 테스트용 데이터를 시드한다.
+ * 데모 계정에 "여행 중(Live)" 화면 테스트용 데이터를 시드한다.
+ *
+ * 대상 계정은 `SEED_USER_EMAIL` 로 지정한다 — 예전에는 아무나 부를 수 있는 데모 로그인이
+ * kakaoId=demo-user 계정을 자동 생성해 줬지만, 그 엔드포인트(모든 방문자가 계정 하나를
+ * 공유하던 구멍)를 없앴다. 이제 데모용 계정도 그냥 일반 계정으로 만들어 쓴다.
  *
  * 오늘 날짜의 당일 여행 + 시간대별 일정 6개를 생성한다.
  * 진행 상태(done/current/upcoming)는 실행 시점의 현재 시각에 따라 자동으로 나뉜다.
  *
- * 실행: cd apps/api && pnpm seed:demo-live
+ * 실행: cd apps/api && SEED_USER_EMAIL=demo@tripick.place pnpm seed:demo-live
  * 멱등성: 같은 제목의 기존 데모 여행을 지우고 다시 만든다.
  *
  * AppModule 전체(BullMQ/Redis/synchronize)를 띄우지 않고, 필요한 엔티티만 등록한
@@ -82,10 +86,16 @@ async function main() {
     const tripsRepo = dataSource.getRepository(TripEntity);
     const itemsRepo = dataSource.getRepository(ItineraryItemEntity);
 
-    const demo = await usersRepo.findOneBy({ kakaoId: 'demo-user' });
+    const seedEmail = (process.env['SEED_USER_EMAIL'] ?? '').trim().toLowerCase();
+    if (!seedEmail) {
+      throw new Error(
+        'SEED_USER_EMAIL 이 필요합니다. 데모용 계정 이메일을 지정하세요 (예: SEED_USER_EMAIL=demo@tripick.place pnpm seed:demo-live).',
+      );
+    }
+    const demo = await usersRepo.findOneBy({ email: seedEmail });
     if (!demo) {
       throw new Error(
-        '데모 계정이 없습니다. 먼저 웹에서 "임시 세션으로 둘러보기"(데모 로그인)를 한 번 실행한 뒤 다시 시도하세요.',
+        `${seedEmail} 계정이 없습니다. 웹에서 이 주소로 회원가입 + 이메일 인증을 먼저 마친 뒤 다시 시도하세요.`,
       );
     }
 

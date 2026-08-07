@@ -37,9 +37,12 @@ export class UserEntity {
   passwordHash?: string;
 
   /**
-   * 인증 대기 중인 bcrypt hash. 가입/계정 연동 시 여기 먼저 저장하고,
-   * 이메일 인증 토큰을 소비할 때 비로소 passwordHash 로 승격한다.
-   * (인증 전에는 로그인 불가 → 이메일 소유 증명 없이 비밀번호 활성화되는 계정 탈취 차단)
+   * 인증 대기 중인 bcrypt hash. **신규 가입 시점에만** 채워지고, 이메일 인증 토큰을
+   * 소비할 때 passwordHash 로 승격한다. (인증 전에는 로그인 불가)
+   *
+   * 이미 있는 계정에는 절대 다시 쓰지 않는다 — 남의 계정에 비밀번호를 심어 두고 주인이
+   * 인증 링크를 누르게 만드는 탈취 경로가 열린다. 기존 계정의 비밀번호 설정·변경은
+   * 재설정 플로우(setPassword)만 통한다.
    */
   @Column({ type: 'varchar', nullable: true })
   pendingPasswordHash?: string | null;

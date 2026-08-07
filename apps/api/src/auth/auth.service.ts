@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -24,7 +23,6 @@ import { RefreshTokenEntity } from './entities/refresh-token.entity';
 import type {
   AuthOpResultDto,
   AuthTokens,
-  DemoLoginDto,
   EmailLoginDto,
   EmailSignupDto,
   KakaoAuthStatusDto,
@@ -75,21 +73,23 @@ export class AuthService {
     if (nickname.length > 20) throw new BadRequestException('닉네임은 20자 이내로 입력해주세요.');
 
     const existing = await this.usersService.findByEmail(email);
-    if (existing && existing.passwordHash) {
-      throw new ConflictException('이미 가입된 이메일이에요. 로그인해주세요.');
-    }
-
-    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_COST);
-    let user: UserEntity;
     if (existing) {
-      // 카카오로 이미 가입한 사용자 — 비밀번호는 pending 으로만 저장.
-      // 이메일 인증 링크(소유자에게만 도달)를 눌러야 활성화 → 계정 탈취 차단.
-      user = await this.usersService.setPendingPassword(existing.id, passwordHash);
+      // 이미 있는 계정에는 절대 비밀번호를 심지 않는다. 예전에는 pending 으로 받아 두고
+      // 인증 링크로 승격했는데, 그 링크는 **계정 주인**에게 간다 — 주인이 "가입 인증"
+      // 메일로 알고 누르는 순간 공격자가 넣은 비밀번호가 활성화돼 계정이 넘어갔다.
+      // 대신 주인에게 상황만 알리고, 비밀번호 설정은 재설정 플로우로 보낸다.
+      await this.emailService.sendAccountExistsNotice(email, {
+        hasPassword: Boolean(existing.passwordHash),
+        resetUrl: `${this.getWebAppUrl()}/forgot-password`,
+        loginUrl: `${this.getWebAppUrl()}/login`,
+      });
     } else {
-      user = await this.usersService.createEmailUser({ email, passwordHash, nickname });
+      const passwordHash = await bcrypt.hash(dto.password, BCRYPT_COST);
+      const user = await this.usersService.createEmailUser({ email, passwordHash, nickname });
+      await this.dispatchVerification(user);
     }
 
-    await this.dispatchVerification(user);
+    // 두 갈래가 완전히 같은 응답을 낸다 — 다르면 그 자체로 가입 여부 조회 API 가 된다.
     return {
       ok: true,
       message: '인증 메일을 보냈어요. 메일을 확인해 가입을 완료해주세요.',
@@ -147,8 +147,10 @@ export class AuthService {
     const email = normalizeEmail(rawEmail);
     if (!email) throw new BadRequestException('이메일을 입력해주세요.');
     const user = await this.usersService.findByEmail(email);
-    // 사용자 enumeration 방지: 같은 응답 반환
-    if (user && user.passwordHash) {
+    // 사용자 enumeration 방지: 같은 응답 반환.
+    // 비밀번호가 아직 없는 계정(카카오 단독 가입)도 통과시킨다 — 기존 계정에 비밀번호를
+    // 다는 유일한 경로라, 여기서 막으면 카카오 가입자는 이메일 로그인을 영영 못 쓴다.
+    if (user) {
       await this.dispatchPasswordReset(user);
     }
     return {
@@ -175,50 +177,57 @@ export class AuthService {
   // Kakao / demo (기존 동작 유지 + session user 형식 통일)
   // ─────────────────────────────────────────────────────────────
 
-  getKakaoAuthUrl(): string {
-    const status = this.getKakaoStatus();
-    if (!status.ready || !status.authorizeUrl) {
-      throw new BadRequestException({
-        message: 'Kakao OAuth is not configured yet',
-        missingKeys: status.missingKeys,
-      });
-    }
-    return status.authorizeUrl;
-  }
-
-  getKakaoStatus(): KakaoAuthStatusDto {
-    const clientId = this.config.get<string>('KAKAO_REST_API_KEY');
-    const redirectUri = this.config.get<string>('KAKAO_CALLBACK_URL');
-    const missingKeys = [
-      ...(clientId ? [] : ['KAKAO_REST_API_KEY']),
-      ...(redirectUri ? [] : ['KAKAO_CALLBACK_URL']),
-    ];
-    if (missingKeys.length > 0 || !clientId || !redirectUri) {
-      return { ready: false, missingKeys };
-    }
+  /**
+   * 로그인 시작 — authorize URL + 그에 묶인 state 를 만든다.
+   *
+   * state 는 로그인 CSRF 방어다. 이게 없으면 공격자가 자기 인가 코드로 피해자 브라우저를
+   * 콜백에 태워 **피해자를 공격자 계정으로 로그인**시킬 수 있고, 이후 피해자가 만드는 여행·
+   * 업로드 사진이 전부 공격자 계정에 쌓인다. 컨트롤러가 같은 값을 httpOnly 쿠키로 심어
+   * 브라우저에 묶고, 콜백에서 쿼리 state 와 대조한다 — URL 에만 실으면 아무 의미가 없다.
+   */
+  startKakaoAuth(): { authorizeUrl: string; state: string } {
+    const { clientId, redirectUri } = this.requireKakaoConfig();
+    const state = generateRandomToken(16);
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
       response_type: 'code',
+      state,
     });
     return {
-      ready: true,
       authorizeUrl: `https://kauth.kakao.com/oauth/authorize?${params.toString()}`,
+      state,
     };
+  }
+
+  getKakaoStatus(): KakaoAuthStatusDto {
+    const missingKeys = this.missingKakaoKeys();
+    return missingKeys.length > 0 ? { ready: false, missingKeys } : { ready: true };
+  }
+
+  private missingKakaoKeys(): string[] {
+    return [
+      ...(this.config.get<string>('KAKAO_REST_API_KEY') ? [] : ['KAKAO_REST_API_KEY']),
+      ...(this.config.get<string>('KAKAO_CALLBACK_URL') ? [] : ['KAKAO_CALLBACK_URL']),
+    ];
+  }
+
+  private requireKakaoConfig(): { clientId: string; redirectUri: string } {
+    const clientId = this.config.get<string>('KAKAO_REST_API_KEY');
+    const redirectUri = this.config.get<string>('KAKAO_CALLBACK_URL');
+    if (!clientId || !redirectUri) {
+      throw new BadRequestException({
+        message: 'Kakao OAuth is not configured yet',
+        missingKeys: this.missingKakaoKeys(),
+      });
+    }
+    return { clientId, redirectUri };
   }
 
   async loginWithKakao(code: string, ctx: TokenContext = {}): Promise<LoginResponseDto> {
     const kakaoToken = await this.getKakaoToken(code);
     const profile = await this.getKakaoProfile(kakaoToken);
     const user = await this.usersService.findOrCreateByKakao(profile);
-    const tokens = await this.issueTokens(user.id, ctx);
-    return { tokens, user: this.toSessionUser(user) };
-  }
-
-  async loginDemo(dto: DemoLoginDto = {}, ctx: TokenContext = {}): Promise<LoginResponseDto> {
-    const user = await this.usersService.findOrCreateDemoUser(
-      dto.nickname?.trim() || '데모 여행자',
-    );
     const tokens = await this.issueTokens(user.id, ctx);
     return { tokens, user: this.toSessionUser(user) };
   }

@@ -41,14 +41,7 @@ export function resetPassword(token: string, password: string) {
   return api.post<AuthOpResultDto>('/auth/reset-password', { token, password });
 }
 
-// ─── 데모 / 카카오 ─────────────────────────────────────────
-
-export async function startDemoSession(nickname = '여행자'): Promise<LoginResponseDto> {
-  const session = await api.post<LoginResponseDto>('/auth/demo', { nickname });
-  storeSession(session);
-  void flushPendingFcmToken();
-  return session;
-}
+// ─── 카카오 ────────────────────────────────────────────────
 
 export function getKakaoStatus() {
   return api.get<KakaoAuthStatusDto>('/auth/kakao/status');

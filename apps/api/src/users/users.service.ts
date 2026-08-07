@@ -138,14 +138,6 @@ export class UsersService implements OnModuleInit {
     return this.repo.save(user);
   }
 
-  /** 계정 연동/재가입 시 인증 대기 비밀번호 설정. 활성 passwordHash 는 건드리지 않는다. */
-  async setPendingPassword(id: string, passwordHash: string): Promise<UserEntity> {
-    const user = await this.findById(id);
-    if (!user) throw new NotFoundException(`User ${id} not found`);
-    user.pendingPasswordHash = passwordHash;
-    return this.repo.save(user);
-  }
-
   /** 비밀번호 즉시 확정(재설정 플로우). 이메일 소유 증명이 끝난 상태 → 인증도 같이 처리. */
   async setPassword(id: string, passwordHash: string): Promise<UserEntity> {
     const user = await this.findById(id);
@@ -166,26 +158,6 @@ export class UsersService implements OnModuleInit {
     }
     if (!user.emailVerifiedAt) user.emailVerifiedAt = new Date();
     await this.repo.save(user);
-  }
-
-  async findOrCreateDemoUser(nickname = '데모 여행자'): Promise<UserEntity> {
-    const kakaoId = 'demo-user';
-    const existing = await this.repo.findOneBy({ kakaoId });
-    if (existing) {
-      if (existing.nickname !== nickname) {
-        existing.nickname = nickname;
-        return this.repo.save(existing);
-      }
-      return existing;
-    }
-
-    const user = this.repo.create({
-      kakaoId,
-      nickname,
-      isDemo: true,
-      handle: await this.generateUniqueHandle(nickname),
-    });
-    return this.repo.save(user);
   }
 
   async update(id: string, dto: UpdateUserDto): Promise<UserEntity> {

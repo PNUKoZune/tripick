@@ -2,7 +2,7 @@
 //
 // 이 앱의 화면 대부분은 로그인 세션 + 실제 여행 데이터가 있어야 렌더된다
 // (SessionGuard + API 로드). 그래서 정적 GET 으로는 UI 를 볼 수 없고,
-// 이 드라이버가 ① 데모 로그인으로 세션을 발급받아 ② localStorage 에 주입한 뒤
+// 이 드라이버가 ① 드라이버 계정으로 로그인해 세션을 발급받아 ② localStorage 에 주입한 뒤
 // ③ 원하는 경로를 헤드리스 Chromium 으로 열어 스크린샷을 찍는다.
 //
 // 사용법:
@@ -14,7 +14,7 @@
 //   WEB_BASE   (기본 http://localhost:3000)
 //   API_BASE   (기본 http://127.0.0.1:4000)
 //   TRIP_ID    스모크 모드에서 배너를 띄울 여행 id (seed:demo-live 출력값)
-//   NICKNAME   데모 계정 닉네임 (기본 "드라이버")
+//   DRIVER_EMAIL / DRIVER_PASSWORD   드라이버가 로그인할 계정 (SKILL.md 의 계정 준비 참고)
 //   VIEWPORT   "WxH" (기본 430x880 — 모바일 폭)
 //
 // 출력 스크린샷은 이 스킬 디렉터리의 shots/ 아래에 떨어진다.
@@ -30,27 +30,35 @@ fs.mkdirSync(SHOTS, { recursive: true });
 
 const WEB_BASE = process.env.WEB_BASE ?? 'http://localhost:3000';
 const API_BASE = process.env.API_BASE ?? 'http://127.0.0.1:4000';
-const NICKNAME = process.env.NICKNAME ?? '드라이버';
+const DRIVER_EMAIL = process.env.DRIVER_EMAIL ?? 'driver@tripick.test';
+const DRIVER_PASSWORD = process.env.DRIVER_PASSWORD ?? 'driver1234';
 const [vw, vh] = (process.env.VIEWPORT ?? '430x880').split('x').map(Number);
 
 const SESSION_KEY = 'tripick.session.v1'; // apps/web/src/shared/lib/session-token.ts
 
-async function demoLogin() {
-  const res = await fetch(`${API_BASE}/api/v1/auth/demo`, {
+// 예전엔 인증 없이 세션을 내주는 /auth/demo 를 썼는데, 그 엔드포인트는 모든 방문자가
+// 계정 하나를 공유하는 구멍이라 없앴다. 이제 미리 만들어 둔 드라이버 계정으로 로그인한다.
+async function logIn() {
+  const res = await fetch(`${API_BASE}/api/v1/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nickname: NICKNAME }),
+    body: JSON.stringify({ email: DRIVER_EMAIL, password: DRIVER_PASSWORD }),
   });
-  if (!res.ok) throw new Error(`demo login failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    throw new Error(
+      `login failed: ${res.status} ${await res.text()}\n` +
+        `${DRIVER_EMAIL} 계정을 먼저 만들어야 한다 — SKILL.md "드라이버 계정 준비" 참고.`,
+    );
+  }
   const session = await res.json(); // LoginResponseDto: { tokens, user }
-  if (!session?.tokens?.accessToken) throw new Error('no accessToken in demo login response');
+  if (!session?.tokens?.accessToken) throw new Error('no accessToken in login response');
   return session;
 }
 
 async function main() {
   const argPath = process.argv[2];
   const argOut = process.argv[3];
-  const session = await demoLogin();
+  const session = await logIn();
 
   const browser = await chromium.launch();
   const ctx = await browser.newContext({

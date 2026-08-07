@@ -3,17 +3,17 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { LoginResponseDto } from '@tripick/types';
-import { redirectToKakao, startDemoSession } from '@/entities/session/api/auth-api';
+import Link from 'next/link';
+import { redirectToKakao } from '@/entities/session/api/auth-api';
 import { storeSession } from '@/entities/session/model/session-storage';
 import { flushPendingFcmToken } from '@/entities/user';
-import { AppFrame, InlineNotice, PrimaryButton, SecondaryButton } from '@/shared/ui/app-frame';
+import { AppFrame, InlineNotice, PrimaryButton } from '@/shared/ui/app-frame';
 
 type CallbackState = { status: 'checking' } | { status: 'error'; message: string };
 
 export function KakaoCallbackView() {
   const router = useRouter();
   const [state, setState] = useState<CallbackState>({ status: 'checking' });
-  const [demoLoading, setDemoLoading] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -42,21 +42,6 @@ export function KakaoCallbackView() {
     }
   }, [router]);
 
-  async function handleDemoStart() {
-    setDemoLoading(true);
-    try {
-      await startDemoSession();
-      router.replace('/');
-    } catch (error) {
-      setState({
-        status: 'error',
-        message: error instanceof Error ? error.message : '임시 세션을 만들지 못했습니다.',
-      });
-    } finally {
-      setDemoLoading(false);
-    }
-  }
-
   return (
     <AppFrame showNav={false} themed>
       <section className="flex min-h-screen items-center justify-center px-5">
@@ -70,7 +55,7 @@ export function KakaoCallbackView() {
           <p className="mt-3 text-[15px] font-bold leading-6 text-[color:var(--text-secondary)]">
             {state.status === 'checking'
               ? '카카오 계정 정보를 앱에 저장하고 있어요.'
-              : '다시 시도하거나 임시 세션으로 먼저 확인할 수 있어요.'}
+              : '다시 시도하거나 이메일로 로그인할 수 있어요.'}
           </p>
 
           {state.status === 'error' ? (
@@ -85,9 +70,12 @@ export function KakaoCallbackView() {
                 <PrimaryButton tone="kakao" onClick={redirectToKakao}>
                   카카오로 다시 시작
                 </PrimaryButton>
-                <SecondaryButton disabled={demoLoading} onClick={handleDemoStart}>
-                  {demoLoading ? '준비 중' : '임시 세션으로 계속'}
-                </SecondaryButton>
+                <Link
+                  href="/login"
+                  className="flex h-12 w-full items-center justify-center rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card)] text-[14px] font-semibold text-[color:var(--ink)] hover:bg-[color:var(--card-soft)]"
+                >
+                  이메일로 로그인
+                </Link>
               </>
             ) : (
               <div className="h-2 overflow-hidden rounded-full bg-[color:var(--soft-bg)]">

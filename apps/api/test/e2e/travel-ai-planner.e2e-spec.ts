@@ -14,7 +14,10 @@ import type {
   ReplanResultDto,
   TripSummaryDto,
 } from '@tripick/types';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import type { Repository } from 'typeorm';
 import { AppModule } from '../../src/app.module';
+import { UserEntity } from '../../src/users/user.entity';
 
 describe('Travel AI planner E2E', () => {
   let app: INestApplication;
@@ -48,11 +51,33 @@ describe('Travel AI planner E2E', () => {
     (global as typeof globalThis & { __TRIPICK_REALTIME_URL__?: string }).__TRIPICK_REALTIME_URL__ =
       `http://127.0.0.1:${port}/realtime`;
 
-    const session = await post<LoginResponseDto>('/auth/demo', {
-      nickname: `E2E 여행자 ${Date.now()}`,
-    });
-    accessToken = session.tokens.accessToken;
+    // 데모 로그인 엔드포인트는 없앴다(모든 방문자가 계정 하나를 공유하던 구멍).
+    // 실제 가입 동선을 그대로 탄다 — 인증 토큰만 메일 대신 DB 에서 꺼내 온다.
+    accessToken = await signUpAndLogIn(`e2e-${Date.now()}@tripick.test`);
   }, 120000);
+
+  /**
+   * 가입 → 이메일 인증 → 로그인. access token 을 돌려준다.
+   *
+   * 인증 링크의 raw 토큰은 메일로만 나가고 DB 에는 hash 만 남아 되돌릴 수 없다. 그래서
+   * 인증 완료 상태만 DB 로 세우고(= 링크를 눌렀다고 치고), 가입·로그인은 실제 엔드포인트를 탄다.
+   */
+  async function signUpAndLogIn(email: string): Promise<string> {
+    const password = 'e2epass123';
+    await post('/auth/signup', { email, password, nickname: 'E2E 여행자' });
+
+    const users = app.get<Repository<UserEntity>>(getRepositoryToken(UserEntity));
+    const user = await users.findOneByOrFail({ email });
+    const { pendingPasswordHash } = user;
+    if (!pendingPasswordHash) throw new Error('가입 직후 pending 비밀번호가 없습니다.');
+    user.emailVerifiedAt = new Date();
+    user.passwordHash = pendingPasswordHash;
+    user.pendingPasswordHash = null;
+    await users.save(user);
+
+    const session = await post<LoginResponseDto>('/auth/login', { email, password });
+    return session.tokens.accessToken;
+  }
 
   afterAll(async () => {
     if (createdTripId) {
