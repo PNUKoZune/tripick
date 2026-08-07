@@ -4,12 +4,12 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { randomBytes } from 'node:crypto';
+import { isUniqueViolation } from '../common/db-errors';
 import { StorageService } from '../storage/storage.service';
 import { FcmTokenService } from '../notification/fcm-token.service';
 import { RefreshTokenEntity } from '../auth/entities/refresh-token.entity';
@@ -18,6 +18,8 @@ import { UserEntity } from './user.entity';
 import { WithdrawalReasonEntity } from './withdrawal-reason.entity';
 import { WithdrawUserDto } from './dto/withdraw-user.dto';
 import { DEFAULT_NOTIFICATION_PREFERENCES } from './notification-preferences.constants';
+import { NICKNAME_MAX_LENGTH, NICKNAME_REQUIRED, NICKNAME_TOO_LONG } from './nickname.constants';
+import { NOTIFICATION_PREFERENCE_KEYS } from './dto/update-notification-preferences.dto';
 import {
   WITHDRAWAL_CONFIRM_PHRASE,
   type KakaoProfile,
@@ -36,7 +38,7 @@ export type PublicProfile = Omit<
 >;
 
 @Injectable()
-export class UsersService implements OnModuleInit {
+export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
   constructor(
@@ -52,16 +54,6 @@ export class UsersService implements OnModuleInit {
     private readonly fcmTokens: FcmTokenService,
   ) {}
 
-  /** 핸들 없이 만들어진 기존 사용자들에 핸들 backfill (synchronize 환경 기준 1회성). */
-  async onModuleInit(): Promise<void> {
-    const legacy = await this.repo.find({ where: { handle: IsNull() } });
-    if (legacy.length === 0) return;
-    for (const user of legacy) {
-      user.handle = await this.generateUniqueHandle(this.handleBaseFor(user));
-      await this.repo.save(user);
-    }
-    this.logger.log(`Backfilled handle for ${legacy.length} user(s)`);
-  }
 
   async findById(id: string): Promise<UserEntity | null> {
     return this.repo.findOneBy({ id });
@@ -123,27 +115,43 @@ export class UsersService implements OnModuleInit {
     return this.repo.save(user);
   }
 
-  /** 신규 이메일 가입. 비밀번호는 인증 전이므로 pending 으로만 저장한다. */
+  /**
+   * 신규 이메일 가입. 비밀번호는 인증 전이므로 pending 으로만 저장한다.
+   *
+   * 같은 이메일로 동시에 두 요청이 들어오면 한쪽은 유니크 제약에 걸린다 — 그걸 그대로
+   * 흘리면 500 이 난다. 이메일 충돌은 "이미 있는 계정"이므로 null 을 돌려주고 호출부가
+   * 기존 계정 경로를 타게 하고, 핸들 충돌은 다른 후보로 다시 시도한다(핸들은 자동 생성값이라
+   * 사용자에게 알릴 것이 없다).
+   */
   async createEmailUser(params: {
     email: string;
     passwordHash: string;
     nickname: string;
-  }): Promise<UserEntity> {
-    const user = this.repo.create({
-      email: params.email,
-      pendingPasswordHash: params.passwordHash,
-      nickname: params.nickname,
-      handle: await this.generateUniqueHandle(localPart(params.email) || params.nickname),
-    });
-    return this.repo.save(user);
-  }
-
-  /** 계정 연동/재가입 시 인증 대기 비밀번호 설정. 활성 passwordHash 는 건드리지 않는다. */
-  async setPendingPassword(id: string, passwordHash: string): Promise<UserEntity> {
-    const user = await this.findById(id);
-    if (!user) throw new NotFoundException(`User ${id} not found`);
-    user.pendingPasswordHash = passwordHash;
-    return this.repo.save(user);
+  }): Promise<UserEntity | null> {
+    const base = localPart(params.email) || params.nickname;
+    const HANDLE_ATTEMPTS = 4;
+    for (let attempt = 0; attempt < HANDLE_ATTEMPTS; attempt++) {
+      // 마지막 시도는 랜덤 접미사로 확정 — 핸들만 계속 부딪히는 극단적 경우 대비.
+      const handle =
+        attempt < HANDLE_ATTEMPTS - 1
+          ? await this.generateUniqueHandle(base)
+          : `${slugifyHandle(base)}${randomBytes(4).toString('hex')}`;
+      try {
+        return await this.repo.save(
+          this.repo.create({
+            email: params.email,
+            pendingPasswordHash: params.passwordHash,
+            nickname: params.nickname,
+            handle,
+          }),
+        );
+      } catch (error) {
+        if (isUniqueViolation(error, 'email')) return null;
+        if (isUniqueViolation(error, 'handle') && attempt < HANDLE_ATTEMPTS - 1) continue;
+        throw error;
+      }
+    }
+    return null;
   }
 
   /** 비밀번호 즉시 확정(재설정 플로우). 이메일 소유 증명이 끝난 상태 → 인증도 같이 처리. */
@@ -168,44 +176,21 @@ export class UsersService implements OnModuleInit {
     await this.repo.save(user);
   }
 
-  async findOrCreateDemoUser(nickname = '데모 여행자'): Promise<UserEntity> {
-    const kakaoId = 'demo-user';
-    const existing = await this.repo.findOneBy({ kakaoId });
-    if (existing) {
-      if (existing.nickname !== nickname) {
-        existing.nickname = nickname;
-        return this.repo.save(existing);
-      }
-      return existing;
-    }
-
-    const user = this.repo.create({
-      kakaoId,
-      nickname,
-      isDemo: true,
-      handle: await this.generateUniqueHandle(nickname),
-    });
-    return this.repo.save(user);
-  }
-
   async update(id: string, dto: UpdateUserDto): Promise<UserEntity> {
     const user = await this.findById(id);
     if (!user) throw new NotFoundException(`User ${id} not found`);
     if (dto.nickname !== undefined) {
       const trimmed = dto.nickname.trim();
       if (!trimmed) {
-        throw new BadRequestException('닉네임을 입력해주세요.');
+        throw new BadRequestException(NICKNAME_REQUIRED);
       }
-      if (trimmed.length > 20) {
-        throw new BadRequestException('닉네임은 20자 이내로 입력해주세요.');
+      if (trimmed.length > NICKNAME_MAX_LENGTH) {
+        throw new BadRequestException(NICKNAME_TOO_LONG);
       }
       user.nickname = trimmed;
     }
     if (dto.handle !== undefined) {
       user.handle = await this.validateHandle(dto.handle, id);
-    }
-    if (dto.profileImageUrl !== undefined) {
-      user.profileImageUrl = dto.profileImageUrl;
     }
     return this.repo.save(user);
   }
@@ -223,9 +208,6 @@ export class UsersService implements OnModuleInit {
     return handle;
   }
 
-  private handleBaseFor(user: UserEntity): string {
-    return localPart(user.email) || user.nickname || user.kakaoId || 'user';
-  }
 
   /** base 를 슬러그화하고 충돌 시 숫자 suffix 를 붙여 유니크 핸들 생성. */
   private async generateUniqueHandle(base: string): Promise<string> {
@@ -245,10 +227,12 @@ export class UsersService implements OnModuleInit {
   ): Promise<NotificationPreferencesDto> {
     const user = await this.findById(id);
     if (!user) throw new NotFoundException(`User ${id} not found`);
+    // 알려진 키만 남긴다. 컨트롤러 DTO 가 이미 걸러 주지만, jsonb 는 한 번 쓰레기가 들어가면
+    // 계속 실려 다니므로 저장 직전에서도 좁힌다.
     user.notificationPreferences = {
       ...DEFAULT_NOTIFICATION_PREFERENCES,
-      ...(user.notificationPreferences ?? {}),
-      ...partial,
+      ...pickKnownPreferences(user.notificationPreferences),
+      ...pickKnownPreferences(partial),
     };
     await this.repo.save(user);
     return user.notificationPreferences;
@@ -378,6 +362,19 @@ export class UsersService implements OnModuleInit {
       this.logger.warn(`탈퇴 사유 기록 실패: ${(error as Error).message}`);
     }
   }
+}
+
+/** 알려진 알림 카테고리 + boolean 값만 통과시킨다. */
+function pickKnownPreferences(
+  source: Partial<NotificationPreferencesDto> | null | undefined,
+): Partial<NotificationPreferencesDto> {
+  if (!source) return {};
+  const picked: Partial<NotificationPreferencesDto> = {};
+  for (const key of NOTIFICATION_PREFERENCE_KEYS) {
+    const value = source[key];
+    if (typeof value === 'boolean') picked[key] = value;
+  }
+  return picked;
 }
 
 /** 가입 후 경과일(음수 방지). 탈퇴 사유 해석용 부가 정보. */

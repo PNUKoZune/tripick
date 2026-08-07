@@ -4,6 +4,7 @@
 
 기준 브랜치: `feat/email-login-and-session`
 작성일: 2026-06-23
+후속 문서: [`docs/auth/account-security-hardening-v1.md`](./account-security-hardening-v1.md) — 이 문서가 세운 구조를 전수 검토해 결함 13건을 고쳤다. **아래 3-1·3-2·3-6 은 그 작업으로 동작이 바뀌었으니 후속 문서를 정본으로 본다.**
 선행 문서:
 - [`docs/settings/settings-profile-v1.md`](../settings/settings-profile-v1.md)
 - [`docs/friends/friends-and-trip-members-v1.md`](../friends/friends-and-trip-members-v1.md)
@@ -56,19 +57,22 @@
 
 ### 3-1. 인증 플로우
 
-`auth/` 모듈에 이메일 기반 동선 추가. 카카오/데모 로그인과 세션 응답 형식(`LoginResponseDto = { tokens, user }`)을 통일.
+`auth/` 모듈에 이메일 기반 동선 추가. 카카오 로그인과 세션 응답 형식(`LoginResponseDto = { tokens, user }`)을 통일. (당시 있던 데모 로그인은 [`docs/auth/account-security-hardening-v1.md`](./account-security-hardening-v1.md) §4.1 에서 제거됐다.)
 
-- **가입** `signupWithEmail` — 이메일/비밀번호/닉네임 검증 후, 비밀번호를 `pendingPasswordHash` 로만 저장하고 인증 메일 발송. 이미 비밀번호가 있는 이메일이면 409.
+- **가입** `signupWithEmail` — 이메일/비밀번호/닉네임 검증 후, 비밀번호를 `pendingPasswordHash` 로만 저장하고 인증 메일 발송. ~~이미 비밀번호가 있는 이메일이면 409.~~
+  - **변경됨** → [`docs/auth/account-security-hardening-v1.md`](./account-security-hardening-v1.md) §4.2: 이미 있는 계정에는 pending 비밀번호를 심지 않는다(계정 탈취 경로). 안내 메일만 보내고 응답은 신규 가입과 동일 — 409 도 사라졌다.
 - **로그인** `loginWithEmail` — bcrypt 비교. 인증 전(pending) 사용자는 `403` + 인증 안내 (401 은 클라에서 "세션 만료" 로 치환되므로 구분).
 - **이메일 인증** `verifyEmail` — 토큰 소비 시 `markEmailVerified` 가 인증 처리 + pending 비밀번호 승격을 함께 수행.
-- **비밀번호 재설정** — `requestPasswordReset`(enumeration 방지: 항상 동일 응답) → `resetPassword`(토큰 소비 + 비밀번호 확정 + **모든 refresh 토큰 폐기**).
+- **비밀번호 재설정** — `requestPasswordReset`(enumeration 방지: 항상 동일 응답) → `resetPassword`(토큰 소비 + 비밀번호 확정 + **모든 refresh 토큰 폐기**). 비밀번호가 없는 계정(카카오 단독 가입)도 대상이다 — 기존 계정에 비밀번호를 다는 유일한 경로다.
+- 메일 링크 경로는 `/auth/verify-email`, **`/reset-password`**(`/auth/reset-password` 아님).
 
 ### 3-2. 토큰 / 세션
 
 - access: `JWT_SECRET` / `JWT_EXPIRES_IN`(7d), refresh: `JWT_REFRESH_SECRET` / `JWT_REFRESH_EXPIRES_IN`(30d).
 - `refresh_tokens` 테이블 — raw 토큰의 SHA-256 hash 만 저장. `familyId` 로 회전 체인 추적.
-- **회전**: refresh 시 같은 family 로 새 토큰 발급 + 기존 row `replacedAt` 마킹.
-- **reuse detection**: 이미 회전된 토큰 재사용 시 family 전체 폐기 (탈취 대응).
+- **회전**: refresh 시 같은 family 로 새 토큰 발급 + 기존 row `replacedAt` 마킹. 마킹은 조건부 UPDATE 로 **선점**하고 진 쪽은 발급하지 않는다([`docs/auth/account-security-hardening-v1.md`](./account-security-hardening-v1.md) §4.5).
+- **reuse detection**: 이미 회전된 토큰 재사용 시 family 전체 폐기 (탈취 대응). 단 **30초 유예** 안의 재사용은 경합·재시도로 보고 해당 요청만 거절한다 — 폐기하면 방금 정상 발급된 토큰까지 죽는다.
+- refresh payload 에는 `jti` 가 들어간다. 없으면 같은 초에 발급된 두 토큰이 바이트까지 같아져 `tokenHash` 유니크 인덱스에 걸린다.
 - 로그아웃 / 비밀번호 변경 시 토큰 폐기.
 
 ### 3-3. 이메일 1회용 토큰
@@ -80,7 +84,7 @@
 ### 3-4. 사용자 핸들
 
 - `users.handle` 컬럼 (유니크, 소문자) — 가입 경로 무관 고유 식별자.
-- 가입 시 자동 생성: 이메일은 local-part, 카카오/데모는 nickname 기반 슬러그 + 충돌 시 숫자 suffix. 비-ASCII(한글 등)는 `user`, `user1` … 폴백.
+- 가입 시 자동 생성: 이메일은 local-part, 카카오는 nickname 기반 슬러그 + 충돌 시 숫자 suffix. 비-ASCII(한글 등)는 `user`, `user1` … 폴백.
 - `onModuleInit` 에서 핸들 없는 기존 유저 백필.
 - `PATCH /users/me { handle }` 로 편집 — `^[a-z0-9_]{3,20}$` 검증 + 중복 차단.
 - 친구 추가(`FriendsService.findUserByHandle`)는 **handle 단일 매칭** — 기존 kakaoId·email·nickname 퍼지 매칭 제거(PII enumeration / 동명이인 오매칭 차단).
@@ -97,8 +101,8 @@
 
 | 항목 | 처리 |
 | --- | --- |
-| 미인증 비밀번호 활성화 (계정 탈취) | 가입/연동 비밀번호는 `pendingPasswordHash` → 이메일 인증 시에만 승격 |
-| 사용자 enumeration | forgot-password / resend-verification 항상 동일 응답 |
+| 미인증 비밀번호 활성화 (계정 탈취) | 가입 비밀번호는 `pendingPasswordHash` → 이메일 인증 시에만 승격. **기존 계정에는 심지 않는다**(hardening 문서 §4.2) |
+| 사용자 enumeration | forgot-password / resend-verification / **signup** 항상 동일 응답 |
 | `/users/me` 민감 필드 노출 | `publicProfile()` 로 `passwordHash` · `pendingPasswordHash` · `fcmToken` 제거 후 반환 |
 | 토큰 이중 소비 | email 토큰 조건부 UPDATE |
 | refresh 탈취 | reuse detection → family 폐기 |
@@ -164,6 +168,7 @@ SMTP_SECURE=false
 ## 7. 후속 / TODO
 
 - ~~refresh 토큰을 RN 네이티브 SecureStore 로 이전, access 만 WebView 주입.~~ → 완료: [refresh-token-securestore-v1.md](refresh-token-securestore-v1.md)
+- ~~이 구조 전반의 보안 결함 점검.~~ → 완료: [`docs/auth/account-security-hardening-v1.md`](./account-security-hardening-v1.md) (13건 수정, 남은 항목은 그 문서 §7)
 - 429 응답 한국어 메시지 + 재시도 안내 UI.
 - 이메일 인증/재설정 메일 템플릿 디자인 정리.
 - 핸들 기반 친구 초대 링크 / QR (이번 핸들 위에 얹기).

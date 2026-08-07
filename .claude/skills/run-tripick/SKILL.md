@@ -60,17 +60,32 @@ until curl -s -o /dev/null http://localhost:3000; do sleep 1; done
 echo "up"
 ```
 
-## Seed a demo user + trip
+## Driver account setup (once per database)
 
-The seed script requires the demo user to exist first, so hit the demo-login
-endpoint once (it creates the `demo-user` account), then seed. Capture the
-printed trip id into `TRIP_ID`:
+There is no anonymous session endpoint — `/auth/demo` was removed because it
+logged every visitor into one shared account. The driver logs in with a real
+account, so create it once. Sign up through the API, then mark it verified in
+the DB directly: the verification link's raw token only exists in the mail
+(console log), while the DB stores just a hash.
 
 ```
-curl -sX POST http://127.0.0.1:4000/api/v1/auth/demo \
-  -H 'Content-Type: application/json' -d '{"nickname":"드라이버"}' >/dev/null
+curl -sX POST http://127.0.0.1:4000/api/v1/auth/signup \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"driver@tripick.test","password":"driver1234","nickname":"드라이버"}'
 
-TRIP_ID=$(pnpm --filter @tripick/api seed:demo-live 2>/dev/null \
+docker compose exec -T postgres psql -U tripick -d tripick -c \
+  'UPDATE users SET "emailVerifiedAt"=now(), "passwordHash"="pendingPasswordHash", "pendingPasswordHash"=NULL WHERE email=$$driver@tripick.test$$;'
+```
+
+Override with `DRIVER_EMAIL` / `DRIVER_PASSWORD` if you use a different account.
+
+## Seed a demo trip
+
+`seed:demo-live` attaches the trip to the account named by `SEED_USER_EMAIL`.
+Capture the printed trip id into `TRIP_ID`:
+
+```
+TRIP_ID=$(SEED_USER_EMAIL=driver@tripick.test pnpm --filter @tripick/api seed:demo-live 2>/dev/null \
   | grep -oP 'trip:.*\(\K[0-9a-f-]{36}')
 echo "TRIP_ID=$TRIP_ID"
 ```
@@ -103,7 +118,8 @@ node driver.mjs "/planner?tripId=$TRIP_ID&day=1&replan=weather" planner.png
 session didn't take or the server isn't up.
 
 Env knobs: `WEB_BASE` (default `http://localhost:3000`), `API_BASE`
-(`http://127.0.0.1:4000`), `TRIP_ID`, `NICKNAME`, `VIEWPORT` (`430x880`).
+(`http://127.0.0.1:4000`), `TRIP_ID`, `DRIVER_EMAIL`, `DRIVER_PASSWORD`,
+`VIEWPORT` (`430x880`).
 
 ## Run (human path)
 
@@ -124,15 +140,15 @@ pnpm --filter @tripick/web typecheck
 - **Every UI screen needs a session.** No `localStorage['tripick.session.v1']` →
   `SessionGuard` redirects to login and you screenshot a login page. The driver
   handles this; if you drive by hand, inject that key (value = the
-  `/auth/demo` response JSON `{tokens,user}`).
+  `/auth/login` response JSON `{tokens,user}`).
 - **`sudo` fails under the `!` runner** (`a terminal is required to
   authenticate`). System-lib installs must be done in a real terminal — see
   Prerequisites.
-- **The demo user is keyed by `kakaoId: 'demo-user'`, not by nickname.** Any
-  `NICKNAME` returns the same account, so the seeded trip is always owned by the
-  session the driver logs into. Good — access just works.
-- **Seed before smoke.** `seed:demo-live` throws if no demo user exists yet;
-  the `curl /auth/demo` step above creates it. Re-running seed deletes and
+- **Seed and driver must point at the same account.** `SEED_USER_EMAIL` (seed)
+  and `DRIVER_EMAIL` (driver) both default to `driver@tripick.test`; if you
+  change one, change the other or the driver logs into an account with no trip.
+- **Seed before smoke.** `seed:demo-live` throws if that account does not exist
+  yet — run the account setup above first. Re-running seed deletes and
   recreates its own `성수·한강 당일 여행 (데모)` trip (new id each time), so
   re-capture `TRIP_ID`.
 - **Two "닫기" buttons** in the banner (text button + aria-label "배너 닫기" ✕)

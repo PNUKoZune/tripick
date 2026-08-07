@@ -26,10 +26,8 @@ import { FcmTokenService } from '../notification/fcm-token.service';
 import { UsersService } from './users.service';
 import { UserEntity } from './user.entity';
 import { WithdrawUserDto } from './dto/withdraw-user.dto';
-import type {
-  UpdateNotificationPreferencesDto,
-  UpdateUserDto,
-} from '@tripick/types';
+import { UpdateNotificationPreferencesBodyDto } from './dto/update-notification-preferences.dto';
+import { UpdateUserBodyDto } from './dto/update-user.dto';
 
 interface UploadedImage {
   buffer: Buffer;
@@ -55,7 +53,7 @@ export class UsersController {
 
   @Patch('me')
   @ApiOperation({ summary: '내 프로필 수정' })
-  async updateMe(@CurrentUser() user: UserEntity, @Body() dto: UpdateUserDto) {
+  async updateMe(@CurrentUser() user: UserEntity, @Body() dto: UpdateUserBodyDto) {
     return this.usersService.publicProfile(await this.usersService.update(user.id, dto));
   }
 
@@ -63,12 +61,9 @@ export class UsersController {
   @ApiOperation({ summary: '알림 수신 설정 갱신' })
   updateNotificationPreferences(
     @CurrentUser() user: UserEntity,
-    @Body() dto: UpdateNotificationPreferencesDto,
+    @Body() dto: UpdateNotificationPreferencesBodyDto,
   ) {
-    return this.usersService.updateNotificationPreferences(
-      user.id,
-      dto?.preferences ?? {},
-    );
+    return this.usersService.updateNotificationPreferences(user.id, dto.preferences);
   }
 
   @Patch('me/fcm-token')
@@ -102,18 +97,20 @@ export class UsersController {
     },
   })
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
-  uploadProfileImage(
+  async uploadProfileImage(
     @CurrentUser() user: UserEntity,
     @UploadedFile() file?: UploadedImage,
   ) {
     if (!file) throw new BadRequestException('파일이 필요합니다.');
-    return this.usersService.uploadProfileImage(user.id, file);
+    return this.usersService.publicProfile(
+      await this.usersService.uploadProfileImage(user.id, file),
+    );
   }
 
   @Delete('me/profile-image')
   @ApiOperation({ summary: '프로필 이미지 초기화 (기본 아바타로 복구)' })
-  removeProfileImage(@CurrentUser() user: UserEntity) {
-    return this.usersService.removeProfileImage(user.id);
+  async removeProfileImage(@CurrentUser() user: UserEntity) {
+    return this.usersService.publicProfile(await this.usersService.removeProfileImage(user.id));
   }
 
   @Post('me/withdrawal')

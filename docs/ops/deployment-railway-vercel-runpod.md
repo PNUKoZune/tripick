@@ -115,7 +115,7 @@ Railway Redis 애드온을 사용한다. 단 접속 정보가 비밀번호를 �
 
 - `docker build -f apps/api/Dockerfile -t tripick-api .` 성공 (이미지 553MB)
 - 빈 DB·Redis 를 붙여 컨테이너 기동 → 마이그레이션 2건 자동 적용, 테이블 17개 생성
-- `GET /api/v1/health` 200, `POST /auth/demo` 200, Docker `HEALTHCHECK` = `healthy`
+- `GET /api/v1/health` 200, `POST /auth/demo` 200, Docker `HEALTHCHECK` = `healthy` *(당시 기록. `/auth/demo` 는 이후 제거 — 스모크는 `POST /auth/signup` 으로 대체)*
 - `REDIS_URL` 경로(5-1)로 Redis 접속 성공
 
 ---
@@ -193,7 +193,7 @@ replica 1개 운영(5-3)이라 동시 실행 경합이 없기에 성립하는 �
 
 - 부팅 시 마이그레이션 2건 자동 적용 (`migrations` 테이블에 기록됨)
 - 테이블 17개(엔티티 13 + 벡터 3 + `migrations`), 확장 `vector`·`uuid-ossp`, HNSW 인덱스 2개 생성 확인
-- `POST /auth/demo` 200 — uuid 기본값·jsonb 기본값·FK 까지 쓰기 경로 동작 확인
+- `POST /auth/demo` 200 — uuid 기본값·jsonb 기본값·FK 까지 쓰기 경로 동작 확인 *(당시 기록. 현재는 `POST /auth/signup` 이 같은 경로를 탄다)*
 - 적용 후 `migration:generate` 재실행 시 위 jsonb 노이즈 외 스키마 차이 없음
 
 ### 5-3. Socket.IO Redis 어댑터 미설치 — 스케일 제약
@@ -238,7 +238,7 @@ CLAUDE.md 아키텍처에 "Redis Adapter / Pub-Sub Sync" 가 명시되어 있으
 | `WEB_APP_URL` | `http://localhost:3000` | Vercel 도메인 |
 | `CORS_ORIGIN` | (기본값) | Vercel 도메인 (쉼표 구분) |
 | `ODSAY_SERVICE_URL` | `http://localhost:4000` | **ODsay 콘솔 등록 도메인과 정확히 일치** |
-| `JWT_SECRET` / `JWT_REFRESH_SECRET` | `change-me-*` | 별도 생성한 시크릿 |
+| `JWT_SECRET` / `JWT_REFRESH_SECRET` | `change-me-*` | **별도 생성한 시크릿 (필수)** — 미설정이거나 `change-me-*` 그대로면 프로덕션 부팅이 거부된다 |
 | `SENTRY_DSN` (api) | api 프로젝트 DSN | 동일 — 비우면 SDK 가 no-op |
 | `SENTRY_ENVIRONMENT` (api) | (비움 → `NODE_ENV`) | `production` |
 | `NEXT_PUBLIC_SENTRY_DSN` (web) | web 프로젝트 DSN | 동일 — **api 와 다른 프로젝트** |

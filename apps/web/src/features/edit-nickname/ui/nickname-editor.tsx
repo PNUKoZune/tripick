@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { UserDto } from '@tripick/types';
 
+import { NICKNAME_MAX_LENGTH } from '@tripick/types';
 import { updateMe } from '@/entities/user';
 import { queryKeys } from '@/shared/api/query-keys';
 import { InlineEditableText } from '@/shared/ui';
@@ -31,7 +32,7 @@ export function NicknameEditor({ me, onError }: Props) {
       onCommit={(next) => mutation.mutate(next)}
       ariaLabel="닉네임"
       placeholder="닉네임"
-      maxLength={20}
+      maxLength={NICKNAME_MAX_LENGTH}
       disabled={!me}
       textClassName="text-[18px] font-bold text-[color:var(--ink,#191F28)] lg:text-[22px]"
     />

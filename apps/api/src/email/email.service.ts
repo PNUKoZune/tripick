@@ -88,6 +88,35 @@ export class EmailService implements OnModuleInit {
     });
   }
 
+  /**
+   * 이미 가입된 주소로 회원가입이 시도됐을 때 계정 주인에게 보내는 안내.
+   *
+   * 가입 응답은 신규 가입과 구분되지 않아야 하므로(enumeration) 알림은 메일로만 간다.
+   * 문구가 "가입 인증"이면 주인이 무심코 눌러 남이 넣은 비밀번호를 활성화해 주는 꼴이라,
+   * 여기서는 **누를 것이 없는** 안내로만 두고 행동은 로그인/재설정으로 유도한다.
+   */
+  async sendAccountExistsNotice(
+    to: string,
+    params: { hasPassword: boolean; resetUrl: string; loginUrl: string },
+  ): Promise<void> {
+    const how = params.hasPassword
+      ? '이미 비밀번호가 설정된 계정이에요. 비밀번호가 기억나지 않으면 재설정해주세요.'
+      : '카카오로 가입된 계정이에요. 이메일 비밀번호를 쓰려면 비밀번호 재설정으로 설정해주세요.';
+    await this.send({
+      to,
+      subject: '[TriPick] 이미 가입된 이메일로 가입 시도가 있었어요',
+      text: `이 주소로 TriPick 회원가입이 시도됐습니다.\n\n${how}\n\n로그인: ${params.loginUrl}\n비밀번호 재설정: ${params.resetUrl}\n\n본인이 시도한 게 아니라면 이 메일을 무시해주세요. 계정과 비밀번호는 아무것도 바뀌지 않았습니다.`,
+      html: buildEmailHtml({
+        title: '이미 가입된 이메일이에요',
+        message: `이 주소로 TriPick 회원가입이 시도됐습니다. ${how}`,
+        ctaLabel: '비밀번호 재설정',
+        ctaUrl: params.resetUrl,
+        footer:
+          '본인이 시도한 게 아니라면 이 메일을 무시해주세요. 계정과 비밀번호는 아무것도 바뀌지 않았습니다.',
+      }),
+    });
+  }
+
   /** 비밀번호 재설정 메일 발송 */
   async sendPasswordReset(to: string, link: string): Promise<void> {
     await this.send({

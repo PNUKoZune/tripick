@@ -45,8 +45,7 @@ import {
   togglePreferencePhotoTag,
   type PreferenceFormState,
 } from '@/entities/preferences/api/preferences-api';
-import { getStoredSession } from '@/entities/session/model/session-storage';
-import { startDemoSession } from '@/entities/session/api/auth-api';
+import { getStoredSession, type Session } from '@/entities/session/model/session-storage';
 import { queryKeys } from '@/shared/api/query-keys';
 import { downscaleImage, PREFERENCE_MAX_DIMENSION } from '@/shared/lib';
 import { ConfirmDialog, ImageLightbox, TimeField, Toast } from '@/shared/ui';
@@ -272,7 +271,7 @@ export function PreferenceSetupForm() {
 
   const savePreferenceMutation = useMutation({
     mutationFn: async (nextForm: PreferenceFormState) => {
-      const session = getStoredSession() ?? (await startDemoSession());
+      const session = requireSession();
       return savePreferences(session.tokens.accessToken, nextForm);
     },
     onSuccess: (preference, variables) => {
@@ -292,7 +291,7 @@ export function PreferenceSetupForm() {
 
   const analyzePhotosMutation = useMutation({
     mutationFn: async (files: File[]) => {
-      const session = getStoredSession() ?? (await startDemoSession());
+      const session = requireSession();
       // vision 분석은 해상도를 쓰므로 표시 크기(80px)보다 큰 1024px 로만 줄인다.
       // 포맷은 jpeg — 로컬 vision 서버(llama.cpp mtmd=stb_image)가 webp 를 못 읽는다.
       const downscaled = await Promise.all(
@@ -330,7 +329,7 @@ export function PreferenceSetupForm() {
 
   const reanalyzePhotosMutation = useMutation({
     mutationFn: async () => {
-      const session = getStoredSession() ?? (await startDemoSession());
+      const session = requireSession();
       return reanalyzePreferencePhotos(session.tokens.accessToken);
     },
     onSuccess: (job) => {
@@ -365,7 +364,7 @@ export function PreferenceSetupForm() {
 
   const togglePhotoTagMutation = useMutation({
     mutationFn: async (input: { url: string; tag: TasteTagValue; enabled: boolean }) => {
-      const session = getStoredSession() ?? (await startDemoSession());
+      const session = requireSession();
       return togglePreferencePhotoTag(session.tokens.accessToken, input);
     },
     onSuccess: (result) => {
@@ -385,7 +384,7 @@ export function PreferenceSetupForm() {
 
   const deletePhotoMutation = useMutation({
     mutationFn: async (url: string) => {
-      const session = getStoredSession() ?? (await startDemoSession());
+      const session = requireSession();
       return deletePreferencePhoto(session.tokens.accessToken, url);
     },
     onSuccess: (result) => {
@@ -1383,4 +1382,17 @@ function StanceButton({
       )}
     </button>
   );
+}
+
+/**
+ * 취향 저장·사진 분석은 반드시 내 계정으로 들어가야 한다. 예전에는 세션이 없으면 그 자리에서
+ * 임시(공유) 세션을 만들어 붙였는데, 그러면 남의 계정에 내 사진과 취향이 쌓였다. 이 화면은
+ * SessionGuard 안에 있어 정상 경로면 세션이 항상 있고, 없으면 조용히 넘어가지 말고 멈춘다.
+ */
+function requireSession(): Session {
+  const session = getStoredSession();
+  if (!session) {
+    throw new Error('로그인이 만료됐어요. 다시 로그인해주세요.');
+  }
+  return session;
 }

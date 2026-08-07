@@ -5,7 +5,7 @@ import { AppFrame } from '@/shared/ui/app-frame';
  * @MX:ANCHOR: 랜딩 "광안리의 하루" — SPEC-WEB-VISUAL-REDESIGN-001 M3 정본 구현.
  * 목업(docs/design-system/mockups/tripick-landing-mockup.html)의 hero 인라인 SVG ·
  * 4단계 플로우 · 미리 보는 결과 · 마무리 섹션 구조를 그대로 옮기되, CTA 는 실제
- * 인증 플로우(AuthStartActions — 이메일/카카오/임시 세션)로 화해(reconcile)한다.
+ * 인증 플로우(AuthStartActions — 이메일/카카오)로 화해(reconcile)한다.
  * @MX:REASON: fan_in — app/page.tsx 진입점이자 비로그인 사용자의 첫 화면.
  */
 const STEPS = [
@@ -79,7 +79,7 @@ export function LandingView() {
               </small>
             </span>
             <span className="whitespace-nowrap rounded-full bg-[color:var(--primary-tint)] px-[11px] py-1.5 text-[12px] font-bold text-[color:var(--primary)]">
-              로그인 없이 체험
+              가입 무료
             </span>
           </header>
 
@@ -127,7 +127,7 @@ export function LandingView() {
                 <AuthStartActions />
               </div>
               <p className="mt-3 text-center text-[13px] text-[color:var(--ink-faint)]">
-                로그인 없이 무료 · 3분이면 충분해요
+                가입 무료 · 3분이면 충분해요
               </p>
             </div>
           </section>

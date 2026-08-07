@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { NICKNAME_MAX_LENGTH } from '@tripick/types';
 
 import { signupWithEmail } from '@/entities/session/api/auth-api';
 import { useRetryCountdown } from '@/shared/lib';
@@ -44,7 +45,7 @@ export function EmailSignupForm({ onSent }: Props) {
           type="text"
           value={nickname}
           onChange={(e) => setNickname(e.target.value)}
-          maxLength={20}
+          maxLength={NICKNAME_MAX_LENGTH}
           placeholder="여행자"
           className="h-12 w-full rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[15px] outline-none focus:border-[color:var(--primary)]"
         />

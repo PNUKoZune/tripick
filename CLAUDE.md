@@ -144,7 +144,7 @@ pgvector 유사도 검색
 
 ```
 src/
-├── auth/           # 카카오 OAuth, JWT·Passport, 토큰 발급·검증
+├── auth/           # 카카오 OAuth + 이메일 가입·로그인·인증·재설정, JWT·Passport, 토큰 발급·회전
 ├── users/          # 사용자 CRUD
 ├── trips/          # 여행 생성·조회·수정·삭제
 ├── itinerary/      # 일정 항목 관리
@@ -233,7 +233,7 @@ src/
 | 관광정보    | 한국관광공사 관광지 집중률(방문자 추이 예측) | 혼잡 예상 시 일정 변경 "추천" 알림 | `TatsCnctrRateService`. areaCd/signguCd=법정동 코드(ldongCode2 로 조달), tAtsNm(관광지)만 데이터. **플래닝 점수에는 미반영** — 취향을 흐릴 수 있어 날씨 알림과 동일하게 inbox 추천(`crowd_alert`)만, 자동 재계획 안 함 |
 | 인기도      | 네이버 블로그·카페 검색(NCP API Hub) | "OO 여행지 추천" 글의 후보 언급 빈도 → 대중 인지도 재랭킹 | `NaverSearchService`. 취향만 보면 마이너 장소가 많이 나와 앞단에 붙인 신호. **플래닝 점수에 popularity 0.12 가중(집중률과 달리 반영)**, 단 소프트 재랭킹(마이너 후순위, 제거 아님)이고 키 없으면 중립값으로 랭킹 불변 |
 | 날씨        | 기상청 단기예보               | 날씨·강수 예보 (최대 5일)             | nx·ny 격자 변환 필수    |
-| 인증        | 카카오 OAuth 2.0              | 로그인, JWT 발급                      |                         |
+| 인증        | 카카오 OAuth 2.0              | 로그인, JWT 발급                      | `state` 필수(아래 주의사항) |
 | 이미지      | 사용자 갤러리 직접 업로드     | 취향 사진 수집                        | Instagram Graph API는 API 한계로 미채택 |
 | 푸시        | Firebase FCM + APNs           | 재계획·날씨 추천 푸시 알림            | notifee 라이브러리 조합 |
 
@@ -245,6 +245,12 @@ src/
 - ODsay `totalTime`=분, `totalDistance`=**미터** (km 아님)
 - 경로 조회 실패 시 `RouteHelper` 는 직선거리 기반 추정치로 조용히 폴백한다. 이동시간이 이상하면 폴백을 타고 있는지부터 확인할 것
 - 이동 수단 분기는 표시용 라벨이 아니라 정본 `RouteMode`('walk'|'transit'|'car')로 한다
+
+**카카오 OAuth 주의사항**
+
+- 로그인 시작(`GET /auth/kakao`)과 콜백은 **같은 오리진**이어야 한다. `state` 를 httpOnly 쿠키로 브라우저에 묶어 콜백에서 대조하는데, 웹이 상대경로(`/api/v1/...`)로 시작하면 Next 프록시 오리진에서 출발하고 카카오는 `KAKAO_CALLBACK_URL`(API 오리진)로 돌려보내 쿠키가 안 실린다. 그래서 서버가 `KAKAO_CALLBACK_URL` 에서 파생한 절대 `startUrl` 을 `/auth/kakao/status` 로 내려주고 웹은 그걸로 이동한다 — 로컬은 포트가 달라도 쿠키가 공유돼 우연히 통과하니, 이 경로를 바꿀 땐 배포 기준으로 판단할 것
+- 로그인 결과는 URL 에 세션이 아니라 **1회용 교환 코드**(Redis, 120초)만 싣는다. 웹이 `POST /auth/kakao/exchange` 로 바꿔 간다
+- 상세: [docs/auth/account-security-hardening-v1.md](docs/auth/account-security-hardening-v1.md)
 
 **기상청 API 주의사항**
 
@@ -263,6 +269,9 @@ src/
 ## 7. 개발 시 주의사항
 
 - PostgreSQL 이미지는 반드시 `pgvector/pgvector:pg16` 사용 (일반 `postgres:16` 사용 금지)
+- **익명·공유 세션은 없다.** 인증 없이 세션을 내주던 `POST /auth/demo`(모든 방문자가 계정 하나를 공유)는 제거했다. 데모·시드·드라이버는 전부 실제 계정으로 로그인한다 (`seed:demo-live` 는 `SEED_USER_EMAIL`)
+- **`JWT_SECRET`·`JWT_REFRESH_SECRET` 은 프로덕션에서 필수**다. 미설정이거나 `.env.example` 의 `change-me-*` 값 그대로면 부팅이 거부된다 (`common/jwt-secrets`)
+- **기존 계정에 비밀번호를 심는 경로를 만들지 말 것.** 가입 요청이 이미 있는 이메일로 오면 계정을 건드리지 않고 주인에게 안내 메일만 보낸다 — 인증 링크는 계정 주인에게 가므로, 대기 비밀번호를 심어 두면 주인이 링크를 누르는 순간 계정이 넘어간다. 기존 계정의 비밀번호 설정·변경은 재설정 플로우만 통한다
 - WebSocket 업그레이드 헤더(`Upgrade`, `Connection`)는 Nginx에서 별도 처리 필요
 - Geolocation(`navigator.geolocation`)은 HTTPS 환경에서만 동작, 로컬은 `localhost` 예외
 - Android WebView에서 geolocation 이중 권한 처리 필요 (`onPermissionRequest` prop)

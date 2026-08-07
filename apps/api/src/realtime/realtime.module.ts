@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { TripMembersModule } from '../trip-members/trip-members.module';
+import { accessTokenSecret } from '../common/jwt-secrets';
 import { RealtimeGateway } from './realtime.gateway';
 
 @Module({
@@ -10,7 +11,7 @@ import { RealtimeGateway } from './realtime.gateway';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET') ?? 'tripick-demo-jwt-secret',
+        secret: accessTokenSecret(config),
       }),
     }),
   ],

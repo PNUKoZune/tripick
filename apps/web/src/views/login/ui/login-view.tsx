@@ -1,11 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import { RiKakaoTalkFill } from 'react-icons/ri';
 
 import { GuestGuard } from '@/entities/session';
 import { EmailLoginForm } from '@/features/email-login';
 import { redirectToKakao } from '@/entities/session/api/auth-api';
-import { AppFrame } from '@/shared/ui/app-frame';
+import { AppFrame, InlineNotice } from '@/shared/ui/app-frame';
 
 export function LoginView() {
   return (
@@ -16,6 +17,14 @@ export function LoginView() {
 }
 
 function LoginContent() {
+  const [notice, setNotice] = useState<string | null>(null);
+
+  function handleKakao() {
+    redirectToKakao().catch((error: unknown) => {
+      setNotice(error instanceof Error ? error.message : '로그인을 시작하지 못했습니다.');
+    });
+  }
+
   return (
     <AppFrame showNav={false} themed>
       <div className="mx-auto flex min-h-dvh w-full max-w-[440px] flex-col px-5 pb-10 pt-12">
@@ -37,12 +46,18 @@ function LoginContent() {
 
         <button
           type="button"
-          onClick={redirectToKakao}
+          onClick={handleKakao}
           className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[12px] bg-[#FEE500] text-[15px] font-bold text-[#191919] hover:bg-[#FFDC00]"
         >
           <RiKakaoTalkFill className="size-5" aria-hidden />
           <span>카카오로 계속하기</span>
         </button>
+
+        {notice ? (
+          <div className="mt-4">
+            <InlineNotice title="로그인 준비 상태" description={notice} tone="blue" />
+          </div>
+        ) : null}
       </div>
     </AppFrame>
   );
