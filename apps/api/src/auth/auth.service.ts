@@ -18,6 +18,7 @@ import axios, { type AxiosError } from 'axios';
 import { UsersService } from '../users/users.service';
 import { UserEntity } from '../users/user.entity';
 import { EmailService } from '../email/email.service';
+import { refreshTokenSecret } from '../common/jwt-secrets';
 import { EmailTokenEntity, type EmailTokenPurpose } from './entities/email-token.entity';
 import { RefreshTokenEntity } from './entities/refresh-token.entity';
 import type {
@@ -45,6 +46,8 @@ export interface TokenContext {
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  /** 부팅 시점에 확정한다 — 키가 없거나 공개 값이면 프로덕션에서 여기서 죽는다. */
+  private readonly refreshSecret: string;
 
   constructor(
     private readonly usersService: UsersService,
@@ -55,7 +58,9 @@ export class AuthService {
     private readonly refreshRepo: Repository<RefreshTokenEntity>,
     @InjectRepository(EmailTokenEntity)
     private readonly emailTokenRepo: Repository<EmailTokenEntity>,
-  ) {}
+  ) {
+    this.refreshSecret = refreshTokenSecret(this.config);
+  }
 
   // ─────────────────────────────────────────────────────────────
   // Email signup / login / verification / reset
@@ -244,7 +249,7 @@ export class AuthService {
     const payload = { sub: userId };
     const accessToken = await this.jwtService.signAsync(payload);
     const refreshToken = await this.jwtService.signAsync(payload, {
-      secret: this.getRefreshSecret(),
+      secret: this.refreshSecret,
       expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN', '30d'),
     });
 
@@ -273,7 +278,7 @@ export class AuthService {
     let payload: { sub: string };
     try {
       payload = this.jwtService.verify<{ sub: string }>(refreshToken, {
-        secret: this.getRefreshSecret(),
+        secret: this.refreshSecret,
       });
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
@@ -369,7 +374,8 @@ export class AuthService {
         expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
       }),
     );
-    const link = `${this.getWebAppUrl()}/auth/reset-password?token=${encodeURIComponent(raw)}`;
+    // 웹 라우트는 `/reset-password` 다(`/auth/reset-password` 페이지는 없다 — 링크가 404 였음).
+    const link = `${this.getWebAppUrl()}/reset-password?token=${encodeURIComponent(raw)}`;
     await this.emailService.sendPasswordReset(user.email, link);
   }
 
@@ -428,10 +434,6 @@ export class AuthService {
       hasPassword: Boolean(user.passwordHash),
       isDemo: Boolean(user.isDemo),
     };
-  }
-
-  private getRefreshSecret(): string {
-    return this.config.get<string>('JWT_REFRESH_SECRET') ?? 'tripick-demo-refresh-secret';
   }
 
   private getWebAppUrl(): string {

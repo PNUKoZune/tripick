@@ -10,6 +10,7 @@ import { RefreshTokenEntity } from './entities/refresh-token.entity';
 import { EmailTokenEntity } from './entities/email-token.entity';
 import { UsersModule } from '../users/users.module';
 import { EmailModule } from '../email/email.module';
+import { accessTokenSecret } from '../common/jwt-secrets';
 
 @Module({
   imports: [
@@ -20,7 +21,7 @@ import { EmailModule } from '../email/email.module';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET') ?? 'tripick-demo-jwt-secret',
+        secret: accessTokenSecret(config),
         signOptions: { expiresIn: config.get('JWT_EXPIRES_IN', '7d') },
       }),
     }),

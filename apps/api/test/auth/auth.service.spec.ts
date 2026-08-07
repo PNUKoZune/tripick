@@ -288,6 +288,18 @@ describe('AuthService — password reset & verify', () => {
     expect(emailService.sendPasswordReset).not.toHaveBeenCalled();
   });
 
+  // 링크 경로가 웹 라우트와 어긋나면 메일은 나가는데 클릭하면 404 라 재설정이 통째로 죽는다.
+  it('sends a reset link pointing at the real web route', async () => {
+    const { service, usersService, emailService } = createHarness();
+    usersService.findByEmail.mockResolvedValue(user({ email: 'a@b.com', passwordHash: 'hash' }));
+
+    await service.requestPasswordReset('a@b.com');
+
+    const [to, link] = emailService.sendPasswordReset.mock.calls[0];
+    expect(to).toBe('a@b.com');
+    expect(link).toMatch(/^http:\/\/localhost:3000\/reset-password\?token=/);
+  });
+
   it('rejects a weak new password on reset', async () => {
     const { service } = createHarness();
     await expect(service.resetPassword('tok', 'short')).rejects.toBeInstanceOf(BadRequestException);

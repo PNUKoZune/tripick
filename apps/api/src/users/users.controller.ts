@@ -102,18 +102,20 @@ export class UsersController {
     },
   })
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
-  uploadProfileImage(
+  async uploadProfileImage(
     @CurrentUser() user: UserEntity,
     @UploadedFile() file?: UploadedImage,
   ) {
     if (!file) throw new BadRequestException('파일이 필요합니다.');
-    return this.usersService.uploadProfileImage(user.id, file);
+    return this.usersService.publicProfile(
+      await this.usersService.uploadProfileImage(user.id, file),
+    );
   }
 
   @Delete('me/profile-image')
   @ApiOperation({ summary: '프로필 이미지 초기화 (기본 아바타로 복구)' })
-  removeProfileImage(@CurrentUser() user: UserEntity) {
-    return this.usersService.removeProfileImage(user.id);
+  async removeProfileImage(@CurrentUser() user: UserEntity) {
+    return this.usersService.publicProfile(await this.usersService.removeProfileImage(user.id));
   }
 
   @Post('me/withdrawal')
