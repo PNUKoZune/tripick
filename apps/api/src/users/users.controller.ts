@@ -26,10 +26,8 @@ import { FcmTokenService } from '../notification/fcm-token.service';
 import { UsersService } from './users.service';
 import { UserEntity } from './user.entity';
 import { WithdrawUserDto } from './dto/withdraw-user.dto';
-import type {
-  UpdateNotificationPreferencesDto,
-  UpdateUserDto,
-} from '@tripick/types';
+import { UpdateNotificationPreferencesBodyDto } from './dto/update-notification-preferences.dto';
+import type { UpdateUserDto } from '@tripick/types';
 
 interface UploadedImage {
   buffer: Buffer;
@@ -63,12 +61,9 @@ export class UsersController {
   @ApiOperation({ summary: '알림 수신 설정 갱신' })
   updateNotificationPreferences(
     @CurrentUser() user: UserEntity,
-    @Body() dto: UpdateNotificationPreferencesDto,
+    @Body() dto: UpdateNotificationPreferencesBodyDto,
   ) {
-    return this.usersService.updateNotificationPreferences(
-      user.id,
-      dto?.preferences ?? {},
-    );
+    return this.usersService.updateNotificationPreferences(user.id, dto.preferences);
   }
 
   @Patch('me/fcm-token')

@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { KakaoExchangeService } from './kakao-exchange.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { RefreshTokenEntity } from './entities/refresh-token.entity';
 import { EmailTokenEntity } from './entities/email-token.entity';
@@ -27,7 +28,7 @@ import { accessTokenSecret } from '../common/jwt-secrets';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, KakaoExchangeService],
   exports: [AuthService],
 })
 export class AuthModule {}

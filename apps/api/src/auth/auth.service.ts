@@ -35,6 +35,8 @@ const BCRYPT_COST = 12;
 const VERIFY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/** 이 시간 안의 재사용은 탈취가 아니라 경합·재시도로 본다 (family 폐기 대상에서 제외). */
+const REFRESH_ROTATION_GRACE_MS = 30 * 1000;
 
 export interface TokenContext {
   userAgent?: string;
@@ -202,7 +204,17 @@ export class AuthService {
 
   getKakaoStatus(): KakaoAuthStatusDto {
     const missingKeys = this.missingKakaoKeys();
-    return missingKeys.length > 0 ? { ready: false, missingKeys } : { ready: true };
+    if (missingKeys.length > 0) return { ready: false, missingKeys };
+    return { ready: true, startUrl: this.kakaoStartUrl() };
+  }
+
+  /**
+   * 로그인 시작 URL. 등록된 콜백 URL 에서 `/callback` 만 떼어 만든다 — 시작과 콜백이 반드시
+   * 같은 오리진이어야 state 쿠키가 왕복한다(웹 프록시 경유로 시작하면 오리진이 갈린다).
+   */
+  private kakaoStartUrl(): string {
+    const { redirectUri } = this.requireKakaoConfig();
+    return redirectUri.replace(/\/callback\/*$/, '');
   }
 
   private missingKakaoKeys(): string[] {
@@ -232,10 +244,14 @@ export class AuthService {
     return { tokens, user: this.toSessionUser(user) };
   }
 
-  getWebKakaoSuccessUrl(session: LoginResponseDto): string {
+  /**
+   * 성공 리다이렉트 URL. 세션 자체가 아니라 1회용 교환 코드만 싣는다 — 예전엔 refresh
+   * 토큰까지 통째로 프래그먼트에 실려 브라우저 히스토리에 30일짜리 자격증명이 남았다.
+   * 프래그먼트를 유지하는 건 쿼리와 달리 Referer·서버 로그에 아예 안 실리기 때문.
+   */
+  getWebKakaoSuccessUrl(code: string): string {
     const url = new URL('/auth/kakao/callback', this.getWebAppUrl());
-    const payload = Buffer.from(JSON.stringify(session), 'utf8').toString('base64url');
-    url.hash = `session=${payload}`;
+    url.hash = `code=${encodeURIComponent(code)}`;
     return url.toString();
   }
 
@@ -255,12 +271,17 @@ export class AuthService {
     ctx: TokenContext = {},
     familyId?: string,
   ): Promise<AuthTokens> {
-    const payload = { sub: userId };
-    const accessToken = await this.jwtService.signAsync(payload);
-    const refreshToken = await this.jwtService.signAsync(payload, {
-      secret: this.refreshSecret,
-      expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN', '30d'),
-    });
+    const accessToken = await this.jwtService.signAsync({ sub: userId });
+    // jti 로 매 발급을 유일하게 만든다. payload 가 { sub } 뿐이면 iat 가 초 단위라 같은 초에
+    // 발급된 두 refresh 토큰이 바이트까지 동일해지고, tokenHash 유니크 인덱스에 걸려 500 이
+    // 난다 — 로그인 직후 같은 초에 갱신하면 재현된다(로그인끼리는 bcrypt 비용이 초를 벌려 준다).
+    const refreshToken = await this.jwtService.signAsync(
+      { sub: userId, jti: generateRandomToken(16) },
+      {
+        secret: this.refreshSecret,
+        expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN', '30d'),
+      },
+    );
 
     const tokenHash = sha256(refreshToken);
     const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
@@ -304,7 +325,13 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token revoked');
     }
     if (row.replacedAt) {
-      // reuse detection — 이미 rotate 된 토큰을 또 쓰려고 함. 탈취 의심.
+      // 방금 회전된 토큰이면 탈취가 아니라 경합이다 — 응답을 못 받은 클라이언트의 재시도,
+      // 또는 웹·네이티브가 동시에 갱신한 경우. 여기서 family 를 폐기하면 바로 직전에
+      // **정상 발급된 새 토큰까지** 죽어서 멀쩡한 세션이 통째로 날아간다. 이 요청만 거절한다.
+      if (Date.now() - row.replacedAt.getTime() <= REFRESH_ROTATION_GRACE_MS) {
+        throw new UnauthorizedException('Refresh token already rotated');
+      }
+      // 한참 지난 뒤 다시 쓰인 옛 토큰 — 탈취 의심.
       this.logger.warn(
         `Refresh token reuse detected for user=${row.userId} family=${row.familyId}`,
       );
@@ -315,11 +342,21 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token expired');
     }
 
+    // 회전 권한을 원자적으로 선점한다. 위 검사와 발급 사이에 다른 요청이 끼어들면
+    // 같은 토큰으로 두 벌이 발급되고 한 벌은 주인 없이 30일을 살아남는다.
+    // 조건부 UPDATE 의 affected 로 승자를 가리고, 진 쪽은 발급하지 않는다.
+    const claimed = await this.refreshRepo
+      .createQueryBuilder()
+      .update()
+      .set({ replacedAt: () => 'NOW()' })
+      .where('id = :id AND "replacedAt" IS NULL AND "revokedAt" IS NULL', { id: row.id })
+      .execute();
+    if (!claimed.affected) {
+      throw new UnauthorizedException('Refresh token already rotated');
+    }
+
     // rotation: 같은 family 로 새 토큰 발급
-    const tokens = await this.issueTokens(row.userId, ctx, row.familyId);
-    row.replacedAt = new Date();
-    await this.refreshRepo.save(row);
-    return tokens;
+    return this.issueTokens(row.userId, ctx, row.familyId);
   }
 
   async logout(refreshToken: string): Promise<void> {

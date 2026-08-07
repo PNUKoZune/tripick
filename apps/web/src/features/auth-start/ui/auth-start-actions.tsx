@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { getKakaoStatus, redirectToKakao } from '@/entities/session/api/auth-api';
+import { redirectToKakao } from '@/entities/session/api/auth-api';
 import { InlineNotice } from '@/shared/ui/app-frame';
 
 /**
@@ -18,16 +18,10 @@ export function AuthStartActions() {
     setLoading(true);
     setNotice(null);
     try {
-      const status = await getKakaoStatus();
-      if (status.ready) {
-        redirectToKakao();
-        return;
-      }
-      const missingKeys = status.missingKeys?.join(', ') || 'KAKAO_REST_API_KEY, KAKAO_CALLBACK_URL';
-      setNotice(`카카오 로그인 환경 변수가 필요해요: ${missingKeys}`);
+      // 설정 확인 + 시작 URL 조회를 redirectToKakao 가 함께 처리한다(성공 시 페이지가 떠난다).
+      await redirectToKakao();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : '로그인을 시작하지 못했습니다.');
-    } finally {
       setLoading(false);
     }
   }

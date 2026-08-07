@@ -16,6 +16,18 @@ import { Throttle } from '@nestjs/throttler';
 import { timingSafeEqual } from 'node:crypto';
 import type { CookieOptions, Request, Response } from 'express';
 import { AuthService, type TokenContext } from './auth.service';
+import { KakaoExchangeService } from './kakao-exchange.service';
+import {
+  EmailLoginBodyDto,
+  EmailSignupBodyDto,
+  KakaoExchangeBodyDto,
+  LogoutBodyDto,
+  RefreshTokenBodyDto,
+  RequestPasswordResetBodyDto,
+  ResendVerificationBodyDto,
+  ResetPasswordBodyDto,
+  VerifyEmailBodyDto,
+} from './dto/auth.dto';
 
 /** 분당 요청 제한 헬퍼 (ttl 단위 ms) */
 const perMinute = (limit: number) => ({ default: { limit, ttl: 60_000 } });
@@ -23,20 +35,13 @@ const perMinute = (limit: number) => ({ default: { limit, ttl: 60_000 } });
 /** 카카오 로그인 CSRF 방어용 state 를 담는 쿠키. 로그인 시작 → 콜백 한 왕복만 산다. */
 const KAKAO_STATE_COOKIE = 'tripick_kakao_state';
 const KAKAO_STATE_TTL_MS = 10 * 60 * 1000;
-import type {
-  EmailLoginDto,
-  EmailSignupDto,
-  RequestPasswordResetDto,
-  ResendVerificationDto,
-  ResetPasswordDto,
-  VerifyEmailDto,
-} from '@tripick/types';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
+    private readonly kakaoExchange: KakaoExchangeService,
     private readonly config: ConfigService,
   ) {}
 
@@ -46,7 +51,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle(perMinute(5)) // 계정 생성 + 메일 발송 남용 방지
   @ApiOperation({ summary: '이메일 회원가입 (인증 메일 발송)' })
-  signup(@Body() dto: EmailSignupDto) {
+  signup(@Body() dto: EmailSignupBodyDto) {
     return this.authService.signupWithEmail(dto);
   }
 
@@ -54,7 +59,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle(perMinute(10)) // 비밀번호 브루트포스 방지
   @ApiOperation({ summary: '이메일 + 비밀번호 로그인' })
-  login(@Body() dto: EmailLoginDto, @Req() req: Request) {
+  login(@Body() dto: EmailLoginBodyDto, @Req() req: Request) {
     return this.authService.loginWithEmail(dto, this.tokenContext(req));
   }
 
@@ -62,32 +67,32 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle(perMinute(20)) // 인증 토큰 추측 방지
   @ApiOperation({ summary: '이메일 인증 토큰 검증' })
-  verifyEmail(@Body() dto: VerifyEmailDto) {
-    return this.authService.verifyEmail(dto?.token ?? '');
+  verifyEmail(@Body() dto: VerifyEmailBodyDto) {
+    return this.authService.verifyEmail(dto.token);
   }
 
   @Post('resend-verification')
   @HttpCode(HttpStatus.OK)
   @Throttle(perMinute(3)) // 메일 발송 남용 방지
   @ApiOperation({ summary: '이메일 인증 메일 재발송' })
-  resendVerification(@Body() dto: ResendVerificationDto) {
-    return this.authService.resendVerification(dto?.email ?? '');
+  resendVerification(@Body() dto: ResendVerificationBodyDto) {
+    return this.authService.resendVerification(dto.email);
   }
 
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @Throttle(perMinute(3)) // 메일 발송 남용 방지
   @ApiOperation({ summary: '비밀번호 재설정 메일 발송' })
-  forgotPassword(@Body() dto: RequestPasswordResetDto) {
-    return this.authService.requestPasswordReset(dto?.email ?? '');
+  forgotPassword(@Body() dto: RequestPasswordResetBodyDto) {
+    return this.authService.requestPasswordReset(dto.email);
   }
 
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
   @Throttle(perMinute(10)) // 재설정 토큰 추측 방지
   @ApiOperation({ summary: '비밀번호 재설정 토큰 검증 + 새 비밀번호 저장' })
-  resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto?.token ?? '', dto?.password ?? '');
+  resetPassword(@Body() dto: ResetPasswordBodyDto) {
+    return this.authService.resetPassword(dto.token, dto.password);
   }
 
   // ─── 카카오 OAuth ──────────────────────────────────────────
@@ -139,7 +144,8 @@ export class AuthController {
     try {
       const session = await this.authService.loginWithKakao(code, this.tokenContext(req));
       if (wantsJson) return session;
-      res.redirect(this.authService.getWebKakaoSuccessUrl(session));
+      const exchangeCode = await this.kakaoExchange.issue(session);
+      res.redirect(this.authService.getWebKakaoSuccessUrl(exchangeCode));
       return undefined;
     } catch (error) {
       if (wantsJson) throw error;
@@ -152,20 +158,28 @@ export class AuthController {
     }
   }
 
+  @Post('kakao/exchange')
+  @HttpCode(HttpStatus.OK)
+  @Throttle(perMinute(20))
+  @ApiOperation({ summary: '카카오 콜백 1회용 코드 → 세션 교환' })
+  kakaoExchangeCode(@Body() dto: KakaoExchangeBodyDto) {
+    return this.kakaoExchange.consume(dto.code);
+  }
+
   // ─── 토큰 ──────────────────────────────────────────────────
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '액세스 토큰 갱신 (refresh rotation)' })
-  refresh(@Body('refreshToken') refreshToken: string, @Req() req: Request) {
-    return this.authService.refreshTokens(refreshToken, this.tokenContext(req));
+  refresh(@Body() dto: RefreshTokenBodyDto, @Req() req: Request) {
+    return this.authService.refreshTokens(dto.refreshToken, this.tokenContext(req));
   }
 
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: '로그아웃 (refresh token 폐기)' })
-  async logout(@Body('refreshToken') refreshToken: string) {
-    await this.authService.logout(refreshToken);
+  async logout(@Body() dto: LogoutBodyDto) {
+    await this.authService.logout(dto.refreshToken ?? '');
   }
 
   /** 콜백(`/api/v1/auth/kakao/callback`)에만 실리도록 경로를 좁힌다. */

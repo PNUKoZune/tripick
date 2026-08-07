@@ -2,11 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { LoginResponseDto } from '@tripick/types';
 import Link from 'next/link';
-import { redirectToKakao } from '@/entities/session/api/auth-api';
-import { storeSession } from '@/entities/session/model/session-storage';
-import { flushPendingFcmToken } from '@/entities/user';
+import { exchangeKakaoCode, redirectToKakao } from '@/entities/session/api/auth-api';
 import { AppFrame, InlineNotice, PrimaryButton } from '@/shared/ui/app-frame';
 
 type CallbackState = { status: 'checking' } | { status: 'error'; message: string };
@@ -25,22 +22,33 @@ export function KakaoCallbackView() {
     }
 
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-    const payload = hash.get('session');
-    if (!payload) {
+    const exchangeCode = hash.get('code');
+    if (!exchangeCode) {
       setState({ status: 'error', message: '카카오 로그인 결과를 찾지 못했습니다.' });
       return;
     }
 
-    try {
-      const session = decodeSession(payload);
-      storeSession(session);
-      void flushPendingFcmToken();
-      window.history.replaceState(null, '', '/auth/kakao/callback');
-      router.replace('/');
-    } catch {
-      setState({ status: 'error', message: '카카오 로그인 정보를 저장하지 못했습니다.' });
-    }
+    // 코드는 URL 에 잠깐 남으므로 교환 전에 먼저 지운다(뒤로 가기·히스토리에 안 남게).
+    window.history.replaceState(null, '', '/auth/kakao/callback');
+    exchangeKakaoCode(exchangeCode)
+      .then(() => router.replace('/'))
+      .catch((error: unknown) => {
+        setState({
+          status: 'error',
+          message:
+            error instanceof Error ? error.message : '카카오 로그인 정보를 저장하지 못했습니다.',
+        });
+      });
   }, [router]);
+
+  function handleRetry() {
+    redirectToKakao().catch((error: unknown) => {
+      setState({
+        status: 'error',
+        message: error instanceof Error ? error.message : '로그인을 시작하지 못했습니다.',
+      });
+    });
+  }
 
   return (
     <AppFrame showNav={false} themed>
@@ -67,7 +75,7 @@ export function KakaoCallbackView() {
           <div className="mt-8 space-y-3">
             {state.status === 'error' ? (
               <>
-                <PrimaryButton tone="kakao" onClick={redirectToKakao}>
+                <PrimaryButton tone="kakao" onClick={handleRetry}>
                   카카오로 다시 시작
                 </PrimaryButton>
                 <Link
@@ -96,15 +104,3 @@ function normalizeCallbackError(message: string): string {
   return message;
 }
 
-function decodeSession(payload: string): LoginResponseDto {
-  const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
-  const binary = window.atob(padded);
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  const decoded = new TextDecoder().decode(bytes);
-  const session = JSON.parse(decoded) as LoginResponseDto;
-  if (!session.tokens?.accessToken || !session.tokens.refreshToken || !session.user?.id) {
-    throw new Error('Invalid Kakao session payload');
-  }
-  return session;
-}

@@ -18,6 +18,7 @@ import { UserEntity } from './user.entity';
 import { WithdrawalReasonEntity } from './withdrawal-reason.entity';
 import { WithdrawUserDto } from './dto/withdraw-user.dto';
 import { DEFAULT_NOTIFICATION_PREFERENCES } from './notification-preferences.constants';
+import { NOTIFICATION_PREFERENCE_KEYS } from './dto/update-notification-preferences.dto';
 import {
   WITHDRAWAL_CONFIRM_PHRASE,
   type KakaoProfile,
@@ -217,10 +218,12 @@ export class UsersService implements OnModuleInit {
   ): Promise<NotificationPreferencesDto> {
     const user = await this.findById(id);
     if (!user) throw new NotFoundException(`User ${id} not found`);
+    // 알려진 키만 남긴다. 컨트롤러 DTO 가 이미 걸러 주지만, jsonb 는 한 번 쓰레기가 들어가면
+    // 계속 실려 다니므로 저장 직전에서도 좁힌다.
     user.notificationPreferences = {
       ...DEFAULT_NOTIFICATION_PREFERENCES,
-      ...(user.notificationPreferences ?? {}),
-      ...partial,
+      ...pickKnownPreferences(user.notificationPreferences),
+      ...pickKnownPreferences(partial),
     };
     await this.repo.save(user);
     return user.notificationPreferences;
@@ -350,6 +353,19 @@ export class UsersService implements OnModuleInit {
       this.logger.warn(`탈퇴 사유 기록 실패: ${(error as Error).message}`);
     }
   }
+}
+
+/** 알려진 알림 카테고리 + boolean 값만 통과시킨다. */
+function pickKnownPreferences(
+  source: Partial<NotificationPreferencesDto> | null | undefined,
+): Partial<NotificationPreferencesDto> {
+  if (!source) return {};
+  const picked: Partial<NotificationPreferencesDto> = {};
+  for (const key of NOTIFICATION_PREFERENCE_KEYS) {
+    const value = source[key];
+    if (typeof value === 'boolean') picked[key] = value;
+  }
+  return picked;
 }
 
 /** 가입 후 경과일(음수 방지). 탈퇴 사유 해석용 부가 정보. */

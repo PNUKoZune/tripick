@@ -242,15 +242,43 @@ describe('AuthService — refresh rotation', () => {
     expect(qb.execute).toHaveBeenCalled(); // revokeAll 실행
   });
 
-  it('detects reuse of an already-rotated token and revokes the family', async () => {
+  it('detects reuse of a long-rotated token and revokes the family', async () => {
+    const { service, jwtService, refreshRepo } = createHarness();
+    jwtService.verify.mockReturnValue({ sub: 'u1' });
+    refreshRepo.findOne.mockResolvedValue(
+      activeRow({ replacedAt: new Date(Date.now() - 60 * 60 * 1000) }),
+    );
+    const qb = queryBuilder();
+    refreshRepo.createQueryBuilder.mockReturnValue(qb);
+
+    await expect(service.refreshTokens(REFRESH)).rejects.toThrow('reused');
+    expect(qb.execute).toHaveBeenCalled(); // revokeFamily 실행
+  });
+
+  /**
+   * 응답을 못 받은 클라이언트의 재시도(또는 웹·네이티브 동시 갱신)를 탈취로 오인하면,
+   * 직전에 정상 발급된 새 토큰까지 family 폐기에 휩쓸려 멀쩡한 세션이 날아간다.
+   */
+  it('treats an immediate retry as a race, not a theft', async () => {
     const { service, jwtService, refreshRepo } = createHarness();
     jwtService.verify.mockReturnValue({ sub: 'u1' });
     refreshRepo.findOne.mockResolvedValue(activeRow({ replacedAt: new Date() }));
     const qb = queryBuilder();
     refreshRepo.createQueryBuilder.mockReturnValue(qb);
 
-    await expect(service.refreshTokens(REFRESH)).rejects.toThrow('reused');
-    expect(qb.execute).toHaveBeenCalled(); // revokeFamily 실행
+    await expect(service.refreshTokens(REFRESH)).rejects.toThrow('already rotated');
+    expect(qb.execute).not.toHaveBeenCalled(); // family 는 살아 있어야 한다
+  });
+
+  /** 검사와 발급 사이에 다른 요청이 회전을 마치면(affected=0) 두 벌째를 발급하면 안 된다. */
+  it('does not issue a second token when it loses the rotation race', async () => {
+    const { service, jwtService, refreshRepo } = createHarness();
+    jwtService.verify.mockReturnValue({ sub: 'u1' });
+    refreshRepo.findOne.mockResolvedValue(activeRow());
+    refreshRepo.createQueryBuilder.mockReturnValue(queryBuilder({ affected: 0 }));
+
+    await expect(service.refreshTokens(REFRESH)).rejects.toThrow('already rotated');
+    expect(refreshRepo.save).not.toHaveBeenCalled();
   });
 
   it('rejects an expired token', async () => {
@@ -260,16 +288,17 @@ describe('AuthService — refresh rotation', () => {
     await expect(service.refreshTokens(REFRESH)).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('rotates a valid token and marks the old one replaced', async () => {
+  it('rotates a valid token by claiming the row conditionally', async () => {
     const { service, jwtService, refreshRepo } = createHarness();
     jwtService.verify.mockReturnValue({ sub: 'u1' });
-    const row = activeRow();
-    refreshRepo.findOne.mockResolvedValue(row);
+    refreshRepo.findOne.mockResolvedValue(activeRow());
+    const qb = queryBuilder({ affected: 1 });
+    refreshRepo.createQueryBuilder.mockReturnValue(qb);
 
     const tokens = await service.refreshTokens(REFRESH);
 
     expect(tokens.accessToken).toContain('u1');
-    expect(row.replacedAt).toBeInstanceOf(Date);
+    expect(qb.execute).toHaveBeenCalled(); // replacedAt 선점
   });
 });
 
@@ -301,6 +330,18 @@ describe('AuthService — logout & kakao status', () => {
   it('throws when starting kakao auth while unconfigured', () => {
     const { service } = createHarness();
     expect(() => service.startKakaoAuth()).toThrow(BadRequestException);
+  });
+
+  /**
+   * 예전엔 세션(refresh 토큰 포함)을 base64 로 프래그먼트에 실어 보내, 30일짜리 자격증명이
+   * 브라우저 히스토리에 남았다. 이제 URL 에는 1회용 교환 코드만 있어야 한다.
+   */
+  it('puts only an exchange code in the success redirect', () => {
+    const { service } = createHarness();
+    const url = new URL(service.getWebKakaoSuccessUrl('exchange-code-123'));
+
+    expect(url.hash).toBe('#code=exchange-code-123');
+    expect(url.href).not.toContain('session=');
   });
 
   // state 가 authorize URL 에만 있고 콜백에서 대조되지 않으면 로그인 CSRF 가 열린다.

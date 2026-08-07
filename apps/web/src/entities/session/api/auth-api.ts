@@ -47,8 +47,29 @@ export function getKakaoStatus() {
   return api.get<KakaoAuthStatusDto>('/auth/kakao/status');
 }
 
-export function redirectToKakao() {
-  window.location.href = apiUrl('/auth/kakao');
+/**
+ * 카카오 로그인 시작. 서버가 준 절대 `startUrl` 로 이동한다 — 상대경로로 가면 웹 프록시
+ * 오리진에서 출발하는데 카카오는 API 오리진으로 돌려보내, 시작 때 심은 CSRF state 쿠키가
+ * 콜백에 실리지 않아 로그인이 항상 실패한다.
+ */
+export async function redirectToKakao(): Promise<void> {
+  const status = await getKakaoStatus();
+  if (!status.ready || !status.startUrl) {
+    throw new Error(
+      status.missingKeys?.length
+        ? `카카오 로그인 환경 변수가 필요해요: ${status.missingKeys.join(', ')}`
+        : '카카오 로그인을 시작하지 못했습니다.',
+    );
+  }
+  window.location.href = status.startUrl;
+}
+
+/** 콜백 URL 의 1회용 코드를 실제 세션으로 바꾼다. 코드는 서버에서 즉시 소비된다. */
+export async function exchangeKakaoCode(code: string): Promise<LoginResponseDto> {
+  const session = await api.post<LoginResponseDto>('/auth/kakao/exchange', { code });
+  storeSession(session);
+  void flushPendingFcmToken();
+  return session;
 }
 
 // ─── 세션 종료 / 토큰 갱신 ───────────────────────────────────

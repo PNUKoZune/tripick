@@ -37,6 +37,17 @@ export interface LoginResponseDto {
 export interface KakaoAuthStatusDto {
   ready: boolean;
   missingKeys?: string[];
+  /**
+   * 로그인을 시작할 절대 URL. 상대경로(`/api/v1/auth/kakao`)로 시작하면 웹 프록시 오리진에서
+   * 출발하는데 카카오는 `KAKAO_CALLBACK_URL`(API 오리진)로 돌려보내, 시작 때 심은 CSRF state
+   * 쿠키가 콜백에 실리지 않는다. 두 다리를 같은 오리진에 두려고 서버가 계산해서 내려준다.
+   */
+  startUrl?: string;
+}
+
+/** 카카오 콜백이 URL 로 넘긴 1회용 교환 코드 → 실제 세션. */
+export interface KakaoExchangeDto {
+  code: string;
 }
 
 export interface EmailSignupDto {
