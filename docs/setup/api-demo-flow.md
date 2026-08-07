@@ -9,7 +9,7 @@
 
 아래 순서로 backend 핵심 수직 slice를 로컬에서 재현할 수 있다.
 
-- 데모 로그인
+- 계정 준비 + 로그인
 - 취향 저장
 - 여행 생성 + mock/rule-based itinerary 생성
 - 일정 조회
@@ -18,7 +18,7 @@
 외부 연동 없이도 동작하도록 일부 fallback이 들어가 있다.
 
 - `DATABASE_URL` 미설정 시 로컬 Postgres fallback 사용
-- `JWT_SECRET` 미설정 시 데모 secret fallback 사용
+- `JWT_SECRET` 미설정 시 개발용 fallback 사용 (**`NODE_ENV=production` 에서는 부팅 거부** → [`docs/auth/account-security-hardening-v1.md`](../auth/account-security-hardening-v1.md) §4.6)
 - TMAP/KMA API 키 미설정 시 route/weather fallback 사용
 
 ## 2. 선행 실행
@@ -38,12 +38,29 @@ pnpm --filter @tripick/api dev
 
 ## 3. 샘플 payload
 
-### 3-1. 데모 로그인
+### 3-1. 계정 준비 + 로그인
+
+인증 없이 세션을 내주던 `POST /auth/demo` 는 제거됐다(모든 방문자가 계정 하나를 공유하던 구멍 —
+[`docs/auth/account-security-hardening-v1.md`](../auth/account-security-hardening-v1.md) §4.1).
+데모용 계정도 일반 계정으로 만들어 쓴다. 최초 1회만:
 
 ```bash
-curl -s -X POST http://localhost:4000/api/v1/auth/demo \
+curl -s -X POST http://localhost:4000/api/v1/auth/signup \
   -H 'content-type: application/json' \
-  -d '{"nickname":"demo-user"}'
+  -d '{"email":"demo@tripick.test","password":"demo12345","nickname":"데모"}'
+
+# 인증 링크의 raw 토큰은 메일(console 로그)에만 있고 DB 엔 hash 만 남는다.
+# 로컬에서는 인증 완료 상태를 직접 세우는 게 빠르다.
+docker compose exec -T postgres psql -U tripick -d tripick -c \
+  'UPDATE users SET "emailVerifiedAt"=now(), "passwordHash"="pendingPasswordHash", "pendingPasswordHash"=NULL WHERE email=$$demo@tripick.test$$;'
+```
+
+이후 로그인:
+
+```bash
+curl -s -X POST http://localhost:4000/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"demo@tripick.test","password":"demo12345"}'
 ```
 
 응답에서 `tokens.accessToken`을 이후 Bearer 토큰으로 사용한다.
@@ -112,9 +129,9 @@ curl -s -X POST http://localhost:4000/api/v1/alternative/waiting \
 
 ## 4. 2026-05-06 실제 검증 결과
 
-다음 흐름을 로컬에서 확인했다.
+당시 기록이다. 1번은 그 뒤 `POST /auth/demo` 가 제거돼 §3-1 의 가입·로그인으로 대체됐고, 나머지 단계는 그대로다.
 
-1. `POST /auth/demo` -> 200
+1. `POST /auth/demo` -> 200 *(현재는 `POST /auth/login`)*
 2. `PUT /preferences` -> 200
 3. `POST /trips` -> 201, `status=confirmed`
 4. `GET /trips/:tripId/itinerary` -> 200, `itinerary_count=8`

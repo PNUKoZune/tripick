@@ -115,7 +115,7 @@ pnpm --filter @tripick/mobile start
 - Web landing/prototype 작업
 - Docker 기반 로컬 데이터 계층 확인
 - API/Web 문서화 및 화면 설계
-- 데모 인증 기반 backend 수직 slice 검증 (`auth/demo -> preferences -> trips -> itinerary -> waiting replan`)
+- backend 수직 slice 검증 (`auth/signup+login -> preferences -> trips -> itinerary -> waiting replan`)
 
 ### 막혀 있는 것
 
