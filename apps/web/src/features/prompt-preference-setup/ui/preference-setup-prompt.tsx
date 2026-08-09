@@ -52,15 +52,15 @@ export function PreferenceSetupPrompt() {
   }
 
   return (
-    <BottomSheet open={open} onClose={dismiss} label="취향 설정 안내">
+    <BottomSheet open={open} onClose={dismiss} label="취향 설정 안내" themed>
       <div className="flex flex-col items-center px-1 pb-1 pt-4 text-center">
-        <span className="flex size-16 items-center justify-center rounded-full bg-[#EAF2FF] text-[#3182F6]">
+        <span className="flex size-16 items-center justify-center rounded-full bg-[color:var(--blue-50,#EAF2FF)] text-[color:var(--blue-600,#3182F6)]">
           <FiCompass className="size-8" aria-hidden />
         </span>
-        <h2 className="mt-4 text-[20px] font-black leading-7 text-[#191F28]">
+        <h2 className="mt-4 text-[20px] font-black leading-7 text-[color:var(--ink,#191F28)]">
           취향부터 설정해 볼까요?
         </h2>
-        <p className="mt-2 text-[14px] font-medium leading-[21px] text-[#6B7684]">
+        <p className="mt-2 text-[14px] font-medium leading-[21px] text-[color:var(--ink-sub,#6B7684)]">
           좋아하는 여행 스타일을 알려주면
           <br />
           일정 추천이 훨씬 잘 맞아져요. 1분이면 끝나요.

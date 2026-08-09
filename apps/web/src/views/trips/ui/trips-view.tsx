@@ -98,7 +98,7 @@ function TripsContent() {
   const latestTrip = trips[0];
 
   return (
-    <AppFrame>
+    <AppFrame themed>
       <PageHeader
         title="내 여행"
         label="내 여행"
@@ -107,13 +107,13 @@ function TripsContent() {
           <>
             <Link
               href={latestTrip ? `/planner?tripId=${latestTrip.id}` : '/trips/new'}
-              className="hidden rounded-[14px] border border-[#E5E8EB] bg-white px-4 py-2 text-[14px] font-semibold text-[#191F28] hover:bg-[#FAFBFC] lg:inline-flex"
+              className="hidden rounded-[14px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] px-4 py-2 text-[14px] font-semibold text-[color:var(--ink,#191F28)] hover:bg-[color:var(--card-soft,#FAFBFC)] lg:inline-flex"
             >
               {latestTrip ? '최근 여행 일정 보기' : '첫 여행 만들기'}
             </Link>
             <Link
               href="/trips/new"
-              className="inline-flex h-10 items-center gap-1 rounded-full bg-[#3182F6] px-4 text-[13px] font-bold text-white shadow-[0_6px_16px_rgba(49,130,246,0.28)] hover:bg-[#1B64DA] lg:gap-0 lg:rounded-[14px] lg:px-4 lg:text-[14px] lg:font-semibold lg:shadow-none"
+              className="inline-flex h-10 items-center gap-1 rounded-full bg-[color:var(--blue-600,#3182F6)] px-4 text-[13px] font-bold text-white shadow-[0_6px_16px_rgba(49,130,246,0.28)] hover:bg-[color:var(--blue-700,#1B64DA)] lg:gap-0 lg:rounded-[14px] lg:px-4 lg:text-[14px] lg:font-semibold lg:shadow-none"
             >
               <span aria-hidden className="lg:hidden">
                 ＋
@@ -150,7 +150,7 @@ function TripsContent() {
         </div>
 
         {loadError ? (
-          <div className="mt-4 rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-4 text-[14px] text-[#F04452]">
+          <div className="mt-4 rounded-[16px] border border-[color:var(--danger-border,#FECDD3)] bg-[color:var(--danger-tint,#FFECEE)] p-4 text-[14px] text-[color:var(--danger,#F04452)]">
             {loadError}
           </div>
         ) : null}
@@ -244,7 +244,7 @@ function SearchSortBar({
       <div className="relative flex-1">
         <FiSearch
           aria-hidden
-          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#8B95A1]"
+          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[color:var(--ink-faint,#8B95A1)]"
         />
         <input
           type="search"
@@ -252,17 +252,19 @@ function SearchSortBar({
           onChange={(event) => onSearch(event.target.value)}
           placeholder="여행·목적지 검색"
           aria-label="여행 검색"
-          className="h-10 w-full rounded-full border border-[#E5E8EB] bg-white pl-9 pr-3 text-[14px] text-[#191F28] placeholder:text-[#8B95A1] focus:border-[#3182F6] focus:outline-none"
+          className="h-10 w-full rounded-full border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] pl-9 pr-3 text-[14px] text-[color:var(--ink,#191F28)] placeholder:text-[color:var(--ink-faint,#8B95A1)] focus:border-[color:var(--blue-600,#3182F6)] focus:outline-none"
         />
       </div>
-      <div className="flex shrink-0 rounded-full border border-[#E5E8EB] bg-white p-0.5">
+      <div className="flex shrink-0 rounded-full border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] p-0.5">
         {SORTS.map((opt) => (
           <button
             key={opt.value}
             type="button"
             onClick={() => onSort(opt.value)}
             className={`h-9 rounded-full px-3 text-[13px] font-semibold transition ${
-              sort === opt.value ? 'bg-[#EAF2FF] text-[#1B64DA]' : 'text-[#6B7684]'
+              sort === opt.value
+                ? 'bg-[color:var(--blue-50,#EAF2FF)] text-[color:var(--blue-700,#1B64DA)]'
+                : 'text-[color:var(--ink-sub,#6B7684)]'
             }`}
           >
             {opt.label}
@@ -284,13 +286,13 @@ function SummaryTile({
 }) {
   const valueClass =
     tone === 'primary'
-      ? 'text-[#1B64DA]'
+      ? 'text-[color:var(--blue-700,#1B64DA)]'
       : tone === 'success'
-        ? 'text-[#00A86B]'
-        : 'text-[#191F28]';
+        ? 'text-[color:var(--ok,#00A86B)]'
+        : 'text-[color:var(--ink,#191F28)]';
   return (
-    <div className="rounded-[14px] border border-[#E5E8EB] bg-white px-3 py-3 text-center">
-      <div className="text-[11px] font-semibold text-[#8B95A1]">{label}</div>
+    <div className="rounded-[14px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] px-3 py-3 text-center">
+      <div className="text-[11px] font-semibold text-[color:var(--ink-faint,#8B95A1)]">{label}</div>
       <div className={`mt-1 text-[18px] font-bold ${valueClass}`}>{value}</div>
     </div>
   );
@@ -308,8 +310,8 @@ function FilterBar({ value, onChange }: { value: Filter; onChange: (next: Filter
             onClick={() => onChange(f.value)}
             className={`min-h-9 rounded-full border px-3 py-1.5 text-[13px] font-semibold transition ${
               active
-                ? 'border-[#3182F6] bg-[#EAF2FF] text-[#1B64DA]'
-                : 'border-[#E5E8EB] bg-white text-[#6B7684] hover:bg-[#FAFBFC]'
+                ? 'border-[color:var(--blue-600,#3182F6)] bg-[color:var(--blue-50,#EAF2FF)] text-[color:var(--blue-700,#1B64DA)]'
+                : 'border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] text-[color:var(--ink-sub,#6B7684)] hover:bg-[color:var(--card-soft,#FAFBFC)]'
             }`}
           >
             {f.label}
@@ -329,14 +331,14 @@ function SkeletonGrid() {
       {Array.from({ length: 3 }).map((_, index) => (
         <div
           key={index}
-          className="h-full overflow-hidden rounded-[20px] border border-[#E5E8EB] bg-white"
+          className="h-full overflow-hidden rounded-[20px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)]"
         >
-          <div className="h-16 animate-pulse bg-[#EEF1F5]" />
+          <div className="h-16 animate-pulse bg-[color:var(--line,#EEF1F5)]" />
           <div className="flex flex-col gap-3 p-4">
-            <div className="h-3 w-16 animate-pulse rounded-full bg-[#EEF1F5]" />
-            <div className="h-4 w-2/3 animate-pulse rounded-full bg-[#EEF1F5]" />
-            <div className="h-3 w-full animate-pulse rounded-full bg-[#EEF1F5]" />
-            <div className="mt-1 h-3 w-1/2 animate-pulse rounded-full bg-[#EEF1F5]" />
+            <div className="h-3 w-16 animate-pulse rounded-full bg-[color:var(--line,#EEF1F5)]" />
+            <div className="h-4 w-2/3 animate-pulse rounded-full bg-[color:var(--line,#EEF1F5)]" />
+            <div className="h-3 w-full animate-pulse rounded-full bg-[color:var(--line,#EEF1F5)]" />
+            <div className="mt-1 h-3 w-1/2 animate-pulse rounded-full bg-[color:var(--line,#EEF1F5)]" />
           </div>
         </div>
       ))}
@@ -347,19 +349,19 @@ function SkeletonGrid() {
 function EmptyState({ hasTrips }: { hasTrips: boolean }) {
   // 여행 자체가 없는 신규 사용자와, 필터 결과만 비어 있는 경우의 안내를 구분한다.
   return (
-    <div className="rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] p-6 text-center">
+    <div className="rounded-[16px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FAFBFC)] p-6 text-center">
       <div className="text-[24px]">🧳</div>
-      <div className="mt-2 text-[14px] font-bold text-[#191F28]">
+      <div className="mt-2 text-[14px] font-bold text-[color:var(--ink,#191F28)]">
         {hasTrips ? '해당 조건의 여행이 없어요' : '아직 만든 여행이 없어요'}
       </div>
-      <div className="mt-1 text-[13px] text-[#6B7684]">
+      <div className="mt-1 text-[13px] text-[color:var(--ink-sub,#6B7684)]">
         {hasTrips ? '다른 필터를 선택해보세요.' : '첫 여행을 만들어 일정을 받아보세요.'}
       </div>
       {hasTrips ? null : (
         <div className="mt-3 flex justify-center">
           <Link
             href="/trips/new"
-            className="inline-flex h-9 items-center rounded-full bg-[#3182F6] px-4 text-[13px] font-semibold text-white hover:bg-[#1B64DA]"
+            className="inline-flex h-9 items-center rounded-full bg-[color:var(--blue-600,#3182F6)] px-4 text-[13px] font-semibold text-white hover:bg-[color:var(--blue-700,#1B64DA)]"
           >
             새 여행 만들기
           </Link>
