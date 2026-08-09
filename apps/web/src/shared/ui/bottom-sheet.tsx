@@ -18,6 +18,12 @@ type Props = {
   label: string;
   /** 시트 안쪽 상단에 그릴 컨텐츠 (지도 등). content 와 같은 카드 안에서 함께 슬라이드 업. */
   topSlot?: ReactNode;
+  /**
+   * 켜면 포털 루트에 `.wvr-scope` 를 붙이고 시트 크롬(패널·핸들·닫기)을 토큰 색으로 그린다.
+   * 포털은 body 로 빠져 AppFrame 의 스코프를 못 받으므로, 다크까지 따라가려면 시트가 직접 스코프를 연다.
+   * 기본값 false — 콘텐츠가 아직 토큰화 안 된 시트는 끄고 기존 라이트 고정을 유지한다.
+   */
+  themed?: boolean;
 };
 
 const DURATION_MS = 320;
@@ -27,7 +33,7 @@ const SHEET_OPEN_MS = 440;
 const EASE_OUT = 'cubic-bezier(0.32, 0.72, 0, 1)';
 const EASE_IN = 'cubic-bezier(0.4, 0, 1, 1)';
 
-export function BottomSheet({ open, onClose, children, label, topSlot }: Props) {
+export function BottomSheet({ open, onClose, children, label, topSlot, themed = false }: Props) {
   const [phase, setPhase] = useState<Phase>('closed');
   const [isDesktop, setIsDesktop] = useState(false);
   const closeTimer = useRef<number | null>(null);
@@ -93,8 +99,21 @@ export function BottomSheet({ open, onClose, children, label, topSlot }: Props) 
   const isVisible = phase === 'open';
   const easing = phase === 'closing' ? EASE_IN : EASE_OUT;
 
+  // themed 면 토큰 색으로, 아니면 기존 라이트 고정색으로 크롬을 그린다 (비-themed 시트는 바이트 동일).
+  const panelBg = themed ? 'bg-[color:var(--card,#fff)]' : 'bg-white';
+  const topSlotBg = themed ? 'bg-[color:var(--card,#fff)]' : 'bg-white';
+  const grabber = themed ? 'bg-[color:var(--line,#E5E8EB)]' : 'bg-[#E5E8EB]';
+  const closeBtn = themed
+    ? 'bg-[color:var(--card,#fff)]/90 text-[color:var(--ink-sub,#4E5968)] hover:bg-[color:var(--card,#fff)] hover:text-[color:var(--ink,#191F28)]'
+    : 'bg-white/90 text-[#4E5968] hover:bg-white hover:text-[#191F28]';
+
   return createPortal(
-    <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label={label}>
+    <div
+      className={`fixed inset-0 z-40 ${themed ? 'wvr-scope' : ''}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={label}
+    >
       {/* 마우스 전용 닫기 영역 — 키보드는 ESC·시트 안 닫기 버튼으로 닫는다 */}
       <button
         type="button"
@@ -133,19 +152,19 @@ export function BottomSheet({ open, onClose, children, label, topSlot }: Props) 
         <div
           ref={panelRef}
           tabIndex={-1}
-          className="relative flex max-h-full w-full max-w-[480px] flex-col overflow-hidden rounded-t-[24px] bg-white shadow-[0_-16px_40px_rgba(15,23,42,0.18)] outline-none lg:max-w-[560px] lg:rounded-[24px] lg:shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
+          className={`relative flex max-h-full w-full max-w-[480px] flex-col overflow-hidden rounded-t-[24px] ${panelBg} shadow-[0_-16px_40px_rgba(15,23,42,0.18)] outline-none lg:max-w-[560px] lg:rounded-[24px] lg:shadow-[0_24px_60px_rgba(15,23,42,0.22)]`}
         >
           <button
             type="button"
             aria-label="닫기"
             onClick={onClose}
-            className="absolute right-3 top-3 z-10 flex size-9 items-center justify-center rounded-full bg-white/90 text-[#4E5968] shadow-[0_2px_8px_rgba(15,23,42,0.16)] backdrop-blur transition hover:bg-white hover:text-[#191F28] active:translate-y-px"
+            className={`absolute right-3 top-3 z-10 flex size-9 items-center justify-center rounded-full ${closeBtn} shadow-[0_2px_8px_rgba(15,23,42,0.16)] backdrop-blur transition active:translate-y-px`}
           >
             <CloseIcon />
           </button>
-          {topSlot ? <div className="bg-white">{topSlot}</div> : null}
+          {topSlot ? <div className={topSlotBg}>{topSlot}</div> : null}
           <div className="flex items-center justify-center pt-2.5 lg:hidden">
-            <span className="h-1 w-10 rounded-full bg-[#E5E8EB]" />
+            <span className={`h-1 w-10 rounded-full ${grabber}`} />
           </div>
           <div className="max-h-[70vh] min-h-0 flex-1 overflow-y-auto px-5 pb-6 pt-3 lg:max-h-[78vh]">
             {children}

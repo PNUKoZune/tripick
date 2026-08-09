@@ -23,18 +23,18 @@ export function DestinationSuggestions() {
   return (
     <section className="mt-8">
       <div className="mb-3 flex items-baseline justify-between px-4 lg:px-0">
-        <h2 className="text-[15px] font-bold text-[#191F28]">이런 여행지 어때요?</h2>
-        <span className="text-[12px] text-[#8B95A1]">이번 달 추천·취향 반영</span>
+        <h2 className="text-[15px] font-bold text-[color:var(--ink,#191F28)]">이런 여행지 어때요?</h2>
+        <span className="text-[12px] text-[color:var(--ink-faint,#8B95A1)]">이번 달 추천·취향 반영</span>
       </div>
       <div className="flex gap-3 overflow-x-auto px-4 pb-1 lg:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {data.map((d) => (
           <Link
             key={d.id}
             href={`/trips/new?destination=${encodeURIComponent(d.name)}`}
-            className="group flex min-w-[132px] flex-col gap-2 rounded-[16px] border border-[#E5E8EB] bg-white p-4 transition hover:border-[#C7DCFF] hover:shadow-[0_8px_20px_rgba(49,130,246,0.10)]"
+            className="group flex min-w-[132px] flex-col gap-2 rounded-[16px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] p-4 transition hover:border-[color:var(--blue-100,#C7DCFF)] hover:shadow-[0_8px_20px_rgba(49,130,246,0.10)]"
           >
-            <span className="text-[14px] font-bold text-[#191F28]">{d.name}</span>
-            <span className="text-[12px] text-[#8B95A1]">{d.region}</span>
+            <span className="text-[14px] font-bold text-[color:var(--ink,#191F28)]">{d.name}</span>
+            <span className="text-[12px] text-[color:var(--ink-faint,#8B95A1)]">{d.region}</span>
           </Link>
         ))}
       </div>
