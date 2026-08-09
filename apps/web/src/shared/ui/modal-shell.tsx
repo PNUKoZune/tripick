@@ -19,6 +19,12 @@ type Props = {
   align?: 'center' | 'bottom';
   /** 패널(카드) 클래스 — 폭·패딩·라운드·배경은 모달마다 달라 통째로 받는다 */
   panelClassName?: string;
+  /**
+   * 켜면 포털 루트에 `.wvr-scope` 를 붙여 다크 토큰이 해석되게 한다.
+   * 포털은 body 로 빠져 AppFrame 의 스코프를 못 받으므로, 토큰화된 모달만 opt-in 한다.
+   * 기본 false — panelClassName·children 이 아직 토큰화 안 된 모달은 라이트 고정 유지.
+   */
+  themed?: boolean;
   children: ReactNode;
 };
 
@@ -31,6 +37,7 @@ export function ModalShell({
   onDismiss,
   align = 'center',
   panelClassName = '',
+  themed = false,
   children,
 }: Props) {
   const panelRef = useFocusTrap<HTMLDivElement>();
@@ -44,7 +51,7 @@ export function ModalShell({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-50 flex justify-center ${
+      className={`fixed inset-0 z-50 flex justify-center ${themed ? 'wvr-scope ' : ''}${
         align === 'bottom' ? 'items-end p-0 sm:items-center sm:p-5' : 'items-center p-5'
       }`}
       role="dialog"
