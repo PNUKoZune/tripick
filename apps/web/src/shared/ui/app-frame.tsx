@@ -3,6 +3,19 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
+import type { IconType } from 'react-icons';
+import {
+  IoHome,
+  IoHomeOutline,
+  IoNotifications,
+  IoNotificationsOutline,
+  IoOptions,
+  IoOptionsOutline,
+  IoPeople,
+  IoPeopleOutline,
+  IoSettings,
+  IoSettingsOutline,
+} from 'react-icons/io5';
 
 import { useInboxUnreadCount } from './inbox-badge-context';
 
@@ -15,6 +28,18 @@ const NAV_ITEMS = [
 ] as const;
 
 type NavIconName = (typeof NAV_ITEMS)[number]['icon'];
+
+/**
+ * 탭 아이콘은 Ionicons 선/채움 페어를 쓴다 — 비활성은 아웃라인, 활성은 채움.
+ * 모바일 하단 탭·데스크탑 사이드 네비가 같은 페어를 공유해 메타포가 어긋나지 않는다.
+ */
+const NAV_ICONS: Record<NavIconName, { outline: IconType; filled: IconType }> = {
+  home: { outline: IoHomeOutline, filled: IoHome },
+  preference: { outline: IoOptionsOutline, filled: IoOptions },
+  members: { outline: IoPeopleOutline, filled: IoPeople },
+  inbox: { outline: IoNotificationsOutline, filled: IoNotifications },
+  settings: { outline: IoSettingsOutline, filled: IoSettings },
+};
 
 /**
  * 페이지 셸: 모바일 = 430px 단일 컬럼 + 하단 탭, 데스크탑 = 사이드 네비 + border-x 카드.
@@ -122,9 +147,9 @@ export function AppBottomNavigation({ className = '' }: { className?: string }) 
   return (
     <nav
       aria-label="하단 탭"
-      className={`fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 border-t border-[color:var(--line-strong)] bg-[color:var(--app-surface)]/95 px-1.5 pb-[max(10px,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-xl ${className}`}
+      className={`fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 rounded-t-[24px] border-t border-[color:var(--line-strong)] bg-[color:var(--app-surface)]/85 px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_28px_-14px_rgba(25,31,40,0.16)] backdrop-blur-xl ${className}`}
     >
-      <div className="grid h-[66px] grid-cols-5 items-stretch">
+      <div className="grid h-[62px] grid-cols-5 items-stretch">
         {NAV_ITEMS.map((item) => {
           const active = isNavItemActive(pathname, item.href);
           const badge = item.icon === 'inbox' ? inboxUnread : 0;
@@ -133,15 +158,28 @@ export function AppBottomNavigation({ className = '' }: { className?: string }) 
               key={item.href}
               href={item.href}
               aria-current={active ? 'page' : undefined}
-              className={`flex h-full flex-col items-center justify-center gap-1 text-[11px] font-black leading-4 transition-colors active:scale-[0.98] ${
+              className={`group flex h-full flex-col items-center justify-center gap-[3px] text-[11px] font-black leading-4 transition-colors active:scale-[0.96] ${
                 active
                   ? 'text-[color:var(--blue-600)]'
                   : 'text-[color:var(--text-tertiary)] hover:text-[color:var(--text-secondary)]'
               }`}
             >
-              <span className="relative">
-                <NavIcon name={item.icon} active={active} />
-                <NavBadge count={badge} />
+              {/* 아이콘을 감싸는 캡슐: 활성이면 blue-50 pill 이 펼쳐지고 아이콘이 살짝 커진다 */}
+              <span className="relative flex h-8 w-[52px] items-center justify-center">
+                <span
+                  aria-hidden="true"
+                  className={`absolute inset-0 rounded-full bg-[color:var(--blue-50)] transition-all duration-200 ease-out ${
+                    active ? 'scale-100 opacity-100' : 'scale-75 opacity-0'
+                  }`}
+                />
+                <span
+                  className={`relative transition-transform duration-200 ease-out ${
+                    active ? 'scale-105' : 'group-hover:scale-105'
+                  }`}
+                >
+                  <NavIcon name={item.icon} active={active} />
+                  <NavBadge count={badge} />
+                </span>
               </span>
               <span>{item.label}</span>
             </Link>
@@ -222,66 +260,8 @@ function isNavItemActive(pathname: string, href: (typeof NAV_ITEMS)[number]['hre
 }
 
 function NavIcon({ name, active }: { name: NavIconName; active: boolean }) {
-  const strokeWidth = active ? 2.35 : 2.1;
-
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="size-[23px]"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={strokeWidth}
-    >
-      {name === 'home' ? (
-        <>
-          <path d="M4.5 10.6 12 4.5l7.5 6.1" />
-          <path d="M6.8 10.2v8.1c0 .8.6 1.3 1.4 1.3h7.6c.8 0 1.4-.5 1.4-1.3v-8.1" />
-          <path d="M10 19.6v-5.1h4v5.1" />
-        </>
-      ) : null}
-      {name === 'preference' ? (
-        <>
-          <path d="M5 7h7" />
-          <path d="M16 7h3" />
-          <path d="M5 17h3" />
-          <path d="M12 17h7" />
-          <circle cx="14" cy="7" r="2.1" />
-          <circle cx="10" cy="17" r="2.1" />
-        </>
-      ) : null}
-      {name === 'members' ? (
-        <>
-          <circle cx="9" cy="8" r="3" />
-          <path d="M4.8 19c.7-3.1 2.3-4.7 4.2-4.7s3.5 1.6 4.2 4.7" />
-          <path d="M15 10.2a2.5 2.5 0 1 0-.7-4.9" />
-          <path d="M15.6 14.6c1.8.4 3 1.8 3.6 4.4" />
-        </>
-      ) : null}
-      {name === 'inbox' ? (
-        <>
-          <path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-4l-3 3-3-3H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" />
-          <path d="M8.5 10h7" />
-          <path d="M8.5 13h4.5" />
-        </>
-      ) : null}
-      {name === 'settings' ? (
-        <>
-          <circle cx="12" cy="12" r="2.6" />
-          <path d="M12 3.5v2.2" />
-          <path d="M12 18.3v2.2" />
-          <path d="M3.5 12h2.2" />
-          <path d="M18.3 12h2.2" />
-          <path d="M5.9 5.9 7.5 7.5" />
-          <path d="M16.5 16.5l1.6 1.6" />
-          <path d="M5.9 18.1 7.5 16.5" />
-          <path d="M16.5 7.5l1.6-1.6" />
-        </>
-      ) : null}
-    </svg>
-  );
+  const Icon = active ? NAV_ICONS[name].filled : NAV_ICONS[name].outline;
+  return <Icon aria-hidden="true" className="size-[23px]" />;
 }
 
 export function PrimaryButton({
