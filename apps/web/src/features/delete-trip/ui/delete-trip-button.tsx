@@ -88,6 +88,7 @@ function ConfirmDialog({
     <ModalShell
       label="이 여행을 삭제할까요?"
       onDismiss={pending ? undefined : onCancel}
+      themed
       panelClassName="w-full max-w-[400px] rounded-[20px] bg-[color:var(--card,#FFFFFF)] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
     >
       <h2 className="text-[18px] font-bold text-[color:var(--ink,#191F28)]">이 여행을 삭제할까요?</h2>
