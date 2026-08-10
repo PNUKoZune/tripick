@@ -22,11 +22,11 @@ export function TripInfoPanel({ trip }: Props) {
       <SurfaceCard padding="sm">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-[12px] font-semibold text-[#8B95A1]">여행 개요</div>
-            <h3 className="mt-1 text-[18px] font-bold leading-[26px] text-[#191F28]">
+            <div className="text-[12px] font-semibold text-[color:var(--ink-faint,#8B95A1)]">여행 개요</div>
+            <h3 className="mt-1 text-[18px] font-bold leading-[26px] text-[color:var(--ink,#191F28)]">
               {trip.title}
             </h3>
-            <div className="mt-1 text-[13px] leading-[20px] text-[#6B7684]">
+            <div className="mt-1 text-[13px] leading-[20px] text-[color:var(--ink-sub,#6B7684)]">
               {meta.durationLabel}
             </div>
           </div>
@@ -76,7 +76,7 @@ function WeatherCard({ tripId, dayCount }: { tripId: string; dayCount: number })
     <SurfaceCard padding="sm">
       <SectionLabel title="날씨 정보" description="여행 날짜별 확인 상태입니다." />
       {isError ? (
-        <div className="mt-2 rounded-[12px] border border-[#E5E8EB] bg-[#FAFBFC] px-3 py-2 text-[13px] text-[#8B95A1]">
+        <div className="mt-2 rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FAFBFC)] px-3 py-2 text-[13px] text-[color:var(--ink-faint,#8B95A1)]">
           날씨를 불러오지 못했어요. 잠시 뒤 다시 확인해주세요.
         </div>
       ) : isPending ? (
@@ -84,7 +84,7 @@ function WeatherCard({ tripId, dayCount }: { tripId: string; dayCount: number })
           {Array.from({ length: Math.max(dayCount, 1) }).map((_, index) => (
             <li
               key={index}
-              className="h-[41px] animate-pulse rounded-[12px] border border-[#E5E8EB] bg-[#FAFBFC]"
+              className="h-[41px] animate-pulse rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FAFBFC)]"
             />
           ))}
         </ul>
@@ -93,23 +93,23 @@ function WeatherCard({ tripId, dayCount }: { tripId: string; dayCount: number })
           {weather.map((w) => (
             <li
               key={w.day}
-              className="flex items-center justify-between rounded-[12px] border border-[#E5E8EB] bg-[#FAFBFC] px-3 py-2"
+              className="flex items-center justify-between rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FAFBFC)] px-3 py-2"
             >
               <div className="flex items-center gap-2">
                 <span aria-hidden className="text-[18px]">
                   {w.emoji}
                 </span>
-                <span className="text-[14px] font-semibold text-[#191F28]">{w.label}</span>
+                <span className="text-[14px] font-semibold text-[color:var(--ink,#191F28)]">{w.label}</span>
                 {!w.forecasted ? <WeatherHint /> : null}
               </div>
               <div className="flex items-center gap-2">
                 {typeof w.precipitationProbability === 'number' ? (
-                  <span className="flex items-center gap-1 text-[13px] font-semibold text-[#3182F6]">
+                  <span className="flex items-center gap-1 text-[13px] font-semibold text-[color:var(--primary,#3182F6)]">
                     <FiDroplet aria-hidden className="h-[13px] w-[13px]" />
                     {w.precipitationProbability}%
                   </span>
                 ) : null}
-                <span className="text-[13px] font-semibold text-[#6B7684]">{w.tempLabel}</span>
+                <span className="text-[13px] font-semibold text-[color:var(--ink-sub,#6B7684)]">{w.tempLabel}</span>
               </div>
             </li>
           ))}
@@ -126,13 +126,13 @@ function WeatherHint() {
       <button
         type="button"
         aria-label={message}
-        className="flex items-center justify-center text-[#8B95A1]"
+        className="flex items-center justify-center text-[color:var(--ink-faint,#8B95A1)]"
       >
         <FiInfo aria-hidden className="h-[15px] w-[15px]" />
       </button>
       <span
         role="tooltip"
-        className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 z-10 w-[180px] -translate-x-1/2 rounded-[8px] bg-[#191F28] px-2.5 py-1.5 text-[11px] font-medium leading-[16px] text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/hint:opacity-100 group-focus-within/hint:opacity-100"
+        className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 z-10 w-[180px] -translate-x-1/2 rounded-[8px] bg-[color:var(--ink,#191F28)] px-2.5 py-1.5 text-[11px] font-medium leading-[16px] text-[color:var(--card,#FFFFFF)] opacity-0 shadow-lg transition-opacity duration-150 group-hover/hint:opacity-100 group-focus-within/hint:opacity-100"
       >
         {message}
       </span>
@@ -142,9 +142,9 @@ function WeatherHint() {
 
 function MetaTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[12px] border border-[#E5E8EB] bg-[#FAFBFC] px-3 py-2">
-      <div className="text-[11px] font-semibold text-[#8B95A1]">{label}</div>
-      <div className="mt-1 text-[14px] font-bold text-[#191F28]">{value}</div>
+    <div className="rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FAFBFC)] px-3 py-2">
+      <div className="text-[11px] font-semibold text-[color:var(--ink-faint,#8B95A1)]">{label}</div>
+      <div className="mt-1 text-[14px] font-bold text-[color:var(--ink,#191F28)]">{value}</div>
     </div>
   );
 }
@@ -158,10 +158,10 @@ function StatTile({
   value: string;
   tone?: 'neutral' | 'warning';
 }) {
-  const valueClass = tone === 'warning' ? 'text-[#FF8A00]' : 'text-[#191F28]';
+  const valueClass = tone === 'warning' ? 'text-[color:var(--accent-deep,#FF8A00)]' : 'text-[color:var(--ink,#191F28)]';
   return (
-    <div className="rounded-[12px] border border-[#E5E8EB] bg-white px-3 py-3 text-center">
-      <div className="text-[11px] font-semibold text-[#8B95A1]">{label}</div>
+    <div className="rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#FFFFFF)] px-3 py-3 text-center">
+      <div className="text-[11px] font-semibold text-[color:var(--ink-faint,#8B95A1)]">{label}</div>
       <div className={`mt-1 text-[16px] font-bold ${valueClass}`}>{value}</div>
     </div>
   );
@@ -170,8 +170,8 @@ function StatTile({
 function SectionLabel({ title, description }: { title: string; description: string }) {
   return (
     <div>
-      <div className="text-[14px] font-bold text-[#191F28]">{title}</div>
-      <div className="mt-0.5 text-[12px] text-[#8B95A1]">{description}</div>
+      <div className="text-[14px] font-bold text-[color:var(--ink,#191F28)]">{title}</div>
+      <div className="mt-0.5 text-[12px] text-[color:var(--ink-faint,#8B95A1)]">{description}</div>
     </div>
   );
 }
@@ -179,7 +179,7 @@ function SectionLabel({ title, description }: { title: string; description: stri
 function TagRow({ label, items }: { label: string; items: PlannerTripMetaDto['tasteTags']['food'] }) {
   return (
     <div className="mt-3">
-      <div className="text-[12px] font-semibold text-[#8B95A1]">{label}</div>
+      <div className="text-[12px] font-semibold text-[color:var(--ink-faint,#8B95A1)]">{label}</div>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         {items.map((item) => (
           <Chip key={item} tone="primary">

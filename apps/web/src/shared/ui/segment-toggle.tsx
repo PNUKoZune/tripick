@@ -29,13 +29,19 @@ export function SegmentToggle({ items, value, onChange, columns = 2 }: Props) {
             onClick={() => onChange(item.value)}
             className={`flex h-12 items-center justify-center gap-2 rounded-[14px] border text-[15px] font-semibold transition ${
               active
-                ? 'border-[#3182F6] bg-[#EAF2FF] text-[#1B64DA]'
-                : 'border-[#E5E8EB] bg-white text-[#6B7684] hover:bg-[#F2F4F6]'
+                ? 'border-[color:var(--primary,#3182F6)] bg-[color:var(--primary-tint,#EAF2FF)] text-[color:var(--primary-deep,#1B64DA)]'
+                : 'border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#FFFFFF)] text-[color:var(--ink-sub,#6B7684)] hover:bg-[color:var(--card-soft,#F2F4F6)]'
             }`}
           >
             <span>{item.label}</span>
             {item.helper ? (
-              <span className={`text-[13px] font-medium ${active ? 'text-[#1B64DA]' : 'text-[#8B95A1]'}`}>
+              <span
+                className={`text-[13px] font-medium ${
+                  active
+                    ? 'text-[color:var(--primary-deep,#1B64DA)]'
+                    : 'text-[color:var(--ink-faint,#8B95A1)]'
+                }`}
+              >
                 {item.helper}
               </span>
             ) : null}
