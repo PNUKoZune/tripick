@@ -3,12 +3,29 @@ import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 
+/** Resend HTTP API. SMTP 포트를 안 쓰므로 아웃바운드 25/465/587 차단 환경에서도 나간다. */
+const RESEND_ENDPOINT = 'https://api.resend.com/emails';
+
+/**
+ * 발송 한 건의 상한. 메일 발송은 가입·재설정 응답 경로에 동기로 물려 있어서,
+ * 상한이 없으면 전송이 막혔을 때 요청이 그대로 끌려간다 (nodemailer 기본 연결 타임아웃 2분).
+ */
+const DEFAULT_SEND_TIMEOUT_MS = 10_000;
+
+type TransportMode = 'console' | 'smtp' | 'resend';
+
 /**
  * 이메일 발송 추상.
  *
  * 동작 모드:
- * - `EMAIL_TRANSPORT=console` (기본): SMTP 안 띄우고 콘솔에 본문만 출력. 가장 빠른 dev 동선.
- * - `EMAIL_TRANSPORT=smtp`: `SMTP_HOST/PORT/USER/PASS` 사용. 로컬 Mailpit (1025) 또는 SaaS (Resend SMTP 등).
+ * - `EMAIL_TRANSPORT=console` (기본): 발송 안 하고 콘솔에 본문만 출력. 가장 빠른 dev 동선.
+ * - `EMAIL_TRANSPORT=resend`: Resend HTTP API (`RESEND_API_KEY`). **프로덕션 권장.**
+ * - `EMAIL_TRANSPORT=smtp`: `SMTP_HOST/PORT/USER/PASS` 사용. 로컬 Mailpit (1025) 등.
+ *
+ * 프로덕션에서 SMTP 대신 HTTP 를 쓰는 이유 — PaaS 는 스팸 방지로 아웃바운드 SMTP 포트를
+ * 막는 경우가 많다(Railway 포함). 막히면 TCP 가 안 붙어 `ETIMEDOUT command=CONN` 으로
+ * 죽는데, 자격증명·도메인 인증이 멀쩡해도 나는 증상이라 원인을 찾기 어렵다.
+ * HTTP API 는 443 만 쓰므로 이 문제가 없고 왕복도 짧다.
  *
  * 주의: 본문은 plain text + HTML 동시 발송. 인증 링크는 클릭만으로 동작하도록 URL 그대로.
  */
@@ -17,7 +34,9 @@ export class EmailService implements OnModuleInit {
   private readonly logger = new Logger(EmailService.name);
   private transporter?: Transporter;
   private fromAddress = 'TriPick <noreply@tripick.place>';
-  private mode: 'console' | 'smtp' = 'console';
+  private mode: TransportMode = 'console';
+  private resendApiKey?: string;
+  private sendTimeoutMs = DEFAULT_SEND_TIMEOUT_MS;
 
   constructor(private readonly config: ConfigService) {}
 
@@ -26,49 +45,109 @@ export class EmailService implements OnModuleInit {
     const from = this.config.get<string>('EMAIL_FROM');
     if (from) this.fromAddress = from;
 
-    if (mode === 'smtp') {
-      const host = this.config.get<string>('SMTP_HOST');
-      const port = Number(this.config.get<string>('SMTP_PORT') ?? '1025');
-      const user = this.config.get<string>('SMTP_USER');
-      const pass = this.config.get<string>('SMTP_PASS');
-      const secure = this.config.get<string>('SMTP_SECURE') === 'true';
-      if (!host) {
-        this.logger.warn(
-          'EMAIL_TRANSPORT=smtp but SMTP_HOST is missing — falling back to console mode',
-        );
-        return;
-      }
-      this.transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure,
-        auth: user && pass ? { user, pass } : undefined,
-      });
-      this.mode = 'smtp';
-      this.logger.log(`Email transport: SMTP ${host}:${port}`);
-    } else {
-      this.logger.log('Email transport: console (no SMTP)');
+    const timeout = Number(this.config.get<string>('EMAIL_SEND_TIMEOUT_MS'));
+    if (Number.isFinite(timeout) && timeout > 0) this.sendTimeoutMs = timeout;
+
+    if (mode === 'resend') {
+      this.initResend();
+      return;
     }
+    if (mode === 'smtp') {
+      this.initSmtp();
+      return;
+    }
+    this.logger.log('Email transport: console (no delivery)');
+  }
+
+  private initResend() {
+    const apiKey = this.config.get<string>('RESEND_API_KEY');
+    if (!apiKey) {
+      this.logger.warn(
+        'EMAIL_TRANSPORT=resend but RESEND_API_KEY is missing — falling back to console mode',
+      );
+      return;
+    }
+    this.resendApiKey = apiKey;
+    this.mode = 'resend';
+    this.logger.log(`Email transport: Resend HTTP API (timeout ${this.sendTimeoutMs}ms)`);
+  }
+
+  private initSmtp() {
+    const host = this.config.get<string>('SMTP_HOST');
+    const port = Number(this.config.get<string>('SMTP_PORT') ?? '1025');
+    const user = this.config.get<string>('SMTP_USER');
+    const pass = this.config.get<string>('SMTP_PASS');
+    const secure = this.config.get<string>('SMTP_SECURE') === 'true';
+    if (!host) {
+      this.logger.warn(
+        'EMAIL_TRANSPORT=smtp but SMTP_HOST is missing — falling back to console mode',
+      );
+      return;
+    }
+    this.transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: user && pass ? { user, pass } : undefined,
+      // 기본값(연결 2분·인사 30초)은 응답 경로에 물린 발송에 너무 길다.
+      connectionTimeout: this.sendTimeoutMs,
+      greetingTimeout: this.sendTimeoutMs,
+      socketTimeout: this.sendTimeoutMs,
+    });
+    this.mode = 'smtp';
+    this.logger.log(`Email transport: SMTP ${host}:${port} (timeout ${this.sendTimeoutMs}ms)`);
   }
 
   async send(params: { to: string; subject: string; text: string; html: string }): Promise<void> {
-    if (this.mode === 'console' || !this.transporter) {
+    if (this.mode === 'console') {
       this.logger.log(
         `\n[EMAIL >] to=${params.to}\nsubject: ${params.subject}\n---\n${params.text}\n---`,
       );
       return;
     }
     try {
-      await this.transporter.sendMail({
-        from: this.fromAddress,
-        to: params.to,
-        subject: params.subject,
-        text: params.text,
-        html: params.html,
-      });
+      if (this.mode === 'resend') {
+        await this.sendViaResend(params);
+      } else if (this.transporter) {
+        await this.transporter.sendMail({
+          from: this.fromAddress,
+          to: params.to,
+          subject: params.subject,
+          text: params.text,
+          html: params.html,
+        });
+      }
     } catch (err) {
       this.logger.error(`Failed to send email to ${params.to}: ${(err as Error).message}`);
       throw err;
+    }
+  }
+
+  private async sendViaResend(params: {
+    to: string;
+    subject: string;
+    text: string;
+    html: string;
+  }): Promise<void> {
+    const res = await fetch(RESEND_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.resendApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: this.fromAddress,
+        to: [params.to],
+        subject: params.subject,
+        text: params.text,
+        html: params.html,
+      }),
+      signal: AbortSignal.timeout(this.sendTimeoutMs),
+    });
+    if (!res.ok) {
+      // 본문에 원인이 담긴다 (도메인 미인증·from 불일치·키 무효 등). 길 수 있어 잘라 남긴다.
+      const detail = await res.text().catch(() => '');
+      throw new Error(`Resend API ${res.status}: ${detail.slice(0, 300)}`);
     }
   }
 

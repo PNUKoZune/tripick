@@ -24,7 +24,7 @@ TriPick 을 매니지드 서비스 조합으로 배포하기 위한 구성·선�
                           │  :8081 TEI (BGE-m3-ko, 임베딩) │
                           └────────────────────────────────┘
 
-┌─ Cloudflare R2 (MinIO 대체) ─┐  ┌─ Resend SMTP (Mailpit 대체) ─┐
+┌─ Cloudflare R2 (MinIO 대체) ─┐  ┌─ Resend HTTP API (Mailpit 대체) ─┐
 ```
 
 **Nginx 는 배포 구성에서 제외한다.** CLAUDE.md 는 라이브 전용 Nginx(SSL 터미네이션·WebSocket 업그레이드 헤더)를 명시하고 있으나,
@@ -42,7 +42,7 @@ Railway 가 TLS 종료와 WebSocket 업그레이드를 모두 처리하므로 �
 | Redis | Railway 애드온 | 캐시·세션·BullMQ·Throttler 공용 |
 | LLM 추론 | RunPod | chat + 임베딩 **2개 엔드포인트** |
 | Object Storage | Cloudflare R2 | S3 호환, 엔드포인트만 전환 |
-| SMTP | Resend | `EMAIL_TRANSPORT=smtp` 유지 |
+| 메일 발송 | Resend | `EMAIL_TRANSPORT=resend` (HTTP API) — 아래 주의 |
 | `apps/mobile` | 스토어 배포 | 본 문서 범위 외 |
 
 ---
@@ -243,7 +243,8 @@ CLAUDE.md 아키텍처에 "Redis Adapter / Pub-Sub Sync" 가 명시되어 있으
 | Redis | `REDIS_HOST` / `REDIS_PORT` | `REDIS_URL` (비밀번호 포함) — **5-1 선행 필요** |
 | `STORAGE_ENDPOINT` | `http://localhost:9000` | R2 S3 API 엔드포인트 |
 | `STORAGE_PUBLIC_URL` | `/storage` (web 프록시 경유) | R2 공개 도메인 절대 URL — 아래 주의 |
-| `SMTP_HOST` / `SMTP_PORT` | `localhost` / `1025` | Resend SMTP |
+| `EMAIL_TRANSPORT` | `smtp` (Mailpit) | **`resend`** — SMTP 아님, 아래 주의 |
+| `RESEND_API_KEY` | (비움) | Resend API 키 |
 | `LLM_BASE_URL` | `http://localhost:8080/v1` | RunPod chat 엔드포인트 |
 | `LLM_EMBEDDING_BASE_URL` | `http://localhost:8081/v1` | RunPod 임베딩 엔드포인트 |
 | `LLM_PLANNER_TIMEOUT_MS` | `12000` | **`90000` 이상** |
@@ -257,6 +258,35 @@ CLAUDE.md 아키텍처에 "Redis Adapter / Pub-Sub Sync" 가 명시되어 있으
 | `SENTRY_ENVIRONMENT` (api) | (비움 → `NODE_ENV`) | `production` |
 | `NEXT_PUBLIC_SENTRY_DSN` (web) | web 프로젝트 DSN | 동일 — **api 와 다른 프로젝트** |
 | `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN` (web) | (비움 → 업로드 off) | Vercel 에 셋 다 주입해야 소스맵이 붙는다 |
+
+### 메일 발송은 SMTP 가 아니라 HTTP API 로 한다
+
+프로덕션은 `EMAIL_TRANSPORT=resend` 다. Resend 도 SMTP 를 제공하지만 **Railway 에서 쓰지 않는다** —
+아웃바운드 SMTP 포트가 막혀 있어 TCP 가 아예 안 붙는다. 증상은 다음과 같이 나온다.
+
+```
+ERROR [EmailService] Failed to send email to ...: Connection timeout
+  code: 'ETIMEDOUT', command: 'CONN'
+```
+
+`command: 'CONN'` 은 연결 자체가 실패했다는 뜻이라 **API 키·도메인 인증이 멀쩡해도 난다.**
+465/587 을 오가거나 키를 재발급해도 해결되지 않으니, 이 로그가 보이면 전송 방식부터 확인한다.
+HTTP API 는 443 만 쓰므로 이 문제가 없다.
+
+프로덕션 변수:
+
+```bash
+EMAIL_TRANSPORT=resend
+RESEND_API_KEY=<Resend API 키>
+EMAIL_FROM=TriPick <noreply@tripick.place>
+```
+
+- `EMAIL_FROM` 의 도메인이 Resend 에서 **인증된 도메인**이어야 한다. 다르면 403 이 온다
+- `RESEND_API_KEY` 를 빼먹으면 부팅은 되지만 console 모드로 폴백해 메일이 로그로만 나간다.
+  기동 로그의 `Email transport:` 줄로 확인한다
+- `SMTP_*` 는 프로덕션에서 넣지 않는다 — 로컬 Mailpit 전용이다
+- 발송 상한은 `EMAIL_SEND_TIMEOUT_MS`(기본 10초). 발송이 가입·재설정 응답 경로에 동기로
+  물려 있어 상한이 필요하다
 
 ### Object Storage 공개 URL 주의
 
@@ -324,7 +354,7 @@ Geolocation 은 HTTPS 환경에서만 동작하나, Vercel 은 기본 HTTPS 이�
 5. **RunPod** — vLLM(chat) + TEI(임베딩) 기동 후 엔드포인트 확보 → Railway 환경변수 주입
 6. **장소 카탈로그 적재** — 빈 `place_embeddings` 로는 일정 생성이 성립하지 않는다 (아래 8-1)
 7. **Vercel** — web 배포 → 카카오/ODsay 콘솔에 도메인 등록 → Railway 의 web 의존 환경변수 갱신 (아래 8-2)
-8. **R2 버킷 생성 + Resend SMTP 전환**
+8. **R2 버킷 생성 + Resend 전환**
 
 ### 8-1. 장소 카탈로그 적재 (빠뜨리기 쉬움)
 
@@ -356,7 +386,7 @@ API 를 먼저 띄우되 이 두 값은 임시로 두고, Vercel 배포 후 갱�
 ## 9. 배포 후 확인 항목
 
 - `GET /api/v1/health` 200 응답
-- `POST /auth/signup` → 이메일 인증 → 로그인 (DB 쓰기 경로 + SMTP 동시 확인)
+- `POST /auth/signup` → 이메일 인증 → 로그인 (DB 쓰기 경로 + 메일 발송 동시 확인)
 - 카카오 OAuth 로그인 → JWT 발급 왕복
 - WebSocket `/realtime` 네임스페이스 연결 및 JWT 인증
 - `place_embeddings` 행 수 확인 (0 이면 8-1 미실행 — 일정 생성이 카카오 폴백으로만 돈다)
