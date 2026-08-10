@@ -81,7 +81,7 @@ function TripLightSummaryCard({ trip, compact = false }: { trip: PlannerTripDto;
   return (
     <section
       className={`wvr-scope rounded-[22px] border border-[color:var(--line)] bg-[color:var(--card)] shadow-[var(--shadow-card)] ${
-        compact ? 'p-4' : 'mx-4 mt-3 p-5'
+        compact ? 'p-4' : 'mb-3 p-5'
       }`}
       aria-label="여행 요약"
     >
@@ -434,8 +434,9 @@ function PlannerContent({
 
         {isLiveActive ? <LivePromoBanner /> : null}
 
-        {trip ? <TripLightSummaryCard trip={trip} /> : null}
-
+        {/* 요약 카드는 모바일에선 "정보" 탭 안으로 넣는다 — 좁은 화면에서 지도·일정보다
+            위에 두면 첫 화면이 요약으로 차서 정작 오늘 일정이 스크롤 밖으로 밀린다.
+            데스크탑은 사이드바 상단(compact)에 그대로 남는다. */}
         {trip ? (
           <PlannerMap
             placeholder={trip.searchPlaceholder}
@@ -489,7 +490,12 @@ function PlannerContent({
           {tab === 'map' && trip ? (
             <TripMapPanel trip={trip} items={itemsForDay} onSelectItem={setOpenItem} />
           ) : null}
-          {tab === 'info' && trip ? <TripInfoPanel trip={trip} /> : null}
+          {tab === 'info' && trip ? (
+            <>
+              <TripLightSummaryCard trip={trip} />
+              <TripInfoPanel trip={trip} />
+            </>
+          ) : null}
           {tab === 'coordination' && trip ? <TripCoordinationPanel tripId={trip.id} /> : null}
 
           {trip?.isOwner ? (
@@ -523,31 +529,35 @@ function PlannerContent({
         <AppDesktopNavigation />
         <div className="wvr-scope min-h-dvh overflow-hidden border-x border-[color:var(--line)] bg-[color:var(--card)]">
           <header className="border-b border-[color:var(--line)] bg-[color:var(--card)]">
-            <div className="mx-auto flex w-full max-w-[1360px] items-center justify-between gap-6 px-8 py-4 xl:px-10">
-              <div className="flex items-center gap-4">
+            {/* lg~xl 사이(노트북 폭)에서 좌우가 서로 밀어 글자가 줄바꿈되던 헤더.
+                왼쪽 묶음만 줄어들게(min-w-0 flex-1) 하고 제목은 말줄임, 액션 묶음은
+                shrink-0 + 줄바꿈 금지로 고정한다. 기간·이동수단 칩은 폭이 넉넉한
+                xl 이상에서만 — 어차피 "정보" 패널에 같은 값이 있다. */}
+            <div className="mx-auto flex w-full max-w-[1360px] items-center justify-between gap-4 px-6 py-4 xl:gap-6 xl:px-10">
+              <div className="flex min-w-0 flex-1 items-center gap-3 xl:gap-4">
                 <Link
                   href="/trips"
-                  className="flex h-9 items-center gap-1 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] pl-2 pr-3 text-[13px] font-semibold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink)]"
+                  className="flex h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] pl-2 pr-3 text-[13px] font-semibold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink)]"
                 >
                   <FiChevronLeft className="size-4" aria-hidden />
                   <span>내 여행</span>
                 </Link>
-                <div>
+                <div className="min-w-0">
                   <div className="text-[12px] font-semibold tracking-wide text-[color:var(--primary)]">
                     Tripick · 일정
                   </div>
-                  <h1 className="mt-0.5 text-[20px] font-bold leading-[28px] text-[color:var(--ink)]">
+                  <h1 className="mt-0.5 truncate text-[20px] font-bold leading-[28px] text-[color:var(--ink)]">
                     {trip?.title ?? '여행 정보 불러오는 중'}
                   </h1>
                 </div>
                 {trip ? (
-                  <div className="flex items-center gap-2">
+                  <div className="hidden shrink-0 items-center gap-2 whitespace-nowrap xl:flex">
                     <Chip tone="neutral">{trip.meta.durationLabel}</Chip>
                     <Chip tone="neutral">{trip.meta.transportLabel}</Chip>
                   </div>
                 ) : null}
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex shrink-0 items-center gap-2 whitespace-nowrap xl:gap-3">
                 {trip ? (
                   <button
                     type="button"
