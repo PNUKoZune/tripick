@@ -144,6 +144,10 @@ pnpm --filter @tripick/web typecheck
 - **`sudo` fails under the `!` runner** (`a terminal is required to
   authenticate`). System-lib installs must be done in a real terminal — see
   Prerequisites.
+- **A freshly created driver account has no preferences**, so the "취향부터
+  설정해 볼까요?" bottom sheet covers the first screen you shoot (it looks like a
+  broken page). Dismiss it in the driver (`나중에 하기`) or save preferences once
+  at `/preferences` for that account.
 - **Seed and driver must point at the same account.** `SEED_USER_EMAIL` (seed)
   and `DRIVER_EMAIL` (driver) both default to `driver@tripick.test`; if you
   change one, change the other or the driver logs into an account with no trip.
