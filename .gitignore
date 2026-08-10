@@ -63,3 +63,6 @@ apps/mobile/ios/TriPick/GoogleService-Info.plist
 
 # 특정 스킬
 .claude/skills/blog-post
+
+# Lazyweb 도구 산출물(디자인 참조 캐시) — TriPick UI 작업엔 미사용
+.lazyweb/
