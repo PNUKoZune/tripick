@@ -19,9 +19,9 @@ TriPick 을 매니지드 서비스 조합으로 배포하기 위한 구성·선�
 └───────────────────┘     └──────────┬─────────────────────┘
                                      │ OpenAI-compatible
                           ┌──────────▼─────────────────────┐
-                          │ RunPod (GPU)                   │
-                          │  :8080 vLLM (Gemma, chat)      │
-                          │  :8081 TEI (BGE-m3-ko, 임베딩) │
+                          │ RunPod (GPU) — 파드 1개        │
+                          │  :8080 llama.cpp (chat+vision) │
+                          │  :8081 llama.cpp (임베딩)      │
                           └────────────────────────────────┘
 
 ┌─ Cloudflare R2 (MinIO 대체) ─┐  ┌─ Resend HTTP API (Mailpit 대체) ─┐
@@ -40,21 +40,49 @@ Railway 가 TLS 종료와 WebSocket 업그레이드를 모두 처리하므로 �
 | `apps/api` | Railway | NestJS + BullMQ Worker 동일 프로세스 |
 | PostgreSQL + pgvector | Railway (커스텀 Docker) | `pgvector/pgvector:pg16` 고정 |
 | Redis | Railway 애드온 | 캐시·세션·BullMQ·Throttler 공용 |
-| LLM 추론 | RunPod | chat + 임베딩 **2개 엔드포인트** |
+| LLM 추론 | RunPod | 파드 1개에 llama-server 2개 (chat+vision / 임베딩) |
 | Object Storage | Cloudflare R2 | S3 호환, 엔드포인트만 전환 |
 | 메일 발송 | Resend | `EMAIL_TRANSPORT=resend` (HTTP API) — 아래 주의 |
 | `apps/mobile` | 스토어 배포 | 본 문서 범위 외 |
 
 ---
 
-## 3. RunPod — 엔드포인트 2개 구성
+## 3. RunPod — 한 파드에 서버 2개
 
-`apps/api/.env.example` 기준으로 chat 추론과 임베딩 서버가 분리되어 있다. 둘 다 필요하다.
+코드가 부르는 LLM 엔드포인트는 셋이다. vision 이 빠지기 쉬우니 먼저 짚는다.
 
-| 용도 | 환경변수 | 서빙 스택 | 기본 포트 |
-| --- | --- | --- | --- |
-| 일정 생성·재계획 추론 | `LLM_BASE_URL` | vLLM + Gemma | 8080 |
-| RAG/CRAG 임베딩 | `LLM_EMBEDDING_BASE_URL` | TEI 또는 Infinity + `dragonkue/BGE-m3-ko` | 8081 |
+| 용도 | 환경변수 | 미설정 시 |
+| --- | --- | --- |
+| 일정 생성·재계획 (chat) | `LLM_BASE_URL` / `LLM_MODEL` | 로컬 기본값 → 폴백 플래닝 |
+| RAG/CRAG·적재 임베딩 | `LLM_EMBEDDING_BASE_URL` / `_MODEL` / `_DIMENSIONS` | **`LLM_BASE_URL` 로 폴백** |
+| 취향 사진 분석 (vision) | `LLM_VISION_BASE_URL` / `_MODEL` | **chat 설정으로 폴백** |
+
+[vision.analyzer.ts](../../apps/api/src/preference-analyzer/vision.analyzer.ts) 가 vision 전용 주소가 없으면
+chat 주소를 그대로 쓴다. chat 서버가 mmproj 를 얹은 멀티모달이면 그대로 두면 되고(권장),
+텍스트 전용이면 이미지를 텍스트 모델에 보내 조용히 실패하므로 vision 서버를 따로 세워야 한다.
+
+### 서빙 이미지 — 커스텀이 필요하다
+
+**RunPod 파드는 컨테이너 하나이고, v2 API 는 컨테이너에 `args` 만 넘긴다**(entrypoint 교체 불가,
+`api.runpod.io/v2/openapi.json` 의 `CreatePodRequest` 에 해당 필드가 없다). 그런데 llama.cpp 공식
+server 이미지의 entrypoint 는 `/app/llama-server` 라, 무엇을 넣든 그 한 프로세스의 인자가 되어
+두 번째 서버를 띄울 수 없다. 같은 저장소의 `full-cuda` 이미지도 `tools.sh` 가 서브커맨드를
+화이트리스트로만 받아 쉘을 얻을 수 없다.
+
+그래서 entrypoint 만 쉘 스크립트로 바꾼 이미지를 쓴다 — [infra/runpod/](../../infra/runpod/).
+
+```bash
+docker build --platform linux/amd64 -f infra/runpod/Dockerfile -t <ns>/tripick-llm:<tag> infra/runpod
+docker push <ns>/tripick-llm:<tag>
+```
+
+[start.sh](../../infra/runpod/start.sh) 가 `llama-server` 를 8080(chat+vision)·8081(임베딩)로 띄운다.
+모델·포트·컨텍스트·키는 전부 env 라, 값만 바꿀 때는 이미지를 다시 만들지 않아도 된다.
+한쪽 서버가 죽으면 컨테이너를 내린다 — 반쪽만 살아 있으면 플래너는 도는데 pgvector 검색만
+조용히 폴백으로 빠져 헬스체크에 안 걸리고 품질만 떨어진다.
+
+**VRAM** — 26B Q4 약 16GB + mmproj 1.5GB + BGE-m3 1.2GB 라 24GB 카드 한 장에 함께 올라간다.
+파드를 나누면 GPU 값을 두 번 낸다.
 
 ### 차원 일치 제약
 
@@ -67,12 +95,38 @@ Railway 가 TLS 종료와 WebSocket 업그레이드를 모두 처리하므로 �
 
 - **Pod (상시)**: 재계획 잡이 대기 없이 처리되어야 하므로 chat 추론은 상시 Pod 권장
 - **Serverless**: 콜드스타트가 수십 초 발생. 선택 시 `LLM_PLANNER_TIMEOUT_MS` 상향이 필수 전제
-- 임베딩은 부하가 낮아 동일 Pod 내 별도 컨테이너로 병설 가능
+- 임베딩은 부하가 낮아 chat 과 같은 파드에 올린다. 단 **별도 컨테이너로는 불가** — 커스텀
+  이미지 안에서 프로세스 두 개로 띄운다(위 참조)
+
+### thinking 모델 주의 — 조용한 폴백의 원인
+
+`gemma-4-26B-A4B-it` 같은 reasoning 모델은 출력을 `message.reasoning_content` 로 보내고
+`message.content` 를 **비운다**. 그런데 [planner-agent.service.ts](../../apps/api/src/planner/agent/planner-agent.service.ts)
+는 `content` 만 읽고 비면 `'{}'` 로 폴백한다 — 즉 **LLM 이 멀쩡히 살아 있는데도 매번 결정적
+폴백으로 빠지고, 에러가 나지 않아 로그로는 잡히지 않는다.**
+
+`start.sh` 가 `--reasoning-budget 0`(thinking 즉시 종료)으로 띄워 막는다. 모델을 바꿀 때
+이 값이 그 모델에도 맞는지 확인할 것. 확인 방법은 응답의 `content` 가 비어 있지 않은지 보는 것이다.
 
 ### 타임아웃 주의
 
 `LLM_PLANNER_TIMEOUT_MS` 기본값은 `12000`(12초)이다. 로컬 LLM 서빙 환경에서 이미 부족한 값이며,
 RunPod 콜드스타트가 겹치면 무조건 타임아웃된다. 프로덕션은 **90000 이상**으로 설정한다.
+
+### 실측 (RTX PRO 4000 Blackwell 24GB, secure $0.57/hr, EU-RO-1)
+
+| 항목 | 값 |
+| --- | --- |
+| 첫 기동 (모델 17GB 다운로드) | 약 70분 — 볼륨 미장착 시 재시작마다 반복된다 |
+| 재시작 (볼륨 캐시 적중) | 약 40초 |
+| 생성 속도 | 110 토큰 2.5초 (활성 4B MoE 라 26B 치고 빠름) |
+| 임베딩 | 1024차원, L2 norm 1.0, cos(카페,커피숍) 0.68 > cos(카페,등산로) 0.29 |
+
+**네트워크 볼륨을 반드시 붙인다.** 모델 다운로드가 초당 4MB 수준이라 재다운로드 비용이
+GPU 시간으로 그대로 청구된다. 파드를 지워도 볼륨에 남아 다음 파드가 재사용한다.
+
+임베딩 서버는 기동 시 `n_batch = n_ubatch = 512` 로 자동 하향된다(경고 로그). 장소 텍스트는
+그보다 짧아 무해하지만, 긴 입력을 임베딩할 일이 생기면 `-ub` 상향을 고려한다.
 
 ---
 
@@ -409,7 +463,15 @@ API 를 먼저 띄우되 이 두 값은 임시로 두고, Vercel 배포 후 갱�
   `SENTRY_AUTH_TOKEN` 이 **모두** 있을 때만 켜지므로, Vercel 에 셋을 넣기 전까지 프로덕션 스택
   트레이스는 난독화된 번들 기준으로 보인다. api 는 릴리스 헬스를 위해 `RAILWAY_GIT_COMMIT_SHA`
   (또는 `SENTRY_RELEASE`)를 릴리스로 쓴다
-- **RunPod 엔드포인트 URL 변동** — Pod 재시작 시 주소가 바뀌면 Railway 환경변수 갱신이 필요하다
+- **RunPod 프록시 URL 은 Pod ID 를 따라간다** — `https://<pod-id>-<port>.proxy.runpod.net` 이라
+  Stop/Start 로는 바뀌지 않는다. Terminate 후 새로 만들 때만 바뀌고, 그때 Railway 환경변수
+  갱신이 필요하다. 이미지만 바꿀 때는 `update-pod` + `restart` 로 ID·URL 을 유지할 수 있다.
+  (TCP 포트 직접 노출은 다르다 — 재기동마다 IP·포트가 바뀌므로 HTTP 프록시를 쓴다)
+- **Stop/Start 는 재고를 보장하지 않는다** — 중지하면 GPU 는 반납된다. 다시 켤 때 그 GPU 타입에
+  물량이 없으면 기동이 실패한다. 시연 일정이 걸려 있으면 상시 가동이 안전하다
+- **community 배치가 거부될 수 있다** — 카탈로그 재고가 있어도 `This machine does not have the
+  resources` / `no instances available` 로 막히는 경우가 있다. 디스크를 줄여도 동일하면
+  계정 쪽 community 접근 문제일 수 있으니 콘솔에서 확인하고, 안 되면 secure 로 간다
 - **장소 카탈로그 적재가 수동 CLI** — 배포 파이프라인에 들어 있지 않다(8-1). 신규 장소 반영은
   `--append` 실행을 사람이 돌리거나 별도 스케줄러를 붙여야 한다
 - **임베딩 모델 교체 시 전체 재적재** — `LLM_EMBEDDING_DIMENSIONS` 는 `vector(1024)` 컬럼에
