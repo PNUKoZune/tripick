@@ -314,7 +314,9 @@ export function PlannerMap({
       {showSearch ? (
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 px-3 pt-3">
           <div className="flex items-start gap-2">
-          <div className="pointer-events-auto relative flex-1">
+          {/* min-w-0 필수 — flex-1 만 두면 min-width:auto 가 검색 input 의 고유 폭을
+              최소치로 잡아 줄어들지 않고, 옆 길찾기 버튼이 지도 밖으로 밀려 잘린다. */}
+          <div className="pointer-events-auto relative min-w-0 flex-1">
             <div className="flex h-9 items-center rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
               <FiSearch aria-hidden className="mr-2 size-4 shrink-0 text-[color:var(--ink-faint)]" />
               <input
