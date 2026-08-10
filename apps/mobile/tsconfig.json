@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "lib": ["es2022", "dom"],
+    "jsx": "react-native",
+    "allowJs": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "strict": true,
+    "moduleResolution": "bundler",
+    "customConditions": ["react-native"],
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": false,
+    "types": [],
+    "paths": {
+      "@tripick/types": ["../../packages/types/src"]
+    }
+  },
+  "include": ["src/**/*", "index.js"],
+  "exclude": ["node_modules", "android", "ios", "**/Pods/**"]
+}

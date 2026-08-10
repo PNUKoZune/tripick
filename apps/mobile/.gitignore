@@ -1,0 +1,63 @@
+# React Native 표준 .gitignore
+# - 빌드 산출물/IDE/로컬 환경 파일만 제외.
+# - source 는 모두 커밋한다.
+
+# OSX
+.DS_Store
+
+# Xcode
+build/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata
+*.xccheckout
+*.moved-aside
+DerivedData
+*.hmap
+*.ipa
+*.xcuserstate
+ios/.xcode.env.local
+
+# Android / IntelliJ
+build/
+.idea/
+.gradle/
+local.properties
+*.iml
+*.hprof
+.cxx/
+*.keystore
+!debug.keystore
+
+# CocoaPods
+ios/Pods/
+ios/Podfile.lock
+
+# Bundle 산출물
+*.jsbundle
+android/app/src/main/assets/index.android.bundle
+android/app/src/main/assets/index.android.bundle.meta
+ios/main.jsbundle*
+
+# Metro 헬스 체크
+.metro-health-check*
+
+# fastlane
+**/fastlane/report.xml
+**/fastlane/Preview.html
+**/fastlane/screenshots
+**/fastlane/test_output
+
+# Logs
+*.log
+yarn-error.log
+
+# Firebase 자격 (별도 secret 채널로 배포)
+android/app/google-services.json
+ios/TriPick/GoogleService-Info.plist

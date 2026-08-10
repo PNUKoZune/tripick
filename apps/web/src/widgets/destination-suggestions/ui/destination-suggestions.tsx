@@ -1,0 +1,43 @@
+'use client';
+
+import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
+
+import { fetchRecommendedDestinations } from '@/entities/trip-plan';
+import { queryKeys } from '@/shared/api/query-keys';
+
+/**
+ * 추천 여행지를 카드로 노출해 원탭으로 여행 생성(프리필)에 진입시킨다.
+ * 서버가 네이버 검색으로 이번 달 "국내 여행지 추천" 글에 실제로 언급된 여행지만 후보로 추린 뒤
+ * 사용자 취향으로 랭킹한다. 네이버 키가 없거나 취향이 없으면 취향/인기순으로 폴백한다.
+ */
+export function DestinationSuggestions() {
+  const { data = [] } = useQuery({
+    queryKey: queryKeys.planner.recommendedDestinations,
+    queryFn: fetchRecommendedDestinations,
+    staleTime: 30 * 60 * 1000,
+  });
+
+  if (data.length === 0) return null;
+
+  return (
+    <section className="mt-8">
+      <div className="mb-3 flex items-baseline justify-between px-4 lg:px-0">
+        <h2 className="text-[15px] font-bold text-[color:var(--ink,#191F28)]">이런 여행지 어때요?</h2>
+        <span className="text-[12px] text-[color:var(--ink-faint,#8B95A1)]">이번 달 추천·취향 반영</span>
+      </div>
+      <div className="flex gap-3 overflow-x-auto px-4 pb-1 lg:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {data.map((d) => (
+          <Link
+            key={d.id}
+            href={`/trips/new?destination=${encodeURIComponent(d.name)}`}
+            className="group flex min-w-[132px] flex-col gap-2 rounded-[16px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] p-4 transition hover:border-[color:var(--blue-100,#C7DCFF)] hover:shadow-[0_8px_20px_rgba(49,130,246,0.10)]"
+          >
+            <span className="text-[14px] font-bold text-[color:var(--ink,#191F28)]">{d.name}</span>
+            <span className="text-[12px] text-[color:var(--ink-faint,#8B95A1)]">{d.region}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}

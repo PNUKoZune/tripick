@@ -1,0 +1,263 @@
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsIn,
+  IsInt,
+  IsLatitude,
+  IsLongitude,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
+import type {
+  CreateTripRequestDto,
+  PlannerAddItemRequestDto,
+  PlannerItemType,
+  PlannerMemberDto,
+  PlannerReorderItemsRequestDto,
+  PlannerResolvePlaceRequestDto,
+  PlannerSwapPlaceDto,
+  PlannerSwapRequestDto,
+  PlannerUpdateItemRequestDto,
+  ReplanBudget,
+  ReplanPace,
+} from '@tripick/types';
+
+import { ReplanPlaceBodyDto } from '../../replanning/dto/replan-request.dto';
+
+const CREATE_TRIP_PACE = ['relaxed', 'balanced', 'packed'] as const satisfies readonly ReplanPace[];
+const CREATE_TRIP_BUDGET = ['thrifty', 'normal', 'premium'] as const satisfies readonly ReplanBudget[];
+const CREATE_TRIP_TRANSPORT = ['transit', 'car'] as const;
+
+class PlannerMemberBodyDto implements PlannerMemberDto {
+  @IsString()
+  @MinLength(1)
+  id!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4)
+  initial!: string;
+
+  @IsString()
+  @MinLength(1)
+  color!: string;
+
+  @IsOptional()
+  @IsString()
+  friendId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  nickname?: string;
+
+  @IsOptional()
+  @IsIn(['owner', 'companion'])
+  role?: 'owner' | 'companion';
+
+  @IsOptional()
+  @IsIn(['accepted', 'pending'])
+  status?: 'accepted' | 'pending';
+}
+
+export class CreateTripRequestBodyDto implements CreateTripRequestDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  title!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  destination!: string;
+
+  // string[][] 는 class-validator 데코레이터로 깔끔히 검증되지 않아 외곽 형태만 여기서 막고
+  // 길이·내용(일수 일치, 지역 비어있음/길이)은 MainPlannerService.assertCreateTrip 에서 검증한다.
+  @IsOptional()
+  @IsArray()
+  dayRegions?: string[][];
+
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  startDate!: string;
+
+  @Matches(/^\d{2}:\d{2}$/)
+  startTime!: string;
+
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  endDate!: string;
+
+  @Matches(/^\d{2}:\d{2}$/)
+  endTime!: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PlannerMemberBodyDto)
+  members!: PlannerMemberBodyDto[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ReplanPlaceBodyDto)
+  mustIncludePlaces?: ReplanPlaceBodyDto[];
+
+  @IsOptional()
+  @IsIn(CREATE_TRIP_PACE)
+  pace?: ReplanPace;
+
+  @IsOptional()
+  @IsIn(CREATE_TRIP_BUDGET)
+  budget?: ReplanBudget;
+
+  @IsOptional()
+  @IsIn(CREATE_TRIP_TRANSPORT)
+  transportMode?: 'transit' | 'car';
+}
+
+class PlannerSwapPlaceBodyDto implements PlannerSwapPlaceDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  name!: string;
+
+  @IsOptional()
+  @IsIn(['attraction', 'restaurant', 'cafe', 'transport'])
+  category?: PlannerItemType;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  address?: string;
+
+  @IsNumber()
+  @IsLatitude()
+  lat!: number;
+
+  @IsNumber()
+  @IsLongitude()
+  lng!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  mapHref?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  kakaoPlaceId?: string;
+}
+
+export class PlannerSwapRequestBodyDto implements PlannerSwapRequestDto {
+  @IsUUID()
+  itemId!: string;
+
+  @ValidateNested()
+  @Type(() => PlannerSwapPlaceBodyDto)
+  place!: PlannerSwapPlaceBodyDto;
+}
+
+export class PlannerResolvePlaceBodyDto implements PlannerResolvePlaceRequestDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(1000)
+  query!: string;
+}
+
+export class AddTripMemberRequestBodyDto {
+  @IsUUID()
+  friendId!: string;
+}
+
+export class PlannerAddItemBodyDto implements PlannerAddItemRequestDto {
+  @IsInt()
+  @Min(1)
+  day!: number;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  name!: string;
+
+  @Matches(/^\d{2}:\d{2}$/)
+  scheduledAt!: string;
+
+  @IsOptional()
+  @IsIn(['attraction', 'restaurant', 'cafe', 'transport'])
+  type?: PlannerItemType;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1440)
+  durationMin?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  address?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @IsLatitude()
+  lat?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @IsLongitude()
+  lng?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  memo?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  kakaoPlaceId?: string;
+}
+
+export class PlannerUpdateItemBodyDto implements PlannerUpdateItemRequestDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  name?: string;
+
+  @IsOptional()
+  @Matches(/^\d{2}:\d{2}$/)
+  scheduledAt?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1440)
+  durationMin?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  memo?: string;
+}
+
+export class PlannerReorderItemsBodyDto implements PlannerReorderItemsRequestDto {
+  @IsInt()
+  @Min(1)
+  day!: number;
+
+  @IsArray()
+  @IsUUID('4', { each: true })
+  orderedItemIds!: string[];
+}

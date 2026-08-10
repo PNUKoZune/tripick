@@ -1,0 +1,68 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build outputs
+dist
+build
+.next
+out
+
+# 패키지 src 내 빌드 산출물 (outDir 은 dist, src 에는 .ts 만 둔다)
+packages/*/src/*.js
+packages/*/src/*.js.map
+packages/*/src/*.d.ts
+packages/*/src/*.d.ts.map
+
+# Turbo
+.turbo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+tmp/
+
+# Testing
+coverage
+.nyc_output
+
+# React Native — 공통 (앱 별 native 디렉터리 안의 build 산출물은 apps/mobile/.gitignore 에서 처리)
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build
+
+# TypeScript
+*.tsbuildinfo
+
+# Windows / WSL noise — NTFS alternate data streams attached to files downloaded via Windows browser
+*:Zone.Identifier
+
+# Firebase client config
+apps/mobile/android/app/google-services.json
+apps/mobile/ios/TriPick/GoogleService-Info.plist
+
+# 특정 스킬
+.claude/skills/blog-post
+
+# Lazyweb 도구 산출물(디자인 참조 캐시) — TriPick UI 작업엔 미사용
+.lazyweb/

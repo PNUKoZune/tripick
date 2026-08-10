@@ -1,0 +1,56 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 여행 진행 중 실시간 위치 추적 (경로 이탈 감지) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- 화면이 꺼진 상태의 장시간 추적용 (후속 foreground service 에서 사용) -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- Android 13+ 푸시 알림 런타임 권한 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+      사진 업로드(<input type=file>)는 권한 선언이 필요 없다.
+      갤러리 선택은 react-native-webview 가 SAF(ACTION_GET_CONTENT)로 열어 선택한 파일만 URI 로 넘겨받으므로
+      READ_MEDIA_IMAGES/READ_EXTERNAL_STORAGE 가 없어도 동작한다.
+      CAMERA 는 의도적으로 선언하지 않는다 — 선언해 두면 RNCWebViewModuleImpl.needsCameraPermission() 이
+      "선언됐는데 미승인" 을 감지해 촬영 항목을 아예 빼버린다. 미선언 상태로 두면 시스템 카메라 앱에 위임돼
+      별도 권한 없이 촬영이 된다.
+    -->
+
+    <!-- Android 11+ 패키지 가시성: 선언이 없으면 파일 선택 시트에서 카메라 앱 항목이 사라진다 -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+    </queries>
+
+    <application
+      android:name=".MainApplication"
+      android:label="@string/app_name"
+      android:icon="@mipmap/ic_launcher"
+      android:roundIcon="@mipmap/ic_launcher_round"
+      android:allowBackup="false"
+      android:theme="@style/AppTheme"
+      android:usesCleartextTraffic="${usesCleartextTraffic}"
+      android:supportsRtl="true">
+      <activity
+        android:name=".MainActivity"
+        android:label="@string/app_name"
+        android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+        android:launchMode="singleTask"
+        android:windowSoftInputMode="adjustResize"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+      </activity>
+      <!-- 여행 진행 중 백그라운드 위치 추적 foreground service -->
+      <service
+        android:name=".location.LocationTrackingService"
+        android:foregroundServiceType="location"
+        android:exported="false" />
+    </application>
+</manifest>

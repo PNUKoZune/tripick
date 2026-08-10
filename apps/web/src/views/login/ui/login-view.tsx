@@ -1,0 +1,64 @@
+'use client';
+
+import { useState } from 'react';
+import { RiKakaoTalkFill } from 'react-icons/ri';
+
+import { GuestGuard } from '@/entities/session';
+import { EmailLoginForm } from '@/features/email-login';
+import { redirectToKakao } from '@/entities/session/api/auth-api';
+import { AppFrame, InlineNotice } from '@/shared/ui/app-frame';
+
+export function LoginView() {
+  return (
+    <GuestGuard>
+      <LoginContent />
+    </GuestGuard>
+  );
+}
+
+function LoginContent() {
+  const [notice, setNotice] = useState<string | null>(null);
+
+  function handleKakao() {
+    redirectToKakao().catch((error: unknown) => {
+      setNotice(error instanceof Error ? error.message : '로그인을 시작하지 못했습니다.');
+    });
+  }
+
+  return (
+    <AppFrame showNav={false} themed>
+      <div className="mx-auto flex min-h-dvh w-full max-w-[440px] flex-col px-5 pb-10 pt-12">
+        <header className="mb-8">
+          <div className="text-[13px] font-black text-[color:var(--primary)]">TriPick</div>
+          <h1 className="mt-2 text-[26px] font-bold text-[color:var(--ink)]">로그인</h1>
+          <p className="mt-1 text-[13px] text-[color:var(--ink-sub)]">
+            여행 일정과 친구 목록이 계정과 함께 저장돼요.
+          </p>
+        </header>
+
+        <EmailLoginForm next="/" />
+
+        <div className="mt-6 flex items-center gap-3">
+          <div className="h-px flex-1 bg-[color:var(--line)]" />
+          <span className="text-[12px] font-semibold text-[color:var(--ink-faint)]">또는</span>
+          <div className="h-px flex-1 bg-[color:var(--line)]" />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleKakao}
+          className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[12px] bg-[#FEE500] text-[15px] font-bold text-[#191919] hover:bg-[#FFDC00]"
+        >
+          <RiKakaoTalkFill className="size-5" aria-hidden />
+          <span>카카오로 계속하기</span>
+        </button>
+
+        {notice ? (
+          <div className="mt-4">
+            <InlineNotice title="로그인 준비 상태" description={notice} tone="blue" />
+          </div>
+        ) : null}
+      </div>
+    </AppFrame>
+  );
+}

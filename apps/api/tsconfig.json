@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "types": ["node"],
+    "paths": {
+      "@tripick/types": ["../../packages/types/src/index.ts"],
+      "@tripick/utils": ["../../packages/utils/src"]
+    },
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "strictPropertyInitialization": false
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "test"],
+  "references": [{ "path": "../../packages/types" }, { "path": "../../packages/utils" }]
+}

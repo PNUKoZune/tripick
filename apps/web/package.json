@@ -1,0 +1,45 @@
+{
+  "name": "@tripick/web",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dnd-kit/helpers": "^0.5.0",
+    "@dnd-kit/react": "^0.5.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^9.2.0",
+    "@mui/x-date-pickers": "^9.9.0",
+    "@sentry/nextjs": "^10.69.0",
+    "@tanstack/react-query": "^5.100.11",
+    "@tripick/types": "workspace:*",
+    "@tripick/utils": "workspace:*",
+    "date-fns": "^4.2.1",
+    "firebase": "^12.16.0",
+    "html-to-image": "^1.11.13",
+    "jspdf": "^4.2.1",
+    "next": "^16.2.4",
+    "react": "^19.2.5",
+    "react-day-picker": "^10.0.1",
+    "react-dom": "^19.2.5",
+    "react-icons": "^5.7.0",
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.4",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^16.2.4",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^6.0.0"
+  }
+}
