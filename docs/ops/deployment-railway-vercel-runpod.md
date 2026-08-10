@@ -1,7 +1,7 @@
 # 배포 가이드 — Railway + Vercel + RunPod
 
-기준 브랜치: `develop` (`c432369`)
-작성일: 2026-07-19
+기준 브랜치: `develop` (`c9a30dc`)
+작성일: 2026-07-19 / 갱신: 2026-08-10
 
 TriPick 을 매니지드 서비스 조합으로 배포하기 위한 구성·선행 작업·환경변수 전환표를 정리한다.
 로컬 `docker-compose.yml` 의 Postgres/Redis/MinIO/Mailpit 은 **개발 전용**이며, 배포 시에는 각각 매니지드 서비스로 치환한다.
@@ -114,9 +114,12 @@ Railway Redis 애드온을 사용한다. 단 접속 정보가 비밀번호를 �
 #### 검증 (실제 이미지 빌드·기동)
 
 - `docker build -f apps/api/Dockerfile -t tripick-api .` 성공 (이미지 553MB)
-- 빈 DB·Redis 를 붙여 컨테이너 기동 → 마이그레이션 2건 자동 적용, 테이블 17개 생성
-- `GET /api/v1/health` 200, `POST /auth/demo` 200, Docker `HEALTHCHECK` = `healthy` *(당시 기록. `/auth/demo` 는 이후 제거 — 스모크는 `POST /auth/signup` 으로 대체)*
+- 빈 DB·Redis 를 붙여 컨테이너 기동 → 마이그레이션 자동 적용, 테이블 17개 생성
+- `GET /api/v1/health` 200, 쓰기 경로 200, Docker `HEALTHCHECK` = `healthy`
 - `REDIS_URL` 경로(5-1)로 Redis 접속 성공
+
+> 당시 기록은 마이그레이션 2건 기준이며, 현재는 7건이다(5-2 표 참조. 테이블 수는 그대로).
+> 쓰기 경로 스모크로 쓰던 `POST /auth/demo` 는 제거됐다 — `POST /auth/signup` 으로 대체한다.
 
 ---
 
@@ -160,6 +163,17 @@ Railway Redis 애드온을 사용한다. 단 접속 정보가 비밀번호를 �
 | `.../migrations/1785135565704-InitEntities.ts` | 엔티티 13개 DDL. `migration:generate` 자동 생성 |
 | package.json | `typeorm`·`migration:{generate,run,revert,show}` 스크립트 |
 
+이후 develop 에 5건이 더 쌓여 **현재 마이그레이션은 7건**이다. 전부 컬럼·인덱스·백필이라
+테이블 수(17개)는 그대로이고, 빈 DB 에 순서대로 적용되는 것도 그대로다.
+
+| 마이그레이션 | 내용 |
+| --- | --- |
+| `1785400000000-AddPlaceRegionCodes` | `place_embeddings` 지역 정본 코드 컬럼(`region_code`·`sigungu_code`) + 인덱스 |
+| `1785500000000-SplitMergedSidoRegionCode` | 통합 행정구역 라벨('전남광주통합특별시') 행의 시도 코드 재분리 |
+| `1785600000000-IngestCursorOffset` | append 적재 커서를 페이지 번호 → 행 오프셋으로 교체 |
+| `1785700000000-PlaceNameLookupIndex` | 정규화 이름 함수 인덱스 (적재 중복 조회 전체 스캔 제거) |
+| `1786100000000-BackfillHandlesDropIsDemo` | 핸들 백필을 부팅 훅에서 이관 + `isDemo` 컬럼 제거 |
+
 **동작 방식** — 개발과 프로덕션을 배타적으로 나눴다. 둘 다 켜면 `synchronize` 가
 마이그레이션 결과를 덮어쓸 수 있다.
 
@@ -191,9 +205,9 @@ replica 1개 운영(5-3)이라 동시 실행 경합이 없기에 성립하는 �
 
 빈 DB 를 새로 만들어 `NODE_ENV=production` 으로 `dist` 를 기동하는 실제 경로를 그대로 밟았다.
 
-- 부팅 시 마이그레이션 2건 자동 적용 (`migrations` 테이블에 기록됨)
+- 부팅 시 마이그레이션 자동 적용 (`migrations` 테이블에 기록됨)
 - 테이블 17개(엔티티 13 + 벡터 3 + `migrations`), 확장 `vector`·`uuid-ossp`, HNSW 인덱스 2개 생성 확인
-- `POST /auth/demo` 200 — uuid 기본값·jsonb 기본값·FK 까지 쓰기 경로 동작 확인 *(당시 기록. 현재는 `POST /auth/signup` 이 같은 경로를 탄다)*
+- 쓰기 경로 200 — uuid 기본값·jsonb 기본값·FK 까지 동작 확인 (현재는 `POST /auth/signup` 이 같은 경로를 탄다)
 - 적용 후 `migration:generate` 재실행 시 위 jsonb 노이즈 외 스키마 차이 없음
 
 ### 5-3. Socket.IO Redis 어댑터 미설치 — 스케일 제약
@@ -228,7 +242,7 @@ CLAUDE.md 아키텍처에 "Redis Adapter / Pub-Sub Sync" 가 명시되어 있으
 | `DATABASE_URL` | `...@localhost:5432` | Railway 내부 URL (`*.railway.internal`) |
 | Redis | `REDIS_HOST` / `REDIS_PORT` | `REDIS_URL` (비밀번호 포함) — **5-1 선행 필요** |
 | `STORAGE_ENDPOINT` | `http://localhost:9000` | R2 S3 API 엔드포인트 |
-| `STORAGE_PUBLIC_URL` | `http://localhost:9000/tripick` | R2 공개 도메인 |
+| `STORAGE_PUBLIC_URL` | `/storage` (web 프록시 경유) | R2 공개 도메인 절대 URL — 아래 주의 |
 | `SMTP_HOST` / `SMTP_PORT` | `localhost` / `1025` | Resend SMTP |
 | `LLM_BASE_URL` | `http://localhost:8080/v1` | RunPod chat 엔드포인트 |
 | `LLM_EMBEDDING_BASE_URL` | `http://localhost:8081/v1` | RunPod 임베딩 엔드포인트 |
@@ -243,6 +257,18 @@ CLAUDE.md 아키텍처에 "Redis Adapter / Pub-Sub Sync" 가 명시되어 있으
 | `SENTRY_ENVIRONMENT` (api) | (비움 → `NODE_ENV`) | `production` |
 | `NEXT_PUBLIC_SENTRY_DSN` (web) | web 프로젝트 DSN | 동일 — **api 와 다른 프로젝트** |
 | `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN` (web) | (비움 → 업로드 off) | Vercel 에 셋 다 주입해야 소스맵이 붙는다 |
+
+### Object Storage 공개 URL 주의
+
+`STORAGE_PUBLIC_URL` 의 로컬 기본값은 절대 URL 이 아니라 상대경로 `/storage` 다.
+web(Next) 의 rewrite (`/storage/:path*` → `TRIPICK_STORAGE_ORIGIN`, [apps/web/next.config.mjs](../../apps/web/next.config.mjs))
+가 받아 MinIO 로 넘기는 구조라, 브라우저·웹뷰 양쪽에서 같은 경로가 통한다.
+
+라이브에서는 둘 중 하나를 고른다. 섞지 말 것.
+
+- **절대 URL 전환** — `STORAGE_PUBLIC_URL` 에 R2 공개 도메인을 넣는다. web 프록시를 안 탄다
+- **상대경로 유지** — `/storage` 를 그대로 두고 Vercel 의 `TRIPICK_STORAGE_ORIGIN` 을 R2 공개
+  도메인으로 지정한다. 이미지가 web 도메인을 경유하므로 R2 도메인이 밖으로 드러나지 않는다
 
 ### ODsay 주의
 
@@ -269,6 +295,7 @@ axios 가 예외를 던지지 않아 `RouteHelper` 가 직선거리 추정치로
 | `NEXT_PUBLIC_API_URL` | `https://<railway-domain>/api/v1` |
 | `NEXT_PUBLIC_WS_URL` | `https://<railway-domain>` |
 | `NEXT_PUBLIC_KAKAO_MAP_KEY` | 카카오 JS 키 |
+| `TRIPICK_STORAGE_ORIGIN` | R2 공개 도메인 — `STORAGE_PUBLIC_URL` 을 `/storage` 로 유지할 때만 (6절 참조) |
 
 `NEXT_PUBLIC_WS_URL` 은 **반드시 `https`** 로 지정한다. HTTPS 페이지에서 `ws://` 로 접속하면
 mixed content 로 차단된다.
@@ -285,23 +312,54 @@ Geolocation 은 HTTPS 환경에서만 동작하나, Vercel 은 기본 HTTPS 이�
 
 ## 8. 배포 순서
 
-1. **선행 코드 작업** — 5-1(Redis URL 통합), 5-2(마이그레이션), 5-4(CORS 제한), 5-5(헬스체크) 모두 완료
-2. **Dockerfile** — `apps/api/Dockerfile` 작성 완료 (컨텍스트=레포 루트)
-3. **Railway**
-   1. Postgres 서비스 배포 (`pgvector/pgvector:pg16`)
-   2. Redis 애드온 추가
-   3. API 서비스 배포 (replica 1) — 부팅 시 마이그레이션이 스키마를 자동 생성한다
-4. **RunPod** — vLLM + TEI 기동 후 엔드포인트 확보 → Railway 환경변수 주입
-5. **Vercel** — web 배포 → 카카오/ODsay 콘솔에 도메인 등록
-6. **R2 버킷 생성 + Resend SMTP 전환**
+0. **선행 코드 작업** — 5-1(Redis URL 통합), 5-2(마이그레이션), 5-4(CORS 제한), 5-5(헬스체크),
+   Dockerfile(컨텍스트=레포 루트) 모두 완료된 상태다. 코드에서 더 할 일은 없다
+1. **시크릿·키 준비** — `JWT_SECRET`·`JWT_REFRESH_SECRET` 을 새로 생성한다
+   (`openssl rand -base64 48`). `change-me-*` 그대로면 프로덕션 부팅이 거부된다.
+   외부 키(카카오 REST·JS·Local, ODsay, KMA, KTO, 네이버 NCP, Firebase)도 함께 모은다
+2. **Railway — Postgres** 서비스 배포 (`pgvector/pgvector:pg16`). 빈 DB 만 만들면 된다
+3. **Railway — Redis** 애드온 추가 → `REDIS_URL` 확보
+4. **Railway — API 서비스** 배포 (replica 1). 부팅 시 마이그레이션이 스키마를 자동 생성한다.
+   헬스체크 경로는 `/api/v1/health`. 이 시점 검증은 health 200 + `POST /auth/signup` 200
+5. **RunPod** — vLLM(chat) + TEI(임베딩) 기동 후 엔드포인트 확보 → Railway 환경변수 주입
+6. **장소 카탈로그 적재** — 빈 `place_embeddings` 로는 일정 생성이 성립하지 않는다 (아래 8-1)
+7. **Vercel** — web 배포 → 카카오/ODsay 콘솔에 도메인 등록 → Railway 의 web 의존 환경변수 갱신 (아래 8-2)
+8. **R2 버킷 생성 + Resend SMTP 전환**
+
+### 8-1. 장소 카탈로그 적재 (빠뜨리기 쉬움)
+
+프로덕션은 `PLACE_RETRIEVAL_AUTO_SEED=false` 라 아무도 후보를 채워주지 않는다.
+빈 카탈로그로 일정을 생성하면 pgvector 검색이 0건이라 CRAG 가 매번 카카오 폴백으로 떨어지고,
+취향 개인화(취향 임베딩 유사도)가 사실상 죽은 채로 돈다.
+
+- 실행: [ingest:places](../../apps/api/src/scripts/ingest-places.ts) —
+  `pnpm --filter @tripick/api ingest:places -- --sources=popular --max=60` 으로 대표 명소·맛집을
+  먼저 얕게 채우고, 이후 `--sources=tour,kakao` 로 넓힌다
+- **임베딩 서버가 먼저 살아 있어야 한다.** 실제 벡터를 못 받으면 스크립트가 해시 폴백을 거부하고
+  중단한다(품질 오염 방지). 그래서 RunPod(5) 다음 순서다
+- **DB 주소는 공개 TCP 프록시 URL 을 쓴다.** Railway 내부 주소(`*.railway.internal`)는 Railway
+  밖에서 해석되지 않으므로, 로컬에서 돌릴 때는 `DATABASE_URL` 을 프록시 주소로 준다
+- KTO 는 일일 호출 예산(`KTO_DAILY_CALL_BUDGET`, 기본 900)이 있어 한 번에 전국이 안 끝난다.
+  `--append` 로 나눠 이어받는다 (커서는 행 오프셋 기준)
+
+### 8-2. web 도메인 의존 환경변수는 두 번 손댄다
+
+`CORS_ORIGIN`·`WEB_APP_URL` 은 Vercel 도메인이 나와야 확정된다. 그런데 Vercel 의
+`NEXT_PUBLIC_API_URL` 은 Railway 도메인이 나와야 확정되므로 서로 물린다.
+API 를 먼저 띄우되 이 두 값은 임시로 두고, Vercel 배포 후 갱신·재배포하는 것을 전제로 잡는다.
+
+`KAKAO_CALLBACK_URL` 은 Railway 도메인만 있으면 확정되므로 4단계에서 바로 넣고 카카오 콘솔에
+등록한다. 다만 OAuth 왕복 자체는 web 이 없으면 끝까지 못 도니, 4단계 스모크는 이메일 가입으로 한다.
 
 ---
 
 ## 9. 배포 후 확인 항목
 
 - `GET /api/v1/health` 200 응답
+- `POST /auth/signup` → 이메일 인증 → 로그인 (DB 쓰기 경로 + SMTP 동시 확인)
 - 카카오 OAuth 로그인 → JWT 발급 왕복
 - WebSocket `/realtime` 네임스페이스 연결 및 JWT 인증
+- `place_embeddings` 행 수 확인 (0 이면 8-1 미실행 — 일정 생성이 카카오 폴백으로만 돈다)
 - 일정 생성 1건 — LLM 엔드포인트 실제 호출 여부 확인 (폴백 여부 로그 확인)
 - 경로 조회 — 직선거리 폴백이 아닌 실제 API 응답인지 확인
 - 이미지 업로드 → R2 저장 및 공개 URL 접근
@@ -322,3 +380,8 @@ Geolocation 은 HTTPS 환경에서만 동작하나, Vercel 은 기본 HTTPS 이�
   트레이스는 난독화된 번들 기준으로 보인다. api 는 릴리스 헬스를 위해 `RAILWAY_GIT_COMMIT_SHA`
   (또는 `SENTRY_RELEASE`)를 릴리스로 쓴다
 - **RunPod 엔드포인트 URL 변동** — Pod 재시작 시 주소가 바뀌면 Railway 환경변수 갱신이 필요하다
+- **장소 카탈로그 적재가 수동 CLI** — 배포 파이프라인에 들어 있지 않다(8-1). 신규 장소 반영은
+  `--append` 실행을 사람이 돌리거나 별도 스케줄러를 붙여야 한다
+- **임베딩 모델 교체 시 전체 재적재** — `LLM_EMBEDDING_DIMENSIONS` 는 `vector(1024)` 컬럼에
+  묶여 있고, 차원이 같아도 모델이 바뀌면 기존 벡터와 좌표계가 달라 검색이 조용히 망가진다.
+  `ingest:places --reseed` + `reembed:preferences` 가 함께 필요하다
