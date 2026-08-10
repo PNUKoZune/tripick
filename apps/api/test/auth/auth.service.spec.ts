@@ -111,7 +111,9 @@ describe('AuthService — email signup', () => {
       nickname: '앨리스',
     } as any);
 
-    usersService.findByEmail.mockResolvedValue(user({ email: 'a@b.com', passwordHash: 'x' }));
+    usersService.findByEmail.mockResolvedValue(
+      user({ email: 'a@b.com', passwordHash: 'x', emailVerifiedAt: new Date() }),
+    );
     const taken = await service.signupWithEmail({
       email: 'a@b.com',
       password: 'abc12345',
@@ -157,9 +159,54 @@ describe('AuthService — email signup', () => {
       nickname: '앨리스',
     } as any);
 
+    // 경쟁자가 만든 계정은 아직 미인증이라 "이미 가입됨" 안내가 아니라 인증 메일로 간다.
     expect(res).toMatchObject({ ok: true, email: 'a@b.com' });
-    expect(emailService.sendAccountExistsNotice).toHaveBeenCalledTimes(1);
+    expect(emailService.sendVerification).toHaveBeenCalledTimes(1);
+    expect(emailService.sendAccountExistsNotice).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 메일을 놓치고 다시 가입을 누르는 흐름. 인증 전이라 주인이 확정되지 않은 신청이므로
+   * 안내가 아니라 인증 메일을 다시 보낸다 — 안내로 보내면 재설정도 인증 전이라 헛돈다.
+   */
+  it('re-sends verification when the pending signup was never verified', async () => {
+    const { service, usersService, emailService } = createHarness();
+    usersService.findByEmail.mockResolvedValue(
+      user({ email: 'a@b.com', pendingPasswordHash: 'first-signup-hash' }),
+    );
+
+    const res = await service.signupWithEmail({
+      email: 'a@b.com',
+      password: 'different1',
+      nickname: '앨리스',
+    } as any);
+
+    expect(res).toMatchObject({ ok: true, email: 'a@b.com' });
+    expect(emailService.sendVerification).toHaveBeenCalledTimes(1);
+    expect(emailService.sendAccountExistsNotice).not.toHaveBeenCalled();
+    // 대기 비밀번호는 그대로 — 이번 요청 값으로 덮으면 남이 기다리던 인증 링크의 의미가 바뀐다.
+    expect(usersService.setPassword).not.toHaveBeenCalled();
+    expect(usersService.createEmailUser).not.toHaveBeenCalled();
+  });
+
+  /** 인증을 마친 이메일 계정은 주인이 확정된 상태 — 안내만 가고 인증 메일은 안 간다. */
+  it('sends the account-exists notice for a verified email account', async () => {
+    const { service, usersService, emailService } = createHarness();
+    usersService.findByEmail.mockResolvedValue(
+      user({ email: 'a@b.com', passwordHash: 'x', emailVerifiedAt: new Date() }),
+    );
+
+    await service.signupWithEmail({
+      email: 'a@b.com',
+      password: 'abc12345',
+      nickname: '앨리스',
+    } as any);
+
     expect(emailService.sendVerification).not.toHaveBeenCalled();
+    expect(emailService.sendAccountExistsNotice).toHaveBeenCalledWith(
+      'a@b.com',
+      expect.objectContaining({ hasPassword: true }),
+    );
   });
 
   /**
@@ -168,7 +215,10 @@ describe('AuthService — email signup', () => {
    */
   it('never plants a password on an existing account', async () => {
     const { service, usersService, emailService } = createHarness();
-    usersService.findByEmail.mockResolvedValue(user({ email: 'a@b.com' })); // 카카오 가입자(비밀번호 없음)
+    // 카카오 가입자(비밀번호 없음). 카카오 가입은 이메일이 인증된 것으로 간주된다.
+    usersService.findByEmail.mockResolvedValue(
+      user({ email: 'a@b.com', kakaoId: 'k1', emailVerifiedAt: new Date() }),
+    );
 
     await service.signupWithEmail({
       email: 'a@b.com',
@@ -178,7 +228,10 @@ describe('AuthService — email signup', () => {
 
     expect(usersService.createEmailUser).not.toHaveBeenCalled();
     expect(emailService.sendVerification).not.toHaveBeenCalled();
-    expect(emailService.sendAccountExistsNotice).toHaveBeenCalledTimes(1);
+    expect(emailService.sendAccountExistsNotice).toHaveBeenCalledWith(
+      'a@b.com',
+      expect.objectContaining({ hasPassword: false }),
+    );
   });
 
   /**
