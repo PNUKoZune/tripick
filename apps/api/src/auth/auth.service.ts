@@ -101,11 +101,13 @@ export class AuthService {
     // 인증 링크로 승격했는데, 그 링크는 **계정 주인**에게 간다 — 주인이 "가입 인증"
     // 메일로 알고 누르는 순간 공격자가 넣은 비밀번호가 활성화돼 계정이 넘어갔다.
     // 대신 주인에게 상황만 알리고, 비밀번호 설정은 재설정 플로우로 보낸다.
-    await this.emailService.sendAccountExistsNotice(email, {
-      hasPassword: Boolean(existing?.passwordHash),
-      resetUrl: `${this.getWebAppUrl()}/forgot-password`,
-      loginUrl: `${this.getWebAppUrl()}/login`,
-    });
+    await this.deliver(email, () =>
+      this.emailService.sendAccountExistsNotice(email, {
+        hasPassword: Boolean(existing?.passwordHash),
+        resetUrl: `${this.getWebAppUrl()}/forgot-password`,
+        loginUrl: `${this.getWebAppUrl()}/login`,
+      }),
+    );
     return signupResult(email);
   }
 
@@ -414,7 +416,8 @@ export class AuthService {
 
   /** 인증 메일 발송 + 사용자에게 이미 보낸 미사용 토큰은 만료 처리 */
   private async dispatchVerification(user: UserEntity): Promise<void> {
-    if (!user.email) return;
+    const email = user.email;
+    if (!email) return;
     await this.expirePendingTokens(user.id, 'verify_email');
     const raw = generateRandomToken();
     await this.emailTokenRepo.save(
@@ -426,11 +429,12 @@ export class AuthService {
       }),
     );
     const link = `${this.getWebAppUrl()}/auth/verify-email?token=${encodeURIComponent(raw)}`;
-    await this.emailService.sendVerification(user.email, link);
+    await this.deliver(email, () => this.emailService.sendVerification(email, link));
   }
 
   private async dispatchPasswordReset(user: UserEntity): Promise<void> {
-    if (!user.email) return;
+    const email = user.email;
+    if (!email) return;
     await this.expirePendingTokens(user.id, 'reset_password');
     const raw = generateRandomToken();
     await this.emailTokenRepo.save(
@@ -443,7 +447,21 @@ export class AuthService {
     );
     // 웹 라우트는 `/reset-password` 다(`/auth/reset-password` 페이지는 없다 — 링크가 404 였음).
     const link = `${this.getWebAppUrl()}/reset-password?token=${encodeURIComponent(raw)}`;
-    await this.emailService.sendPasswordReset(user.email, link);
+    await this.deliver(email, () => this.emailService.sendPasswordReset(email, link));
+  }
+
+  /**
+   * 메일 발송 실패를 응답으로 올리지 않는다 — 토큰·계정은 이 시점에 이미 커밋됐고,
+   * 호출부의 응답은 enumeration 방지로 어차피 성공/실패를 구분하지 않는 고정 문구다.
+   * 여기서 던지면 "계정은 만들어졌는데 가입은 500" 같은 어긋난 상태만 사용자에게 보인다.
+   * 실패는 로그·Sentry 로 남기고, 사용자는 재발송/재설정 요청으로 복구한다.
+   */
+  private async deliver(to: string, send: () => Promise<void>): Promise<void> {
+    try {
+      await send();
+    } catch (err) {
+      this.logger.error(`메일 발송 실패 (to=${to}): ${(err as Error).message}`);
+    }
   }
 
   /** 아직 쓸 수 있는 토큰 조회. 소비는 하지 않는다 — 부수효과 전에 사전 조건을 다 보려고 분리했다. */

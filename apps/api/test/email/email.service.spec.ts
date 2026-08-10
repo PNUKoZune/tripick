@@ -19,6 +19,19 @@ function smtpService(extra: Record<string, string> = {}) {
   return svc;
 }
 
+function resendService(extra: Record<string, string> = {}) {
+  const svc = new EmailService(
+    config({ EMAIL_TRANSPORT: 'resend', RESEND_API_KEY: 're_test_key', ...extra }),
+  );
+  svc.onModuleInit();
+  return svc;
+}
+
+const fetchMock = jest.fn();
+beforeAll(() => {
+  (globalThis as any).fetch = fetchMock;
+});
+
 describe('EmailService — transport modes', () => {
   beforeEach(() => jest.clearAllMocks());
 
@@ -64,6 +77,73 @@ describe('EmailService — transport modes', () => {
     await expect(
       svc.send({ to: 'a@b.com', subject: 's', text: 't', html: '<p>t</p>' }),
     ).rejects.toThrow('smtp down');
+  });
+
+  it('bounds SMTP timeouts so a blocked port cannot hold the request open', () => {
+    smtpService({ EMAIL_SEND_TIMEOUT_MS: '4000' });
+    expect(createTransport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connectionTimeout: 4000,
+        greetingTimeout: 4000,
+        socketTimeout: 4000,
+      }),
+    );
+  });
+});
+
+describe('EmailService — Resend HTTP transport', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('falls back to console when EMAIL_TRANSPORT=resend but the API key is missing', async () => {
+    const svc = new EmailService(config({ EMAIL_TRANSPORT: 'resend' }));
+    svc.onModuleInit();
+
+    await svc.send({ to: 'a@b.com', subject: 's', text: 't', html: '<p>t</p>' });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(createTransport).not.toHaveBeenCalled();
+  });
+
+  it('posts to the Resend API with the bearer key and never opens an SMTP socket', async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200 });
+    const svc = resendService({ EMAIL_FROM: 'From <from@tripick.place>' });
+
+    await svc.send({ to: 'a@b.com', subject: '제목', text: '본문', html: '<p>본문</p>' });
+
+    expect(createTransport).not.toHaveBeenCalled();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.resend.com/emails');
+    expect(init.method).toBe('POST');
+    expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer re_test_key');
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(JSON.parse(init.body as string)).toEqual({
+      from: 'From <from@tripick.place>',
+      to: ['a@b.com'],
+      subject: '제목',
+      text: '본문',
+      html: '<p>본문</p>',
+    });
+  });
+
+  it('surfaces the response body on a non-2xx so the cause is in the log', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 403,
+      text: async () => '{"message":"The tripick.place domain is not verified"}',
+    });
+    const svc = resendService();
+
+    await expect(
+      svc.send({ to: 'a@b.com', subject: 's', text: 't', html: '<p>t</p>' }),
+    ).rejects.toThrow(/403.*not verified/);
+  });
+
+  it('rethrows transport-level failures (timeout/abort)', async () => {
+    fetchMock.mockRejectedValue(new Error('The operation was aborted due to timeout'));
+    const svc = resendService();
+
+    await expect(
+      svc.send({ to: 'a@b.com', subject: 's', text: 't', html: '<p>t</p>' }),
+    ).rejects.toThrow('aborted due to timeout');
   });
 });
 
