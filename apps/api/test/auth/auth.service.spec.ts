@@ -180,6 +180,25 @@ describe('AuthService — email signup', () => {
     expect(emailService.sendVerification).not.toHaveBeenCalled();
     expect(emailService.sendAccountExistsNotice).toHaveBeenCalledTimes(1);
   });
+
+  /**
+   * 계정 생성이 메일 발송보다 먼저 커밋된다. 발송 실패를 그대로 올리면 "계정은 만들어졌는데
+   * 가입은 500" 이 되어, 사용자가 재시도하면 이번엔 기존 계정 안내 메일을 받는다.
+   */
+  it('still answers ok when the verification mail fails to send', async () => {
+    const { service, usersService, emailService } = createHarness();
+    usersService.findByEmail.mockResolvedValue(null);
+    usersService.createEmailUser.mockResolvedValue(user({ email: 'a@b.com' }));
+    emailService.sendVerification.mockRejectedValue(new Error('Resend API 403'));
+
+    const res = await service.signupWithEmail({
+      email: 'a@b.com',
+      password: 'abc12345',
+      nickname: '앨리스',
+    } as any);
+
+    expect(res).toMatchObject({ ok: true, email: 'a@b.com' });
+  });
 });
 
 describe('AuthService — email login', () => {
