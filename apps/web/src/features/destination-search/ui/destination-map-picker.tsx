@@ -8,6 +8,8 @@ import {
   type KakaoMapInstance,
   type KakaoMarkerInstance,
 } from '@/shared/lib';
+import { LuMap } from 'react-icons/lu';
+
 import { BottomSheet } from '@/shared/ui';
 
 type Props = {
@@ -34,14 +36,17 @@ export function DestinationMapPicker({ onSelect }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex h-12 shrink-0 items-center gap-1.5 rounded-[14px] border border-[#E5E8EB] bg-white px-3.5 text-[13px] font-semibold text-[#4E5968] transition hover:border-[#3182F6] hover:text-[#3182F6]"
+        className="flex h-12 shrink-0 items-center gap-1.5 rounded-[14px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FFFFFF)] px-3.5 text-[13px] font-semibold text-[color:var(--ink-sub,#4E5968)] transition hover:border-[color:var(--primary,#3182F6)] hover:text-[color:var(--primary,#3182F6)]"
       >
-        <span aria-hidden className="text-[15px]">
-          🗺️
-        </span>
+        <LuMap aria-hidden className="size-4" />
         지도
       </button>
-      <BottomSheet open={open} onClose={() => setOpen(false)} label="지도에서 여행 지역 선택">
+      <BottomSheet
+        open={open}
+        onClose={() => setOpen(false)}
+        label="지도에서 여행 지역 선택"
+        themed
+      >
         <MapPickerContent
           hasKey={hasKey}
           onConfirm={(name) => {
@@ -189,8 +194,8 @@ function MapPickerContent({
   if (failed) {
     return (
       <div className="py-8 text-center">
-        <p className="text-[15px] font-semibold text-[#191F28]">지도를 불러올 수 없어요</p>
-        <p className="mt-1.5 text-[13px] text-[#8B95A1]">
+        <p className="text-[15px] font-semibold text-[color:var(--ink,#191F28)]">지도를 불러올 수 없어요</p>
+        <p className="mt-1.5 text-[13px] text-[color:var(--ink-faint,#8B95A1)]">
           지도 키가 설정되지 않았습니다. 상단 입력창에서 직접 검색해 주세요.
         </p>
       </div>
@@ -200,8 +205,8 @@ function MapPickerContent({
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <h2 className="text-[16px] font-bold text-[#191F28]">지도에서 여행 지역 선택</h2>
-        <p className="mt-0.5 text-[13px] text-[#8B95A1]">
+        <h2 className="text-[16px] font-bold text-[color:var(--ink,#191F28)]">지도에서 여행 지역 선택</h2>
+        <p className="mt-0.5 text-[13px] text-[color:var(--ink-faint,#8B95A1)]">
           지도를 눌러 지역을 고르거나, 장소를 검색해 이동하세요.
         </p>
       </div>
@@ -218,35 +223,35 @@ function MapPickerContent({
             }
           }}
           placeholder="예) 해운대해수욕장, 경주역"
-          className="h-11 flex-1 rounded-[12px] border border-[#E5E8EB] bg-white px-3.5 text-[14px] text-[#191F28] outline-none focus:border-[#3182F6] focus:ring-2 focus:ring-[#E1ECFF]"
+          className="h-11 flex-1 rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FFFFFF)] px-3.5 text-[14px] text-[color:var(--ink,#191F28)] outline-none focus:border-[color:var(--primary,#3182F6)] focus:ring-2 focus:ring-[color:var(--ring,#E1ECFF)]"
         />
         <button
           type="button"
           onClick={handleSearch}
-          className="h-11 shrink-0 rounded-[12px] bg-[#F2F4F6] px-4 text-[14px] font-semibold text-[#4E5968] hover:bg-[#E8EBED]"
+          className="h-11 shrink-0 rounded-[12px] bg-[color:var(--card-soft,#F2F4F6)] px-4 text-[14px] font-semibold text-[color:var(--ink-sub,#4E5968)] hover:bg-[color:var(--line,#E8EBED)]"
         >
           검색
         </button>
       </div>
 
-      <div className="relative h-[300px] w-full overflow-hidden rounded-[16px] border border-[#E5E8EB] bg-[#F7F8FA]">
+      <div className="relative h-[300px] w-full overflow-hidden rounded-[16px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#F7F8FA)]">
         <div ref={containerRef} className="h-full w-full" />
         {!ready ? (
-          <div className="absolute inset-0 flex items-center justify-center text-[13px] text-[#B0B8C1]">
+          <div className="absolute inset-0 flex items-center justify-center text-[13px] text-[color:var(--ink-faint,#B0B8C1)]">
             지도 불러오는 중…
           </div>
         ) : null}
       </div>
 
-      <div className="rounded-[12px] bg-[#F7F8FA] px-4 py-3 text-[14px]">
+      <div className="rounded-[12px] bg-[color:var(--card-soft,#F7F8FA)] px-4 py-3 text-[14px]">
         {geocoding ? (
-          <span className="text-[#8B95A1]">지역 확인 중…</span>
+          <span className="text-[color:var(--ink-faint,#8B95A1)]">지역 확인 중…</span>
         ) : picked ? (
-          <span className="font-semibold text-[#191F28]">
-            선택: <span className="text-[#3182F6]">{picked.label}</span>
+          <span className="font-semibold text-[color:var(--ink,#191F28)]">
+            선택: <span className="text-[color:var(--primary,#3182F6)]">{picked.label}</span>
           </span>
         ) : (
-          <span className="text-[#8B95A1]">지도를 눌러 위치를 선택하세요</span>
+          <span className="text-[color:var(--ink-faint,#8B95A1)]">지도를 눌러 위치를 선택하세요</span>
         )}
       </div>
 
@@ -254,7 +259,7 @@ function MapPickerContent({
         type="button"
         disabled={!picked}
         onClick={() => picked && onConfirm(picked.name)}
-        className="h-12 w-full rounded-[14px] bg-[#3182F6] text-[15px] font-bold text-white transition disabled:bg-[#C7DCFF]"
+        className="h-12 w-full rounded-[14px] bg-[color:var(--btn-bg,#3182F6)] text-[15px] font-bold text-[color:var(--btn-text,#FFFFFF)] transition disabled:bg-[color:var(--line,#C7DCFF)] disabled:text-[color:var(--ink-faint,#FFFFFF)]"
       >
         {picked ? `‘${picked.name}’(으)로 선택` : '위치를 선택해주세요'}
       </button>
