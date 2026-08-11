@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { IconType } from 'react-icons';
 import {
@@ -28,6 +29,34 @@ const NAV_ITEMS = [
 ] as const;
 
 type NavIconName = (typeof NAV_ITEMS)[number]['icon'];
+
+// 직전 하단 탭 인덱스 — 모듈 스코프라 클라이언트 내비게이션(페이지 리마운트)을 넘어 살아남는다
+let lastNavIndex: number | null = null;
+
+function navIndexOf(pathname: string): number | null {
+  const index = NAV_ITEMS.findIndex((item) => isNavItemActive(pathname, item.href));
+  return index === -1 ? null : index;
+}
+
+/**
+ * 하단 탭 이동 방향에 맞는 페이지 등장 클래스. 오른쪽 탭으로 갔으면 오른쪽에서,
+ * 왼쪽 탭으로 갔으면 왼쪽에서 슬라이드해 들어온다(모바일 한정 — 데스크탑은 페이드).
+ * 탭 밖 화면(로그인·공유 등)이나 첫 진입, 같은 탭 클러스터 내 이동은 페이드.
+ * 방향은 마운트 시 useState 초기화로 한 번만 확정하고(리렌더에 고정), 직전 탭 기록은
+ * 커밋 후 effect 에서 갱신한다 — StrictMode 의 이중 호출에도 안전한 분리다.
+ */
+export function useNavSlideClass(): string {
+  const pathname = usePathname();
+  const [cls] = useState(() => {
+    const index = navIndexOf(pathname);
+    if (index === null || lastNavIndex === null || index === lastNavIndex) return 'app-page-in';
+    return index > lastNavIndex ? 'app-slide-in-right' : 'app-slide-in-left';
+  });
+  useEffect(() => {
+    lastNavIndex = navIndexOf(pathname);
+  }, [pathname]);
+  return cls;
+}
 
 /**
  * 탭 아이콘은 Ionicons 선/채움 페어를 쓴다 — 비활성은 아웃라인, 활성은 채움.
@@ -59,20 +88,29 @@ export function AppFrame({
   showNav?: boolean;
   themed?: boolean;
 }) {
+  const pageInClass = useNavSlideClass();
+
   if (!showNav) {
     // themed 면 .wvr-scope 가 배경(--bg)까지 정하므로 bg 유틸리티를 겹쳐 주지 않는다.
     return (
-      <main className={themed ? 'wvr-scope min-h-dvh' : 'min-h-dvh bg-[color:var(--app-surface)]'}>
+      <main
+        className={`${pageInClass} overflow-x-clip ${themed ? 'wvr-scope min-h-dvh' : 'min-h-dvh bg-[color:var(--app-surface)]'}`}
+      >
         {children}
       </main>
     );
   }
 
   return (
-    <div className={`min-h-dvh bg-[color:var(--app-bg)] ${themed ? 'wvr-scope' : ''}`}>
+    <div
+      className={`min-h-dvh overflow-x-clip bg-[color:var(--app-bg)] ${themed ? 'wvr-scope' : ''}`}
+    >
       <div className="mx-auto w-full max-w-[430px] bg-[color:var(--app-surface)] pb-[88px] lg:grid lg:max-w-[1440px] lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:bg-transparent lg:px-6 lg:pb-0">
         <AppDesktopNavigation />
-        <div className="min-h-dvh lg:border-x lg:border-[color:var(--line-strong)] lg:bg-[color:var(--app-surface)]">
+        {/* 본문만 등장 모션 — 탭바·사이드 네비는 애니메이션 없이 그려 셸이 고정된 것처럼 보이게 한다 */}
+        <div
+          className={`${pageInClass} min-h-dvh lg:border-x lg:border-[color:var(--line-strong)] lg:bg-[color:var(--app-surface)]`}
+        >
           {children}
         </div>
       </div>
@@ -164,17 +202,19 @@ export function AppBottomNavigation({ className = '' }: { className?: string }) 
                   : 'text-[color:var(--text-tertiary)] hover:text-[color:var(--text-secondary)]'
               }`}
             >
-              {/* 아이콘을 감싸는 캡슐: 활성이면 blue-50 pill 이 펼쳐지고 아이콘이 살짝 커진다 */}
+              {/* 아이콘을 감싸는 캡슐: 활성이면 blue-50 pill 이 펼쳐지고 아이콘이 살짝 커진다.
+                  탭 이동은 페이지 리마운트라 transition 이 못 돌기 때문에, 활성 탭의
+                  등장 모션은 마운트 시 재생되는 keyframe(app-nav-pill-in·app-nav-pop)으로 건다 */}
               <span className="relative flex h-8 w-[52px] items-center justify-center">
                 <span
                   aria-hidden="true"
                   className={`absolute inset-0 rounded-full bg-[color:var(--blue-50)] transition-all duration-200 ease-out ${
-                    active ? 'scale-100 opacity-100' : 'scale-75 opacity-0'
+                    active ? 'app-nav-pill-in scale-100 opacity-100' : 'scale-75 opacity-0'
                   }`}
                 />
                 <span
                   className={`relative transition-transform duration-200 ease-out ${
-                    active ? 'scale-105' : 'group-hover:scale-105'
+                    active ? 'app-nav-pop scale-105' : 'group-hover:scale-105'
                   }`}
                 >
                   <NavIcon name={item.icon} active={active} />

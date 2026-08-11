@@ -65,9 +65,15 @@ export function ModalShell({
         aria-hidden
         onClick={onDismiss}
         disabled={!onDismiss}
-        className="absolute inset-0 bg-black/45"
+        className="app-backdrop-in absolute inset-0 bg-black/45"
       />
-      <div ref={panelRef} tabIndex={-1} className={`relative outline-none ${panelClassName}`}>
+      {/* 등장 모션만 있고 퇴장은 즉시 — 열림이 마운트라 언마운트를 지연할 곳이 없다.
+          transform 은 애니메이션 종료 후 해제되므로 내부 fixed 요소를 가두지 않는다 */}
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        className={`app-panel-in relative outline-none ${panelClassName}`}
+      >
         {children}
       </div>
     </div>,

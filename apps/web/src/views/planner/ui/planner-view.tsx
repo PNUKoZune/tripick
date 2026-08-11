@@ -46,7 +46,13 @@ import { queryKeys } from '@/shared/api/query-keys';
 import { useMediaQuery } from '@/shared/lib';
 import { readJson, writeJson } from '@/shared/lib/storage';
 import { Chip, Toast } from '@/shared/ui';
-import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
+import {
+  AppBottomNavigation,
+  AppDesktopNavigation,
+  useNavSlideClass,
+} from '@/shared/ui/app-frame';
+
+const TAB_ORDER: PlannerTab[] = ['schedule', 'map', 'info', 'coordination'];
 import { AlternativeSheet } from '@/widgets/alternative-sheet';
 import { PlannerHeader } from '@/widgets/planner-header';
 import { PlannerMap } from '@/widgets/planner-map';
@@ -234,6 +240,16 @@ function PlannerContent({
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<PlannerTab>('schedule');
+  // 탭 이동 방향에 맞춘 콘텐츠 등장 클래스. 사용자가 탭을 눌렀을 때만 방향을 갱신하고
+  // (딥링크 등 프로그램적 전환은 setTab 직접 호출 = 기본 페이드 유지), 상태로 들고 있어
+  // 무관한 리렌더에 애니메이션 클래스가 바뀌며 재생되는 걸 막는다.
+  const [tabAnim, setTabAnim] = useState('app-tab-in');
+  const handleTabChange = (next: PlannerTab) => {
+    const delta = TAB_ORDER.indexOf(next) - TAB_ORDER.indexOf(tab);
+    if (delta !== 0) setTabAnim(delta > 0 ? 'app-slide-in-right' : 'app-slide-in-left');
+    setTab(next);
+  };
+  const pageInClass = useNavSlideClass();
   const [day, setDay] = useState(initialDay ?? 1);
   const [openItem, setOpenItem] = useState<PlannerItineraryItemDto | null>(null);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
@@ -422,9 +438,11 @@ function PlannerContent({
   const pickPlaceLabel = focusedItem ? '이 일정으로 변경' : '이 장소로 일정 변경';
 
   return (
-    <div className="wvr-scope min-h-dvh bg-[color:var(--bg)]">
+    <div className="wvr-scope min-h-dvh overflow-x-clip bg-[color:var(--bg)]">
       {/* < lg : phone shell (모바일 우선) — 대상 화면(결과) 범위: wvr-scope 로컬 팔레트 */}
-      <div className="wvr-scope mx-auto min-h-dvh max-w-[430px] pb-[88px] lg:hidden">
+      <div
+        className={`wvr-scope ${pageInClass} mx-auto min-h-dvh max-w-[430px] pb-[88px] lg:hidden`}
+      >
         <PlannerHeader
           title={trip?.title ?? (isResolvingTrip ? '여행 찾는 중' : '여행을 먼저 만들어주세요')}
           members={trip?.members ?? []}
@@ -451,7 +469,7 @@ function PlannerContent({
           </div>
         )}
 
-        {selectedTripId ? <PlannerTabs value={tab} onChange={setTab} /> : null}
+        {selectedTripId ? <PlannerTabs value={tab} onChange={handleTabChange} /> : null}
 
         {trip && tab !== 'coordination' ? (
           <div className="px-4 pt-3">
@@ -468,35 +486,38 @@ function PlannerContent({
 
           {!selectedTripId && !loadError ? <PlannerEmptyState loading={isResolvingTrip} /> : null}
 
-          {tab === 'schedule' && trip ? (
-            <>
-              <PendingProposalsPanel
-                tripId={trip.id}
-                isOwner={isOwner}
-                onOpenProposal={setPreviewProposalId}
-              />
-              <EditableTimeline
-                tripId={trip.id}
-                day={day}
-                items={itemsForDay}
-                selectedItemId={focusedItemId}
-                onSelectItem={(item) => setFocusedItemId(item.id)}
-                onSwitchItem={setOpenItem}
-                isOwner={isOwner}
-                onProposed={handleProposed}
-              />
-            </>
-          ) : null}
-          {tab === 'map' && trip ? (
-            <TripMapPanel trip={trip} items={itemsForDay} onSelectItem={setOpenItem} />
-          ) : null}
-          {tab === 'info' && trip ? (
-            <>
-              <TripLightSummaryCard trip={trip} />
-              <TripInfoPanel trip={trip} />
-            </>
-          ) : null}
-          {tab === 'coordination' && trip ? <TripCoordinationPanel tripId={trip.id} /> : null}
+          {/* key={tab} 로 탭이 바뀔 때만 리마운트해 등장 모션(이동 방향 슬라이드)을 재생한다 */}
+          <div key={tab} className={tabAnim}>
+            {tab === 'schedule' && trip ? (
+              <>
+                <PendingProposalsPanel
+                  tripId={trip.id}
+                  isOwner={isOwner}
+                  onOpenProposal={setPreviewProposalId}
+                />
+                <EditableTimeline
+                  tripId={trip.id}
+                  day={day}
+                  items={itemsForDay}
+                  selectedItemId={focusedItemId}
+                  onSelectItem={(item) => setFocusedItemId(item.id)}
+                  onSwitchItem={setOpenItem}
+                  isOwner={isOwner}
+                  onProposed={handleProposed}
+                />
+              </>
+            ) : null}
+            {tab === 'map' && trip ? (
+              <TripMapPanel trip={trip} items={itemsForDay} onSelectItem={setOpenItem} />
+            ) : null}
+            {tab === 'info' && trip ? (
+              <>
+                <TripLightSummaryCard trip={trip} />
+                <TripInfoPanel trip={trip} />
+              </>
+            ) : null}
+            {tab === 'coordination' && trip ? <TripCoordinationPanel tripId={trip.id} /> : null}
+          </div>
 
           {trip?.isOwner ? (
             <div className="mt-6 border-t border-[color:var(--card-soft)] pt-5">
@@ -527,7 +548,10 @@ function PlannerContent({
       {/* ≥ lg : 데스크탑 웹 레이아웃 — 대상 화면(결과) 범위: wvr-scope 로컬 팔레트 */}
       <div className="mx-auto hidden w-full max-w-[1640px] lg:grid lg:min-h-dvh lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:px-6">
         <AppDesktopNavigation />
-        <div className="wvr-scope min-h-dvh overflow-hidden border-x border-[color:var(--line)] bg-[color:var(--card)]">
+        {/* 본문만 등장 모션 — 사이드 네비는 애니메이션 없이 그려 셸이 고정된 것처럼 보이게 한다 */}
+        <div
+          className={`wvr-scope ${pageInClass} min-h-dvh overflow-hidden border-x border-[color:var(--line)] bg-[color:var(--card)]`}
+        >
           <header className="border-b border-[color:var(--line)] bg-[color:var(--card)]">
             {/* lg~xl 사이(노트북 폭)에서 좌우가 서로 밀어 글자가 줄바꿈되던 헤더.
                 왼쪽 묶음만 줄어들게(min-w-0 flex-1) 하고 제목은 말줄임, 액션 묶음은
@@ -677,35 +701,38 @@ function PlannerContent({
                 ) : null}
               </div>
               <div className="flex-1 overflow-y-auto px-5 py-4">
-                {loadError ? (
-                  <div className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]">
-                    {loadError}
-                  </div>
-                ) : !selectedTripId || !trip ? (
-                  <PlannerEmptyState loading={isResolvingTrip} />
-                ) : activeSidePanel === 'info' ? (
-                  <TripInfoPanel trip={trip} />
-                ) : activeSidePanel === 'coordination' ? (
-                  <TripCoordinationPanel tripId={trip.id} />
-                ) : (
-                  <>
-                    <PendingProposalsPanel
-                      tripId={trip.id}
-                      isOwner={isOwner}
-                      onOpenProposal={setPreviewProposalId}
-                    />
-                    <EditableTimeline
-                      tripId={trip.id}
-                      day={day}
-                      items={itemsForDay}
-                      selectedItemId={focusedItemId}
-                      onSelectItem={(item) => setFocusedItemId(item.id)}
-                      onSwitchItem={setOpenItem}
-                      isOwner={isOwner}
-                      onProposed={handleProposed}
-                    />
-                  </>
-                )}
+                {/* key={activeSidePanel} 로 패널 전환 시에만 등장 모션을 재생한다 */}
+                <div key={activeSidePanel} className="app-tab-in">
+                  {loadError ? (
+                    <div className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]">
+                      {loadError}
+                    </div>
+                  ) : !selectedTripId || !trip ? (
+                    <PlannerEmptyState loading={isResolvingTrip} />
+                  ) : activeSidePanel === 'info' ? (
+                    <TripInfoPanel trip={trip} />
+                  ) : activeSidePanel === 'coordination' ? (
+                    <TripCoordinationPanel tripId={trip.id} />
+                  ) : (
+                    <>
+                      <PendingProposalsPanel
+                        tripId={trip.id}
+                        isOwner={isOwner}
+                        onOpenProposal={setPreviewProposalId}
+                      />
+                      <EditableTimeline
+                        tripId={trip.id}
+                        day={day}
+                        items={itemsForDay}
+                        selectedItemId={focusedItemId}
+                        onSelectItem={(item) => setFocusedItemId(item.id)}
+                        onSwitchItem={setOpenItem}
+                        isOwner={isOwner}
+                        onProposed={handleProposed}
+                      />
+                    </>
+                  )}
+                </div>
               </div>
               <div className="border-t border-[color:var(--line)] bg-[color:var(--card-soft)] px-5 py-3 text-[12px] text-[color:var(--ink-sub)]">
                 일정을 클릭하면 지도에서 초점이 맞춰지고, 변경 아이콘을 누르면 대안 시트가 열립니다.

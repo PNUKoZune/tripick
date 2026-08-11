@@ -31,7 +31,7 @@ export function PlannerTabs({ value, onChange }: Props) {
             >
               {item.label}
               {active ? (
-                <span className="absolute bottom-0 h-[3px] w-16 rounded-full bg-[color:var(--primary)]" />
+                <span className="app-tabline-in absolute bottom-0 h-[3px] w-16 rounded-full bg-[color:var(--primary)]" />
               ) : null}
             </button>
           );
