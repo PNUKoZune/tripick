@@ -282,8 +282,10 @@ EMAIL_FROM=TriPick <noreply@tripick.place>
 ```
 
 - `EMAIL_FROM` 의 도메인이 Resend 에서 **인증된 도메인**이어야 한다. 다르면 403 이 온다
-- `RESEND_API_KEY` 를 빼먹으면 부팅은 되지만 console 모드로 폴백해 메일이 로그로만 나간다.
-  기동 로그의 `Email transport:` 줄로 확인한다
+- `RESEND_API_KEY` 를 빼먹으면 **부팅이 실패한다.** 예전엔 console 모드로 조용히 폴백했는데,
+  가입·재설정이 전부 200 을 돌려주면서 메일만 안 나가고 발송 "실패"가 아니라 에러 로그조차 없어
+  알아챌 방법이 없었다. 기동 로그의 `Email transport:` 줄로 어떤 전송을 잡았는지 확인한다
+  (근거: [`docs/auth/email-delivery-hardening-v1.md` §3.3](../auth/email-delivery-hardening-v1.md))
 - `SMTP_*` 는 프로덕션에서 넣지 않는다 — 로컬 Mailpit 전용이다
 - 발송 상한은 `EMAIL_SEND_TIMEOUT_MS`(기본 10초). 발송이 가입·재설정 응답 경로에 동기로
   물려 있어 상한이 필요하다

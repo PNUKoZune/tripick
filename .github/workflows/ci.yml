@@ -1,0 +1,98 @@
+name: CI
+
+# PR 에서 자동으로 도는 유일한 검사다. 지금까지는 Vercel 웹 빌드만 걸려 있어서
+# API 테스트·타입체크·마이그레이션은 아무도 돌리지 않았다.
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+# 같은 브랜치에 새 커밋이 올라오면 이전 실행은 취소한다 (러너 낭비 방지).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# NODE_ENV 를 여기서 절대 설정하지 말 것. production 이면 pnpm 이 devDependencies 를
+# 건너뛰어 tsc·jest·next 가 없는 채로 빌드가 시작된다 (Vercel 이 실제로 이렇게 죽었다).
+
+jobs:
+  verify:
+    name: 빌드 · 타입 · 린트 · 테스트
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm 버전은 root package.json 의 packageManager 필드를 따른다.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: 의존성 설치
+        run: pnpm install --frozen-lockfile
+
+      # 태스크를 나눠 실행한다 — 한 번에 묶으면 어느 단계에서 깨졌는지 로그를 뒤져야 한다.
+      # turbo 캐시는 CI 에서 쓰지 않는다. 캐시 적중으로 태스크를 건너뛰면 "검사했다"는
+      # 신호만 남고 실제로는 아무것도 안 돈다 (Vercel 에서 tsc 부재가 이렇게 가려졌다).
+      - name: 빌드
+        run: pnpm turbo run build
+
+      - name: 타입체크
+        run: pnpm turbo run typecheck
+
+      - name: 린트
+        run: pnpm turbo run lint
+
+      - name: 테스트
+        run: pnpm turbo run test
+
+  migrations:
+    name: 마이그레이션 (빈 DB → up → down → up)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # 일반 postgres 이미지는 안 된다 — InitVectorSchema 가 vector 확장을 만든다.
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: tripick
+          POSTGRES_PASSWORD: tripick
+          POSTGRES_DB: tripick_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tripick"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://tripick:tripick@localhost:5432/tripick_ci
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # 프로덕션은 부팅하면서 이걸 그대로 돌린다(migrationsRun). 여기서 깨지면 배포도 깨진다.
+      - name: 빈 DB 에 전체 적용
+        run: pnpm --filter @tripick/api migration:run
+
+      - name: 재실행은 아무것도 하지 않아야 한다
+        run: |
+          output=$(pnpm --filter @tripick/api migration:run 2>&1)
+          echo "$output"
+          echo "$output" | grep -q "No migrations are pending"
+
+      # 롤백 경로 검증. 되돌릴 수 없는 마이그레이션은 배포 사고 때 손이 묶인다.
+      # 가장 최근 1건만 본다 — PR 이 여러 건을 추가하면 마지막 것만 검증된다.
+      - name: 최신 마이그레이션 되돌리고 다시 적용
+        run: |
+          pnpm --filter @tripick/api migration:revert
+          pnpm --filter @tripick/api migration:run
