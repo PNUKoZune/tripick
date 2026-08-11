@@ -15,8 +15,9 @@ import type {
   TripSummaryDto,
 } from '@tripick/types';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import type { Repository } from 'typeorm';
+import { IsNull, type Repository } from 'typeorm';
 import { AppModule } from '../../src/app.module';
+import { EmailTokenEntity } from '../../src/auth/entities/email-token.entity';
 import { UserEntity } from '../../src/users/user.entity';
 
 describe('Travel AI planner E2E', () => {
@@ -68,12 +69,18 @@ describe('Travel AI planner E2E', () => {
 
     const users = app.get<Repository<UserEntity>>(getRepositoryToken(UserEntity));
     const user = await users.findOneByOrFail({ email });
-    const { pendingPasswordHash } = user;
-    if (!pendingPasswordHash) throw new Error('가입 직후 pending 비밀번호가 없습니다.');
+    // 대기 비밀번호는 계정이 아니라 그 가입 신청이 만든 인증 토큰에 실려 있다.
+    const emailTokens = app.get<Repository<EmailTokenEntity>>(getRepositoryToken(EmailTokenEntity));
+    const token = await emailTokens.findOne({
+      where: { userId: user.id, purpose: 'verify_email', consumedAt: IsNull() },
+      order: { createdAt: 'DESC' },
+    });
+    if (!token?.pendingPasswordHash) throw new Error('가입 직후 대기 비밀번호가 없습니다.');
     user.emailVerifiedAt = new Date();
-    user.passwordHash = pendingPasswordHash;
-    user.pendingPasswordHash = null;
+    user.passwordHash = token.pendingPasswordHash;
     await users.save(user);
+    token.consumedAt = new Date();
+    await emailTokens.save(token);
 
     const session = await post<LoginResponseDto>('/auth/login', { email, password });
     return session.tokens.accessToken;

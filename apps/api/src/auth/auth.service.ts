@@ -9,7 +9,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'node:crypto';
 import axios, { type AxiosError } from 'axios';
@@ -85,12 +85,15 @@ export class AuthService {
     if (!nickname) throw new BadRequestException(NICKNAME_REQUIRED);
     if (nickname.length > NICKNAME_MAX_LENGTH) throw new BadRequestException(NICKNAME_TOO_LONG);
 
+    // 계정 유무와 무관하게 항상 해싱한다 — 신규 경로에서만 cost 12 를 치르면 기존 계정일 때
+    // 응답이 눈에 띄게 빨라져, 고정 응답으로 막아 둔 가입 여부가 시간차로 새어 나간다.
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_COST);
+
     let existing = await this.usersService.findByEmail(email);
     if (!existing) {
-      const passwordHash = await bcrypt.hash(dto.password, BCRYPT_COST);
-      const created = await this.usersService.createEmailUser({ email, passwordHash, nickname });
+      const created = await this.usersService.createEmailUser({ email, nickname });
       if (created) {
-        await this.dispatchVerification(created);
+        await this.dispatchVerification(created, passwordHash);
         return signupResult(email);
       }
       // 동시 가입 경쟁에서 졌다(유니크 충돌) — 상대가 방금 만든 계정을 다시 읽어
@@ -102,14 +105,14 @@ export class AuthService {
     // 메일을 못 받았거나 놓쳐서 다시 가입을 누르는 게 이 상태의 거의 전부라, 여기서
     // "이미 가입된 계정" 안내를 보내면 막다른 길이 된다 (재설정으로 유도해도 인증 전이라 헛돈다).
     //
-    // 단, **대기 비밀번호는 덮어쓰지 않는다** — 이번 요청의 비밀번호가 아니라 첫 신청 때의
-    // 것이 그대로 승격된다. 덮어쓰면 남의 이메일로 가입 신청을 밀어 넣어 주인이 기다리던
-    // 인증 링크의 의미를 바꿔치기할 수 있다 (주인이 자기 링크를 눌렀는데 남의 비밀번호가 활성화).
-    // 첫 신청과 다른 비밀번호를 넣었다면 인증 후 재설정으로 바꾸면 된다.
+    // 이번 요청의 비밀번호는 **이번에 보내는 토큰에만** 실린다. 계정에 대기 칸을 두고 먼저
+    // 심은 쪽이 이기게 하면 남의 이메일을 선점해 두고 주인이 자기 가입 링크를 누르는 순간
+    // 공격자 비밀번호가 켜지고, 나중 신청이 이기게 하면 주인이 기다리던 링크의 의미가 바뀐다.
+    // 토큰이 각자 자기 신청의 비밀번호를 들고 있으면 **누른 링크의 비밀번호**만 켜진다.
     // (`passwordHash` 까지 보는 건 방어적 조건이다 — 값이 있으면 인증을 마친 계정이므로
     //  emailVerifiedAt 이 어떤 이유로 비어 있어도 주인 있는 계정으로 취급한다.)
     if (existing && !existing.emailVerifiedAt && !existing.kakaoId && !existing.passwordHash) {
-      await this.dispatchVerification(existing);
+      await this.dispatchVerification(existing, passwordHash);
       return signupResult(email);
     }
 
@@ -135,14 +138,16 @@ export class AuthService {
     }
     const user = await this.usersService.findByEmail(email);
     if (!user || !user.passwordHash) {
-      // 비밀번호가 아직 pending(인증 전)인 사용자는 인증을 안내한다.
+      // 비밀번호가 아직 pending(인증 전)인 사용자는 인증을 안내한다. 대기 비밀번호는 계정이
+      // 아니라 살아 있는 인증 토큰이 들고 있으므로 거기서 꺼내 맞춰 본다.
       // 403 으로 던져야 클라이언트가 메시지를 그대로 노출(401 은 만료 안내로 치환됨).
-      if (user?.pendingPasswordHash && (await bcrypt.compare(dto.password, user.pendingPasswordHash))) {
+      const pending = user ? await this.pendingPasswordFromLiveToken(user.id) : null;
+      if (pending && (await bcrypt.compare(dto.password, pending))) {
         throw new ForbiddenException('이메일 인증을 완료해야 로그인할 수 있어요. 메일함을 확인해주세요.');
       }
       // 계정이 없어도 해시 비교 비용을 똑같이 치른다. 바로 던지면 cost 12 짜리 bcrypt 를
       // 건너뛰어 응답이 눈에 띄게 빨라지고, 그 시간차만으로 가입 여부를 훑을 수 있다.
-      if (!user?.pendingPasswordHash) {
+      if (!pending) {
         await bcrypt.compare(dto.password, DUMMY_PASSWORD_HASH);
       }
       throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않아요.');
@@ -165,9 +170,9 @@ export class AuthService {
     const user = await this.usersService.findById(record.userId);
     if (!user) throw new NotFoundException('사용자를 찾을 수 없어요.');
     await this.consumeEmailToken(record);
-    // markEmailVerified 가 인증 처리 + pending 비밀번호 승격을 함께 수행한다.
-    // (이미 인증된 카카오 계정에 비밀번호를 연동한 경우도 여기서 활성화됨)
-    await this.usersService.markEmailVerified(user.id);
+    // 켜지는 비밀번호는 **이 토큰이 들고 온 것**이다 — 계정에 남은 값을 켜면 어느 신청의
+    // 비밀번호인지 알 수 없다(같은 이메일로 여러 신청이 들어올 수 있다).
+    await this.usersService.markEmailVerified(user.id, record.pendingPasswordHash);
     return { ok: true, message: '이메일 인증이 완료됐어요.' };
   }
 
@@ -210,6 +215,10 @@ export class AuthService {
     await this.consumeEmailToken(record);
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
     await this.usersService.setPassword(record.userId, passwordHash);
+    // 살아 있던 가입 신청은 여기서 전부 무효화한다. 재설정으로 이메일 소유가 증명됐고
+    // 비밀번호도 확정됐는데, 자기 비밀번호를 들고 있는 인증 토큰을 남겨 두면 그 토큰을 쥔
+    // 쪽이 나중에 이 계정 상태를 건드릴 여지가 남는다.
+    await this.expirePendingTokens(record.userId, 'verify_email');
     // 비밀번호 변경 = 다른 디바이스 모두 로그아웃
     await this.revokeAllRefreshTokens(record.userId);
     return { ok: true, message: '비밀번호가 변경됐어요. 새 비밀번호로 로그인해주세요.' };
@@ -280,6 +289,11 @@ export class AuthService {
     const kakaoToken = await this.getKakaoToken(code);
     const profile = await this.getKakaoProfile(kakaoToken);
     const user = await this.usersService.findOrCreateByKakao(profile);
+    // 카카오 로그인은 이메일 소유를 증명하고 계정을 인증 상태로 만든다(같은 이메일의 미인증
+    // 가입은 여기서 merge 된다). 그때 대기 중이던 가입 신청 토큰을 남겨 두면, 그 토큰을 쥔
+    // 쪽이 나중에 링크를 태워 이 계정에 비밀번호를 심을 수 있다 — 카카오 단독 계정은
+    // passwordHash 가 비어 있어 승격 가드에도 안 걸린다. 이메일 비밀번호는 재설정으로만.
+    await this.expirePendingTokens(user.id, 'verify_email');
     const tokens = await this.issueTokens(user.id, ctx);
     return { tokens, user: this.toSessionUser(user) };
   }
@@ -431,10 +445,21 @@ export class AuthService {
   // Email token helpers
   // ─────────────────────────────────────────────────────────────
 
-  /** 인증 메일 발송 + 사용자에게 이미 보낸 미사용 토큰은 만료 처리 */
-  private async dispatchVerification(user: UserEntity): Promise<void> {
+  /**
+   * 인증 메일 발송 + 사용자에게 이미 보낸 미사용 토큰은 만료 처리.
+   *
+   * `pendingPasswordHash` 는 이 신청이 인증되면 켜질 비밀번호다. 재발송처럼 비밀번호가
+   * 없는 호출은 지금 살아 있는 토큰의 것을 **이어받는다** — 안 그러면 재발송 링크가 인증만
+   * 하고 비밀번호는 없는 계정을 만들어, 방금 가입한 사용자가 로그인을 못 한다.
+   */
+  private async dispatchVerification(
+    user: UserEntity,
+    pendingPasswordHash?: string,
+  ): Promise<void> {
     const email = user.email;
     if (!email) return;
+    // 만료시키기 전에 읽어야 한다 — expirePendingTokens 가 먼저 돌면 이어받을 값이 사라진다.
+    const carried = pendingPasswordHash ?? (await this.pendingPasswordFromLiveToken(user.id));
     await this.expirePendingTokens(user.id, 'verify_email');
     const raw = generateRandomToken();
     await this.emailTokenRepo.save(
@@ -442,6 +467,7 @@ export class AuthService {
         userId: user.id,
         purpose: 'verify_email',
         tokenHash: sha256(raw),
+        pendingPasswordHash: carried,
         expiresAt: new Date(Date.now() + VERIFY_TOKEN_TTL_MS),
       }),
     );
@@ -488,6 +514,19 @@ export class AuthService {
         extra: { recipientDomain: to.split('@')[1] ?? 'unknown' },
       });
     }
+  }
+
+  /**
+   * 아직 살아 있는 인증 토큰이 들고 있는 대기 비밀번호. 없으면 null.
+   * 재발송이 이어받을 값이자, 로그인 실패 시 "인증부터 하세요" 안내를 가를 기준이다.
+   */
+  private async pendingPasswordFromLiveToken(userId: string): Promise<string | null> {
+    const row = await this.emailTokenRepo.findOne({
+      where: { userId, purpose: 'verify_email', consumedAt: IsNull() },
+      order: { createdAt: 'DESC' },
+    });
+    if (!row?.pendingPasswordHash) return null;
+    return row.expiresAt.getTime() < Date.now() ? null : row.pendingPasswordHash;
   }
 
   /** 아직 쓸 수 있는 토큰 조회. 소비는 하지 않는다 — 부수효과 전에 사전 조건을 다 보려고 분리했다. */
