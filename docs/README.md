@@ -22,6 +22,7 @@
 - [auth/email-login-and-session-v1.md](auth/email-login-and-session-v1.md) — 이메일 로그인 · 세션 · 사용자 핸들
 - [auth/refresh-token-securestore-v1.md](auth/refresh-token-securestore-v1.md) — refresh 토큰 RN SecureStore 이전 (Keychain/Keystore)
 - [auth/account-security-hardening-v1.md](auth/account-security-hardening-v1.md) — 회원 도메인 보안 보강 (공유 데모 세션 제거 · OAuth state · 계정 탈취 경로 차단 · refresh 회전 원자화)
+- [auth/email-delivery-hardening-v1.md](auth/email-delivery-hardening-v1.md) — 인증 메일 경로 보강 (가입 메일 한도 · 발송 실패 관측 · 대기 비밀번호를 토큰에 바인딩)
 
 ## 여행 (Trips)
 

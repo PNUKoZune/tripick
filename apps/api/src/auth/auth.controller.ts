@@ -54,7 +54,12 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle(perMinute(5)) // 계정 생성 + 메일 발송 남용 방지
   @ApiOperation({ summary: '이메일 회원가입 (인증 메일 발송)' })
-  signup(@Body() dto: EmailSignupBodyDto) {
+  async signup(@Body() dto: EmailSignupBodyDto, @Res({ passthrough: true }) res: Response) {
+    // 가입도 메일을 보내는 경로다 — 미인증 계정이면 인증 메일 재발송, 인증된 계정이면
+    // "가입 시도" 안내가 나간다. 여기에 주소별 한도가 없으면 재발송 라우트의 한도를
+    // 가입으로 그냥 우회할 수 있고, 남의 주소로 메일을 무제한 꽂을 수 있다.
+    // 버킷을 재발송과 **공유**해야(purpose='verify') 우회가 막힌다.
+    await this.assertMailQuota(dto.email, 'verify', res);
     return this.authService.signupWithEmail(dto);
   }
 

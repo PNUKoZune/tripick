@@ -11,6 +11,18 @@ import { createHash } from 'node:crypto';
 import { AuthService } from '../../src/auth/auth.service';
 import { UserEntity } from '../../src/users/user.entity';
 
+// 카카오 토큰·프로필 왕복만 대신한다. 이 파일의 다른 테스트는 axios 를 타지 않는다.
+jest.mock('axios', () => {
+  const stub = {
+    post: jest.fn(async () => ({ data: { access_token: 'kakao-access' } })),
+    get: jest.fn(async () => ({
+      data: { id: 77, kakao_account: { email: 'a@b.com', profile: { nickname: '카카오' } } },
+    })),
+    isAxiosError: () => false,
+  };
+  return { __esModule: true, default: stub, ...stub };
+});
+
 const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
 
 function config(overrides: Record<string, string> = {}) {
@@ -23,14 +35,32 @@ function config(overrides: Record<string, string> = {}) {
   } as any;
 }
 
-/** `.update().set().where().execute()` 체인을 흉내내는 QueryBuilder 스텁. */
+/** `.update().set().where().execute()` 체인을 흉내내는 QueryBuilder 스텁. where 파라미터는 기록해 둔다. */
 function queryBuilder(execResult: { affected?: number } = { affected: 1 }) {
-  const qb: any = {};
+  const qb: any = { wheres: [] as any[] };
   qb.update = () => qb;
   qb.set = () => qb;
-  qb.where = () => qb;
+  qb.where = (_sql: string, params?: any) => {
+    qb.wheres.push(params ?? {});
+    return qb;
+  };
   qb.execute = jest.fn().mockResolvedValue(execResult);
   return qb;
+}
+
+/** 아직 살아 있는 인증 토큰 행. 대기 비밀번호·닉네임은 계정이 아니라 여기 실린다. */
+function liveVerifyToken(pendingPasswordHash: string | null, over: Record<string, any> = {}) {
+  return {
+    id: 'et-old',
+    userId: 'u1',
+    purpose: 'verify_email',
+    tokenHash: 'old-hash',
+    pendingPasswordHash,
+    pendingNickname: null,
+    expiresAt: new Date(Date.now() + 60_000),
+    createdAt: new Date(),
+    ...over,
+  } as any;
 }
 
 function user(over: Partial<UserEntity> = {}): UserEntity {
@@ -61,12 +91,19 @@ function createHarness(configOverrides: Record<string, string> = {}) {
     findOne: jest.fn(),
     createQueryBuilder: jest.fn(() => queryBuilder()),
   };
+  const emailTokenQbs: any[] = [];
   const emailTokenRepo = {
     create: jest.fn((v: any) => v),
     save: jest.fn(async (v: any) => ({ id: v.id ?? 'et-1', ...v })),
     findOne: jest.fn(),
-    createQueryBuilder: jest.fn(() => queryBuilder()),
+    createQueryBuilder: jest.fn(() => {
+      const qb = queryBuilder();
+      emailTokenQbs.push(qb);
+      return qb;
+    }),
   };
+  /** 지금까지 만료 처리된 (userId, purpose) 목록. */
+  const expiredTokenTargets = () => emailTokenQbs.flatMap((qb) => qb.wheres);
   const service = new AuthService(
     usersService as any,
     jwtService as any,
@@ -75,7 +112,15 @@ function createHarness(configOverrides: Record<string, string> = {}) {
     refreshRepo as any,
     emailTokenRepo as any,
   );
-  return { service, usersService, jwtService, emailService, refreshRepo, emailTokenRepo };
+  return {
+    service,
+    usersService,
+    jwtService,
+    emailService,
+    refreshRepo,
+    emailTokenRepo,
+    expiredTokenTargets,
+  };
 }
 
 describe('AuthService — email signup', () => {
@@ -111,7 +156,9 @@ describe('AuthService — email signup', () => {
       nickname: '앨리스',
     } as any);
 
-    usersService.findByEmail.mockResolvedValue(user({ email: 'a@b.com', passwordHash: 'x' }));
+    usersService.findByEmail.mockResolvedValue(
+      user({ email: 'a@b.com', passwordHash: 'x', emailVerifiedAt: new Date() }),
+    );
     const taken = await service.signupWithEmail({
       email: 'a@b.com',
       password: 'abc12345',
@@ -157,9 +204,79 @@ describe('AuthService — email signup', () => {
       nickname: '앨리스',
     } as any);
 
+    // 경쟁자가 만든 계정은 아직 미인증이라 "이미 가입됨" 안내가 아니라 인증 메일로 간다.
     expect(res).toMatchObject({ ok: true, email: 'a@b.com' });
-    expect(emailService.sendAccountExistsNotice).toHaveBeenCalledTimes(1);
+    expect(emailService.sendVerification).toHaveBeenCalledTimes(1);
+    expect(emailService.sendAccountExistsNotice).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 메일을 놓치고 다시 가입을 누르는 흐름. 인증 전이라 주인이 확정되지 않은 신청이므로
+   * 안내가 아니라 인증 메일을 다시 보낸다 — 안내로 보내면 재설정도 인증 전이라 헛돈다.
+   */
+  it('re-sends verification when the pending signup was never verified', async () => {
+    const { service, usersService, emailService, emailTokenRepo } = createHarness();
+    usersService.findByEmail.mockResolvedValue(user({ email: 'a@b.com' }));
+    // 먼저 들어온 신청이 남긴, 아직 살아 있는 토큰 (다른 비밀번호를 들고 있다)
+    emailTokenRepo.findOne.mockResolvedValue(liveVerifyToken('first-signup-hash'));
+
+    const res = await service.signupWithEmail({
+      email: 'a@b.com',
+      password: 'different1',
+      nickname: '앨리스',
+    } as any);
+
+    expect(res).toMatchObject({ ok: true, email: 'a@b.com' });
+    expect(emailService.sendVerification).toHaveBeenCalledTimes(1);
+    expect(emailService.sendAccountExistsNotice).not.toHaveBeenCalled();
+    expect(usersService.setPassword).not.toHaveBeenCalled();
+    expect(usersService.createEmailUser).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 계정 선점 차단: 공격자가 피해자 이메일로 먼저 가입해 두면, 예전엔 **첫 신청의**
+   * 비밀번호가 계정에 남아 피해자가 자기 가입 링크를 누르는 순간 그게 활성화됐다.
+   * 이제 링크마다 자기 신청의 비밀번호를 들고 가므로 누른 링크의 것만 켜진다.
+   */
+  it('binds this request password to the token it sends, not the first signup', async () => {
+    const { service, usersService, emailTokenRepo } = createHarness();
+    usersService.findByEmail.mockResolvedValue(user({ email: 'a@b.com' }));
+    emailTokenRepo.findOne.mockResolvedValue(
+      liveVerifyToken('attacker-hash', { pendingNickname: '공격자' }),
+    );
+
+    await service.signupWithEmail({
+      email: 'a@b.com',
+      password: 'victim1234',
+      nickname: '앨리스',
+    } as any);
+
+    const saved = emailTokenRepo.save.mock.calls.at(-1)![0] as any;
+    expect(saved.purpose).toBe('verify_email');
+    expect(saved.pendingPasswordHash).not.toBe('attacker-hash');
+    expect(await bcrypt.compare('victim1234', saved.pendingPasswordHash)).toBe(true);
+    // 닉네임도 같은 신청의 것이어야 한다 — 계정 이름은 첫 신청이 정하지만 주인은 링크를 누른 쪽이다.
+    expect(saved.pendingNickname).toBe('앨리스');
+  });
+
+  /** 인증을 마친 이메일 계정은 주인이 확정된 상태 — 안내만 가고 인증 메일은 안 간다. */
+  it('sends the account-exists notice for a verified email account', async () => {
+    const { service, usersService, emailService } = createHarness();
+    usersService.findByEmail.mockResolvedValue(
+      user({ email: 'a@b.com', passwordHash: 'x', emailVerifiedAt: new Date() }),
+    );
+
+    await service.signupWithEmail({
+      email: 'a@b.com',
+      password: 'abc12345',
+      nickname: '앨리스',
+    } as any);
+
     expect(emailService.sendVerification).not.toHaveBeenCalled();
+    expect(emailService.sendAccountExistsNotice).toHaveBeenCalledWith(
+      'a@b.com',
+      expect.objectContaining({ hasPassword: true }),
+    );
   });
 
   /**
@@ -168,7 +285,10 @@ describe('AuthService — email signup', () => {
    */
   it('never plants a password on an existing account', async () => {
     const { service, usersService, emailService } = createHarness();
-    usersService.findByEmail.mockResolvedValue(user({ email: 'a@b.com' })); // 카카오 가입자(비밀번호 없음)
+    // 카카오 가입자(비밀번호 없음). 카카오 가입은 이메일이 인증된 것으로 간주된다.
+    usersService.findByEmail.mockResolvedValue(
+      user({ email: 'a@b.com', kakaoId: 'k1', emailVerifiedAt: new Date() }),
+    );
 
     await service.signupWithEmail({
       email: 'a@b.com',
@@ -178,7 +298,10 @@ describe('AuthService — email signup', () => {
 
     expect(usersService.createEmailUser).not.toHaveBeenCalled();
     expect(emailService.sendVerification).not.toHaveBeenCalled();
-    expect(emailService.sendAccountExistsNotice).toHaveBeenCalledTimes(1);
+    expect(emailService.sendAccountExistsNotice).toHaveBeenCalledWith(
+      'a@b.com',
+      expect.objectContaining({ hasPassword: false }),
+    );
   });
 
   /**
@@ -211,9 +334,10 @@ describe('AuthService — email login', () => {
   });
 
   it('throws 403 when the password is only pending verification', async () => {
-    const { service, usersService } = createHarness();
+    const { service, usersService, emailTokenRepo } = createHarness();
     const pendingHash = await bcrypt.hash('abc12345', 10);
-    usersService.findByEmail.mockResolvedValue(user({ pendingPasswordHash: pendingHash }));
+    usersService.findByEmail.mockResolvedValue(user());
+    emailTokenRepo.findOne.mockResolvedValue(liveVerifyToken(pendingHash));
     await expect(
       service.loginWithEmail({ email: 'a@b.com', password: 'abc12345' } as any),
     ).rejects.toBeInstanceOf(ForbiddenException);
@@ -450,13 +574,66 @@ describe('AuthService — password reset & verify', () => {
     expect(link).toMatch(/^http:\/\/localhost:3000\/reset-password\?token=/);
   });
 
+  /**
+   * 재발송은 자기 비밀번호가 없다. 살아 있는 토큰의 것을 이어받지 않으면 재발송 링크가
+   * 인증만 하고 비밀번호 없는 계정을 만들어, 방금 가입한 사용자가 로그인을 못 한다.
+   */
+  it('carries the pending password forward on resend', async () => {
+    const { service, usersService, emailTokenRepo } = createHarness();
+    usersService.findByEmail.mockResolvedValue(user({ email: 'a@b.com' }));
+    emailTokenRepo.findOne.mockResolvedValue(
+      liveVerifyToken('signup-hash', { pendingNickname: '보통사용자' }),
+    );
+
+    await service.resendVerification('a@b.com');
+
+    const saved = emailTokenRepo.save.mock.calls.at(-1)![0] as any;
+    expect(saved.pendingPasswordHash).toBe('signup-hash');
+    expect(saved.pendingNickname).toBe('보통사용자');
+  });
+
+  /** 만료된 토큰의 비밀번호는 이어받지 않는다 — 죽은 신청을 재발송으로 되살리는 셈이 된다. */
+  it('does not carry a password forward from an expired token', async () => {
+    const { service, usersService, emailTokenRepo } = createHarness();
+    usersService.findByEmail.mockResolvedValue(user({ email: 'a@b.com' }));
+    emailTokenRepo.findOne.mockResolvedValue(
+      liveVerifyToken('stale-hash', { expiresAt: new Date(Date.now() - 1000) }),
+    );
+
+    await service.resendVerification('a@b.com');
+
+    const saved = emailTokenRepo.save.mock.calls.at(-1)![0] as any;
+    expect(saved.pendingPasswordHash).toBeNull();
+  });
+
+  /** 켜지는 비밀번호·닉네임은 계정에 남은 값이 아니라 **소비한 토큰**이 들고 온 것이어야 한다. */
+  it('promotes the password and nickname carried by the consumed token', async () => {
+    const { service, emailTokenRepo, usersService } = createHarness();
+    emailTokenRepo.findOne.mockResolvedValue(
+      liveVerifyToken('this-token-hash', {
+        id: 'et-1',
+        consumedAt: null,
+        pendingNickname: '링크를 누른 사람',
+      }),
+    );
+    usersService.findById.mockResolvedValue(user());
+
+    await service.verifyEmail('tok');
+
+    expect(usersService.markEmailVerified).toHaveBeenCalledWith('u1', {
+      passwordHash: 'this-token-hash',
+      nickname: '링크를 누른 사람',
+    });
+  });
+
   it('rejects a weak new password on reset', async () => {
     const { service } = createHarness();
     await expect(service.resetPassword('tok', 'short')).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('consumes the token, sets the password, and revokes sessions on reset', async () => {
-    const { service, emailTokenRepo, usersService, refreshRepo } = createHarness();
+    const { service, emailTokenRepo, usersService, refreshRepo, expiredTokenTargets } =
+      createHarness();
     emailTokenRepo.findOne.mockResolvedValue({
       id: 'et-1',
       userId: 'u1',
@@ -473,6 +650,11 @@ describe('AuthService — password reset & verify', () => {
     expect(usersService.setPassword).toHaveBeenCalledWith('u1', expect.any(String));
     expect(qb.execute).toHaveBeenCalled(); // revokeAll
     expect(res.ok).toBe(true);
+    // 살아 있던 가입 신청 토큰도 함께 무효화한다 — 자기 비밀번호를 들고 있는 링크를
+    // 남겨 두면 방금 확정한 비밀번호 위로 나중에 다시 손댈 여지가 남는다.
+    expect(expiredTokenTargets()).toContainEqual(
+      expect.objectContaining({ userId: 'u1', purpose: 'verify_email' }),
+    );
   });
 
   /**
@@ -506,5 +688,29 @@ describe('AuthService — password reset & verify', () => {
       expiresAt: new Date(Date.now() + 60_000),
     });
     await expect(service.verifyEmail('tok')).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('AuthService — kakao login', () => {
+  /**
+   * 카카오 로그인은 같은 이메일의 미인증 가입을 merge 하면서 계정을 인증 상태로 만든다.
+   * 그때 대기 중이던 가입 신청 토큰을 남겨 두면, 그 토큰을 쥔 쪽이 나중에 링크를 태워
+   * 이 계정에 비밀번호를 심을 수 있다 — 카카오 단독 계정은 passwordHash 가 비어 있어
+   * 승격 가드에도 걸리지 않는다. 이메일 비밀번호는 재설정 플로우로만 붙어야 한다.
+   */
+  it('expires pending verification tokens so nobody can plant a password later', async () => {
+    const { service, usersService, expiredTokenTargets } = createHarness({
+      KAKAO_REST_API_KEY: 'key',
+      KAKAO_CALLBACK_URL: 'http://localhost:4000/api/v1/auth/kakao/callback',
+    });
+    usersService.findOrCreateByKakao.mockResolvedValue(
+      user({ id: 'u1', email: 'a@b.com', kakaoId: '77', emailVerifiedAt: new Date() }),
+    );
+
+    await service.loginWithKakao('code');
+
+    expect(expiredTokenTargets()).toContainEqual(
+      expect.objectContaining({ userId: 'u1', purpose: 'verify_email' }),
+    );
   });
 });
