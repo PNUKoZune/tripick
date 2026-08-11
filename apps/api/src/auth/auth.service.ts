@@ -13,6 +13,7 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'node:crypto';
 import axios, { type AxiosError } from 'axios';
+import * as Sentry from '@sentry/nestjs';
 
 import { UsersService } from '../users/users.service';
 import { UserEntity } from '../users/user.entity';
@@ -471,12 +472,21 @@ export class AuthService {
    * 호출부의 응답은 enumeration 방지로 어차피 성공/실패를 구분하지 않는 고정 문구다.
    * 여기서 던지면 "계정은 만들어졌는데 가입은 500" 같은 어긋난 상태만 사용자에게 보인다.
    * 실패는 로그·Sentry 로 남기고, 사용자는 재발송/재설정 요청으로 복구한다.
+   *
+   * Sentry 는 **직접** 올려야 한다 — 전역 필터(SentryGlobalFilter)는 응답까지 올라온 예외만
+   * 잡고, Nest Logger 는 Sentry 로 흐르지 않는다. 삼킨 예외를 그냥 두면 사용자에겐 200 이
+   * 나가고 메일만 조용히 안 가는 상태가 아무 알림 없이 계속된다.
    */
   private async deliver(to: string, send: () => Promise<void>): Promise<void> {
     try {
       await send();
     } catch (err) {
       this.logger.error(`메일 발송 실패 (to=${to}): ${(err as Error).message}`);
+      // 수신 주소는 태그가 아니라 본문에만 둔다 — 태그는 인덱싱돼 검색·그룹핑에 노출된다.
+      Sentry.captureException(err, {
+        tags: { area: 'auth-email' },
+        extra: { recipientDomain: to.split('@')[1] ?? 'unknown' },
+      });
     }
   }
 

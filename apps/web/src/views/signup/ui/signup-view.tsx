@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { GuestGuard } from '@/entities/session';
 import { resendVerification } from '@/entities/session/api/auth-api';
 import { EmailSignupForm } from '@/features/email-signup';
+import { useRetryCountdown } from '@/shared/lib';
 import { AppFrame } from '@/shared/ui/app-frame';
 import { useMutation } from '@tanstack/react-query';
 
@@ -22,6 +23,10 @@ function SignupContent() {
   const resendMutation = useMutation({
     mutationFn: (email: string) => resendVerification(email),
   });
+  // 재발송은 주소당 시간당 5회·IP 당 분당 3회라 429 가 실제로 난다. 결과를 안 그리면
+  // 눌러도 아무 반응이 없어 사용자는 계속 누르고, 한도만 더 깎인다.
+  const resendRetryAfter = useRetryCountdown(resendMutation.error);
+  const resendError = resendMutation.error instanceof Error ? resendMutation.error.message : null;
 
   return (
     <AppFrame showNav={false} themed>
@@ -45,13 +50,22 @@ function SignupContent() {
               <button
                 type="button"
                 onClick={() => resendMutation.mutate(sentEmail)}
-                disabled={resendMutation.isPending}
+                disabled={resendMutation.isPending || resendRetryAfter > 0}
                 className="mt-3 text-[13px] font-semibold text-[color:var(--primary)] hover:underline disabled:opacity-50"
               >
-                {resendMutation.isPending ? '재전송 중…' : '인증 메일 다시 보내기'}
+                {resendMutation.isPending
+                  ? '재전송 중…'
+                  : resendRetryAfter > 0
+                    ? `${resendRetryAfter}초 후 다시 보낼 수 있어요`
+                    : '인증 메일 다시 보내기'}
               </button>
               {resendMutation.isSuccess ? (
                 <p className="mt-1 text-[12px] text-[color:var(--ok)]">메일이 재전송됐어요.</p>
+              ) : null}
+              {resendError ? (
+                <p className="mt-1 text-[12px] font-semibold text-[color:var(--danger)]">
+                  {resendError}
+                </p>
               ) : null}
             </div>
             <Link

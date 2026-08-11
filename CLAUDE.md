@@ -271,6 +271,8 @@ src/
 - PostgreSQL 이미지는 반드시 `pgvector/pgvector:pg16` 사용 (일반 `postgres:16` 사용 금지)
 - **익명·공유 세션은 없다.** 인증 없이 세션을 내주던 `POST /auth/demo`(모든 방문자가 계정 하나를 공유)는 제거했다. 데모·시드·드라이버는 전부 실제 계정으로 로그인한다 (`seed:demo-live` 는 `SEED_USER_EMAIL`)
 - **`JWT_SECRET`·`JWT_REFRESH_SECRET` 은 프로덕션에서 필수**다. 미설정이거나 `.env.example` 의 `change-me-*` 값 그대로면 부팅이 거부된다 (`common/jwt-secrets`)
+- **프로덕션은 실제 발송 가능한 이메일 설정이 없으면 부팅을 거부한다** (`EMAIL_TRANSPORT=resend`+`RESEND_API_KEY` 또는 `smtp`+`SMTP_HOST`). console 폴백은 가입·재설정이 전부 200 을 돌려주는데 메일은 한 통도 안 나가고 발송 "실패"가 아니라 에러 로그조차 없는 조용한 사고라서다
+- **메일을 보내는 라우트에는 주소별 한도(`EmailSendLimiterService`)를 반드시 붙인다.** 라우트의 `@Throttle` 은 IP 기준이라 IP 를 갈아 가며 한 주소로 메일을 몰 수 있다. 가입(`/auth/signup`)도 인증 메일 재발송·"가입 시도" 안내를 보내므로 재발송과 **같은 `verify` 버킷**을 쓴다 — 버킷이 갈리면 가입으로 재발송 한도를 그대로 우회한다
 - **기존 계정에 비밀번호를 심는 경로를 만들지 말 것.** 가입 요청이 이미 있는 이메일로 오면 계정을 건드리지 않고 주인에게 안내 메일만 보낸다 — 인증 링크는 계정 주인에게 가므로, 대기 비밀번호를 심어 두면 주인이 링크를 누르는 순간 계정이 넘어간다. 기존 계정의 비밀번호 설정·변경은 재설정 플로우만 통한다
 - WebSocket 업그레이드 헤더(`Upgrade`, `Connection`)는 Nginx에서 별도 처리 필요
 - Geolocation(`navigator.geolocation`)은 HTTPS 환경에서만 동작, 로컬은 `localhost` 예외

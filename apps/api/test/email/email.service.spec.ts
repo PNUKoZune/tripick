@@ -53,6 +53,27 @@ describe('EmailService — transport modes', () => {
     expect(sendMail).not.toHaveBeenCalled();
   });
 
+  it('refuses to boot in production when no transport can deliver', () => {
+    // console 폴백은 프로덕션에서 조용한 사고다 — 응답은 200, 메일은 0통, 알림도 없음.
+    const cases = [
+      { EMAIL_TRANSPORT: 'console' },
+      { EMAIL_TRANSPORT: 'resend' }, // RESEND_API_KEY 없음
+      { EMAIL_TRANSPORT: 'smtp' }, // SMTP_HOST 없음
+      {}, // 미설정 → console 기본값
+    ];
+    for (const extra of cases) {
+      const svc = new EmailService(config({ NODE_ENV: 'production', ...extra }));
+      expect(() => svc.onModuleInit()).toThrow(/이메일 발송이 설정되지 않았습니다/);
+    }
+  });
+
+  it('boots in production when a transport is actually configured', () => {
+    const svc = new EmailService(
+      config({ NODE_ENV: 'production', EMAIL_TRANSPORT: 'resend', RESEND_API_KEY: 're_live' }),
+    );
+    expect(() => svc.onModuleInit()).not.toThrow();
+  });
+
   it('sends through SMTP when configured', async () => {
     sendMail.mockResolvedValue({});
     const svc = smtpService({ EMAIL_FROM: 'From <from@tripick.place>' });

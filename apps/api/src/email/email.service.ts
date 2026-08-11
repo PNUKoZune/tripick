@@ -56,12 +56,27 @@ export class EmailService implements OnModuleInit {
       this.initSmtp();
       return;
     }
+    this.assertDeliverableInProduction(`EMAIL_TRANSPORT=${mode}`);
     this.logger.log('Email transport: console (no delivery)');
+  }
+
+  /**
+   * 프로덕션에서 console 폴백은 조용한 사고다. 가입·재설정은 enumeration 방지로 어차피
+   * 고정 문구 200 을 돌려주고, 폴백은 발송 "실패"가 아니라서 에러 로그도 Sentry 도 안 뜬다 —
+   * 아무도 메일을 못 받는 상태가 알림 없이 유지된다. 부팅에서 막는 게 유일한 신호다.
+   * (`JWT_SECRET` 을 프로덕션에서 필수로 두는 것과 같은 이유)
+   */
+  private assertDeliverableInProduction(reason: string): void {
+    if (this.config.get<string>('NODE_ENV') !== 'production') return;
+    throw new Error(
+      `이메일 발송이 설정되지 않았습니다 (${reason}). 프로덕션에서는 EMAIL_TRANSPORT=resend + RESEND_API_KEY, 또는 EMAIL_TRANSPORT=smtp + SMTP_HOST 가 필요합니다.`,
+    );
   }
 
   private initResend() {
     const apiKey = this.config.get<string>('RESEND_API_KEY');
     if (!apiKey) {
+      this.assertDeliverableInProduction('EMAIL_TRANSPORT=resend, RESEND_API_KEY 없음');
       this.logger.warn(
         'EMAIL_TRANSPORT=resend but RESEND_API_KEY is missing — falling back to console mode',
       );
@@ -79,6 +94,7 @@ export class EmailService implements OnModuleInit {
     const pass = this.config.get<string>('SMTP_PASS');
     const secure = this.config.get<string>('SMTP_SECURE') === 'true';
     if (!host) {
+      this.assertDeliverableInProduction('EMAIL_TRANSPORT=smtp, SMTP_HOST 없음');
       this.logger.warn(
         'EMAIL_TRANSPORT=smtp but SMTP_HOST is missing — falling back to console mode',
       );
