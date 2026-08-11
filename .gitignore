@@ -66,3 +66,6 @@ apps/mobile/ios/TriPick/GoogleService-Info.plist
 
 # Lazyweb 도구 산출물(디자인 참조 캐시) — TriPick UI 작업엔 미사용
 .lazyweb/
+
+# Vercel CLI 링크 정보 (vercel link 가 생성)
+.vercel
