@@ -38,9 +38,13 @@ export function GuestGuard({
 }
 
 function GuardPlaceholder() {
+  // wvr-scope 로 배경·글자가 팔레트(다크 포함)를 따라간다 — 라이트 고정이면
+  // 다크 화면 사이에서 흰 화면이 번쩍인다. 첫 로드에만 보이는 화면이라 스코프 무해.
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-[#F7F8FA]">
-      <div className="text-[13px] font-semibold text-[#8B95A1]">잠시만 기다려 주세요…</div>
+    <div className="wvr-scope flex min-h-dvh items-center justify-center">
+      <div className="text-[13px] font-semibold text-[color:var(--ink-faint)]">
+        잠시만 기다려 주세요…
+      </div>
     </div>
   );
 }

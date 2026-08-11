@@ -1,56 +1,53 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
 import { getStoredSession } from '../model/session-storage';
+import { useHasSession } from './use-has-session';
 
-export type SessionGuardState = 'pending' | 'authenticated' | 'redirecting';
-export type GuestGuardState = 'pending' | 'guest' | 'redirecting';
+export type SessionGuardState = 'pending' | 'authenticated';
+export type GuestGuardState = 'redirecting' | 'guest';
 
 /**
  * 로그인 필수 가드. 세션 없으면 `redirectTo` 로 이동.
- * - 'pending': 첫 렌더, 아직 검사 전 (SSR 결과)
+ * - 'pending': SSR·하이드레이션 첫 렌더, 또는 세션 없음(리다이렉트 진행 중)
  * - 'authenticated': 세션 있음, 컨텐츠 렌더 OK
- * - 'redirecting': 세션 없음, 리다이렉트 중 (스피너만 노출)
+ *
+ * 세션 판정은 effect 가 아니라 useSyncExternalStore(useHasSession)로 한다 —
+ * effect 방식은 모든 클라이언트 내비게이션마다 'pending' 프레임(placeholder 번쩍)을
+ * 강제하지만, 스토어 방식은 첫 렌더부터 세션을 알아 탭 전환이 즉시 컨텐츠로 그려진다.
+ * placeholder 는 진짜 첫 로드(SSR 스냅샷 false)에만 남는다.
  */
 export function useSessionGuard(redirectTo = '/login'): SessionGuardState {
   const router = useRouter();
-  const [state, setState] = useState<SessionGuardState>('pending');
+  const hasSession = useHasSession();
 
   useEffect(() => {
-    const exists = Boolean(getStoredSession());
-    if (exists) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- 세션 확인 결과 반영 후 이어서 리다이렉트하는 side-effect
-      setState('authenticated');
-      return;
+    // 하이드레이션 첫 렌더의 스냅샷(false)이 아니라 스토리지를 직접 재확인하고 리다이렉트한다
+    if (!getStoredSession()) {
+      redirectWithFallback(router.replace, redirectTo);
     }
-    setState('redirecting');
-    redirectWithFallback(router.replace, redirectTo);
   }, [router, redirectTo]);
 
-  return state;
+  return hasSession ? 'authenticated' : 'pending';
 }
 
 /**
  * 로그인 상태이면 차단하는 가드 (signup/login/forgot-password 용).
+ * 세션이 없으면 첫 렌더부터 'guest' 라 폼이 즉시 그려진다.
  */
 export function useGuestGuard(redirectTo = '/'): GuestGuardState {
   const router = useRouter();
-  const [state, setState] = useState<GuestGuardState>('pending');
+  const hasSession = useHasSession();
 
   useEffect(() => {
-    const exists = Boolean(getStoredSession());
-    if (!exists) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- 세션 확인 결과 반영 후 이어서 리다이렉트하는 side-effect(게스트 가드)
-      setState('guest');
-      return;
+    if (getStoredSession()) {
+      redirectWithFallback(router.replace, redirectTo);
     }
-    setState('redirecting');
-    redirectWithFallback(router.replace, redirectTo);
   }, [router, redirectTo]);
 
-  return state;
+  return hasSession ? 'redirecting' : 'guest';
 }
 
 /**
