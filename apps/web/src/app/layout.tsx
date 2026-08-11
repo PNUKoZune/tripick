@@ -2,9 +2,21 @@ import type { Metadata, Viewport } from 'next';
 import { Providers } from './providers';
 import './globals.css';
 
+// og:image·twitter:image 는 같은 폴더의 opengraph-image.png 파일 컨벤션이 자동 주입한다.
+// 절대 URL 의 기준(metadataBase)은 Vercel 이 배포 URL 에서 자동 유도한다.
 export const metadata: Metadata = {
   title: 'Tripick — 취향 조율 여행 플래너',
   description: '동행 멤버의 취향을 맞추고 국내 여행 일정을 준비하는 Tripick',
+  openGraph: {
+    title: 'Tripick — 취향 조율 여행 플래너',
+    description: '동행 멤버의 취향을 맞추고 국내 여행 일정을 준비하는 Tripick',
+    siteName: 'Tripick',
+    type: 'website',
+    locale: 'ko_KR',
+  },
+  twitter: {
+    card: 'summary_large_image',
+  },
 };
 
 export const viewport: Viewport = {

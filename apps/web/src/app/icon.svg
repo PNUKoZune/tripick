@@ -1,0 +1,13 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- 선셋 마크: 광안리 하늘·해·파도 (OG 카드와 같은 장면 축약) -->
+  <defs><clipPath id="r"><rect width="64" height="64" rx="14" /></clipPath></defs>
+  <g clip-path="url(#r)">
+    <rect width="64" height="64" fill="#C9DFFC" />
+    <rect y="34" width="64" height="30" fill="#FFDFC8" opacity=".8" />
+    <circle cx="42" cy="22" r="12" fill="#FF9B70" />
+    <g fill="none" stroke-linecap="round">
+      <path d="M8 42 q6 -5 12 0 t12 0 t12 0 t12 0" stroke="#7FA9EF" stroke-width="6" />
+      <path d="M8 53 q6 -5 12 0 t12 0 t12 0 t12 0" stroke="#4C7FDD" stroke-width="6" />
+    </g>
+  </g>
+</svg>
