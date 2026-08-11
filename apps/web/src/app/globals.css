@@ -356,3 +356,117 @@ nextjs-portal {
 /* prefers-reduced-motion: reduce 에서는 위 @media 블록 자체가 매칭되지 않아
    .wvr-rise 등 애니메이션 클래스가 transform/opacity 없이 정적으로 렌더된다
    (REQ-WVR-071). */
+
+/* 앱 공통 등장 모션 — ModalShell(백드롭·패널)과 플래너 탭 전환에서 쓴다.
+   .wvr-scope 밖(포털 모달 등)에서도 쓰이므로 전역 클래스.
+   reduced-motion 에서는 블록이 매칭되지 않아 정적으로 렌더된다. */
+@media (prefers-reduced-motion: no-preference) {
+  .app-backdrop-in {
+    animation: app-fade-in 0.18s ease-out;
+  }
+  .app-panel-in {
+    animation: app-panel-in 0.26s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+  .app-tab-in {
+    animation: app-tab-in 0.22s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+  .app-tabline-in {
+    animation: app-tabline-in 0.2s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+  /* 바텀탭은 라우트 이동이라 페이지가 통째로 리마운트된다 — transition 은 못 돌고,
+     마운트 시에도 재생되는 keyframe 만 유효하다. 페이드는 opacity 만 쓴다(transform 은
+     조상에 걸리면 내부 fixed 요소의 기준이 바뀌어 탭바·FAB 가 튄다). */
+  .app-page-in {
+    animation: app-fade-in 0.24s ease-out;
+  }
+  /* 탭 이동 방향(왼→오른쪽 탭 = 오른쪽에서 등장, 반대는 왼쪽에서)을 따르는 슬라이드.
+     기본은 페이드(데스크탑·reduced 아님)이고, 모바일(<lg)에서만 좌우 오프셋이 붙는다.
+     오프셋은 transform 이 아니라 left 로 준다 — transform 은 containing block 을 만들어
+     내부 fixed 요소(탭바·FAB·시트)가 애니메이션 동안 래퍼 기준으로 튀기 때문. */
+  .app-slide-in-right,
+  .app-slide-in-left {
+    animation: app-fade-in 0.24s ease-out;
+  }
+  @media (width < 64rem) {
+    .app-slide-in-right,
+    .app-slide-in-left {
+      position: relative;
+      animation-duration: 0.28s;
+      animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1);
+    }
+    .app-slide-in-right {
+      animation-name: app-slide-in-right;
+    }
+    .app-slide-in-left {
+      animation-name: app-slide-in-left;
+    }
+    @keyframes app-slide-in-right {
+      from {
+        opacity: 0;
+        left: 28px;
+      }
+      to {
+        opacity: 1;
+        left: 0;
+      }
+    }
+    @keyframes app-slide-in-left {
+      from {
+        opacity: 0;
+        left: -28px;
+      }
+      to {
+        opacity: 1;
+        left: 0;
+      }
+    }
+  }
+  /* pop·pill 키프레임의 transform 은 Tailwind v4 scale 유틸(개별 scale 속성)과 곱으로
+     합성되므로 1 로 끝내야 활성 배율(scale-105 등)에 정확히 안착한다 */
+  .app-nav-pop {
+    animation: app-nav-pop 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+  .app-nav-pill-in {
+    animation: app-nav-pill-in 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+  @keyframes app-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes app-panel-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.98);
+    }
+  }
+  @keyframes app-tab-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  @keyframes app-tabline-in {
+    from {
+      opacity: 0;
+      transform: scaleX(0.4);
+    }
+  }
+  @keyframes app-nav-pop {
+    0% {
+      transform: scale(0.8);
+    }
+    55% {
+      transform: scale(1.12);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  @keyframes app-nav-pill-in {
+    from {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+  }
+}

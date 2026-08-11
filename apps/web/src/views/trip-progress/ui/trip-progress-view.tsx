@@ -19,7 +19,11 @@ import { ReplanToast, useReplanSubscription } from '@/features/subscribe-replan-
 import { NextStopBar, useTripProgress } from '@/features/track-trip-progress';
 import { queryKeys } from '@/shared/api/query-keys';
 import { LocationPermissionBanner, useCurrentLocation } from '@/shared/location';
-import { AppBottomNavigation, AppDesktopNavigation } from '@/shared/ui/app-frame';
+import {
+  AppBottomNavigation,
+  AppDesktopNavigation,
+  useNavSlideClass,
+} from '@/shared/ui/app-frame';
 import { AlternativeSheet } from '@/widgets/alternative-sheet';
 import { LiveMap } from '@/widgets/live-map';
 import { TripProgressTimeline } from '@/widgets/trip-progress-timeline';
@@ -84,6 +88,8 @@ function TripProgressContent() {
 
   const [alternativeItem, setAlternativeItem] = useState<PlannerItineraryItemDto | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  // 탭 밖 화면이라 항상 페이드지만, 직전 탭 기록을 갱신해 다음 탭 이동 방향이 꼬이지 않게 한다
+  const pageInClass = useNavSlideClass();
 
   const selectedMarker = useMemo(
     () => dayMarkers.find((marker) => marker.itemId === selectedItemId) ?? null,
@@ -98,7 +104,9 @@ function TripProgressContent() {
     <div className="bg-[#F7F8FA]">
       {/* 모바일 (< lg): 지도 위 + 일정 아래 풀스크린 셸 */}
       <div className="lg:hidden">
-        <div className="mx-auto flex h-dvh max-w-[430px] flex-col overflow-hidden bg-white">
+        <div
+          className={`${pageInClass} mx-auto flex h-dvh max-w-[430px] flex-col overflow-hidden bg-white`}
+        >
           <header className="flex shrink-0 items-center justify-between border-b border-[#E5E8EB] px-5 py-4">
             <div>
               <div className="text-[12px] font-bold tracking-wide text-[#3182F6]">여행 중</div>
@@ -148,7 +156,9 @@ function TripProgressContent() {
       {/* 태블릿·PC (≥ lg): 좌측 네비 + 큰 지도 + 우측 일정 패널 */}
       <div className="mx-auto hidden h-dvh w-full max-w-[1640px] lg:grid lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:px-6">
         <AppDesktopNavigation />
-        <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_380px] overflow-hidden border-x border-[#E5E8EB] bg-white xl:grid-cols-[minmax(0,1fr)_440px]">
+        <div
+          className={`${pageInClass} grid min-h-0 grid-cols-[minmax(0,1fr)_380px] overflow-hidden border-x border-[#E5E8EB] bg-white xl:grid-cols-[minmax(0,1fr)_440px]`}
+        >
           <main className="relative min-h-0">
             <LiveMap
               center={trip?.mapCenter ?? DEFAULT_CENTER}
@@ -223,9 +233,11 @@ function TripProgressEmpty({
   loading: boolean;
   upcoming: TripSummaryDto[];
 }) {
+  const pageInClass = useNavSlideClass();
+
   return (
     <div className="min-h-dvh bg-[#F7F8FA]">
-      <div className="mx-auto min-h-dvh max-w-[430px] bg-white pb-[88px]">
+      <div className={`${pageInClass} mx-auto min-h-dvh max-w-[430px] bg-white pb-[88px]`}>
         <header className="px-5 pb-4 pt-8">
           <div className="text-[12px] font-bold tracking-wide text-[#3182F6]">여행 중</div>
           <h1 className="mt-0.5 text-[22px] font-bold leading-8 text-[#191F28]">실시간 여행</h1>
