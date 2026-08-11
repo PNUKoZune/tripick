@@ -160,17 +160,26 @@ export class UsersService {
   }
 
   /**
-   * 이메일 인증 완료 처리 + 소비된 토큰이 들고 온 대기 비밀번호 활성화.
+   * 이메일 인증 완료 처리 + 소비된 토큰이 들고 온 가입 신청 내용 적용.
    *
-   * 비밀번호는 호출부(소비한 토큰)가 준 것만 켠다 — 계정에 남아 있는 값을 켜면 어느 신청의
-   * 비밀번호인지 알 수 없다. 이미 비밀번호가 있는 계정은 덮지 않는다: 주인이 확정된 계정에
-   * 인증 링크로 비밀번호를 심는 경로가 바로 계정 탈취다(변경은 재설정 플로우만).
+   * 값은 호출부(소비한 토큰)가 준 것만 켠다 — 계정에 남아 있는 값을 켜면 어느 신청의 것인지
+   * 알 수 없다. 이미 비밀번호가 있는 계정은 손대지 않는다: 주인이 확정된 계정에 인증 링크로
+   * 비밀번호를 심는 경로가 바로 계정 탈취다(변경은 재설정 플로우만).
+   *
+   * 닉네임도 비밀번호와 같은 조건에서만 적용한다. 계정 닉네임은 첫 신청이 정하는데 실제
+   * 주인은 링크를 누른 신청이므로, 승격되는 신청의 이름으로 맞춰 준다 — 안 그러면 남의
+   * 이메일로 먼저 가입해 둔 쪽이 정한 이름을 주인이 그대로 쓰게 된다.
    */
-  async markEmailVerified(id: string, pendingPasswordHash?: string | null): Promise<void> {
+  async markEmailVerified(
+    id: string,
+    pending?: { passwordHash?: string | null; nickname?: string | null },
+  ): Promise<void> {
     const user = await this.findById(id);
     if (!user) throw new NotFoundException(`User ${id} not found`);
-    if (pendingPasswordHash && !user.passwordHash) {
-      user.passwordHash = pendingPasswordHash;
+    if (pending?.passwordHash && !user.passwordHash) {
+      user.passwordHash = pending.passwordHash;
+      const nickname = (pending.nickname ?? '').trim();
+      if (nickname && nickname.length <= NICKNAME_MAX_LENGTH) user.nickname = nickname;
     }
     if (!user.emailVerifiedAt) user.emailVerifiedAt = new Date();
     await this.repo.save(user);

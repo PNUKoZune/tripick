@@ -46,6 +46,16 @@ export class EmailTokenEntity {
   @Column({ type: 'varchar', nullable: true })
   pendingPasswordHash?: string | null;
 
+  /**
+   * 이 토큰을 소비할 때 계정에 적용할 닉네임 (verify_email 전용).
+   *
+   * 비밀번호와 같은 신청에서 나온 값이라 같이 움직인다. 계정 닉네임은 첫 신청이 정하는데,
+   * 링크를 누른 신청이 계정의 주인이 되므로 닉네임도 그 신청의 것이어야 한다 — 안 그러면
+   * 남의 이메일로 먼저 가입해 둔 쪽이 정한 이름을 주인이 그대로 쓰게 된다.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  pendingNickname?: string | null;
+
   /** 사용된(소비된) 시각. null = 아직 사용 가능. */
   @Column({ type: 'timestamptz', nullable: true })
   consumedAt?: Date;

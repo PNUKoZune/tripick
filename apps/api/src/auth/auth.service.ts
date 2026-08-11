@@ -49,6 +49,12 @@ const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** 이 시간 안의 재사용은 탈취가 아니라 경합·재시도로 본다 (family 폐기 대상에서 제외). */
 const REFRESH_ROTATION_GRACE_MS = 30 * 1000;
 
+/** 인증 링크가 켤 가입 신청 내용. 같은 신청에서 나온 값이라 항상 같이 움직인다. */
+interface PendingSignup {
+  passwordHash: string;
+  nickname?: string | null;
+}
+
 export interface TokenContext {
   userAgent?: string;
   ipAddress?: string;
@@ -93,7 +99,7 @@ export class AuthService {
     if (!existing) {
       const created = await this.usersService.createEmailUser({ email, nickname });
       if (created) {
-        await this.dispatchVerification(created, passwordHash);
+        await this.dispatchVerification(created, { passwordHash, nickname });
         return signupResult(email);
       }
       // 동시 가입 경쟁에서 졌다(유니크 충돌) — 상대가 방금 만든 계정을 다시 읽어
@@ -108,11 +114,11 @@ export class AuthService {
     // 이번 요청의 비밀번호는 **이번에 보내는 토큰에만** 실린다. 계정에 대기 칸을 두고 먼저
     // 심은 쪽이 이기게 하면 남의 이메일을 선점해 두고 주인이 자기 가입 링크를 누르는 순간
     // 공격자 비밀번호가 켜지고, 나중 신청이 이기게 하면 주인이 기다리던 링크의 의미가 바뀐다.
-    // 토큰이 각자 자기 신청의 비밀번호를 들고 있으면 **누른 링크의 비밀번호**만 켜진다.
+    // 토큰이 각자 자기 신청을 들고 있으면 **누른 링크의 비밀번호·닉네임**만 켜진다.
     // (`passwordHash` 까지 보는 건 방어적 조건이다 — 값이 있으면 인증을 마친 계정이므로
     //  emailVerifiedAt 이 어떤 이유로 비어 있어도 주인 있는 계정으로 취급한다.)
     if (existing && !existing.emailVerifiedAt && !existing.kakaoId && !existing.passwordHash) {
-      await this.dispatchVerification(existing, passwordHash);
+      await this.dispatchVerification(existing, { passwordHash, nickname });
       return signupResult(email);
     }
 
@@ -141,8 +147,8 @@ export class AuthService {
       // 비밀번호가 아직 pending(인증 전)인 사용자는 인증을 안내한다. 대기 비밀번호는 계정이
       // 아니라 살아 있는 인증 토큰이 들고 있으므로 거기서 꺼내 맞춰 본다.
       // 403 으로 던져야 클라이언트가 메시지를 그대로 노출(401 은 만료 안내로 치환됨).
-      const pending = user ? await this.pendingPasswordFromLiveToken(user.id) : null;
-      if (pending && (await bcrypt.compare(dto.password, pending))) {
+      const pending = user ? await this.livePendingSignup(user.id) : null;
+      if (pending && (await bcrypt.compare(dto.password, pending.passwordHash))) {
         throw new ForbiddenException('이메일 인증을 완료해야 로그인할 수 있어요. 메일함을 확인해주세요.');
       }
       // 계정이 없어도 해시 비교 비용을 똑같이 치른다. 바로 던지면 cost 12 짜리 bcrypt 를
@@ -170,9 +176,12 @@ export class AuthService {
     const user = await this.usersService.findById(record.userId);
     if (!user) throw new NotFoundException('사용자를 찾을 수 없어요.');
     await this.consumeEmailToken(record);
-    // 켜지는 비밀번호는 **이 토큰이 들고 온 것**이다 — 계정에 남은 값을 켜면 어느 신청의
-    // 비밀번호인지 알 수 없다(같은 이메일로 여러 신청이 들어올 수 있다).
-    await this.usersService.markEmailVerified(user.id, record.pendingPasswordHash);
+    // 켜지는 비밀번호·닉네임은 **이 토큰이 들고 온 것**이다 — 계정에 남은 값을 켜면 어느
+    // 신청의 것인지 알 수 없다(같은 이메일로 여러 신청이 들어올 수 있다).
+    await this.usersService.markEmailVerified(user.id, {
+      passwordHash: record.pendingPasswordHash ?? null,
+      nickname: record.pendingNickname ?? null,
+    });
     return { ok: true, message: '이메일 인증이 완료됐어요.' };
   }
 
@@ -448,18 +457,15 @@ export class AuthService {
   /**
    * 인증 메일 발송 + 사용자에게 이미 보낸 미사용 토큰은 만료 처리.
    *
-   * `pendingPasswordHash` 는 이 신청이 인증되면 켜질 비밀번호다. 재발송처럼 비밀번호가
-   * 없는 호출은 지금 살아 있는 토큰의 것을 **이어받는다** — 안 그러면 재발송 링크가 인증만
-   * 하고 비밀번호는 없는 계정을 만들어, 방금 가입한 사용자가 로그인을 못 한다.
+   * `pending` 은 이 신청이 인증되면 계정에 적용될 값이다. 재발송처럼 자기 신청 내용이 없는
+   * 호출은 지금 살아 있는 토큰의 것을 **이어받는다** — 안 그러면 재발송 링크가 인증만 하고
+   * 비밀번호는 없는 계정을 만들어, 방금 가입한 사용자가 로그인을 못 한다.
    */
-  private async dispatchVerification(
-    user: UserEntity,
-    pendingPasswordHash?: string,
-  ): Promise<void> {
+  private async dispatchVerification(user: UserEntity, pending?: PendingSignup): Promise<void> {
     const email = user.email;
     if (!email) return;
     // 만료시키기 전에 읽어야 한다 — expirePendingTokens 가 먼저 돌면 이어받을 값이 사라진다.
-    const carried = pendingPasswordHash ?? (await this.pendingPasswordFromLiveToken(user.id));
+    const carried = pending ?? (await this.livePendingSignup(user.id));
     await this.expirePendingTokens(user.id, 'verify_email');
     const raw = generateRandomToken();
     await this.emailTokenRepo.save(
@@ -467,7 +473,8 @@ export class AuthService {
         userId: user.id,
         purpose: 'verify_email',
         tokenHash: sha256(raw),
-        pendingPasswordHash: carried,
+        pendingPasswordHash: carried?.passwordHash ?? null,
+        pendingNickname: carried?.nickname ?? null,
         expiresAt: new Date(Date.now() + VERIFY_TOKEN_TTL_MS),
       }),
     );
@@ -517,16 +524,17 @@ export class AuthService {
   }
 
   /**
-   * 아직 살아 있는 인증 토큰이 들고 있는 대기 비밀번호. 없으면 null.
+   * 아직 살아 있는 인증 토큰이 들고 있는 가입 신청 내용. 없으면 null.
    * 재발송이 이어받을 값이자, 로그인 실패 시 "인증부터 하세요" 안내를 가를 기준이다.
    */
-  private async pendingPasswordFromLiveToken(userId: string): Promise<string | null> {
+  private async livePendingSignup(userId: string): Promise<PendingSignup | null> {
     const row = await this.emailTokenRepo.findOne({
       where: { userId, purpose: 'verify_email', consumedAt: IsNull() },
       order: { createdAt: 'DESC' },
     });
     if (!row?.pendingPasswordHash) return null;
-    return row.expiresAt.getTime() < Date.now() ? null : row.pendingPasswordHash;
+    if (row.expiresAt.getTime() < Date.now()) return null;
+    return { passwordHash: row.pendingPasswordHash, nickname: row.pendingNickname ?? null };
   }
 
   /** 아직 쓸 수 있는 토큰 조회. 소비는 하지 않는다 — 부수효과 전에 사전 조건을 다 보려고 분리했다. */

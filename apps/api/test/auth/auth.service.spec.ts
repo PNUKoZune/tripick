@@ -48,7 +48,7 @@ function queryBuilder(execResult: { affected?: number } = { affected: 1 }) {
   return qb;
 }
 
-/** 아직 살아 있는 인증 토큰 행. 대기 비밀번호는 계정이 아니라 여기 실린다. */
+/** 아직 살아 있는 인증 토큰 행. 대기 비밀번호·닉네임은 계정이 아니라 여기 실린다. */
 function liveVerifyToken(pendingPasswordHash: string | null, over: Record<string, any> = {}) {
   return {
     id: 'et-old',
@@ -56,6 +56,7 @@ function liveVerifyToken(pendingPasswordHash: string | null, over: Record<string
     purpose: 'verify_email',
     tokenHash: 'old-hash',
     pendingPasswordHash,
+    pendingNickname: null,
     expiresAt: new Date(Date.now() + 60_000),
     createdAt: new Date(),
     ...over,
@@ -240,7 +241,9 @@ describe('AuthService — email signup', () => {
   it('binds this request password to the token it sends, not the first signup', async () => {
     const { service, usersService, emailTokenRepo } = createHarness();
     usersService.findByEmail.mockResolvedValue(user({ email: 'a@b.com' }));
-    emailTokenRepo.findOne.mockResolvedValue(liveVerifyToken('attacker-hash'));
+    emailTokenRepo.findOne.mockResolvedValue(
+      liveVerifyToken('attacker-hash', { pendingNickname: '공격자' }),
+    );
 
     await service.signupWithEmail({
       email: 'a@b.com',
@@ -252,6 +255,8 @@ describe('AuthService — email signup', () => {
     expect(saved.purpose).toBe('verify_email');
     expect(saved.pendingPasswordHash).not.toBe('attacker-hash');
     expect(await bcrypt.compare('victim1234', saved.pendingPasswordHash)).toBe(true);
+    // 닉네임도 같은 신청의 것이어야 한다 — 계정 이름은 첫 신청이 정하지만 주인은 링크를 누른 쪽이다.
+    expect(saved.pendingNickname).toBe('앨리스');
   });
 
   /** 인증을 마친 이메일 계정은 주인이 확정된 상태 — 안내만 가고 인증 메일은 안 간다. */
@@ -576,12 +581,15 @@ describe('AuthService — password reset & verify', () => {
   it('carries the pending password forward on resend', async () => {
     const { service, usersService, emailTokenRepo } = createHarness();
     usersService.findByEmail.mockResolvedValue(user({ email: 'a@b.com' }));
-    emailTokenRepo.findOne.mockResolvedValue(liveVerifyToken('signup-hash'));
+    emailTokenRepo.findOne.mockResolvedValue(
+      liveVerifyToken('signup-hash', { pendingNickname: '보통사용자' }),
+    );
 
     await service.resendVerification('a@b.com');
 
     const saved = emailTokenRepo.save.mock.calls.at(-1)![0] as any;
     expect(saved.pendingPasswordHash).toBe('signup-hash');
+    expect(saved.pendingNickname).toBe('보통사용자');
   });
 
   /** 만료된 토큰의 비밀번호는 이어받지 않는다 — 죽은 신청을 재발송으로 되살리는 셈이 된다. */
@@ -598,17 +606,24 @@ describe('AuthService — password reset & verify', () => {
     expect(saved.pendingPasswordHash).toBeNull();
   });
 
-  /** 켜지는 비밀번호는 계정에 남은 값이 아니라 **소비한 토큰**이 들고 온 것이어야 한다. */
-  it('promotes the password carried by the consumed token', async () => {
+  /** 켜지는 비밀번호·닉네임은 계정에 남은 값이 아니라 **소비한 토큰**이 들고 온 것이어야 한다. */
+  it('promotes the password and nickname carried by the consumed token', async () => {
     const { service, emailTokenRepo, usersService } = createHarness();
     emailTokenRepo.findOne.mockResolvedValue(
-      liveVerifyToken('this-token-hash', { id: 'et-1', consumedAt: null }),
+      liveVerifyToken('this-token-hash', {
+        id: 'et-1',
+        consumedAt: null,
+        pendingNickname: '링크를 누른 사람',
+      }),
     );
     usersService.findById.mockResolvedValue(user());
 
     await service.verifyEmail('tok');
 
-    expect(usersService.markEmailVerified).toHaveBeenCalledWith('u1', 'this-token-hash');
+    expect(usersService.markEmailVerified).toHaveBeenCalledWith('u1', {
+      passwordHash: 'this-token-hash',
+      nickname: '링크를 누른 사람',
+    });
   });
 
   it('rejects a weak new password on reset', async () => {
