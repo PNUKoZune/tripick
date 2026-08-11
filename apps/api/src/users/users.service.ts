@@ -32,10 +32,7 @@ const ALLOWED_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
 const MAX_REASON_DETAIL_LENGTH = 500;
 
-export type PublicProfile = Omit<
-  UserEntity,
-  'passwordHash' | 'pendingPasswordHash'
->;
+export type PublicProfile = Omit<UserEntity, 'passwordHash'>;
 
 @Injectable()
 export class UsersService {
@@ -61,9 +58,8 @@ export class UsersService {
 
   /** 클라이언트에 돌려줘도 되는 프로필. passwordHash 등 민감 컬럼을 제거한다. */
   publicProfile(user: UserEntity): PublicProfile {
-    const { passwordHash, pendingPasswordHash, ...safe } = user;
+    const { passwordHash, ...safe } = user;
     void passwordHash;
-    void pendingPasswordHash;
     return safe;
   }
 
@@ -116,7 +112,9 @@ export class UsersService {
   }
 
   /**
-   * 신규 이메일 가입. 비밀번호는 인증 전이므로 pending 으로만 저장한다.
+   * 신규 이메일 가입. **비밀번호는 저장하지 않는다** — 인증 전 대기 비밀번호는 그 신청이
+   * 만든 인증 토큰(`EmailTokenEntity.pendingPasswordHash`)이 들고 있다가 링크를 누를 때
+   * 승격된다. 계정에 대기 칸을 두면 같은 이메일로 들어온 여러 신청이 그 칸을 두고 다툰다.
    *
    * 같은 이메일로 동시에 두 요청이 들어오면 한쪽은 유니크 제약에 걸린다 — 그걸 그대로
    * 흘리면 500 이 난다. 이메일 충돌은 "이미 있는 계정"이므로 null 을 돌려주고 호출부가
@@ -125,7 +123,6 @@ export class UsersService {
    */
   async createEmailUser(params: {
     email: string;
-    passwordHash: string;
     nickname: string;
   }): Promise<UserEntity | null> {
     const base = localPart(params.email) || params.nickname;
@@ -140,7 +137,6 @@ export class UsersService {
         return await this.repo.save(
           this.repo.create({
             email: params.email,
-            pendingPasswordHash: params.passwordHash,
             nickname: params.nickname,
             handle,
           }),
@@ -159,18 +155,31 @@ export class UsersService {
     const user = await this.findById(id);
     if (!user) throw new NotFoundException(`User ${id} not found`);
     user.passwordHash = passwordHash;
-    user.pendingPasswordHash = null;
     if (!user.emailVerifiedAt) user.emailVerifiedAt = new Date();
     return this.repo.save(user);
   }
 
-  /** 이메일 인증 완료 처리 + 대기 중이던 비밀번호가 있으면 활성화. */
-  async markEmailVerified(id: string): Promise<void> {
+  /**
+   * 이메일 인증 완료 처리 + 소비된 토큰이 들고 온 가입 신청 내용 적용.
+   *
+   * 값은 호출부(소비한 토큰)가 준 것만 켠다 — 계정에 남아 있는 값을 켜면 어느 신청의 것인지
+   * 알 수 없다. 이미 비밀번호가 있는 계정은 손대지 않는다: 주인이 확정된 계정에 인증 링크로
+   * 비밀번호를 심는 경로가 바로 계정 탈취다(변경은 재설정 플로우만).
+   *
+   * 닉네임도 비밀번호와 같은 조건에서만 적용한다. 계정 닉네임은 첫 신청이 정하는데 실제
+   * 주인은 링크를 누른 신청이므로, 승격되는 신청의 이름으로 맞춰 준다 — 안 그러면 남의
+   * 이메일로 먼저 가입해 둔 쪽이 정한 이름을 주인이 그대로 쓰게 된다.
+   */
+  async markEmailVerified(
+    id: string,
+    pending?: { passwordHash?: string | null; nickname?: string | null },
+  ): Promise<void> {
     const user = await this.findById(id);
     if (!user) throw new NotFoundException(`User ${id} not found`);
-    if (user.pendingPasswordHash) {
-      user.passwordHash = user.pendingPasswordHash;
-      user.pendingPasswordHash = null;
+    if (pending?.passwordHash && !user.passwordHash) {
+      user.passwordHash = pending.passwordHash;
+      const nickname = (pending.nickname ?? '').trim();
+      if (nickname && nickname.length <= NICKNAME_MAX_LENGTH) user.nickname = nickname;
     }
     if (!user.emailVerifiedAt) user.emailVerifiedAt = new Date();
     await this.repo.save(user);

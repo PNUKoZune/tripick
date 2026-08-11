@@ -32,20 +32,15 @@ export class UserEntity {
   @Column({ type: 'varchar', nullable: true })
   handle?: string | null;
 
-  /** bcrypt hash. 이메일 가입자만 가짐. 카카오 단독 가입자는 null. 이메일 인증 완료 후에만 채워짐. */
+  /**
+   * bcrypt hash. 이메일 가입자만 가짐. 카카오 단독 가입자는 null. 이메일 인증 완료 후에만 채워짐.
+   *
+   * 인증 대기 중인 비밀번호는 여기 두지 않는다 — 계정에 한 칸만 있으면 같은 이메일로 들어온
+   * 여러 가입 신청이 그 칸을 두고 다투게 되고, 링크를 누른 사람이 신청하지 않은 비밀번호가
+   * 켜질 수 있다. `EmailTokenEntity.pendingPasswordHash` 로 신청마다 따로 들고 간다.
+   */
   @Column({ nullable: true })
   passwordHash?: string;
-
-  /**
-   * 인증 대기 중인 bcrypt hash. **신규 가입 시점에만** 채워지고, 이메일 인증 토큰을
-   * 소비할 때 passwordHash 로 승격한다. (인증 전에는 로그인 불가)
-   *
-   * 이미 있는 계정에는 절대 다시 쓰지 않는다 — 남의 계정에 비밀번호를 심어 두고 주인이
-   * 인증 링크를 누르게 만드는 탈취 경로가 열린다. 기존 계정의 비밀번호 설정·변경은
-   * 재설정 플로우(setPassword)만 통한다.
-   */
-  @Column({ type: 'varchar', nullable: true })
-  pendingPasswordHash?: string | null;
 
   /** 이메일 인증 완료 시각. null = 미인증 상태. 카카오 가입자는 자동으로 채워짐. */
   @Column({ type: 'timestamptz', nullable: true })
