@@ -80,7 +80,7 @@
 ### 5.3 배치 · 검증 · 재생성
 
 - `buildPerDayDeterministicPlan(poolsByDay, itemsPerDay)`: `day = dayIndex+1` 로 미리 배정. `buildDraft` 가 `item.day` 로 그룹핑하므로 지역 간 섞임이 없다.
-- 검증 실패 시 재생성 루프(`rebuildValidDraft`)는 모드에 맞는 배치 생성기(`planFactory`)를 받는다. 일자별은 각 풀을 rotate 해 재시도, 단일은 기존 `buildDeterministicPlan` rotate.
+- 검증 실패 시 재생성 루프(`rebuildValidDraft`)는 모드에 맞는 배치 생성기(`planFactory`)를 받는다. 두 모드 모두 후보를 `orderByProximity`(직전 배치 장소에서 하버사인 최근접) 로 다시 이어 재시도한다 — 일자별은 각 풀을, 단일은 통합 풀을 정렬해 `buildDeterministicPlan` 에 넘긴다. 지역으로 좁혀도 지역 안에서 후보가 흩어질 수 있어 일자별 모드에도 같은 정렬을 적용한다.
 - **must-include**(`enforceMustInclude`): 일자별 모드에서는 누락 필수 장소를 **이미 배치된 후보 중 좌표가 가장 가까운 항목의 일차**에 넣어 엉뚱한 지역 일차에 섞이지 않게 한다. 단일 지역 모드는 기존 라운드로빈 유지. (생성 시엔 must 가 비어 무해하고, 재계획 경로에서 의미가 있다.)
 
 [`planner.module.ts`](../../apps/api/src/planner/planner.module.ts) 에 `TripDayEntity` forFeature 를 등록해 `PlannerService` 가 `TripsService` 의존(순환) 없이 `trip_days` 를 직접 읽는다.

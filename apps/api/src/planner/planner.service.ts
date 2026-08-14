@@ -334,7 +334,7 @@ export class PlannerService {
     const guaranteedPlan = this.enforceMustInclude(agentPlan, mustCandidates, planDays, perDayMode);
     const aiDraft = await this.buildDraft(guaranteedPlan, draftContext);
     const aiValidation = await this.validateDraft(aiDraft, draftContext);
-    // 검증 실패 시 후보 rotate 기반 결정적 재생성. 모드에 맞는 배치 생성기를 넘긴다.
+    // 검증 실패 시 근접 후보 우선 재정렬 기반 결정적 재생성. 모드에 맞는 배치 생성기를 넘긴다.
     const rebuildAttempts = perDayMode
       ? Math.min(3, Math.max(1, ...poolsByDay!.map((pool) => pool.length)))
       : Math.min(3, candidates.length);
@@ -342,7 +342,10 @@ export class PlannerService {
       ? (attempt: number) =>
           this.enforceMustInclude(
             this.buildPerDayDeterministicPlan(
-              poolsByDay!.map((pool) => this.rotate(pool, attempt)),
+              // 풀은 이미 그 일차 지역으로 좁혀져 있지만, 지역 안에서도 흩어질 수 있어 같은 기준으로 잇는다.
+              poolsByDay!.map((pool, index) =>
+                this.orderByProximity(pool, attempt, this.dayOrigin(draftContext, planDays[index]!)),
+              ),
               itemsPerDay,
               planDays,
               anchorByDay,
@@ -353,7 +356,10 @@ export class PlannerService {
           )
       : (attempt: number) =>
           this.enforceMustInclude(
-            this.buildDeterministicPlan(this.rotate(candidates, attempt), draftContext),
+            this.buildDeterministicPlan(
+              this.orderByProximity(candidates, attempt, this.dayOrigin(draftContext, planDays[0]!)),
+              draftContext,
+            ),
             mustCandidates,
             planDays,
           );
@@ -717,7 +723,7 @@ export class PlannerService {
 
     let lastValidation = failedAiValidation;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
-      // 후보 rotate 로 필수 장소가 상위 slice 밖으로 밀릴 수 있어 결정적 폴백에서도 강제 주입한다.
+      // 근접 재정렬로 필수 장소가 상위 slice 밖으로 밀릴 수 있어 결정적 폴백에서도 강제 주입한다.
       const fallbackPlan = makePlan(attempt);
       const fallbackDraft = await this.buildDraft(fallbackPlan, context);
       const fallbackValidation = await this.validateDraft(fallbackDraft, context);
@@ -1060,10 +1066,69 @@ export class PlannerService {
     return adjusted;
   }
 
-  private rotate<T>(items: T[], offset: number): T[] {
-    if (items.length === 0) return [];
-    const pivot = offset % items.length;
-    return [...items.slice(pivot), ...items.slice(0, pivot)];
+  /**
+   * 재시도용 후보 정렬 — 시드 하나를 잡고, 남은 후보 중 **직전에 배치한 장소에서 가장 가까운
+   * 것**을 차례로 잇는다(그리디 최근접 순회). `buildDeterministicPlan`·
+   * `buildPerDayDeterministicPlan` 이 이 순서를 앞에서부터 잘라 일차를 채우므로, 정렬만 바꿔도
+   * 한 일차가 지리적으로 뭉친 후보로 채워진다.
+   *
+   * 이전 단순 회전(rotate)은 CRAG 점수 순서를 그대로 두고 시작점만 옮겼다. pgvector 카탈로그가
+   * 시도 단위로 적재돼 있어 "부산광역시" 같은 광역 목적지는 상위 후보가 해운대·금정산·오륙도로
+   * 흩어지는데, 그러면 어느 회전에서도 이동시간 제약을 못 맞춰 여행 생성이 통째로 롤백됐다.
+   *
+   * 거리는 하버사인 직선거리로만 본다 — 실제 경로 조회는 후보 수의 제곱만큼 외부 API 를 때리므로
+   * 순위만 정하는 데는 과하다. 최종 판정은 어차피 `ConstraintEngine` 이 실제 ETA 로 한다.
+   *
+   * CRAG 점수 체계(취향·popularity)는 손대지 않는다 — 여기 들어오는 후보는 이미 취향 상위로
+   * 걸러진 풀이고, 이 정렬은 그 안에서의 **방문 순서**만 정한다.
+   *
+   * @param attempt 재시도 회차. 시드를 바꿔 회차마다 다른 군집(=다른 일차 경계)을 만든다.
+   * @param origin  첫 이동의 실제 출발지(오늘 일차를 다시 짤 때의 사용자 현재 위치).
+   *                주면 거기서 가까운 순으로 시드를 고른다.
+   */
+  private orderByProximity<T extends { coordinates: PlaceDto['coordinates'] }>(
+    candidates: T[],
+    attempt: number,
+    origin?: PlaceDto['coordinates'],
+  ): T[] {
+    if (candidates.length === 0) return [];
+
+    // 시드 후보 순서: origin 이 있으면 거기서 가까운 순, 없으면 CRAG 순위 그대로.
+    const seedOrder = origin
+      ? [...candidates].sort(
+          (a, b) =>
+            haversineMeters(origin, a.coordinates) - haversineMeters(origin, b.coordinates),
+        )
+      : candidates;
+    const remaining = [...candidates];
+    const seed = seedOrder[attempt % seedOrder.length]!;
+    const ordered: T[] = remaining.splice(remaining.indexOf(seed), 1);
+
+    while (remaining.length > 0) {
+      const from = ordered[ordered.length - 1]!.coordinates;
+      let bestIndex = 0;
+      let bestDistance = Infinity;
+      remaining.forEach((candidate, index) => {
+        const distance = haversineMeters(from, candidate.coordinates);
+        // 부등호가 `<` 이라 같은 거리면 앞선 후보(= CRAG 상위)가 남는다.
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestIndex = index;
+        }
+      });
+      ordered.push(...remaining.splice(bestIndex, 1));
+    }
+    return ordered;
+  }
+
+  /**
+   * 그 일차 첫 이동의 출발지. 오늘을 다시 짜는 일차(앵커 있음)만 사용자의 현재 위치에서
+   * 출발한다 — `buildDraft` 가 앵커된 일차의 첫 항목 이동시간을 현재 위치 기준으로 재는 것과
+   * 같은 기준이어야, 근접 정렬이 고른 순서와 실제 이동시간 계산이 어긋나지 않는다.
+   */
+  private dayOrigin(context: DraftBuildContext, day: number): PlaceDto['coordinates'] | undefined {
+    if (!context.anchorByDay.has(day)) return undefined;
+    return context.options.currentLocation;
   }
 
   private async estimateTravelTime(
