@@ -2,18 +2,46 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { getSeedCandidates, tasteTagsToKeywords } from './place-seeds';
 import { CragEvaluatorService } from './crag-evaluator.service';
+import { DestinationAnchorService } from './destination-anchor.service';
 import { KakaoLocalService } from './kakao-local.service';
 import { NaverSearchService, NEUTRAL_POPULARITY } from './naver-search.service';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
+import { destinationRegionFilter } from './region-code';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { isEligibleItineraryCandidate } from './place-eligibility';
 import type {
   CandidatePlace,
+  DestinationAnchor,
   RawPlaceCandidate,
   RetrievalContext,
   RetrievalResult,
   RetrievalSource,
 } from './types';
+
+/** 일정에 식사 슬롯을 채우는 카테고리. 앵커 반경이 충분한지 판정할 때 쓴다. */
+const DINING_CATEGORIES: ReadonlySet<string> = new Set(['restaurant', 'cafe']);
+
+/**
+ * 앵커 반경 확장 단계(m). 부족하면 다음 단계로 넓히고, 마지막까지 부족하면 지역 전역을 덧댄다.
+ *
+ * 실측 카탈로그(10,333행)에서 반경별 후보 수(괄호는 식당·카페)를 재서 정했다:
+ *
+ * | 앵커 | 2km | 5km | 10km |
+ * |---|---|---|---|
+ * | 광안리 | 17 (2) | 144 (61) | 368 (122) |
+ * | 서면역 | 36 (4) | 151 (62) | 386 (128) |
+ * | 감천문화마을 | 65 (25) | 107 (30) | 286 (98) |
+ * | 남이섬 | 7 (1) | 55 (24) | 96 (46) |
+ * | 에버랜드 | 2 (0) | 4 (1) | 15 (2) |
+ *
+ * 고정 반경이 안 되는 이유가 이 표에 다 있다 — 2km 로 고정하면 광안리에 식사 후보가 2곳뿐이고,
+ * 10km 로 고정하면 감천문화마을 여행이 부산 절반으로 번진다. 에버랜드처럼 카탈로그가 얇은
+ * 앵커는 어떤 반경으로도 못 채우므로 지역 폴백이 있어야 한다.
+ */
+const DEFAULT_RADIUS_STEPS_M = [2000, 5000, 10000] as const;
+
+/** 앵커 반경이 "충분하다"고 볼 최소 종류별 후보 수. 일정에 식사와 볼거리가 둘 다 필요하다. */
+const MIN_KIND_COUNT = 4;
 
 @Injectable()
 export class PlaceRetrievalService {
@@ -26,13 +54,20 @@ export class PlaceRetrievalService {
     private readonly kakaoLocal: KakaoLocalService,
     private readonly evaluator: CragEvaluatorService,
     private readonly naverSearch: NaverSearchService,
+    private readonly anchors: DestinationAnchorService,
   ) {}
 
   async retrieve(inputContext: RetrievalContext): Promise<RetrievalResult> {
     // 앞단: 목적지 네이버 추천 글로 대중 인지도 인덱스를 만들어 랭킹 컨텍스트에 주입한다.
     // 이후 모든 evaluator.rank 호출이 이 인덱스로 마이너 장소를 후순위로 민다.
     const popularityIndex = await this.naverSearch.getPopularityIndex(inputContext.destination);
-    const context: RetrievalContext = { ...inputContext, popularityIndex };
+    // 행정구역으로 안 잡히는 목적지('광안리')만 좌표 앵커로 해석된다. 나머지는 null 이라
+    // 아래 경로가 통째로 기존과 같다.
+    const anchor = await this.anchors.resolve(inputContext.destination);
+    // 지역 코드는 한 번만 해석해 내려보낸다 — 소비측이 destination 문자열에서 각자
+    // 재계산하면 앵커로 알아낸 지역('광안리'→부산)을 못 보고 죽은 코드로 되돌아간다.
+    const regionFilter = anchor?.region ?? destinationRegionFilter(inputContext.destination);
+    const context: RetrievalContext = { ...inputContext, popularityIndex, regionFilter };
     const limit = context.limit ?? 16;
     const queryText = this.buildQueryText(context);
     const sources: RetrievalSource[] = [];
@@ -51,22 +86,38 @@ export class PlaceRetrievalService {
     // 목적지/이벤트 질의 벡터에 저장된 취향 벡터를 가중 결합해 검색 자체를 개인화
     const searchEmbedding = this.blendPreference(queryEmbedding, preferenceVector);
 
-    await this.seedLocalCatalogIfNeeded(context.destination);
+    // 앵커가 있으면 그 지역 카탈로그는 이미 적재돼 있다(앵커 해석 자체가 지역을 알아낸 것).
+    // '광안리' 로 시드를 찾아 봐야 전용 카탈로그가 없어 매번 빈손으로 로그만 남는다.
+    if (!anchor) await this.seedLocalCatalogIfNeeded(context.destination);
 
-    const pgvector = this.filterEligibleCandidates(
-      await this.placeEmbeddings.searchByEmbedding(
+    const poolSize = limit * this.candidatePoolMultiplier();
+    let pgvector: RawPlaceCandidate[];
+    if (anchor) {
+      const around = await this.searchAroundAnchor(
+        anchor,
         searchEmbedding,
-        context.destination,
-        limit * this.candidatePoolMultiplier(),
+        poolSize,
+        limit,
         preferenceVector,
-      ),
-      'pgvector',
-    );
+      );
+      // 확정된 반경을 컨텍스트에 실어 카카오 폴백이 같은 범위를 보게 한다.
+      context.anchor = { ...anchor, radiusM: around.radiusM };
+      pgvector = around.candidates;
+    } else {
+      pgvector = this.filterEligibleCandidates(
+        await this.placeEmbeddings.searchByEmbedding(
+          searchEmbedding,
+          { kind: 'region', region: regionFilter },
+          poolSize,
+          preferenceVector,
+        ),
+        'pgvector',
+      );
+    }
     if (pgvector.length > 0) {
       sources.push('pgvector');
       rawCandidates.push(...pgvector);
     }
-
 
     let ranked = this.evaluator.rank(rawCandidates, context);
     if (!this.isStrongEnough(ranked, limit)) {
@@ -81,7 +132,11 @@ export class PlaceRetrievalService {
       }
     }
 
-    if (!this.isStrongEnough(ranked, limit)) {
+    // 시드 폴백은 목적지 전용 카탈로그가 없으면 DEFAULT_SEEDS(서울 도심 좌표의 가짜 장소 6개)를
+    // 준다. 앵커를 아는 여행에 그걸 섞으면 부산 일정에 서울 좌표가 박혀 동선이 깨지므로,
+    // 실제 후보가 한 건도 없을 때만(=아무것도 안 주는 것보다는 나을 때) 허용한다.
+    const seedAllowed = !anchor || rawCandidates.length === 0;
+    if (!this.isStrongEnough(ranked, limit) && seedAllowed) {
       const seeds = this.filterEligibleCandidates(
         getSeedCandidates(context.destination),
         'seed',
@@ -108,8 +163,11 @@ export class PlaceRetrievalService {
     const rejectedCount = Math.max(0, ranked.length - accepted.length);
 
     const popularCount = places.filter((place) => popularityIndex.mentions(place.name) > 0).length;
+    const scope = context.anchor
+      ? `anchor="${context.anchor.label}"/${context.anchor.radiusM / 1000}km`
+      : `region=${regionFilter.sido ?? regionFilter.sigungu ?? 'none'}`;
     this.logger.log(
-      `CRAG retrieval for "${context.destination}" sources=${sources.join('+') || 'none'} avg=${averageConfidence.toFixed(2)} selected=${places.length} naver=${popularityIndex.docCount}docs/${popularCount}matched`,
+      `CRAG retrieval for "${context.destination}" ${scope} sources=${sources.join('+') || 'none'} avg=${averageConfidence.toFixed(2)} selected=${places.length} naver=${popularityIndex.docCount}docs/${popularCount}matched`,
     );
 
     return {
@@ -122,6 +180,90 @@ export class PlaceRetrievalService {
         rejectedCount,
       },
     };
+  }
+
+  /**
+   * 앵커 주변을 반경을 넓혀 가며 훑는다.
+   *
+   * 마지막 단계까지 부족하면 앵커가 알아낸 지역 전역 검색을 **덧댄다(교체가 아니다)** —
+   * 가까운 후보를 지역 상위 N 경쟁에 밀려 잃으면 앵커를 쓴 의미가 없다. id 중복은
+   * `evaluator.rank` 의 dedupe 가 접는다.
+   */
+  private async searchAroundAnchor(
+    anchor: DestinationAnchor,
+    embedding: number[],
+    poolSize: number,
+    limit: number,
+    preferenceVector?: number[],
+  ): Promise<{ candidates: RawPlaceCandidate[]; radiusM: number }> {
+    const steps = this.radiusStepsM();
+    const search = async (radiusM: number): Promise<RawPlaceCandidate[]> =>
+      this.filterEligibleCandidates(
+        await this.placeEmbeddings.searchByEmbedding(
+          embedding,
+          { kind: 'anchor', center: anchor.coordinates, radiusM },
+          poolSize,
+          preferenceVector,
+        ),
+        'pgvector',
+      );
+
+    let candidates: RawPlaceCandidate[] = [];
+    for (const step of steps) {
+      candidates = await search(step);
+      if (this.isAnchorPoolSufficient(candidates, limit)) {
+        this.logger.log(
+          `앵커 "${anchor.label}" 반경 ${step / 1000}km 후보 ${candidates.length}건으로 확정`,
+        );
+        return { candidates, radiusM: step };
+      }
+    }
+
+    const widest = steps[steps.length - 1]!;
+    const regional = this.filterEligibleCandidates(
+      await this.placeEmbeddings.searchByEmbedding(
+        embedding,
+        { kind: 'region', region: anchor.region },
+        poolSize,
+        preferenceVector,
+      ),
+      'pgvector',
+    );
+    const seen = new Set(candidates.map((candidate) => candidate.id));
+    const merged = [
+      ...candidates,
+      ...regional.filter((candidate) => !seen.has(candidate.id)),
+    ];
+    this.logger.log(
+      `앵커 "${anchor.label}" 최대 반경 ${widest / 1000}km 로도 후보가 얇아(${candidates.length}건) ` +
+        `${anchor.region.sido ?? anchor.region.sigungu} 전역 ${regional.length}건을 덧댔습니다.`,
+    );
+    return { candidates: merged, radiusM: widest };
+  }
+
+  /**
+   * 앵커 반경 후보 풀이 이 반경에서 멈춰도 될 만큼 찼는지.
+   *
+   * **개수만 보면 안 된다** — 실측에서 광안리 2km 는 17건이나 되는데 식당·카페가 2곳뿐이라
+   * 하루치 식사 슬롯도 못 채운다. 그래서 종류별 하한을 함께 본다. 전체 개수는 최종 선택
+   * 수(limit)의 2배를 요구한다 — 그 정도는 돼야 인지도·취향 재정렬이 손댈 여지가 생긴다.
+   */
+  private isAnchorPoolSufficient(candidates: RawPlaceCandidate[], limit: number): boolean {
+    if (candidates.length < limit * 2) return false;
+    const dining = candidates.filter((candidate) =>
+      DINING_CATEGORIES.has(candidate.category),
+    ).length;
+    return dining >= MIN_KIND_COUNT && candidates.length - dining >= MIN_KIND_COUNT;
+  }
+
+  /** 앵커 반경 확장 단계(m). 오름차순으로 정렬해 넓혀 가는 순서를 보장한다. */
+  private radiusStepsM(): number[] {
+    const parsed = this.config
+      .get<string>('PLACE_ANCHOR_RADIUS_STEPS_M', '')
+      .split(',')
+      .map((token) => Number(token.trim()))
+      .filter((value) => Number.isFinite(value) && value > 0);
+    return parsed.length > 0 ? parsed.sort((a, b) => a - b) : [...DEFAULT_RADIUS_STEPS_M];
   }
 
   private async seedLocalCatalogIfNeeded(destination: string): Promise<void> {

@@ -81,7 +81,9 @@ export class CragEvaluatorService {
   rank(candidates: RawPlaceCandidate[], context: RetrievalContext): CandidatePlace[] {
     const weights = this.weights();
     const unique = this.deduplicate(candidates);
-    const expectedRegion = destinationRegionFilter(context.destination);
+    // 앵커로 해석된 목적지는 그 결과가 정본이다 — 여기서 destination 문자열을 다시 파싱하면
+    // '광안리' 가 존재하지 않는 시군구 코드로 되돌아가 지역 가드가 통째로 꺼진다.
+    const expectedRegion = context.regionFilter ?? destinationRegionFilter(context.destination);
     const regionJudgeable = this.localityJudgeable(unique, expectedRegion);
     const scored = unique
       .map((candidate) => this.evaluate(candidate, context, weights, expectedRegion, regionJudgeable))

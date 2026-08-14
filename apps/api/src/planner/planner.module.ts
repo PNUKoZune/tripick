@@ -7,6 +7,7 @@ import { RouteHelper } from './helpers/route.helper';
 import { ScheduleConstraint } from './helpers/schedule.constraint';
 import { ConstraintEngine } from './constraint/constraint.engine';
 import { CragEvaluatorService } from './retrieval/crag-evaluator.service';
+import { DestinationAnchorService } from './retrieval/destination-anchor.service';
 import { IngestCursorRepository } from './retrieval/ingest-cursor.repository';
 import { KakaoLocalService } from './retrieval/kakao-local.service';
 import { NaverSearchService } from './retrieval/naver-search.service';
@@ -41,6 +42,7 @@ import { TripDayEntity } from '../trips/trip-day.entity';
     KakaoLocalService,
     NaverSearchService,
     CragEvaluatorService,
+    DestinationAnchorService,
     PlaceRetrievalService,
     TourApiService,
     TatsCnctrRateService,

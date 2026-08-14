@@ -48,6 +48,14 @@ export function normalizeCatalogName(name: string): string {
 }
 
 /**
+ * 평면 근사 상수. 위도 1도=111km, 경도 1도≈88km(위도 37.5° 보정).
+ * 앵커 반경 bbox(`place-embedding.repository`)도 이 값으로 만든다 — 거리 판정이 여러 곳에
+ * 흩어져 있어도 같은 근사식을 써야 경계에서 결과가 갈리지 않는다.
+ */
+export const KM_PER_LAT_DEGREE = 111;
+export const KM_PER_LNG_DEGREE = 88;
+
+/**
  * 두 좌표의 거리(m). 위도 1도=111km, 경도 1도≈88km(위도 37.5° 보정) 평면 근사 —
  * 국내 단거리에서 오차 1% 미만이고, place-embedding.repository 의 SQL 이 같은 식을 쓴다
  * (같은 판정이 JS·SQL 두 곳에서 갈리지 않게 하려면 근사식도 같아야 한다).
@@ -102,8 +110,8 @@ function stripRegionPrefix(compact: string, regionTokens: string[]): string {
 }
 
 function distanceKm(from: Coordinates, to: Coordinates): number {
-  const latDelta = (from.lat - to.lat) * 111;
-  const lngDelta = (from.lng - to.lng) * 88;
+  const latDelta = (from.lat - to.lat) * KM_PER_LAT_DEGREE;
+  const lngDelta = (from.lng - to.lng) * KM_PER_LNG_DEGREE;
   return Math.sqrt(latDelta ** 2 + lngDelta ** 2);
 }
 

@@ -58,6 +58,13 @@ ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS updated_at      TIMESTAMPT
 ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS region_code     TEXT;
 ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS sigungu_code    TEXT;
 
+-- 앵커 반경(bbox) 검색용 위경도. coordinates jsonb 가 정본이고 이건 항상 그 파생이라
+-- 손으로 동기화할 여지가 없다. jsonb 표현식은 인덱스를 못 타 전체 스캔이 된다.
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS lat double precision
+  GENERATED ALWAYS AS ((coordinates->>'lat')::double precision) STORED;
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS lng double precision
+  GENERATED ALWAYS AS ((coordinates->>'lng')::double precision) STORED;
+
 -- pgvector HNSW 인덱스 (코사인 유사도 검색)
 CREATE INDEX IF NOT EXISTS idx_preference_embeddings_hnsw
   ON preference_embeddings USING hnsw (embedding vector_cosine_ops)
@@ -83,6 +90,10 @@ CREATE INDEX IF NOT EXISTS idx_place_embeddings_region_code
 
 CREATE INDEX IF NOT EXISTS idx_place_embeddings_sigungu_code
   ON place_embeddings (sigungu_code);
+
+-- 앵커 반경 bbox 인덱스. 실측(10,333행, 광안리 3km) 26.8ms 전체 스캔 → 0.8ms.
+CREATE INDEX IF NOT EXISTS idx_place_embeddings_lat_lng
+  ON place_embeddings (lat, lng);
 
 -- 로컬 seed 및 외부 API 후보 중복 방지/조회 최적화용 보조 인덱스
 CREATE INDEX IF NOT EXISTS idx_place_embeddings_region_name

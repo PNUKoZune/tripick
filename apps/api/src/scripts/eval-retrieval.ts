@@ -37,6 +37,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import type { ReplanTrigger, TasteTagDto } from '@tripick/types';
 import { CragEvaluatorService } from '../planner/retrieval/crag-evaluator.service';
+import { DestinationAnchorService } from '../planner/retrieval/destination-anchor.service';
 import { KakaoLocalService } from '../planner/retrieval/kakao-local.service';
 import { NaverSearchService } from '../planner/retrieval/naver-search.service';
 import { PlaceEmbeddingRepository } from '../planner/retrieval/place-embedding.repository';
@@ -96,6 +97,7 @@ class CatalogProbe {
     KakaoLocalService,
     NaverSearchService,
     CragEvaluatorService,
+    DestinationAnchorService,
     PlaceRetrievalService,
     CatalogProbe,
   ],

@@ -9,9 +9,30 @@ import {
   normalizeDestinationRegion,
   regionPrefixStem,
 } from './place-seeds';
-import { SAME_PLACE_RADIUS_M, normalizeCatalogName } from './near-duplicate';
-import { destinationRegionFilter, placeRegionCodes, sidoCodesForLabel } from './region-code';
+import {
+  KM_PER_LAT_DEGREE,
+  KM_PER_LNG_DEGREE,
+  SAME_PLACE_RADIUS_M,
+  normalizeCatalogName,
+} from './near-duplicate';
+import {
+  destinationRegionFilter,
+  placeRegionCodes,
+  sidoCodesForLabel,
+  type RegionFilter,
+} from './region-code';
 import type { RawPlaceCandidate } from './types';
+
+/**
+ * 후보 검색을 어디로 좁힐지.
+ *
+ * `region` 은 행정 경계 등가 비교(btree pre-filter), `anchor` 는 지점 반경 bbox 다.
+ * 목적지가 행정구역이면 전자, '광안리'처럼 그보다 좁은 지점이면 후자를 쓴다 — 후자는
+ * 경계를 넘는 후보를 자연스럽게 포함한다(광안리 앵커 반경에 남구·해운대구가 함께 들어온다).
+ */
+export type PlaceSearchScope =
+  | { kind: 'region'; region: RegionFilter }
+  | { kind: 'anchor'; center: Coordinates; radiusM: number };
 
 export interface UpsertPlaceInput {
   kakaoPlaceId?: string | null;
@@ -85,29 +106,12 @@ export class PlaceEmbeddingRepository {
 
   async searchByEmbedding(
     embedding: number[],
-    destination: string,
+    scope: PlaceSearchScope,
     limit: number,
     preferenceVector?: number[],
   ): Promise<RawPlaceCandidate[]> {
-    // 목적지를 정본 지역 코드로 바꿔 등가 비교로 pre-filter 한다.
-    // ILIKE 프리픽스였을 때는 인덱스를 못 타 (a) 전체 스캔이거나 (b) HNSW 근사 이웃을
-    // 뒤에서 걸러내는 post-filter 였고, 후자는 후보가 통째로 탈락해 결과가 비었다.
-    // 등가 비교면 플래너가 btree(region_code/sigungu_code)로 먼저 좁히고 정확 KNN 을 돌린다.
-    // 예: '경주'→sigungu '경주', '부산 해운대구'→sido '부산', '경상북도'→sido '경북'.
-    const { sido, sigungu } = destinationRegionFilter(destination);
     const params: unknown[] = [`[${embedding.join(',')}]`];
-
-    // 지역 코드가 안 잡히는 목적지(자유 입력·해외)는 필터 없이 전역 검색으로 둔다.
-    // 지역 라벨이 아예 없는 행(폴백 시드)은 어느 목적지에서도 후보로 남긴다.
-    const unlabeled = '(region_code IS NULL AND sigungu_code IS NULL)';
-    let regionClause = '';
-    if (sido) {
-      params.push(sido);
-      regionClause = `AND (region_code = $${params.length} OR ${unlabeled})`;
-    } else if (sigungu) {
-      params.push(sigungu);
-      regionClause = `AND (sigungu_code = $${params.length} OR ${unlabeled})`;
-    }
+    const regionClause = this.scopeClause(scope, params);
 
     params.push(limit);
     const limitIndex = params.length;
@@ -151,6 +155,64 @@ export class PlaceEmbeddingRepository {
       );
       return [];
     }
+  }
+
+  /**
+   * scope 를 WHERE 절 조각으로 바꾸고 바인딩을 `params` 에 밀어 넣는다.
+   *
+   * **지역 모드** — 정본 지역 코드 등가 비교. ILIKE 프리픽스였을 때는 인덱스를 못 타
+   * (a) 전체 스캔이거나 (b) HNSW 근사 이웃을 뒤에서 걸러내는 post-filter 였고, 후자는 후보가
+   * 통째로 탈락해 결과가 비었다. 등가 비교면 플래너가 btree(region_code/sigungu_code)로 먼저
+   * 좁히고 정확 KNN 을 돌린다. 코드가 안 잡히는 목적지(자유 입력·해외)는 필터 없이 전역 검색,
+   * 지역 라벨이 아예 없는 행(폴백 시드)은 어느 목적지에서도 후보로 남긴다.
+   *
+   * **앵커 모드** — bbox 로 좁히고 **정확 거리로 한 번 더 자른다**. 둘 다 필요하다:
+   * bbox 는 `(lat, lng)` btree 를 타서 스캔을 없애고(실측 3km 질의 26.8ms → 0.8ms), 거리 조건은
+   * 인덱스를 못 타는 대신 모서리를 깎는다.
+   *
+   * 모서리를 왜 깎아야 하나 — 외접 정사각형은 대각선이 반경의 1.41배라 "10km 반경"이 실제로는
+   * 14km 까지 닿는다. 장소 밀도가 균일하지 않아서 이 차이가 면적비(1.27배)보다 훨씬 크게 터진다:
+   * 에버랜드 10km 가 **원 15건 vs bbox 54건**이었고, 늘어난 39건은 대부분 북서쪽 모서리에 걸린
+   * 분당이었다(실측 결과 1·2위가 분당 카페). 반경 확장 판정도 이 부풀린 수를 보고 "충분하다"고
+   * 멈춰 버려, 지역 폴백이 떠야 할 케이스가 안 떴다.
+   *
+   * 거리식은 `near-duplicate` 의 평면 근사와 같은 상수를 쓴다 — 같은 좌표가 JS·SQL 두 곳에서
+   * 다르게 판정되면 안 된다.
+   */
+  private scopeClause(scope: PlaceSearchScope, params: unknown[]): string {
+    if (scope.kind === 'anchor') {
+      const radiusKm = scope.radiusM / 1000;
+      const latDelta = radiusKm / KM_PER_LAT_DEGREE;
+      const lngDelta = radiusKm / KM_PER_LNG_DEGREE;
+      params.push(
+        scope.center.lat - latDelta,
+        scope.center.lat + latDelta,
+        scope.center.lng - lngDelta,
+        scope.center.lng + lngDelta,
+        scope.center.lat,
+        scope.center.lng,
+        radiusKm,
+      );
+      const box = params.length - 6;
+      const center = params.length - 2;
+      return `AND lat BETWEEN $${box} AND $${box + 1} AND lng BETWEEN $${box + 2} AND $${box + 3}
+          AND sqrt(
+                power((lat - $${center}) * ${KM_PER_LAT_DEGREE}, 2)
+                + power((lng - $${center + 1}) * ${KM_PER_LNG_DEGREE}, 2)
+              ) <= $${center + 2}`;
+    }
+
+    const unlabeled = '(region_code IS NULL AND sigungu_code IS NULL)';
+    const { sido, sigungu } = scope.region;
+    if (sido) {
+      params.push(sido);
+      return `AND (region_code = $${params.length} OR ${unlabeled})`;
+    }
+    if (sigungu) {
+      params.push(sigungu);
+      return `AND (sigungu_code = $${params.length} OR ${unlabeled})`;
+    }
+    return '';
   }
 
   /**
