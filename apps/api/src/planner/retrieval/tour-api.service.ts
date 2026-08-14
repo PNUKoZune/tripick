@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { OPENING_HOURS_FIELD, parseOpeningHours } from './opening-hours.parser';
-import { isTravelCourseArticle } from './place-name-quality';
+import { isRetailBranchOutlet, isTravelCourseArticle } from './place-name-quality';
 import { isPlausibleKoreanCoordinate } from './place-eligibility';
 import { SAME_PLACE_RADIUS_M } from './near-duplicate';
 import { parseSigungu } from './place-seeds';
@@ -96,6 +96,12 @@ const EXCLUDED_CONTENT_TYPES = new Set(['32']);
 
 /** 여행코스. 실제 코스명과 큐레이션 기사가 섞여 오므로 이름 모양으로 한 번 더 가른다. */
 export const TRAVEL_COURSE_CONTENT_TYPE = '25';
+
+/**
+ * 쇼핑. 전통시장(여행지)과 체인 매장·건물 입점 점포(여행지 아님)가 섞여 오므로
+ * 여행코스와 같은 방식으로 이름·주소 모양을 한 번 더 본다.
+ */
+export const SHOPPING_CONTENT_TYPE = '38';
 
 /** contentTypeId → 한글 유형명 (임베딩 텍스트 강화용). */
 const CONTENT_TYPE_NAME: Record<string, string> = {
@@ -562,6 +568,13 @@ export class TourApiService {
     // 여행코스(25)에는 실제 코스명('남파랑길 25코스')과 큐레이션 기사('가정의 달, 싱글을 위한
     // 혼자 먹는 밥상 코스')가 섞여 온다. 기사는 방문할 지점이 아니므로 적재하지 않는다.
     if (contentTypeId === TRAVEL_COURSE_CONTENT_TYPE && isTravelCourseArticle(name, address)) {
+      return null;
+    }
+
+    // 쇼핑(38)에는 전통시장('경주 중앙시장')과 체인 매장·건물 입점 점포('다이소 부산서면점',
+    // '구찌 롯데백화점 부산본점')가 섞여 온다. 후자는 방문할 여행지가 아니고, 좌표가 건물 좌표라
+    // 반경 검색에서 한 건물의 매장들이 후보를 통째로 먹는다.
+    if (contentTypeId === SHOPPING_CONTENT_TYPE && isRetailBranchOutlet(name, address)) {
       return null;
     }
     const sigungu = parseSigungu(address);

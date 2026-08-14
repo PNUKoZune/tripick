@@ -65,3 +65,43 @@ export function isTravelCourseArticle(name: string, address: string): boolean {
   if (words.length >= ARTICLE_WORD_COUNT) return true;
   return words.some((word) => PARTICLE_ENDING.test(word));
 }
+
+/**
+ * 체인 지점 접미 — 'BRAND 지역점' 모양. **앞에 다른 어절이 있어야 한다.**
+ * 단일 어절로 '점' 으로 끝나는 보통명사('음식점'·'분기점')를 지점으로 오인하지 않게 하려는 것인데,
+ * 실측 쇼핑 588건이 전부 공백을 포함한 'BRAND 지역점' 이라 이 제약으로 잃는 건 없다.
+ */
+const BRANCH_SUFFIX = /\s\S*점$/;
+
+/**
+ * 주소의 층 표기. 관측된 표기를 전부 덮는다 — '2층'·'B1층'·'본관 4층'·'9,10층'·'1~3층'·'지하 1층'.
+ * 숫자 없는 '지하층'도 같은 뜻이라 함께 본다.
+ */
+const FLOOR_IN_ADDRESS = /(\d\s*층|지하\s*층)/;
+
+/**
+ * KTO 쇼핑(contentTypeId=38) 행이 **여행지가 아니라 소매 점포**인지.
+ *
+ * 호출 측이 contentTypeId 를 먼저 확인해야 한다 — 이 규칙을 카탈로그 전체에 적용하면
+ * 체인 카페·식당 지점('스타벅스 해운대점')이 함께 죽는데, 그건 실제로 일정에 넣는 장소다.
+ * 음식점은 39, 카페는 카카오 소스라 38 로 좁히면 그 위험이 사라진다.
+ *
+ * 쇼핑 버킷을 통째로 버릴 수는 없다 — 서문시장·자갈치시장 같은 **전통시장이 여기 들어 있고**,
+ * 그건 취향 기반 추천의 정당한 후보다. 실측(카탈로그 내 쇼핑 818행)에서 두 신호가 그 둘을 갈랐다:
+ *
+ *   ① 이름이 체인 지점 접미로 끝남 — '다이소 부산서면점'·'게스 롯데프리미엄아울렛 동부산점' (588건)
+ *   ② 주소에 층 표기가 있음 — 건물 안 입점 매장이라 그 좌표는 건물의 좌표다 (382건)
+ *
+ * 둘 중 하나라도 걸리는 635건을 빼고 남는 183건은 대부분 시장·오일장·상점가였다
+ * ('경주 중앙시장'·'강경젓갈시장'·'광양5일장 (1, 6일)'·'견지동 불교용품거리').
+ *
+ * 왜 지워야 하나 — 반경 검색이 붙으면서 이게 실제로 결과를 먹었다. 서면역 2km 후보 33건 중
+ * **9건이 롯데백화점 입점 브랜드 매장**이었다(구찌·다미아니·금강제화…). 시도 전역 검색일 때는
+ * 643건 중 23건이라 묻혀 있던 비율이, 풀이 작아지자 27% 로 드러난 것이다.
+ */
+export function isRetailBranchOutlet(name: string, address: string): boolean {
+  const trimmed = name.trim();
+  if (!trimmed) return true;
+  if (BRANCH_SUFFIX.test(trimmed)) return true;
+  return FLOOR_IN_ADDRESS.test(address);
+}

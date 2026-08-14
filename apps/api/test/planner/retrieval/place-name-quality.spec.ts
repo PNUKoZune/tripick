@@ -1,6 +1,7 @@
 /// <reference types="jest" />
 
 import {
+  isRetailBranchOutlet,
   isSeoBusinessName,
   isTravelCourseArticle,
 } from '../../../src/planner/retrieval/place-name-quality';
@@ -70,5 +71,52 @@ describe('isTravelCourseArticle', () => {
     ]) {
       expect(isTravelCourseArticle(name, '경남 거제시 동부면 부춘리 산 43-3')).toBe(false);
     }
+  });
+});
+
+/**
+ * 표본은 전부 실측 카탈로그(KTO 쇼핑 818행)에서 가져왔다. 이 규칙은 **쇼핑(38) 안에서만**
+ * 돈다 — 카카오 소스 카페·식당 지점('스타벅스 해운대점')은 같은 모양이지만 일정에 넣는 장소다.
+ */
+describe('isRetailBranchOutlet', () => {
+  it('체인 지점 접미로 끝나면 소매 점포다', () => {
+    for (const name of [
+      '다이소 부산서면점',
+      '게스 롯데프리미엄아울렛 동부산점',
+      '올리브영 울산삼산대로점',
+      '갤러리아백화점 광교점',
+      // 시장에 입점한 체인 매장도 시장 자체가 아니라 점포다.
+      '다이소 부산국제시장점',
+    ]) {
+      expect(isRetailBranchOutlet(name, '부산광역시 중구 중구로 3')).toBe(true);
+    }
+  });
+
+  it('주소에 층이 있으면 건물 입점 점포다 (좌표가 건물 좌표라 반경 검색을 먹는다)', () => {
+    for (const address of [
+      '대구광역시 중구 달구벌대로 2077 (계산동2가) 1층',
+      '경기도 안산시 단원구 고잔1길 12 (고잔동) 본관 4층',
+      '제주특별자치도 서귀포시 안덕면 신화역사로304번길 38 B1층',
+      '대구광역시 중구 달구벌대로 2127 (봉산동) S타워 9,10층',
+      '부산광역시 부산진구 동성로 71 (전포동) 1~3층',
+    ]) {
+      expect(isRetailBranchOutlet('구찌 현대백화점 더현대 대구', address)).toBe(true);
+    }
+  });
+
+  it('전통시장·상점가는 남긴다 (쇼핑 버킷을 통째로 버릴 수 없는 이유)', () => {
+    for (const name of [
+      '경주 중앙시장',
+      '강경젓갈시장',
+      '광양5일장 (1, 6일)',
+      '견지동 불교용품거리',
+      '고창 파머스마켓',
+    ]) {
+      expect(isRetailBranchOutlet(name, '경상북도 경주시 금성로 295')).toBe(false);
+    }
+  });
+
+  it('단일 어절로 점으로 끝나는 보통명사는 지점이 아니다', () => {
+    expect(isRetailBranchOutlet('음식점', '부산광역시 중구 중구로 3')).toBe(false);
   });
 });
