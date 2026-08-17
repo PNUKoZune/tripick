@@ -58,10 +58,16 @@ import type { CandidatePlace } from '../planner/retrieval/types';
  * 안 그러면 적재를 안 돌린 지역의 낮은 recall 을 랭킹 탓으로 오독하게 된다.
  */
 class CatalogProbe {
-  constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
+  constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly anchors: DestinationAnchorService,
+  ) {}
 
   async exists(name: string, destination: string): Promise<boolean> {
-    const { sido, sigungu } = destinationRegionFilter(destination);
+    // 앵커 목적지('광안리')는 destinationRegionFilter 가 실재하지 않는 코드를 만들어 내
+    // 존재 확인이 통째로 0 건이 된다(실측: 앵커 케이스 catalog 0%). 검색과 같은 해석을 쓴다.
+    const anchor = await this.anchors.resolve(destination);
+    const { sido, sigungu } = anchor?.region ?? destinationRegionFilter(destination);
     const code = sido ?? sigungu;
     const rows: Array<{ hit: string }> = await this.dataSource.query(
       `SELECT '1' AS hit FROM place_embeddings

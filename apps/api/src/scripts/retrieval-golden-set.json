@@ -469,6 +469,82 @@
         "강천사"
       ],
       "forbidden": []
+    },
+    {
+      "id": "gwangalli-anchor",
+      "intent": "행정구역보다 좁은 목적지(앵커 반경 검색) — 광안리 앵커 2km 안의 실제 명소가 상위에 와야 한다. 지역 코드로는 부산 전역이 다 '부산'이라 locality 항이 아무것도 못 가른다.",
+      "destination": "광안리",
+      "expectRegion": "부산",
+      "tasteTags": {
+        "food": [
+          "seafood"
+        ],
+        "mood": [
+          "romantic",
+          "healing"
+        ],
+        "environment": [
+          "beach",
+          "nightview"
+        ],
+        "confidence": 0.8
+      },
+      "relevant": [
+        "광안리해수욕장",
+        "광안대교",
+        "민락수변공원",
+        "민락해변공원",
+        "밀락더마켓",
+        "광안리해변 테마거리",
+        "민락어민활어직판장",
+        "삼익비치수변공원",
+        "광안리 해양레포츠센터",
+        "남천 해변시장",
+        "수영사적공원"
+      ],
+      "forbidden": [
+        "감천문화마을",
+        "태종대",
+        "해동용궁사"
+      ]
+    },
+    {
+      "id": "seomyeon-station-anchor",
+      "intent": "역세권 목적지(앵커 반경 검색) — 서면역 앵커 2km 안의 상권·거리가 상위에 와야 한다. 부산 전역 검색으로 새면 해운대·기장 명소가 올라온다.",
+      "destination": "서면역",
+      "expectRegion": "부산",
+      "tasteTags": {
+        "food": [
+          "korean",
+          "cafe"
+        ],
+        "mood": [
+          "trendy",
+          "nostalgic"
+        ],
+        "environment": [
+          "city"
+        ],
+        "confidence": 0.8
+      },
+      "relevant": [
+        "서면시장",
+        "서면먹자골목",
+        "서면1번가",
+        "전포카페거리",
+        "전포공구길",
+        "KT&G 상상마당 부산",
+        "서면 지하도상가",
+        "부전인삼시장",
+        "송상현광장",
+        "전리단길",
+        "서면젊음의거리"
+      ],
+      "forbidden": [
+        "해운대해수욕장",
+        "감천문화마을",
+        "해동용궁사"
+      ]
     }
   ]
 }

@@ -59,6 +59,51 @@ const ATTRACTION_CATEGORIES: ReadonlySet<string> = new Set(['attraction']);
 /** 트리거 없음(최초 생성) 및 트리거별 선호 신호가 없을 때 쓰는 중립 점수. */
 const NEUTRAL_TRIGGER_SCORE = 0.64;
 
+/** 후보 풀 단위 판정 결과. 가를 수 없는 항은 꺼서 일률 감점이 순위를 흔드는 걸 막는다. */
+interface PoolJudgement {
+  region: boolean;
+  popularity: boolean;
+}
+
+/**
+ * 인지도 항을 켤 최소 언급 비율. 후보 풀에서 이만큼도 안 잡히면 코퍼스가 그 지역을 못 담은 것으로 본다.
+ *
+ * 골든셋 스윕(14케이스)으로 정했다:
+ *
+ * | 임계 | R@10 | R\|cat | MRR | 비고 |
+ * |---|---|---|---|---|
+ * | 0 (항상 켬) | 0.334 | 0.624 | 0.673 | 대구가 0점 |
+ * | **0.03~0.12** | **0.342** | **0.631** | **0.682** | 평평한 최적 |
+ * | 0.16 | 0.334 | 0.607 | 0.688 | 부산·제주(12~13%)가 꺼져 손해 |
+ * | 0.25 | 0.206 | 0.486 | 0.429 | 급락 |
+ * | 1 (항상 끔) | 0.163 | 0.364 | 0.345 | 폭락 |
+ *
+ * ⚠️ **인지도를 끄는 게 목적이 아니다.** 항상 끄면(1) 지표가 절반으로 무너진다 — 언급 0 감점은
+ * 전체적으로 크게 이득이고, 코퍼스가 그 지역을 담아낸 경우에만 그렇다는 게 이 게이트의 요지다.
+ *
+ * 0.03~0.12 가 동률이라 **의도로 갈랐다**: 대구(1.3%)만 끄고 서울(6.0%)은 살린다.
+ * 서울은 400건 중 24건이 실제로 언급된 것이라 신호로 볼 여지가 있다. 0.05 는 그 사이에서
+ * 양쪽 모두와 여유를 두는 값이다.
+ */
+const DEFAULT_MIN_POPULARITY_COVERAGE = 0.05;
+
+/**
+ * 앵커 반경 경계의 locality 점수 = **거리 항의 세기**. 0.95 는 사실상 끈 것(전 후보 동점)이고,
+ * 낮출수록 앵커 가까운 쪽을 강하게 우대한다.
+ *
+ * 앵커 케이스 2개(광안리·서면역) 스윕:
+ *
+ * | edge | R@10 | R\|cat | 비고 |
+ * |---|---|---|---|
+ * | 0.95 (끔) | 0.364 | 0.540 | 기준선 — 광안리 2위가 센텀시티 스파랜드(2km 밖) |
+ * | 0.85 | 0.409 | 0.540 | |
+ * | **0.7** | **0.455** | **0.540** | 무릎 |
+ * | 0.6 이하 | 0.455 | 0.495 | 거리가 과해져 정답 하나가 상위 16 밖으로 밀림 |
+ *
+ * 0.6 부터 R\|cat 이 깎이는 게 상한 신호다 — R@10 이 같아도 정답을 잃고 있다.
+ */
+const DEFAULT_ANCHOR_EDGE_SCORE = 0.7;
+
 /**
  * 트리거별 후보 선호도. `Record<ReplanTrigger, …>` 라 ReplanTrigger 에 값이 늘면 여기서
  * 컴파일 에러로 잡힌다 — if 체인 시절엔 새 트리거가 조용히 기본값으로 떨어졌다(crowd 가 그랬다).
@@ -84,9 +129,12 @@ export class CragEvaluatorService {
     // 앵커로 해석된 목적지는 그 결과가 정본이다 — 여기서 destination 문자열을 다시 파싱하면
     // '광안리' 가 존재하지 않는 시군구 코드로 되돌아가 지역 가드가 통째로 꺼진다.
     const expectedRegion = context.regionFilter ?? destinationRegionFilter(context.destination);
-    const regionJudgeable = this.localityJudgeable(unique, expectedRegion);
+    const judgement: PoolJudgement = {
+      region: this.localityJudgeable(unique, expectedRegion),
+      popularity: this.popularityJudgeable(unique, context),
+    };
     const scored = unique
-      .map((candidate) => this.evaluate(candidate, context, weights, expectedRegion, regionJudgeable))
+      .map((candidate) => this.evaluate(candidate, context, weights, expectedRegion, judgement))
       .sort((a, b) => b.confidence - a.confidence);
     // 근접 중복 접기는 **점수 정렬 뒤에** 온다 — 남는 대표가 그 무리에서 가장 높은 후보여야 한다.
     return collapseNearDuplicates(scored, context.destination);
@@ -179,7 +227,7 @@ export class CragEvaluatorService {
     context: RetrievalContext,
     weights: TermWeights,
     expectedRegion: RegionFilter,
-    regionJudgeable: boolean,
+    judgement: PoolJudgement,
   ): CandidatePlace {
     const tags = candidate.tags?.length ? candidate.tags : inferPlaceTags(candidate);
     const matchedTags = this.matchedTags(tags, context);
@@ -187,10 +235,10 @@ export class CragEvaluatorService {
     const retrieval = this.retrievalScore(candidate);
     const personalization = this.personalizationScore(candidate);
     const taste = this.tasteScore(tags, context, personalization);
-    const locality = this.localityScore(candidate, expectedRegion, regionJudgeable, penalties);
+    const locality = this.localityScore(candidate, context, expectedRegion, judgement.region, penalties);
     const contextScore = this.contextScore(candidate, tags, context);
     const availability = this.availabilityScore(candidate, context, penalties);
-    const popularity = this.popularityScore(candidate, context, penalties);
+    const popularity = this.popularityScore(candidate, context, judgement.popularity, penalties);
     // 네이버 인지도 항을 더해 마이너 장소를 후순위로 민다.
     // 인덱스 비활성 시 popularity=중립값이라 나머지 항 비율만 유지되고 순위는 불변.
     const total = this.clamp(
@@ -259,13 +307,42 @@ export class CragEvaluatorService {
   private popularityScore(
     candidate: RawPlaceCandidate,
     context: RetrievalContext,
+    judgeable: boolean,
     penalties: string[],
   ): number {
     const index = context.popularityIndex;
-    if (!index || index.docCount === 0) return NEUTRAL_POPULARITY;
+    if (!index || index.docCount === 0 || !judgeable) return NEUTRAL_POPULARITY;
     const score = index.score(candidate.name);
     if (index.mentions(candidate.name) === 0) penalties.push('naver-unmentioned');
     return score;
+  }
+
+  /**
+   * 이 후보 풀에서 인지도로 후보를 가를 수 있는지. **코퍼스가 그 지역 장소를 못 담았으면 포기한다.**
+   *
+   * 네이버 검색 API 의 `description` 은 본문이 아니라 **120자 스니펫**이라, "대구 실내 여행지
+   * 6곳" 같은 글에서 정작 그 6곳의 이름이 코퍼스에 안 들어간다. 그 결과 지역마다 신호가 잡히는
+   * 비율이 **1.3%~59.2% 로 46배** 벌어진다 (후보 400건 기준 실측):
+   *
+   *   속초 59.2% · 여수 30.8% · 전주 30.3% · 강릉 21.7% · 경주 20.9%
+   *   광주 15.7% · 부산 13.3% · 제주 12.3% · 서울 6.0% · **대구 1.3%**
+   *
+   * 비율이 이렇게 낮으면 "언급 0" 은 **마이너 장소가 아니라 정보 없음**이다. 정보 없음에 감점을
+   * 주면 신호가 아니라 노이즈고, 실측에서 대구 서문시장·팔공산·83타워가 전부 언급 0 으로 0.15 를
+   * 받아 이름이 두 글자인 일반 상호(중립 0.50)에게 밀렸다 — 서문시장이 157건 중 31위였다.
+   *
+   * `localityJudgeable` 과 같은 철학이다: 가를 수 없으면 그 항을 끄고 나머지 항에 맡긴다.
+   */
+  private popularityJudgeable(candidates: RawPlaceCandidate[], context: RetrievalContext): boolean {
+    const index = context.popularityIndex;
+    if (!index || index.docCount === 0 || candidates.length === 0) return false;
+    const mentioned = candidates.filter((candidate) => index.mentions(candidate.name) > 0).length;
+    return mentioned / candidates.length >= this.minPopularityCoverage();
+  }
+
+  /** 인지도 항을 켤 최소 언급 비율. 근거는 DEFAULT_MIN_POPULARITY_COVERAGE 주석. */
+  private minPopularityCoverage(): number {
+    return this.readWeight('CRAG_MIN_POPULARITY_COVERAGE', DEFAULT_MIN_POPULARITY_COVERAGE);
   }
 
   /** 저장된 취향 벡터와의 코사인 유사도(-1~1)를 0~1 점수로 정규화 */
@@ -288,10 +365,19 @@ export class CragEvaluatorService {
    */
   private localityScore(
     candidate: RawPlaceCandidate,
+    context: RetrievalContext,
     expected: RegionFilter,
     judgeable: boolean,
     penalties: string[],
   ): number {
+    // 앵커 목적지('광안리'·'서면역')는 **행정 경계가 아니라 그 지점 주변**이 사용자가 말한
+    // 범위다. 지역 코드로 보면 앵커 반경 안이 전부 같은 시도라 이 항이 전 후보 0.92 로 일률이
+    // 되어 아무것도 못 가른다 — 반경으로 후보를 좁혀 놓고도 그 안에서 가까운 곳을 앞세울 수단이
+    // 없었다. 반경을 못 채워 시도 전역을 덧댄 경우(에버랜드)엔 먼 후보가 같은 점수로 섞인다.
+    if (context.anchor) {
+      return this.anchorProximityScore(candidate, context.anchor);
+    }
+
     if (!judgeable) return CragEvaluatorService.NEUTRAL_LOCALITY;
 
     const { regionCode, sigunguCode } = placeRegionCodes(
@@ -305,6 +391,42 @@ export class CragEvaluatorService {
     if (CragEvaluatorService.matchesRegion(expected, regionCode, sigunguCode)) return 0.92;
     penalties.push('destination-mismatch');
     return 0.32;
+  }
+
+  /**
+   * 앵커에서의 거리 점수. **고정 밴드가 아니라 확정된 반경으로 정규화**한다.
+   *
+   * `distanceScore`(0.5/2/5/12km 밴드)를 그대로 쓰면 2km 앵커 안에서는 두 밴드(0.95·0.82)에만
+   * 걸려 사실상 못 가른다 — 실측에서 서면역(2km 확정)이 지표 변화 0 이었다. 반경은 그 지역
+   * 밀도에 맞춰 2→5→10km 로 정해지므로(§PlaceRetrievalService), 그 반경을 1.0 으로 놓고 재면
+   * 밀집 지역과 한산한 지역이 같은 변별력을 갖는다.
+   *
+   * 반경 밖(시도 전역을 덧댄 경우)은 하한으로 눌러 가까운 후보 뒤에 세운다 — 그게 앵커를 쓴
+   * 이유다. 하한을 0 으로 두지 않는 건 인지도 감점과 같은 이유로, 순위만 낮추고 탈락시키지
+   * 않기 위해서다.
+   */
+  private anchorProximityScore(
+    candidate: RawPlaceCandidate,
+    anchor: { coordinates: Coordinates; radiusM: number },
+  ): number {
+    const edge = this.anchorEdgeScore();
+    const radiusKm = Math.max(anchor.radiusM / 1000, 0.1);
+    const ratio = this.distanceKm(candidate.coordinates, anchor.coordinates) / radiusKm;
+    const score = CragEvaluatorService.ANCHOR_NEAR_SCORE - ratio * (CragEvaluatorService.ANCHOR_NEAR_SCORE - edge);
+    return this.clamp(Math.max(score, Math.min(edge, CragEvaluatorService.ANCHOR_FAR_SCORE)));
+  }
+
+  /** 앵커 지점의 점수(거리 0). 지역 코드 일치(0.92)와 같은 수준에 둔다. */
+  private static readonly ANCHOR_NEAR_SCORE = 0.95;
+  /** 반경 밖(시도 전역 덧댐) 하한. 순위만 낮추고 탈락시키지는 않는다. */
+  private static readonly ANCHOR_FAR_SCORE = 0.3;
+
+  /**
+   * 확정 반경 경계의 점수 = **거리 항의 세기**. 낮출수록 앵커 가까운 쪽이 강하게 우대된다.
+   * 근거는 DEFAULT_ANCHOR_EDGE_SCORE 주석.
+   */
+  private anchorEdgeScore(): number {
+    return this.readWeight('CRAG_ANCHOR_EDGE_SCORE', DEFAULT_ANCHOR_EDGE_SCORE);
   }
 
   private static matchesRegion(

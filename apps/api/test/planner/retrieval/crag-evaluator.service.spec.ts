@@ -527,4 +527,99 @@ describe('CragEvaluatorService', () => {
       }
     });
   });
+
+  describe('앵커 목적지의 locality — 거리 기반', () => {
+    const anchored = (radiusM: number): RetrievalContext => ({
+      userId: 'u1',
+      destination: '광안리',
+      regionFilter: { sido: '부산', sigungu: '수영' },
+      anchor: {
+        coordinates: { lat: 35.1532, lng: 129.119 },
+        label: '광안리해수욕장',
+        region: { sido: '부산', sigungu: '수영' },
+        radiusM,
+      },
+    });
+    const at = (id: string, lat: number, lng: number): RawPlaceCandidate => ({
+      id,
+      name: id,
+      category: 'attraction',
+      address: '부산 수영구',
+      coordinates: { lat, lng },
+      source: 'pgvector',
+      similarity: 0.5,
+      tags: ['city'],
+    });
+
+    it('앵커에 가까울수록 높다 — 지역 코드로는 반경 안이 전부 같은 시도라 못 가른다', () => {
+      const ranked = service.rank(
+        [at('far', 35.1532 + 1.8 / 111, 129.119), at('near', 35.1532, 129.119)],
+        anchored(2000),
+      );
+      const near = ranked.find((c) => c.id === 'near')!;
+      const far = ranked.find((c) => c.id === 'far')!;
+      expect(near.crag.locality).toBeGreaterThan(far.crag.locality);
+      expect(near.crag.locality).toBeCloseTo(0.95, 2);
+    });
+
+    it('반경으로 정규화한다 — 고정 밴드면 2km 앵커 안에서 변별이 안 된다', () => {
+      // 같은 1km 라도 2km 앵커에선 경계 근처, 10km 앵커에선 중심 근처여야 한다.
+      const point = at('p', 35.1532 + 1 / 111, 129.119);
+      const tight = service.rank([point], anchored(2000))[0]!;
+      const wide = service.rank([point], anchored(10000))[0]!;
+      expect(wide.crag.locality).toBeGreaterThan(tight.crag.locality);
+    });
+
+    it('반경 밖(시도 전역 덧댐)은 하한으로 눌러 가까운 후보 뒤에 세운다', () => {
+      const ranked = service.rank([at('outside', 35.1532 + 20 / 111, 129.119)], anchored(2000));
+      // 순위만 낮추고 탈락시키지는 않는다 — 인지도 감점과 같은 원칙.
+      expect(ranked[0]!.crag.locality).toBeGreaterThan(0);
+      expect(ranked[0]!.crag.locality).toBeLessThanOrEqual(0.3);
+    });
+  });
+
+  describe('인지도 판정 가능성', () => {
+    const index = (mentionedNames: string[]) => ({
+      docCount: 600,
+      mentions: (name: string) => (mentionedNames.includes(name) ? 3 : 0),
+      score: (name: string) => (mentionedNames.includes(name) ? 0.9 : 0.15),
+    });
+    // 이름은 자리수를 맞춰야 한다 — '장소9' 가 '장소99' 에 포함돼 근접 중복으로 접힌다.
+    const nameOf = (i: number) => `장소${String(i).padStart(3, '0')}`;
+    const pool = (count: number): RawPlaceCandidate[] =>
+      Array.from({ length: count }, (_, i) => ({
+        id: `p${i}`,
+        name: nameOf(i),
+        category: 'attraction',
+        address: '대구 중구',
+        coordinates: { lat: 35.87 + i / 200, lng: 128.6 },
+        source: 'pgvector' as const,
+        similarity: 0.5,
+        tags: ['city'],
+      }));
+
+    it('코퍼스가 그 지역을 못 담으면 전 후보 중립 — 언급 0 은 마이너가 아니라 정보 없음', () => {
+      // 대구 실측이 400건 중 5건(1.3%). 그 상태의 감점은 신호가 아니라 노이즈다.
+      const ranked = service.rank(pool(100), {
+        userId: 'u1',
+        destination: '대구',
+        popularityIndex: index([nameOf(0)]) as never,
+      });
+      for (const candidate of ranked) {
+        expect(candidate.crag.popularity).toBe(0.5);
+        expect(candidate.crag.penalties).not.toContain('naver-unmentioned');
+      }
+    });
+
+    it('코퍼스가 담아냈으면 감점을 그대로 살린다 — 항을 끄는 게 목적이 아니다', () => {
+      const mentioned = Array.from({ length: 20 }, (_, i) => nameOf(i));
+      const ranked = service.rank(pool(100), {
+        userId: 'u1',
+        destination: '속초',
+        popularityIndex: index(mentioned) as never,
+      });
+      expect(ranked.find((c) => c.name === nameOf(0))!.crag.popularity).toBe(0.9);
+      expect(ranked.find((c) => c.name === nameOf(99))!.crag.popularity).toBe(0.15);
+    });
+  });
 });
