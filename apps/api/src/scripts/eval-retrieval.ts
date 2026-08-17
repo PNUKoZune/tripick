@@ -219,10 +219,24 @@ function parseArgs(argv: string[]) {
  */
 const MIN_NAME_MATCH_LENGTH = 3;
 
+/**
+ * 정답 이름을 품고 있어도 **그 장소가 아닌** 부속 시설. 정답 쪽에 같은 토큰이 없으면 매칭에서 뺀다.
+ *
+ * 왜 필요한가 — 포함 매칭이 양방향이라 '남부시장 천변유료주차장'이 정답 '남부시장'의 hit 로,
+ * '무섬마을 임시주차장'이 '무섬마을'의 hit 로 세어지고 있었다(실측 2건). 주차장을 찾아 준 걸
+ * 정답으로 세면 recall 이 부풀고, 그 위에서 랭킹을 튜닝하면 노이즈를 쫓게 된다.
+ *
+ * 브랜드 지점('테라로사 사천해변점')은 빼지 않는다 — 강릉 케이스의 정답 '테라로사'는 브랜드이고
+ * 그 지점이 실제로 방문할 장소다. 부속 시설과 지점은 다른 문제라 같은 규칙으로 묶으면 안 된다.
+ */
+const ANCILLARY_TOKENS = ['주차장', '매표소', '안내소', '정류장', '화장실'] as const;
+
 function nameMatches(candidate: string, expected: string): boolean {
   const a = candidate.replace(/\s+/g, '').toLowerCase();
   const b = expected.replace(/\s+/g, '').toLowerCase();
   if (a === b) return true;
+  if (ANCILLARY_TOKENS.some((token) => a.includes(token) && !b.includes(token))) return false;
+  // 2자 이름('우도'·'홍대')은 완전 일치로만 잡는다. 부분 매칭을 허용하면 우연한 포함이 흔하다.
   const shorter = a.length <= b.length ? a : b;
   if (shorter.length < MIN_NAME_MATCH_LENGTH) return false;
   return a.includes(b) || b.includes(a);
