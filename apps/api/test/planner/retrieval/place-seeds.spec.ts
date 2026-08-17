@@ -200,4 +200,35 @@ describe('tasteTagsToKeywords', () => {
       'nature',
     ]);
   });
+
+  /**
+   * 산 이외의 자연 지형 접미. 카탈로그 실측(10,721행)으로 오탐률을 재서 고른 것들이라,
+   * 접미를 늘릴 때도 같은 방식으로 재고 나서 넣어야 한다.
+   */
+  it('자연 지형 접미를 산악·자연 신호로 읽는다', () => {
+    // 이게 없어서 제주 최대 명소가 cultural 하나로 떨어졌다.
+    expect(
+      inferPlaceTags({ name: '성산일출봉', category: 'attraction', address: '제주특별자치도 서귀포시 성산읍 일출로 284-12' }),
+    ).toEqual(expect.arrayContaining(['mountain', 'nature']));
+    expect(
+      inferPlaceTags({ name: '추암 촛대바위', category: 'attraction', address: '강원특별자치도 동해시 촛대바위길' }),
+    ).toEqual(expect.arrayContaining(['mountain', 'nature']));
+  });
+
+  it('동굴은 자연이되 산악은 아니다', () => {
+    // '군산 해망굴'은 해안 터널이라 mountain 을 주면 산악 취향 질의에 잘못 걸린다.
+    const tags = inferPlaceTags({ name: '군산 해망굴', category: 'attraction', address: '전북특별자치도 군산시 군산창2길 48' });
+    expect(tags).toContain('nature');
+    expect(tags).not.toContain('mountain');
+  });
+
+  it("전망대·등대는 자연 지형이 아니다 ('대' 를 접미로 넣지 않은 이유)", () => {
+    // 실측 178건이 거의 전부 전망대·등대·천문대라 '대' 를 넣으면 시설이 통째로 nature 가 된다.
+    // (산 이름이 든 '구봉산전망대'는 MOUNTAIN_FACILITY_WORDS 규칙으로 산악이 맞다 — 여기선 제외)
+    for (const name of ['송대말등대', '동춘터널전망대']) {
+      expect(
+        inferPlaceTags({ name, category: 'attraction', address: '강원특별자치도 삼척시' }),
+      ).not.toContain('nature');
+    }
+  });
 });
