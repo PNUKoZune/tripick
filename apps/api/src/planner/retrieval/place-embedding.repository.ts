@@ -21,7 +21,7 @@ import {
   sidoCodesForLabel,
   type RegionFilter,
 } from './region-code';
-import type { RawPlaceCandidate } from './types';
+import type { RawPlaceCandidate, VisitWindow } from './types';
 
 /**
  * 후보 검색을 어디로 좁힐지.
@@ -33,6 +33,11 @@ import type { RawPlaceCandidate } from './types';
 export type PlaceSearchScope =
   | { kind: 'region'; region: RegionFilter }
   | { kind: 'anchor'; center: Coordinates; radiusM: number };
+
+/** Date → KST 기준 'YYYY-MM-DD'. 행사 기간은 날짜 단위라 시각·타임존을 여기서 떨군다. */
+export function toKstDateString(date: Date): string {
+  return new Date(date.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
 
 export interface UpsertPlaceInput {
   kakaoPlaceId?: string | null;
@@ -48,6 +53,10 @@ export interface UpsertPlaceInput {
   imageUrl?: string | null;
   /** 'HH:MM-HH:MM' 영업시간 (KTO detailIntro2). 없으면 소비측이 제약 없음으로 처리한다. */
   openingHours?: string | null;
+  /** 행사 시작일 'YYYY-MM-DD' (KTO 축제공연행사). NULL 이면 기간 없는 상시 장소. */
+  eventStartDate?: string | null;
+  /** 행사 종료일 'YYYY-MM-DD'. 여행 날짜가 이 뒤면 후보에서 빠진다. */
+  eventEndDate?: string | null;
   /** 임베딩 대상 텍스트 해시 (증분 upsert 판정용) */
   textHash?: string | null;
   /** 임베딩에 사용한 모델 식별자 */
@@ -61,6 +70,9 @@ export interface PlaceProvenance {
   embeddingModel: string | null;
   /** 영업시간은 임베딩 텍스트에 없어 해시로 변화를 감지할 수 없다. 값 비교용으로 함께 읽는다. */
   openingHours: string | null;
+  /** 행사 기간도 임베딩 텍스트 밖이다. 연례 축제는 매년 날짜가 바뀌므로 비교가 특히 중요하다. */
+  eventStartDate: string | null;
+  eventEndDate: string | null;
 }
 
 /** 취향 벡터 기반 지역 추천 1건. */
@@ -109,9 +121,11 @@ export class PlaceEmbeddingRepository {
     scope: PlaceSearchScope,
     limit: number,
     preferenceVector?: number[],
+    visitWindow?: VisitWindow,
   ): Promise<RawPlaceCandidate[]> {
     const params: unknown[] = [`[${embedding.join(',')}]`];
     const regionClause = this.scopeClause(scope, params);
+    const eventClause = this.eventPeriodClause(visitWindow, params);
 
     params.push(limit);
     const limitIndex = params.length;
@@ -142,6 +156,7 @@ export class PlaceEmbeddingRepository {
         FROM place_embeddings
         WHERE embedding IS NOT NULL
           ${regionClause}
+          ${eventClause}
         ORDER BY embedding <=> $1::vector
         LIMIT $${limitIndex}
         `,
@@ -155,6 +170,30 @@ export class PlaceEmbeddingRepository {
       );
       return [];
     }
+  }
+
+  /**
+   * 기간 있는 행사(KTO 축제공연행사)를 **여행 날짜와 겹칠 때만** 남긴다.
+   *
+   * 축제는 장소가 아니라 이벤트다 — 적재 시점에 "끝난 것"만 빼면 오늘 적재한 8월 축제를
+   * 10월 여행 후보로 내주게 된다. 판정은 반드시 소비 시점(여행 날짜)에 해야 한다.
+   * 실측에서 `2025 영호남 전통시장 박람회`(2026년 8월 현재 종료)가 서면역·부산 결과에,
+   * `해운대 모래축제`가 골든셋 busan-beach 상위 16 안에 올라왔다.
+   *
+   * NULL 은 **기간 없음 = 상시**다. 축제가 아닌 행(관광지·음식점·카페)이 전부 여기 해당하므로
+   * 이 조건은 그들에게 아무 영향이 없다.
+   *
+   * 여행 날짜를 모르는 호출(스크립트·진단)은 오늘로 판정한다 — 이미 끝난 행사를 후보로
+   * 내주지 않는 쪽이 안전한 기본값이다.
+   */
+  private eventPeriodClause(visitWindow: VisitWindow | undefined, params: unknown[]): string {
+    const today = toKstDateString(new Date());
+    const from = visitWindow?.from ?? today;
+    const to = visitWindow?.to ?? from;
+    params.push(from, to);
+    const index = params.length - 1;
+    return `AND (event_end_date IS NULL OR event_end_date >= $${index}::date)
+          AND (event_start_date IS NULL OR event_start_date <= $${index + 1}::date)`;
   }
 
   /**
@@ -368,8 +407,15 @@ export class PlaceEmbeddingRepository {
       text_hash: string | null;
       embedding_model: string | null;
       opening_hours: string | null;
+      event_start_date: string | null;
+      event_end_date: string | null;
     }> = await this.dataSource.query(
-      `SELECT id, text_hash, embedding_model, opening_hours FROM place_embeddings WHERE ${clause.sql} LIMIT 1`,
+      // 날짜는 **문자로 읽는다** — pg 드라이버가 date 를 로컬 자정 Date 로 파싱해서 그대로
+      // 비교하면 UTC 컨테이너에서 하루가 밀린다(이 저장소가 offsetDate 주석에 남긴 것과 같은 함정).
+      `SELECT id, text_hash, embedding_model, opening_hours,
+              to_char(event_start_date, 'YYYY-MM-DD') AS event_start_date,
+              to_char(event_end_date, 'YYYY-MM-DD') AS event_end_date
+       FROM place_embeddings WHERE ${clause.sql} LIMIT 1`,
       clause.params,
     );
     const row = rows[0];
@@ -379,6 +425,8 @@ export class PlaceEmbeddingRepository {
           textHash: row.text_hash,
           embeddingModel: row.embedding_model,
           openingHours: row.opening_hours,
+          eventStartDate: row.event_start_date,
+          eventEndDate: row.event_end_date,
         }
       : null;
   }
@@ -429,6 +477,20 @@ export class PlaceEmbeddingRepository {
     await this.dataSource.query(
       'UPDATE place_embeddings SET opening_hours = $2, updated_at = NOW() WHERE id = $1',
       [id, openingHours],
+    );
+  }
+
+  /**
+   * 행사 기간만 갱신한다(재임베딩 없음). 영업시간과 같은 이유로 필요하다 — 기간은 임베딩 텍스트에
+   * 들어가지 않아 텍스트 해시가 그대로면 증분 적재가 통째로 건너뛴다.
+   *
+   * 영업시간보다 더 자주 필요하다: **연례 축제는 같은 contentId 의 날짜가 매년 바뀐다.**
+   * 이 경로가 없으면 작년 날짜가 박힌 채 영영 안 갱신돼 그 축제가 영구히 안 보이게 된다.
+   */
+  async updateEventPeriod(id: string, startDate: string, endDate: string): Promise<void> {
+    await this.dataSource.query(
+      'UPDATE place_embeddings SET event_start_date = $2, event_end_date = $3, updated_at = NOW() WHERE id = $1',
+      [id, startDate, endDate],
     );
   }
 
@@ -490,6 +552,8 @@ export class PlaceEmbeddingRepository {
           embedding_model = $12,
           region_code = $13,
           sigungu_code = $14,
+          event_start_date = $15,
+          event_end_date = $16,
           updated_at = NOW()
         WHERE id = $1
         `,
@@ -508,6 +572,8 @@ export class PlaceEmbeddingRepository {
           place.embeddingModel ?? null,
           regionCode,
           sigunguCode,
+          place.eventStartDate ?? null,
+          place.eventEndDate ?? null,
         ],
       );
       return;
@@ -531,9 +597,11 @@ export class PlaceEmbeddingRepository {
         embedding_model,
         region_code,
         sigungu_code,
+        event_start_date,
+        event_end_date,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::vector, $12, $13, $14, $15, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::vector, $12, $13, $14, $15, $16, $17, NOW())
       `,
       [
         place.kakaoPlaceId ?? null,
@@ -551,6 +619,8 @@ export class PlaceEmbeddingRepository {
         place.embeddingModel ?? null,
         regionCode,
         sigunguCode,
+        place.eventStartDate ?? null,
+        place.eventEndDate ?? null,
       ],
     );
   }

@@ -96,8 +96,8 @@ describe('PlaceEmbeddingRepository.searchByEmbedding scope', () => {
     expect(sql).toContain('region_code = $2');
     expect(sql).toContain('region_code IS NULL AND sigungu_code IS NULL');
     expect(params[1]).toBe('부산');
-    // LIMIT 은 스코프 바인딩 뒤에 온다 — 자리번호가 밀리면 조용히 다른 값이 들어간다.
-    expect(sql).toContain('LIMIT $3');
+    // LIMIT 은 스코프·행사기간 바인딩 뒤에 온다 — 자리번호가 밀리면 조용히 다른 값이 들어간다.
+    expect(sql).toContain('LIMIT $5');
   });
 
   it('시도가 없으면 시군구 코드로 좁힌다', async () => {
@@ -115,7 +115,7 @@ describe('PlaceEmbeddingRepository.searchByEmbedding scope', () => {
     await repo.searchByEmbedding([1, 0], { kind: 'region', region: { sido: null, sigungu: null } }, 16);
 
     expect(calls[0]!.sql).not.toContain('region_code =');
-    expect(calls[0]!.sql).toContain('LIMIT $2');
+    expect(calls[0]!.sql).toContain('LIMIT $4');
   });
 
   it('앵커 스코프는 bbox 로 인덱스를 타고 정확 거리로 모서리를 깎는다', async () => {
@@ -138,7 +138,39 @@ describe('PlaceEmbeddingRepository.searchByEmbedding scope', () => {
     // (실측: 에버랜드 10km 원 15건 vs bbox 54건).
     expect(sql).toContain('<= $8');
     expect(params.slice(5, 8)).toEqual([35.1532, 129.119, 5]);
-    expect(sql).toContain('LIMIT $9');
+    expect(sql).toContain('LIMIT $11');
+  });
+});
+
+describe('PlaceEmbeddingRepository 행사 기간 필터', () => {
+  it('여행 구간과 겹치는 행사만 남긴다 (NULL 은 기간 없는 상시 장소)', async () => {
+    const { repo, calls } = build();
+
+    await repo.searchByEmbedding(
+      [1, 0],
+      { kind: 'region', region: { sido: '부산', sigungu: null } },
+      16,
+      undefined,
+      { from: '2026-10-01', to: '2026-10-03' },
+    );
+
+    const { sql, params } = calls[0]!;
+    expect(sql).toContain('event_end_date IS NULL OR event_end_date >= $3::date');
+    expect(sql).toContain('event_start_date IS NULL OR event_start_date <= $4::date');
+    expect(params.slice(2, 4)).toEqual(['2026-10-01', '2026-10-03']);
+  });
+
+  it('구간을 안 주면 오늘로 판정한다 (끝난 행사를 기본으로 내주지 않는다)', async () => {
+    const { repo, calls } = build();
+
+    await repo.searchByEmbedding(
+      [1, 0],
+      { kind: 'region', region: { sido: null, sigungu: null } },
+      16,
+    );
+
+    const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    expect(calls[0]!.params.slice(1, 3)).toEqual([today, today]);
   });
 });
 

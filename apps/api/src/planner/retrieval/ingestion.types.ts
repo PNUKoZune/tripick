@@ -25,6 +25,13 @@ export interface IngestPlace {
   imageUrl?: string;
   /** 'HH:MM-HH:MM' 정규화 영업시간 (KTO detailIntro2). 카카오 소스는 제공하지 않아 비어 있다. */
   openingHours?: string;
+  /**
+   * 행사 시작일 'YYYY-MM-DD' (KTO 축제공연행사만). 없으면 상시 운영 장소다.
+   * 목록 API(areaBasedList2)는 기간을 안 주므로 searchFestival2 로 따로 조달한다.
+   */
+  eventStartDate?: string;
+  /** 행사 종료일 'YYYY-MM-DD'. 이 날짜가 지난 행사는 검색에서 제외된다. */
+  eventEndDate?: string;
   source: IngestSource;
 }
 

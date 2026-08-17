@@ -5,7 +5,7 @@ import { CragEvaluatorService } from './crag-evaluator.service';
 import { DestinationAnchorService } from './destination-anchor.service';
 import { KakaoLocalService } from './kakao-local.service';
 import { NaverSearchService, NEUTRAL_POPULARITY } from './naver-search.service';
-import { PlaceEmbeddingRepository } from './place-embedding.repository';
+import { PlaceEmbeddingRepository, toKstDateString } from './place-embedding.repository';
 import { destinationRegionFilter } from './region-code';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { isEligibleItineraryCandidate } from './place-eligibility';
@@ -16,6 +16,7 @@ import type {
   RetrievalContext,
   RetrievalResult,
   RetrievalSource,
+  VisitWindow,
 } from './types';
 
 /** 일정에 식사 슬롯을 채우는 카테고리. 앵커 반경이 충분한지 판정할 때 쓴다. */
@@ -91,6 +92,8 @@ export class PlaceRetrievalService {
     if (!anchor) await this.seedLocalCatalogIfNeeded(context.destination);
 
     const poolSize = limit * this.candidatePoolMultiplier();
+    // 기간 있는 행사(축제)는 이 구간과 겹칠 때만 후보로 남는다. 여행 날짜를 모르면 오늘 기준.
+    const visitWindow = this.visitWindow(context);
     let pgvector: RawPlaceCandidate[];
     if (anchor) {
       const around = await this.searchAroundAnchor(
@@ -98,6 +101,7 @@ export class PlaceRetrievalService {
         searchEmbedding,
         poolSize,
         limit,
+        visitWindow,
         preferenceVector,
       );
       // 확정된 반경을 컨텍스트에 실어 카카오 폴백이 같은 범위를 보게 한다.
@@ -110,6 +114,7 @@ export class PlaceRetrievalService {
           { kind: 'region', region: regionFilter },
           poolSize,
           preferenceVector,
+          visitWindow,
         ),
         'pgvector',
       );
@@ -194,6 +199,7 @@ export class PlaceRetrievalService {
     embedding: number[],
     poolSize: number,
     limit: number,
+    visitWindow: VisitWindow,
     preferenceVector?: number[],
   ): Promise<{ candidates: RawPlaceCandidate[]; radiusM: number }> {
     const steps = this.radiusStepsM();
@@ -204,6 +210,7 @@ export class PlaceRetrievalService {
           { kind: 'anchor', center: anchor.coordinates, radiusM },
           poolSize,
           preferenceVector,
+          visitWindow,
         ),
         'pgvector',
       );
@@ -226,6 +233,7 @@ export class PlaceRetrievalService {
         { kind: 'region', region: anchor.region },
         poolSize,
         preferenceVector,
+        visitWindow,
       ),
       'pgvector',
     );
@@ -254,6 +262,20 @@ export class PlaceRetrievalService {
       DINING_CATEGORIES.has(candidate.category),
     ).length;
     return dining >= MIN_KIND_COUNT && candidates.length - dining >= MIN_KIND_COUNT;
+  }
+
+  /**
+   * 후보를 방문할 날짜 구간. 여행 날짜를 모르는 호출(스크립트·진단)은 오늘 하루로 본다 —
+   * 이미 끝난 행사를 후보로 내주지 않는 쪽이 안전한 기본값이다.
+   */
+  private visitWindow(context: RetrievalContext): VisitWindow {
+    if (context.visitWindow) {
+      const { from, to } = context.visitWindow;
+      // 뒤집힌 구간이 들어오면 조건이 아무것도 통과시키지 못하므로 순서를 바로잡는다.
+      return from <= to ? { from, to } : { from: to, to: from };
+    }
+    const day = toKstDateString(context.startAt ?? new Date());
+    return { from: day, to: day };
   }
 
   /** 앵커 반경 확장 단계(m). 오름차순으로 정렬해 넓혀 가는 순서를 보장한다. */

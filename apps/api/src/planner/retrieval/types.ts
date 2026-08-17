@@ -3,6 +3,12 @@ import type { RegionFilter } from './region-code';
 
 export type RetrievalSource = 'pgvector' | 'kakao' | 'seed';
 
+/** 후보를 방문할 날짜 구간 (KST 기준 'YYYY-MM-DD', 양끝 포함). */
+export interface VisitWindow {
+  from: string;
+  to: string;
+}
+
 /**
  * 행정구역보다 좁은 목적지('광안리'·'서면역'·'남이섬')를 좌표로 해석한 결과.
  *
@@ -86,6 +92,14 @@ export interface RetrievalContext {
   notes?: string | null;
   limit?: number;
   startAt?: Date;
+  /**
+   * 후보를 **방문할 날짜 구간**. 기간 있는 행사(축제)를 여행 날짜와 겹칠 때만 남기는 데 쓴다.
+   *
+   * `startAt` 과 별개인 이유 — `startAt` 은 "그 시각에 문을 여는가"(영업시간·가용성 점수)를 보는
+   * 시각이고, 이건 "그 날짜에 열리는 행사인가"를 보는 날짜 구간이다. 일자별 검색은 하루짜리
+   * 구간이지만 `startAt` 은 첫 일차 기준으로 공유되므로, 하나로 합치면 둘 중 하나가 틀어진다.
+   */
+  visitWindow?: VisitWindow;
   /** 목적지 네이버 추천 글 기반 대중 인지도 인덱스 (place-retrieval 이 앞단에서 주입) */
   popularityIndex?: PopularityIndex;
   /**

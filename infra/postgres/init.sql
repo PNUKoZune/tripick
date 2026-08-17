@@ -58,6 +58,11 @@ ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS updated_at      TIMESTAMPT
 ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS region_code     TEXT;
 ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS sigungu_code    TEXT;
 
+-- 행사 기간 (KTO 축제공연행사). NULL 은 '기간 없음 = 상시'로 읽는다.
+-- 축제는 장소가 아니라 기간이 있는 이벤트라, 소비 시점(여행 날짜)에 판정해야 한다.
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS event_start_date date;
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS event_end_date   date;
+
 -- 앵커 반경(bbox) 검색용 위경도. coordinates jsonb 가 정본이고 이건 항상 그 파생이라
 -- 손으로 동기화할 여지가 없다. jsonb 표현식은 인덱스를 못 타 전체 스캔이 된다.
 ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS lat double precision

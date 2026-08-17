@@ -262,6 +262,7 @@ export class PlaceIngestionService {
     let duplicates = 0;
     // 재임베딩 없이 영업시간만 채운 건수 (해시가 같아 unchanged 로 분류된 기존 행)
     let openingHoursFilled = 0;
+    let eventPeriodsFilled = 0;
     for (const place of deduped) {
       const text = this.buildText(place);
       const textHash = createHash('sha256').update(text).digest('hex');
@@ -302,6 +303,22 @@ export class PlaceIngestionService {
           await this.repository.updateOpeningHours(existing.id, next);
           openingHoursFilled += 1;
         }
+        // 행사 기간도 같은 이유로 따로 채운다. 연례 축제는 같은 contentId 의 날짜가 매년 바뀌는데
+        // 이름·주소가 그대로라 해시는 변하지 않는다 — 이 경로가 없으면 작년 날짜에 갇힌다.
+        // 기간을 못 받은 이번 실행(undefined)은 저장된 값을 건드리지 않는다.
+        if (
+          place.eventStartDate &&
+          place.eventEndDate &&
+          (place.eventStartDate !== existing.eventStartDate ||
+            place.eventEndDate !== existing.eventEndDate)
+        ) {
+          await this.repository.updateEventPeriod(
+            existing.id,
+            place.eventStartDate,
+            place.eventEndDate,
+          );
+          eventPeriodsFilled += 1;
+        }
         unchanged += 1;
         continue;
       }
@@ -322,6 +339,10 @@ export class PlaceIngestionService {
           // 재임베딩(update) 경로가 무조건 null 로 덮어써 저장된 영업시간을 날리던 것을 막는다.
           // insert 시엔 existing 이 없어 null → 정상. backfill(unchanged) 경로와 대칭.
           openingHours: place.openingHours ?? existing?.openingHours ?? null,
+          // 행사 기간은 매 적재에 새로 받으므로 그대로 덮어쓴다 — 연례 축제는 KTO 가 같은
+          // contentId 의 날짜를 갱신하고, 그 갱신이 반영돼야 다음 회차가 다시 후보로 살아난다.
+          eventStartDate: place.eventStartDate ?? null,
+          eventEndDate: place.eventEndDate ?? null,
           textHash,
           embeddingModel: source === 'remote' ? model : 'hash',
         },
@@ -345,7 +366,8 @@ export class PlaceIngestionService {
     this.logger.log(
       `[${region}] 수집 ${result.fetched} → dedupe ${result.deduped} → 신규 ${inserted} / 갱신 ${updated} / 유지 ${unchanged} (삭제 ${deleted})` +
         (duplicates > 0 ? ` · 기존 장소와 중복 ${duplicates}건 건너뜀` : '') +
-        (openingHoursFilled > 0 ? ` · 영업시간 backfill ${openingHoursFilled}` : ''),
+        (openingHoursFilled > 0 ? ` · 영업시간 backfill ${openingHoursFilled}` : '') +
+        (eventPeriodsFilled > 0 ? ` · 행사기간 backfill ${eventPeriodsFilled}` : ''),
     );
     return result;
   }
