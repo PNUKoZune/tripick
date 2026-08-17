@@ -200,6 +200,41 @@ function kakaoDoc(kakaoPlaceId: string, lat: number) {
   };
 }
 
+/**
+ * 검색 게이트가 후보로 절대 안 쓰는 행이 적재만 되고 쌓이던 회귀를 막는다.
+ * 정리 CLI 로 걷어내도 재적재가 그대로 되돌려 놨다(부산 재적재 후 13건 재유입).
+ */
+describe('PlaceIngestionService 부적합 장소 차단', () => {
+  it('검색이 안 쓰는 장소(의료 시설·SEO 상호)는 적재하지 않는다', async () => {
+    const deps = mockDeps();
+    deps.kakaoLocal.searchAround.mockResolvedValue([
+      { ...kakaoDoc('k-drug', 38.2115), name: '가까운약국' },
+      { ...kakaoDoc('k-seo', 38.2116), name: '속초맛집' },
+      { ...kakaoDoc('k-ok', 38.2117), name: '속초 등대 전망대' },
+    ]);
+    const service = build(deps);
+
+    const summary = await service.ingest({ regions: ['속초'], sources: ['kakao'], maxPerRegion: 8 });
+
+    const upserted = deps.repository.upsertPlace.mock.calls.map((call) => (call[0] as { name: string }).name);
+    expect(upserted).toEqual(['속초 등대 전망대']);
+    expect(summary.totalInserted).toBe(1);
+  });
+
+  it('국내 좌표 밖(KTO placeholder)도 같은 게이트에서 막힌다', async () => {
+    const deps = mockDeps();
+    deps.kakaoLocal.searchAround.mockResolvedValue([
+      { ...kakaoDoc('k-bad', 38.2115), name: '남중국해 좌표 장소', coordinates: { lat: 19.694, lng: 117.993 } },
+    ]);
+    const service = build(deps);
+
+    const summary = await service.ingest({ regions: ['속초'], sources: ['kakao'], maxPerRegion: 8 });
+
+    expect(deps.repository.upsertPlace).not.toHaveBeenCalled();
+    expect(summary.totalInserted).toBe(0);
+  });
+});
+
 function mockDeps() {
   return {
     config: { get: jest.fn((_key: string, fallback?: unknown) => fallback) },

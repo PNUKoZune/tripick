@@ -9,6 +9,7 @@ import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { KtoCallBudget, TourApiService } from './tour-api.service';
 import { PopularPlaceService } from './popular-place.service';
 import { isSeoBusinessName } from './place-name-quality';
+import { isEligibleItineraryCandidate } from './place-eligibility';
 import { SAME_PLACE_RADIUS_M, metersBetween, normalizeCatalogName } from './near-duplicate';
 import { inferPlaceTags, parseSigungu } from './place-seeds';
 import { SIDO_CODES, placeRegionCodes } from './region-code';
@@ -247,12 +248,31 @@ export class PlaceIngestionService {
       );
     }
 
-    // SEO 상호는 소스를 가리지 않고 들어온다 — popular 관문이 막아도 카카오 주변 검색이
-    // '경주맛집' 을 실존 음식점으로 다시 주워 온다. 소스 합류 후 한 곳에서 막는다.
+    // 자동 일정에 부적합한 장소는 소스를 가리지 않고 들어온다 — popular 관문이 막아도 카카오
+    // 주변 검색이 '경주맛집' 을 실존 음식점으로 다시 주워 온다. 소스 합류 후 한 곳에서 막는다.
+    //
+    // **검색 게이트와 같은 함수로, 같은 입력으로 판정한다.** 예전엔 SEO 상호만 걸러서, 검색이
+    // 절대 후보로 안 쓰는 행(약국·의원 등)이 적재만 되고 쌓였다 — 정리 CLI 로 걷어내도 재적재가
+    // 그대로 되돌려 놨다(부산 재적재 후 13건 재유입).
+    //
+    // ⚠️ `categoryDetail` 을 일부러 넘기지 않는다. place_embeddings 는 그 값을 저장하지 않아
+    // **검색 단계의 pgvector 후보에는 categoryDetail 이 없다**. 적재 때만 그걸 넘기면 게이트가
+    // 검색보다 후해져서, 저장은 되는데 검색에는 절대 안 나오는 행이 계속 생긴다.
+    // 적재 판정은 그 행이 **저장된 모습 그대로** 검색에서 어떻게 판정될지를 예측해야 한다.
     const unique = this.dedupe(collected);
-    const deduped = unique.filter((place) => !isSeoBusinessName(place.name));
-    if (deduped.length < unique.length) {
-      this.logger.log(`[${region}] SEO 상호 ${unique.length - deduped.length}건 제외`);
+    const deduped = unique.filter((place) =>
+      isEligibleItineraryCandidate({
+        name: place.name,
+        category: place.category,
+        coordinates: place.coordinates,
+      }),
+    );
+    const excluded = unique.length - deduped.length;
+    if (excluded > 0) {
+      const seo = unique.filter((place) => isSeoBusinessName(place.name)).length;
+      this.logger.log(
+        `[${region}] 자동 일정 부적합 ${excluded}건 제외` + (seo > 0 ? ` (SEO 상호 ${seo})` : ''),
+      );
     }
     const model = this.embeddingModelId();
 
