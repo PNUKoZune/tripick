@@ -57,6 +57,7 @@
 - [preference/merged-sido-label-v1.md](preference/merged-sido-label-v1.md) — 통합 행정구역 라벨 분리(광주가 전남으로 묻히던 문제, 백필)
 - [preference/retrieval-ranking-tuning-v1.md](preference/retrieval-ranking-tuning-v1.md) — 검색 랭킹 튜닝(다양성 상한이 상위 후보를 버리던 버그, 인지도 매칭 정확도, R|cat 0.16→0.38)
 - [preference/catalog-name-quality-v1.md](preference/catalog-name-quality-v1.md) — 카탈로그 이름 품질(일반어 상호 지역 특이도, SEO 상호·여행코스 기사 제거)
+- [preference/national-ingest-retuning-v1.md](preference/national-ingest-retuning-v1.md) — 전국 적재(카탈로그 10,721→40,304행) 후 랭킹 재튜닝(후보 풀 배수는 카탈로그 크기에 묶임, 나머지 노브는 기존 값 유지)
 - [preference/destination-anchor-retrieval-v1.md](preference/destination-anchor-retrieval-v1.md) — 목적지 앵커 반경 검색(행정구역으로 안 잡히는 '광안리'·'남이섬'이 후보 0건이던 문제, 적응형 반경·앵커 거리 locality)
 - [preference/catalog-ingestion-gates-v1.md](preference/catalog-ingestion-gates-v1.md) — 카탈로그 적재 게이트(KTO 쇼핑 소매 점포·축제 행사 기간·적재↔검색 게이트 일치)
 - [preference/retrieval-eval-harness-hardening-v1.md](preference/retrieval-eval-harness-hardening-v1.md) — 평가 하네스 보강(골든셋 정답·매칭 교정, 인지도 판정 가능성 게이트, 측정 방법론)
