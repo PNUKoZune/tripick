@@ -59,6 +59,12 @@ const ATTRACTION_CATEGORIES: ReadonlySet<string> = new Set(['attraction']);
 /** 트리거 없음(최초 생성) 및 트리거별 선호 신호가 없을 때 쓰는 중립 점수. */
 const NEUTRAL_TRIGGER_SCORE = 0.64;
 
+/**
+ * `inferPlaceTags` 의 폴백 태그. 이것들만 있으면 사전이 이름에서 아무것도 못 읽은 것이다
+ * — `cultural` 은 category==='attraction' 이면 무조건 붙고, `city` 는 태그 0 일 때의 폴백이다.
+ */
+const FALLBACK_ONLY_TAGS: ReadonlySet<string> = new Set(['cultural', 'city']);
+
 /** 후보 풀 단위 판정 결과. 가를 수 없는 항은 꺼서 일률 감점이 순위를 흔드는 걸 막는다. */
 interface PoolJudgement {
   region: boolean;
@@ -86,6 +92,30 @@ interface PoolJudgement {
  * 양쪽 모두와 여유를 두는 값이다.
  */
 const DEFAULT_MIN_POPULARITY_COVERAGE = 0.05;
+
+/**
+ * 태그가 폴백뿐인 후보의 취향 점수를 중립으로 둘지.
+ *
+ * 골든셋 16케이스 연속 A/B (전국 적재 · 커버리지 97% 상태):
+ *
+ * | | R@5 | R@10 | R\|cat | MRR |
+ * |---|---|---|---|---|
+ * | 끔 | 0.234 | 0.429 | 0.530 | 0.700 |
+ * | **켬** | 0.226 | **0.431** | **0.537** | **0.723** |
+ *
+ * 케이스별 `R|cat` 은 개선 3 / 악화 1 / 무변화 12 다 — 진단이 지목한 케이스가 정확히 올랐다:
+ * 부산 0.46→**0.54**(오륙도·송도해상케이블카), 속초 0.50→**0.60**(신흥사·영금정), 경주 0.80→0.90.
+ *
+ * ⚠️ **커버리지가 채워진 뒤에야 이득이 됐다.** 커버리지 74% 시절 같은 변경은 개선 5 / 악화 5 로
+ * 갈려 채택하지 않았다(그때 기록: `retrieval-eval-harness-hardening-v1.md` §4.2). 후보 풀이 얇을
+ * 때는 중립화가 빈 자리를 엉뚱한 후보로 채웠고, 풀이 두꺼워지자 제자리를 찾았다.
+ *
+ * ⚠️ 트레이드오프 하나 — `cultural` 을 폴백으로 보므로 **문화 취향 케이스는 손해**다
+ * (gyeongju-weather-indoor R\|cat 0.50→0.33). 실제 문화시설이 `cultural` 하나만 갖고 있으면
+ * 중립이 되어 가점을 못 받는다. 3케이스 개선(+0.28)이 1케이스 악화(-0.17)보다 커서 채택했다.
+ * `cultural` 을 폴백에서 빼면 이 손해는 사라지지만 신흥사·영금정이 다시 감점된다.
+ */
+const DEFAULT_TASTE_FALLBACK_NEUTRAL = true;
 
 /**
  * 앵커 반경 경계의 locality 점수 = **거리 항의 세기**. 0.95 는 사실상 끈 것(전 후보 동점)이고,
@@ -287,8 +317,9 @@ export class CragEvaluatorService {
   ): number {
     const neutralScore = 0.56;
     const preferred = tasteTagsToKeywords(context.tasteTags);
+    const judgeable = !this.tasteFallbackNeutral() || tags.some((tag) => !FALLBACK_ONLY_TAGS.has(tag));
     const rawTagScore =
-      preferred.length === 0
+      preferred.length === 0 || !judgeable
         ? neutralScore
         : this.clamp(0.35 + preferred.filter((tag) => tags.includes(tag)).length / preferred.length);
     const rawConfidence = context.tasteTags?.confidence ?? 0;
@@ -338,6 +369,27 @@ export class CragEvaluatorService {
     if (!index || index.docCount === 0 || candidates.length === 0) return false;
     const mentioned = candidates.filter((candidate) => index.mentions(candidate.name) > 0).length;
     return mentioned / candidates.length >= this.minPopularityCoverage();
+  }
+
+  /**
+   * 태그가 폴백뿐인 후보의 취향 점수를 중립으로 둘지 (`CRAG_TASTE_FALLBACK_NEUTRAL`).
+   *
+   * `inferPlaceTags` 는 항상 최소 하나를 준다 — attraction 이면 `cultural`, 그마저 없으면 `city`.
+   * 그 둘뿐이라는 건 키워드 사전이 이 이름에서 **아무것도 못 읽었다**는 뜻이지 "취향에 안 맞는
+   * 곳"이라는 뜻이 아니다. 구분이 없으면 사전의 빈틈이 그대로 감점이 된다 — 실측에서 속초
+   * '신흥사'·'영금정', 부산 '오륙도' 가 인지도 **1.00**(코퍼스가 강하게 언급한 대표 명소)인데도
+   * 태그 매칭 0 → taste 0.54 를 받아 17~19위로 밀렸다. taste 스프레드(0.28×가중 0.27=0.076)가
+   * 인지도 차이(0.08×0.16=0.013)의 6배라 뒤집힌다.
+   *
+   * `localityJudgeable`·`popularityJudgeable` 과 같은 원칙이지만 **기본값은 끔**이다 —
+   * 근거는 DEFAULT_TASTE_FALLBACK_NEUTRAL 주석.
+   */
+  private tasteFallbackNeutral(): boolean {
+    const raw = this.config?.get<string>('CRAG_TASTE_FALLBACK_NEUTRAL');
+    if (raw === undefined || raw === null || String(raw).trim() === '') {
+      return DEFAULT_TASTE_FALLBACK_NEUTRAL;
+    }
+    return String(raw).trim() !== 'false';
   }
 
   /** 인지도 항을 켤 최소 언급 비율. 근거는 DEFAULT_MIN_POPULARITY_COVERAGE 주석. */

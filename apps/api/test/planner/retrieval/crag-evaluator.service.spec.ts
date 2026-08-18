@@ -622,4 +622,34 @@ describe('CragEvaluatorService', () => {
       expect(ranked.find((c) => c.name === nameOf(99))!.crag.popularity).toBe(0.15);
     });
   });
+
+  describe('취향 판정 가능성 (폴백 태그뿐이면 중립)', () => {
+    const ctx = (): RetrievalContext => ({
+      userId: 'u1',
+      destination: '속초',
+      tasteTags: { food: ['seafood'], mood: ['adventure'], environment: ['mountain', 'nature'], confidence: 0.85 },
+    });
+    const at = (id: string, name: string, tags: string[]): RawPlaceCandidate => ({
+      id, name, category: 'attraction', address: '강원특별자치도 속초시',
+      coordinates: { lat: 38.2 + id.length / 1000, lng: 128.6 },
+      source: 'pgvector', similarity: 0.5, tags,
+    });
+
+    it('사전이 못 읽은 후보(폴백 태그뿐)는 감점하지 않는다', () => {
+      // 실측: 신흥사·영금정이 인지도 1.00 인데 태그 매칭 0 → taste 0.54 로 17~19위까지 밀렸다.
+      // 사전의 빈틈은 "취향에 안 맞다"가 아니라 "모른다"다.
+      const [fallbackOnly, matched] = service.rank(
+        [at('a', '신흥사', ['cultural']), at('b', '설악산', ['mountain', 'nature'])],
+        ctx(),
+      );
+      const only = [fallbackOnly, matched].find((c) => c!.name === '신흥사')!;
+      expect(only.crag.taste).toBeCloseTo(0.56, 2);
+    });
+
+    it('실질 태그가 있으면 그대로 판정한다 — 항을 끄는 게 목적이 아니다', () => {
+      const ranked = service.rank([at('c', '설악산', ['mountain', 'nature'])], ctx());
+      // 4개 중 2개 매칭 → 중립(0.56)보다 확실히 높아야 한다.
+      expect(ranked[0]!.crag.taste).toBeGreaterThan(0.7);
+    });
+  });
 });
