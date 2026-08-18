@@ -231,4 +231,30 @@ describe('tasteTagsToKeywords', () => {
       ).not.toContain('nature');
     }
   });
+
+  /**
+   * 도심 거리·광장·전망 타워. 태그는 임베딩 텍스트에도 들어가므로(`buildPlaceEmbeddingText`)
+   * 이 사전의 빈틈은 점수뿐 아니라 **선발**에서 손실을 낸다 — 서울 정답 6개가 `cultural` 하나만
+   * 받아 도심·야경 질의와 벡터 거리가 멀어 풀 배수 60(4,110행의 23%)에서도 안 들어왔다.
+   */
+  it('도심 거리·광장·상점가를 도심 신호로 읽는다', () => {
+    for (const name of ['명동거리', '홍대걷고싶은거리', 'BIFF광장', '제주칠성로상점가']) {
+      expect(
+        inferPlaceTags({ name, category: 'attraction', address: '서울 중구' }),
+      ).toContain('city');
+    }
+  });
+
+  it('전망 타워는 야경 신호를 받는다', () => {
+    expect(
+      inferPlaceTags({ name: '롯데월드타워', category: 'attraction', address: '서울 송파구 올림픽로 300' }),
+    ).toEqual(expect.arrayContaining(['nightview', 'city']));
+  });
+
+  it('교차로·지명·건물은 도심 접미로 오인하지 않는다', () => {
+    // '전포 삼거리'는 교차로, '광장동'은 서울 광진구 지명, '타워팰리스'는 아파트다.
+    expect(inferPlaceTags({ name: '전포 삼거리', category: 'attraction', address: '부산 부산진구' })).not.toContain('city');
+    expect(inferPlaceTags({ name: '서울 광장동', category: 'attraction', address: '서울 광진구' })).not.toContain('city');
+    expect(inferPlaceTags({ name: '타워팰리스', category: 'attraction', address: '서울 강남구' })).not.toContain('nightview');
+  });
 });
