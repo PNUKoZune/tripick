@@ -115,14 +115,16 @@ function distanceKm(from: Coordinates, to: Coordinates): number {
   return Math.sqrt(latDelta ** 2 + lngDelta ** 2);
 }
 
-function isNearDuplicate(a: Normalized, b: Normalized): boolean {
-  if (a.stripped === b.stripped) return true;
-  const [shorter, longer] =
-    a.compact.length <= b.compact.length ? [a.compact, b.compact] : [b.compact, a.compact];
-  if (shorter.length < MIN_CONTAINMENT_LENGTH) return false;
-  if (!longer.includes(shorter)) return false;
-  if (a.place.category !== b.place.category) return false;
-  return distanceKm(a.place.coordinates, b.place.coordinates) <= CONTAINMENT_MAX_KM;
+/**
+ * 기준 `base` 가 후보 `candidate` 를 흡수하는지. **방향이 있다** — candidate 가 base 를 품어야
+ * 하고 그 반대는 아니다(§collapseNearDuplicates 의 다리 문제).
+ */
+function absorbs(base: Normalized, candidate: Normalized): boolean {
+  if (base.stripped === candidate.stripped) return true;
+  if (base.compact.length < MIN_CONTAINMENT_LENGTH) return false;
+  if (!candidate.compact.includes(base.compact)) return false;
+  if (base.place.category !== candidate.place.category) return false;
+  return distanceKm(base.place.coordinates, candidate.place.coordinates) <= CONTAINMENT_MAX_KM;
 }
 
 /**
@@ -133,9 +135,22 @@ function isNearDuplicate(a: Normalized, b: Normalized): boolean {
  * '한라산'이 맞다. 점수는 동률일 때만 본다(먼저 온 쪽). 대표는 자기 원래 순위 자리에 남으므로
  * 반환 목록은 입력의 점수 정렬을 그대로 유지한다.
  *
- * 무리 짓기는 **전이적**이다 — 특별전시관·어린이박물관은 서로를 포함하지 않지만 둘 다
- * '국립경주박물관'을 포함해 한 무리가 된다. 이름이 짧은 대표가 남으므로 전이로 무리가 커져도
- * 결과가 엉뚱해지지 않는다.
+ * 무리는 **"기준 이름 하나 + 그 이름을 품은 확장들"** 로만 짓는다. 특별전시관·어린이박물관은
+ * 서로를 포함하지 않지만 둘 다 '국립경주박물관'을 품으므로 그 기준 아래 한 무리가 된다.
+ *
+ * ⚠️ **양방향 전이 병합이면 안 된다.** 예전 구현은 쌍끼리 포함 관계만 보고 union 했는데,
+ * 긴 이름 하나가 서로 무관한 짧은 이름 둘을 이어 붙였다. 실측(속초):
+ *
+ *   속초해수욕장 ─┐
+ *                 ├─ 속초해수욕장 대관람차(속초아이)   ← 둘을 잇는 다리
+ *   속초아이     ─┘
+ *
+ * '속초해수욕장'과 '속초아이'는 서로를 포함하지 않는 **다른 장소**인데 한 무리가 되고, 가장 짧은
+ * 이름 규칙이 대표를 '속초아이'(대관람차)로 뽑아 **해수욕장이 후보에서 통째로 사라졌다**
+ * (골든셋 sokcho 정답 하나가 채점 풀에 아예 없었다).
+ *
+ * 그래서 접기는 **한 방향**이다 — 후보는 자기가 품고 있는 기준에만 접힌다. 기준을 이름이 짧은
+ * 순으로 세우므로 대표는 여전히 가장 짧은 이름이고, 서로를 품지 않는 둘은 각자 기준으로 남는다.
  */
 export function collapseNearDuplicates<T extends NearDuplicateCandidate>(
   candidates: T[],
@@ -151,29 +166,19 @@ export function collapseNearDuplicates<T extends NearDuplicateCandidate>(
     return { place: candidate, compact, stripped: stripRegionPrefix(compact, regionTokens) };
   });
 
-  // 무리 번호(union-find 없이 단순 병합 — 후보 수가 수백 단위라 O(n²) 로 충분).
-  const groupOf = normalized.map((_, index) => index);
-  const mergeInto = (from: number, to: number): void => {
-    for (let i = 0; i < groupOf.length; i += 1) {
-      if (groupOf[i] === from) groupOf[i] = to;
-    }
-  };
-  for (let i = 0; i < normalized.length; i += 1) {
-    for (let j = 0; j < i; j += 1) {
-      if (groupOf[i] === groupOf[j]) continue;
-      if (isNearDuplicate(normalized[i]!, normalized[j]!)) mergeInto(groupOf[i]!, groupOf[j]!);
-    }
+  // 이름이 짧은 순으로 기준을 세운다. 길이가 같으면 입력 순서(점수 순)로 갈라 결정적으로 만든다.
+  const byNameLength = normalized
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => a.item.compact.length - b.item.compact.length || a.index - b.index);
+
+  const baseIndexes: number[] = [];
+  const collapsed = new Set<number>();
+  for (const { item, index } of byNameLength) {
+    // 자기가 품고 있는 기준이 있으면 그 아래로 접힌다. 없으면 자기가 새 기준이 된다.
+    const base = baseIndexes.find((baseIndex) => absorbs(normalized[baseIndex]!, item));
+    if (base === undefined) baseIndexes.push(index);
+    else collapsed.add(index);
   }
 
-  const representative = new Map<number, number>();
-  normalized.forEach((item, index) => {
-    const group = groupOf[index]!;
-    const current = representative.get(group);
-    if (current === undefined || item.compact.length < normalized[current]!.compact.length) {
-      representative.set(group, index);
-    }
-  });
-
-  const keptIndexes = new Set(representative.values());
-  return candidates.filter((_, index) => keptIndexes.has(index));
+  return candidates.filter((_, index) => !collapsed.has(index));
 }
