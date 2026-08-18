@@ -255,15 +255,16 @@ export class PlaceIngestionService {
     // 절대 후보로 안 쓰는 행(약국·의원 등)이 적재만 되고 쌓였다 — 정리 CLI 로 걷어내도 재적재가
     // 그대로 되돌려 놨다(부산 재적재 후 13건 재유입).
     //
-    // ⚠️ `categoryDetail` 을 일부러 넘기지 않는다. place_embeddings 는 그 값을 저장하지 않아
-    // **검색 단계의 pgvector 후보에는 categoryDetail 이 없다**. 적재 때만 그걸 넘기면 게이트가
-    // 검색보다 후해져서, 저장은 되는데 검색에는 절대 안 나오는 행이 계속 생긴다.
-    // 적재 판정은 그 행이 **저장된 모습 그대로** 검색에서 어떻게 판정될지를 예측해야 한다.
+    // `categoryDetail` 을 함께 넘긴다 — place_embeddings 가 그 값을 저장하므로 검색 단계
+    // pgvector 후보도 같은 값을 갖는다. 예전엔 저장을 안 해서 적재 게이트가 검색보다 후해지지
+    // 않도록 **일부러 빼고** 판정했는데(§1786500000000-AddPlaceCategoryDetail), 그러면 소스가
+    // 관광지로 준 실제 명소('부산 구 백제병원' 등록문화재)가 이름 때문에 함께 죽었다.
     const unique = this.dedupe(collected);
     const deduped = unique.filter((place) =>
       isEligibleItineraryCandidate({
         name: place.name,
         category: place.category,
+        ...(place.categoryDetail ? { categoryDetail: place.categoryDetail } : {}),
         coordinates: place.coordinates,
       }),
     );
@@ -283,6 +284,7 @@ export class PlaceIngestionService {
     // 재임베딩 없이 영업시간만 채운 건수 (해시가 같아 unchanged 로 분류된 기존 행)
     let openingHoursFilled = 0;
     let eventPeriodsFilled = 0;
+    let categoryDetailsFilled = 0;
     for (const place of deduped) {
       const text = this.buildText(place);
       const textHash = createHash('sha256').update(text).digest('hex');
@@ -339,6 +341,12 @@ export class PlaceIngestionService {
           );
           eventPeriodsFilled += 1;
         }
+        // 카테고리 상세는 컬럼을 나중에 추가해 기존 행이 NULL 이다. 임베딩 텍스트엔 이미 들어가
+        // 있어 해시가 같으므로, 백필은 이 경로로만 된다(1회성 — 이후는 해시가 변화를 잡는다).
+        if (place.categoryDetail && place.categoryDetail !== existing.categoryDetail) {
+          await this.repository.updateCategoryDetail(existing.id, place.categoryDetail);
+          categoryDetailsFilled += 1;
+        }
         unchanged += 1;
         continue;
       }
@@ -351,6 +359,7 @@ export class PlaceIngestionService {
           name: place.name,
           address: place.address,
           category: place.category,
+          categoryDetail: place.categoryDetail ?? null,
           region: place.region,
           regionSigungu: place.sigungu ?? null,
           coordinates: place.coordinates,
@@ -387,7 +396,8 @@ export class PlaceIngestionService {
       `[${region}] 수집 ${result.fetched} → dedupe ${result.deduped} → 신규 ${inserted} / 갱신 ${updated} / 유지 ${unchanged} (삭제 ${deleted})` +
         (duplicates > 0 ? ` · 기존 장소와 중복 ${duplicates}건 건너뜀` : '') +
         (openingHoursFilled > 0 ? ` · 영업시간 backfill ${openingHoursFilled}` : '') +
-        (eventPeriodsFilled > 0 ? ` · 행사기간 backfill ${eventPeriodsFilled}` : ''),
+        (eventPeriodsFilled > 0 ? ` · 행사기간 backfill ${eventPeriodsFilled}` : '') +
+        (categoryDetailsFilled > 0 ? ` · 카테고리상세 backfill ${categoryDetailsFilled}` : ''),
     );
     return result;
   }

@@ -206,9 +206,12 @@ function kakaoDoc(kakaoPlaceId: string, lat: number) {
  */
 describe('PlaceIngestionService 부적합 장소 차단', () => {
   it('검색이 안 쓰는 장소(의료 시설·SEO 상호)는 적재하지 않는다', async () => {
+    // ⚠️ 소스 카테고리가 이름보다 우선한다 — 소스가 '관광명소' 로 준 것은 이름에 '약국' 이
+    // 들어 있어도 통과한다('부산 구 백제병원' 같은 실제 명소를 살리기 위한 설계).
     const deps = mockDeps();
     deps.kakaoLocal.searchAround.mockResolvedValue([
-      { ...kakaoDoc('k-drug', 38.2115), name: '가까운약국' },
+      // 카카오는 약국에 '의료,건강 > 약국' 을 준다 — 게이트는 이름보다 이 값을 먼저 본다.
+      { ...kakaoDoc('k-drug', 38.2115), name: '가까운약국', categoryDetail: '의료,건강 > 약국' },
       { ...kakaoDoc('k-seo', 38.2116), name: '속초맛집' },
       { ...kakaoDoc('k-ok', 38.2117), name: '속초 등대 전망대' },
     ]);

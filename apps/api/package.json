@@ -14,6 +14,7 @@
     "cleanup:catalog": "ts-node -r tsconfig-paths/register src/scripts/cleanup-catalog.ts",
     "rederive:region-codes": "ts-node -r tsconfig-paths/register src/scripts/rederive-region-codes.ts",
     "reembed:preferences": "ts-node -r tsconfig-paths/register src/scripts/reembed-preferences.ts",
+    "reembed:places": "ts-node -r tsconfig-paths/register src/scripts/reembed-places.ts",
     "typeorm": "typeorm-ts-node-commonjs -d src/database/data-source.ts",
     "migration:generate": "pnpm typeorm migration:generate",
     "migration:run": "pnpm typeorm migration:run",

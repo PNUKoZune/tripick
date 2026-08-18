@@ -58,6 +58,10 @@ ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS updated_at      TIMESTAMPT
 ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS region_code     TEXT;
 ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS sigungu_code    TEXT;
 
+-- 소스가 준 카테고리 상세(KTO 유형명 / 카카오 category_name). 임베딩 텍스트·태그 유추·검색
+-- eligibility 판정이 모두 이 값을 쓰므로, 저장해 두지 않으면 적재 시점과 검색 시점의 판정이 갈린다.
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS category_detail TEXT;
+
 -- 행사 기간 (KTO 축제공연행사). NULL 은 '기간 없음 = 상시'로 읽는다.
 -- 축제는 장소가 아니라 기간이 있는 이벤트라, 소비 시점(여행 날짜)에 판정해야 한다.
 ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS event_start_date date;

@@ -172,6 +172,22 @@ export class KtoQuotaExceededError extends Error {
  *    LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR
  * 둘 다 axios 가 던지지 않으므로(HTTP 200) 본문을 직접 봐야 한다.
  */
+/**
+ * HTTP 429 = 호출량 초과. **본문 검사(`detectKtoQuota`)로는 안 잡힌다** — 그건 KTO 가 200 에
+ * 실어 보내는 초과 메시지를 보는 것이고, 429 는 axios 가 던져서 일반 catch 로 빠진다.
+ *
+ * 그래서 실측에서 이렇게 됐다: 전량 적재를 하루에 세 번 돌린 뒤 백필을 실행했더니 서울 8페이지째부터
+ * 전부 429 였는데, 지역마다 실패 경고만 찍고 16개 시도를 끝까지 돌고 **"적재 완료: 신규 0 / 갱신 0"**
+ * 으로 끝났다. "할 일이 없었다"와 "전부 실패했다"가 같은 보고로 나온 것이다.
+ */
+function isRateLimited(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { response?: { status?: number } }).response?.status === 429
+  );
+}
+
 export function detectKtoQuota(data: unknown): boolean {
   if (typeof data === 'string') {
     return (
@@ -673,6 +689,11 @@ export class TourApiService {
       return toArray(items && typeof items !== 'string' ? items.item : undefined);
     } catch (error) {
       if (error instanceof KtoQuotaExceededError) throw error; // 초과는 상위로 전파해 수집 중단
+      // HTTP 429 도 초과다 — 예산을 소진 처리하고 상위로 던져 남은 지역까지 헛돌지 않게 한다.
+      if (isRateLimited(error)) {
+        budget?.markExhausted();
+        throw new KtoQuotaExceededError('areaBasedList2 (HTTP 429)');
+      }
       this.logger.warn(
         `KTO areaBasedList2 실패 (lDongRegnCd=${lDongRegnCd}, page=${pageNo}): ${error instanceof Error ? error.message : String(error)}`,
       );

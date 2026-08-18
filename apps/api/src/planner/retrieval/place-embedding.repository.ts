@@ -45,6 +45,11 @@ export interface UpsertPlaceInput {
   name: string;
   address?: string | null;
   category?: string | null;
+  /**
+   * 소스가 준 카테고리 상세 (KTO 유형명 '관광지' / 카카오 category_name 경로).
+   * 임베딩 텍스트·태그 유추·검색 eligibility 판정이 모두 이 값을 보므로 저장해야 적재와 검색이 일치한다.
+   */
+  categoryDetail?: string | null;
   /** destination_region 컬럼에 저장할 지역 라벨 (예: '서울', 'seoul') */
   region: string;
   /** region_sigungu 컬럼에 저장할 시군구 라벨 (예: '경주시') */
@@ -73,6 +78,11 @@ export interface PlaceProvenance {
   /** 행사 기간도 임베딩 텍스트 밖이다. 연례 축제는 매년 날짜가 바뀌므로 비교가 특히 중요하다. */
   eventStartDate: string | null;
   eventEndDate: string | null;
+  /**
+   * 카테고리 상세는 임베딩 텍스트 **안**에 있지만(해시가 변화를 잡는다) 컬럼을 새로 추가했으므로
+   * 기존 행은 NULL 이다. 해시가 같아 `unchanged` 로 떨어지는 행을 채우려면 값 비교가 필요하다.
+   */
+  categoryDetail: string | null;
 }
 
 /** 취향 벡터 기반 지역 추천 1건. */
@@ -102,6 +112,7 @@ interface PlaceEmbeddingRow {
   name: string;
   address?: string | null;
   category?: string | null;
+  category_detail?: string | null;
   destination_region?: string | null;
   coordinates?: Coordinates | string | null;
   image_url?: string | null;
@@ -147,6 +158,7 @@ export class PlaceEmbeddingRepository {
                name,
                address,
                category,
+               category_detail,
                destination_region,
                coordinates,
                image_url,
@@ -407,6 +419,7 @@ export class PlaceEmbeddingRepository {
       text_hash: string | null;
       embedding_model: string | null;
       opening_hours: string | null;
+      category_detail: string | null;
       event_start_date: string | null;
       event_end_date: string | null;
     }> = await this.dataSource.query(
@@ -427,6 +440,7 @@ export class PlaceEmbeddingRepository {
           openingHours: row.opening_hours,
           eventStartDate: row.event_start_date,
           eventEndDate: row.event_end_date,
+          categoryDetail: row.category_detail,
         }
       : null;
   }
@@ -495,6 +509,18 @@ export class PlaceEmbeddingRepository {
   }
 
   /**
+   * 카테고리 상세만 갱신한다(재임베딩 없음). 이 컬럼은 나중에 추가돼 기존 행이 NULL 인데,
+   * 임베딩 텍스트는 이미 그 값을 포함해 만들어졌으므로 해시가 같아 증분 적재가 건너뛴다.
+   * 백필 1회를 위한 경로 — 그 뒤로는 텍스트 해시가 변화를 잡는다.
+   */
+  async updateCategoryDetail(id: string, categoryDetail: string): Promise<void> {
+    await this.dataSource.query(
+      'UPDATE place_embeddings SET category_detail = $2, updated_at = NOW() WHERE id = $1',
+      [id, categoryDetail],
+    );
+  }
+
+  /**
    * 카카오 장소 ID 로 적재된 영업시간을 조회한다. 사용자가 지도에서 고른 장소를 일정에
    * 수동 추가할 때, 이미 적재된 값이 있으면 외부 API 왕복 없이 재사용하기 위한 경로.
    * 적재 안 됐거나 영업시간이 없으면 null.
@@ -554,6 +580,7 @@ export class PlaceEmbeddingRepository {
           sigungu_code = $14,
           event_start_date = $15,
           event_end_date = $16,
+          category_detail = $17,
           updated_at = NOW()
         WHERE id = $1
         `,
@@ -574,6 +601,7 @@ export class PlaceEmbeddingRepository {
           sigunguCode,
           place.eventStartDate ?? null,
           place.eventEndDate ?? null,
+          place.categoryDetail ?? null,
         ],
       );
       return;
@@ -599,9 +627,10 @@ export class PlaceEmbeddingRepository {
         sigungu_code,
         event_start_date,
         event_end_date,
+        category_detail,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::vector, $12, $13, $14, $15, $16, $17, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::vector, $12, $13, $14, $15, $16, $17, $18, NOW())
       `,
       [
         place.kakaoPlaceId ?? null,
@@ -621,6 +650,7 @@ export class PlaceEmbeddingRepository {
         sigunguCode,
         place.eventStartDate ?? null,
         place.eventEndDate ?? null,
+        place.categoryDetail ?? null,
       ],
     );
   }
@@ -685,6 +715,7 @@ export class PlaceEmbeddingRepository {
       ...(row.tourism_api_id ? { tourismApiId: row.tourism_api_id } : {}),
       name: row.name,
       category: row.category ?? 'attraction',
+      ...(row.category_detail ? { categoryDetail: row.category_detail } : {}),
       address: row.address ?? '',
       coordinates,
       ...(row.image_url ? { imageUrl: row.image_url } : {}),
