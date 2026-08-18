@@ -15,6 +15,18 @@ import { inferPlaceTags, parseSigungu } from './place-seeds';
 import { SIDO_CODES, placeRegionCodes } from './region-code';
 import type { IngestPlace, IngestRegionResult, IngestSource, IngestSummary } from './ingestion.types';
 
+/**
+ * 카탈로그에서 앵커를 뽑을 때 읽는 좌표 상한. 한 시도 최대치(실측 경기 6,524행)를 넉넉히 덮는다
+ * — 표본이 지역 전체보다 작으면 앵커가 그 표본 쪽으로 쏠린다. 읽는 건 double 두 개뿐이다.
+ */
+const CATALOG_ANCHOR_SAMPLE = 20000;
+
+/**
+ * 카탈로그 앵커를 채울 때 필요한 개수의 몇 배를 뽑아 둘지. 기존 앵커와 겹치는 후보가 버려지므로
+ * 딱 맞게 뽑으면 걸러진 만큼 슬롯이 빈다.
+ */
+const ANCHOR_FILL_OVERFETCH = 4;
+
 export interface IngestOptions {
   /** 특정 시도명만 적재 (예: '서울'). 미지정 시 전국 시도. */
   regions?: string[];
@@ -406,7 +418,12 @@ export class PlaceIngestionService {
    * 앞선 소스(popular·관광공사) 좌표에서 뽑은 앵커들을 중심으로 카카오 카테고리 검색
    * (위치+category_group_code)을 돌려 지역 장소를 수집한다. budget(=관광공사와 동일 상한)을
    * 앵커·카테고리에 고르게 분배해 소스 비중을 반반으로 맞춘다.
-   * 앵커가 하나도 없으면 지역 중심 1곳으로 폴백한다.
+   *
+   * 앵커는 **이번 실행 좌표가 1순위, 카탈로그 좌표가 채움**이다. 순서가 뒤집히면 안 된다 —
+   * 카탈로그 앵커는 실행마다 같은 상위 버킷이라, 그게 앞에 오면 append 모드가 매 배치 같은
+   * 곳만 다시 훑는다. 이번 배치 좌표를 먼저 쓰면 배치가 넘어갈 때 탐색 지점도 함께 옮겨간다.
+   * 남은 슬롯만 카탈로그로 채우므로 카카오 단독 실행(앵커 0개)에서도 지역 전역이 잡힌다.
+   * 채움 앵커는 기존 앵커와 반경 절반 안이면 버린다 — 원이 겹치는 만큼 budget 이 낭비된다.
    */
   private async fetchKakao(
     region: string,
@@ -414,7 +431,25 @@ export class PlaceIngestionService {
     anchorPlaces: IngestPlace[],
   ): Promise<IngestPlace[]> {
     const radius = this.ingestRadius();
-    let centers = this.deriveAnchors(anchorPlaces, this.maxAnchors());
+    const maxAnchors = this.maxAnchors();
+    let centers = this.deriveAnchors(
+      anchorPlaces.map((place) => place.coordinates),
+      maxAnchors,
+    );
+
+    const fromRunCount = centers.length;
+    if (fromRunCount < maxAnchors) {
+      const catalog = await this.repository.findRegionCoordinates(region, CATALOG_ANCHOR_SAMPLE);
+      const fill = this.deriveAnchors(catalog, maxAnchors * ANCHOR_FILL_OVERFETCH).filter(
+        (candidate) => !centers.some((taken) => metersBetween(taken, candidate) <= radius / 2),
+      );
+      centers = [...centers, ...fill].slice(0, maxAnchors);
+      if (centers.length > fromRunCount) {
+        this.logger.log(
+          `[${region}] 카카오 앵커 ${centers.length}곳 = 이번 실행 ${fromRunCount} + 카탈로그 ${centers.length - fromRunCount} (반경 ${radius}m)`,
+        );
+      }
+    }
 
     if (centers.length === 0) {
       const center = await this.kakaoLocal.resolveCenter(region);
@@ -458,14 +493,13 @@ export class PlaceIngestionService {
   }
 
   /**
-   * 관광공사 장소 좌표를 격자(≈0.1°, 약 10km)로 버킷팅해 밀집 순으로 앵커(버킷 중심)를 뽑는다.
+   * 장소 좌표를 격자(≈0.1°, 약 10km)로 버킷팅해 밀집 순으로 앵커(버킷 중심)를 뽑는다.
    * 장소가 실제로 몰린 지역(관광 중심지)을 카카오 검색의 중심으로 삼아 시도 전역을 고르게 훑는다.
    */
-  private deriveAnchors(places: IngestPlace[], maxAnchors: number): Coordinates[] {
-    if (places.length === 0) return [];
+  private deriveAnchors(coordinates: Coordinates[], maxAnchors: number): Coordinates[] {
+    if (coordinates.length === 0) return [];
     const buckets = new Map<string, { latSum: number; lngSum: number; count: number }>();
-    for (const place of places) {
-      const { lat, lng } = place.coordinates;
+    for (const { lat, lng } of coordinates) {
       const key = `${lat.toFixed(1)},${lng.toFixed(1)}`;
       const bucket = buckets.get(key) ?? { latSum: 0, lngSum: 0, count: 0 };
       bucket.latSum += lat;
@@ -484,9 +518,16 @@ export class PlaceIngestionService {
     return Number.isFinite(value) && value > 0 ? Math.min(value, 20000) : 10000;
   }
 
+  /**
+   * 기본 8 → 24. 앵커 하나가 덮는 면적은 반경 10km 원(≈314km²)이라 8곳으로는 시도 하나를
+   * 못 덮는다(경기 10,200km²). 앵커가 KTO 좌표에 묶여 있던 동안엔 8개 넘게 뽑아도 이번 배치
+   * 안에서만 나뉘어 의미가 없었지만, 카탈로그로 채우게 된 뒤로는 24곳이 실제로 서로 다른
+   * 관광 밀집지를 짚는다. 호출 비용은 앵커×카테고리 4×페이지 ≤3 = 시도당 ≤288 콜로,
+   * 일 한도가 KTO 와 별개인 카카오에선 전국(17시도)을 돌려도 여유가 있다.
+   */
   private maxAnchors(): number {
-    const value = Number(this.config.get<string | number>('KAKAO_INGEST_MAX_ANCHORS', 8));
-    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 8;
+    const value = Number(this.config.get<string | number>('KAKAO_INGEST_MAX_ANCHORS', 24));
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 24;
   }
 
   /**

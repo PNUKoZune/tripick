@@ -347,6 +347,42 @@ export class PlaceEmbeddingRepository {
     }
   }
 
+  /**
+   * 이 지역 카탈로그에 이미 적재된 좌표 목록. 카카오 주변 검색의 **앵커 후보**로만 쓴다.
+   *
+   * 카카오만 돌리는 실행(`--sources=kakao`)은 같은 실행에서 KTO 좌표를 못 받아
+   * 지역 중심 1곳(반경 10km)으로 떨어졌다 — 시도 하나를 그 한 점으로 훑을 수 없어
+   * 카카오 전용 장소(카페·음식점) 보강이 사실상 도심 근처만 됐다. 이미 적재된 관광지
+   * 좌표가 그 지역의 관광 밀집지를 그대로 알려 주므로, KTO 호출 없이 앵커를 얻는다
+   * — KTO 일 한도를 다 쓴 날에도 카카오(별개 한도)만으로 보강 실행이 가능해진다.
+   *
+   * `ORDER BY id` 는 실행 간 같은 표본을 보장하려는 것이다(정렬 없는 LIMIT 은 계획에 따라
+   * 표본이 바뀌어 앵커가 흔들린다). 좌표만 읽으므로 전 지역 최대치를 그대로 받아도 싸다.
+   */
+  async findRegionCoordinates(destination: string, limit: number): Promise<Coordinates[]> {
+    const { sido, sigungu } = destinationRegionFilter(destination);
+    const column = sido ? 'region_code' : sigungu ? 'sigungu_code' : null;
+    const code = sido ?? sigungu;
+    if (!column || !code) return [];
+    try {
+      const rows: Array<{ lat: number; lng: number }> = await this.dataSource.query(
+        `SELECT lat, lng FROM place_embeddings
+         WHERE ${column} = $1 AND lat IS NOT NULL AND lng IS NOT NULL
+         ORDER BY id
+         LIMIT $2`,
+        [code, limit],
+      );
+      return rows
+        .map((row) => ({ lat: Number(row.lat), lng: Number(row.lng) }))
+        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+    } catch (error) {
+      this.logger.warn(
+        `앵커용 좌표 조회 실패 (${destination}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return [];
+    }
+  }
+
   async seedRegion(
     destination: string,
     embed: (text: string) => Promise<number[]>,

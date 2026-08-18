@@ -238,6 +238,74 @@ describe('PlaceIngestionService 부적합 장소 차단', () => {
   });
 });
 
+/**
+ * 카카오만 돌리는 실행이 지역 중심 1곳으로 떨어져 시도 전역을 못 훑던 회귀를 막는다.
+ * (KTO 일 한도를 다 쓴 날에도 카카오 단독 보강이 되어야 한다)
+ */
+describe('PlaceIngestionService 카카오 앵커', () => {
+  it('이번 실행에 앵커가 없으면 카탈로그 좌표에서 뽑는다 (지역 중심 폴백 금지)', async () => {
+    const deps = mockDeps();
+    // 서로 다른 0.1° 버킷 3곳 — 앵커 3곳이 나와야 한다.
+    deps.repository.findRegionCoordinates.mockResolvedValue([
+      { lat: 38.21, lng: 128.59 },
+      { lat: 37.55, lng: 126.98 },
+      { lat: 35.16, lng: 129.16 },
+    ]);
+    const service = build(deps);
+
+    await service.ingest({ regions: ['강원'], sources: ['kakao'], maxPerRegion: 40 });
+
+    expect(deps.kakaoLocal.resolveCenter).not.toHaveBeenCalled();
+    expect(deps.kakaoLocal.searchAround).toHaveBeenCalledTimes(3);
+  });
+
+  it('이번 실행 앵커를 앞에 두고 남은 슬롯만 카탈로그로 채운다', async () => {
+    const deps = mockDeps();
+    deps.config.get = jest.fn((key: string, fallback?: unknown) =>
+      key === 'KAKAO_INGEST_MAX_ANCHORS' ? 2 : fallback,
+    );
+    deps.tourApi.fetchByArea.mockResolvedValue({
+      places: [
+        {
+          tourismApiId: 't-1',
+          name: '속초시립박물관',
+          category: 'attraction',
+          address: '강원특별자치도 속초시 신흥2길 16',
+          coordinates: { lat: 38.19, lng: 128.6 },
+          region: '강원특별자치도',
+          source: 'tour',
+        },
+      ],
+      nextOffset: 0,
+      quotaExceeded: false,
+    });
+    // 첫 좌표는 이번 실행 앵커와 반경 절반(5km) 안이라 버려지고, 먼 쪽이 남은 슬롯을 채운다.
+    deps.repository.findRegionCoordinates.mockResolvedValue([
+      { lat: 38.192, lng: 128.601 },
+      { lat: 37.55, lng: 126.98 },
+    ]);
+    const service = build(deps);
+
+    await service.ingest({ regions: ['강원'], sources: ['tour', 'kakao'], maxPerRegion: 40 });
+
+    const centers = deps.kakaoLocal.searchAround.mock.calls.map((call) => call[0]);
+    expect(centers).toEqual([
+      { lat: 38.19, lng: 128.6 },
+      { lat: 37.55, lng: 126.98 },
+    ]);
+  });
+
+  it('카탈로그도 비면 지역 중심 1곳으로 폴백한다', async () => {
+    const deps = mockDeps();
+    const service = build(deps);
+
+    await service.ingest({ regions: ['강원'], sources: ['kakao'], maxPerRegion: 40 });
+
+    expect(deps.kakaoLocal.resolveCenter).toHaveBeenCalledWith('강원특별자치도');
+    expect(deps.kakaoLocal.searchAround).toHaveBeenCalledTimes(1);
+  });
+});
+
 function mockDeps() {
   return {
     config: { get: jest.fn((_key: string, fallback?: unknown) => fallback) },
@@ -261,6 +329,7 @@ function mockDeps() {
       deleteRegion: jest.fn().mockResolvedValue(0),
       findProvenance: jest.fn().mockResolvedValue(null),
       findSamePlace: jest.fn().mockResolvedValue(null),
+      findRegionCoordinates: jest.fn().mockResolvedValue([]),
       upsertPlace: jest.fn().mockResolvedValue(undefined),
       updateOpeningHours: jest.fn().mockResolvedValue(undefined),
     },

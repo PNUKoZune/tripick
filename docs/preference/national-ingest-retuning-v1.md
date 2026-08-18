@@ -281,4 +281,4 @@ pnpm reembed:places -- --apply --regions=서울,부산
 
 - `daegu-nostalgic` R\|cat 0.23, `seoul-city-nightview` 0.20 — 커버리지 100% 인데 낮다. 순수 랭킹 실패가 남은 두 케이스
 - `jeonju-food-hanok` 78% · `gyeongju-weather-indoor` 86% — 커버리지가 아직 안 찬 유이한 케이스. KTO 에 없는 정답(객리단길·자만벽화마을·솔거미술관)이라 카카오·popular 소스 패스가 필요하다
-- 카카오 소스는 이번에 안 돌렸다(`--sources=tour` 만). 카카오 전용 장소(카페·프랜차이즈) 보강은 별도 실행
+- 카카오 소스는 이번에 안 돌렸다(`--sources=tour` 만). 그 뒤 별도로 돌린 결과와 거기서 드러난 체인 지점 문제는 [kakao-source-enrichment-v1.md](kakao-source-enrichment-v1.md) 로 이어진다

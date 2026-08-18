@@ -22,7 +22,7 @@
  *
  * 옵션:
  *   --apply         실제로 삭제한다 (기본은 dry-run)
- *   --only=a,b      대상 부류 선택 (seo, course, coords, lodging, dup / 기본 전부)
+ *   --only=a,b      대상 부류 선택 (seo, course, coords, lodging, retail, dup, ineligible / 기본 전부)
  *   --samples=30    보고할 표본 수 (기본 30)
  *
  * course·retail 판정은 KTO 에 "이 시도의 그 유형 목록"을 되물어(areaBasedList2 contentTypeId)
@@ -39,6 +39,7 @@ import {
   isTravelCourseArticle,
 } from '../planner/retrieval/place-name-quality';
 import {
+  KtoQuotaExceededError,
   SHOPPING_CONTENT_TYPE,
   TRAVEL_COURSE_CONTENT_TYPE,
   TourApiService,
@@ -80,6 +81,7 @@ interface CatalogRow {
   created_at: string;
   destination_region: string | null;
   tourism_api_id: string | null;
+  category_detail: string | null;
   coordinates: { lat: number; lng: number } | null;
 }
 
@@ -128,7 +130,7 @@ async function main() {
 
     const rows: CatalogRow[] = await dataSource.query(
       `SELECT id, name, address, category, opening_hours, image_url, created_at,
-              destination_region, tourism_api_id, coordinates
+              destination_region, tourism_api_id, category_detail, coordinates
        FROM place_embeddings`,
     );
     console.log(`\n카탈로그 ${rows.length}행 검사`);
@@ -227,14 +229,15 @@ async function main() {
     if (options.targets.includes('ineligible')) {
       // 검색 게이트를 그대로 되물어 본다 — 게이트가 이미 거부하는 행은 결과에 못 나오면서
       // 카탈로그 용량과 후보 풀 자리만 차지한다. 규칙을 여기 복제하지 않아야 둘이 안 갈린다.
-      // (DB 에는 categoryDetail 컬럼이 없어 이름·카테고리·좌표만 넘긴다 — 게이트의 마지막
-      //  이름 검사가 의료 시설을 잡는 경로다.)
+      // `category_detail` 까지 넘겨야 검색과 **같은 입력**으로 판정한다 — 그 값이 빠지면
+      // 카테고리 화이트리스트가 안 걸려, 검색은 후보로 쓰는 행을 정리가 지워 버린다.
       const hits = rows.filter(
         (row) =>
           !doomed.has(row.id) &&
           !isEligibleItineraryCandidate({
             name: row.name,
             category: row.category ?? 'attraction',
+            ...(row.category_detail ? { categoryDetail: row.category_detail } : {}),
             ...(row.coordinates ? { coordinates: row.coordinates } : {}),
           }),
       );
@@ -329,7 +332,14 @@ function reportDuplicateGroups(groups: DuplicateGroup[], samples: number): void 
   if (groups.length > samples) console.log(`  … 외 ${groups.length - samples}무리`);
 }
 
-/** 전국 시도의 해당 contentTypeId 집합. KTO 키가 없으면 null. */
+/**
+ * 전국 시도의 해당 contentTypeId 집합. KTO 키가 없거나 **일 한도를 넘겼으면** null.
+ *
+ * 한도 초과를 던져서 프로세스를 죽이면 안 된다 — KTO 를 쓰는 단계는 course·retail 둘뿐이고
+ * 나머지(seo·coords·lodging·dup·ineligible)는 키 없이 돌아간다. 예전엔 429 가 main 밖으로
+ * 나가면서 뒤에 오는 `ineligible` 단계가 통째로 실행되지 않았다(한도를 다 쓴 날엔 정리 자체가
+ * 불가능해진다). 확정 집합을 못 만든 단계만 건너뛰고 나머지는 그대로 돌린다.
+ */
 async function collectContentIds(
   tourApi: TourApiService,
   contentTypeId: string,
@@ -339,10 +349,18 @@ async function collectContentIds(
   if (sidos.length === 0) return null;
 
   const ids = new Set<string>();
-  for (const sido of sidos) {
-    const contentIds = await tourApi.fetchContentIds(sido.code, contentTypeId);
-    for (const id of contentIds) ids.add(id);
-    console.log(`  [${sido.name}] ${label} ${contentIds.length}건`);
+  try {
+    for (const sido of sidos) {
+      const contentIds = await tourApi.fetchContentIds(sido.code, contentTypeId);
+      for (const id of contentIds) ids.add(id);
+      console.log(`  [${sido.name}] ${label} ${contentIds.length}건`);
+    }
+  } catch (error) {
+    if (error instanceof KtoQuotaExceededError) {
+      console.log(`  [${label}] KTO 일 한도 초과 — 이 단계를 건너뜁니다.`);
+      return null;
+    }
+    throw error;
   }
   return ids;
 }

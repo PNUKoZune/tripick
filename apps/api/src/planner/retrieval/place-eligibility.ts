@@ -1,4 +1,4 @@
-import { isSeoBusinessName } from './place-name-quality';
+import { isChainBranchOutlet, isSeoBusinessName } from './place-name-quality';
 import { isRegionLabel } from './region-code';
 import type { RawPlaceCandidate } from './types';
 
@@ -96,6 +96,10 @@ export function isEligibleItineraryCandidate(
   // 전에 들어온 행과 아직 정리 스크립트를 돌리지 않은 환경이 있어 검색 단계에서도 뺀다.
   // 카테고리 화이트리스트는 이걸 못 막는다 — 실존 음식점이라 '음식점' 카테고리를 달고 온다.
   if (isSeoBusinessName(place.name)) return false;
+
+  // 프랜차이즈 개별 지점('스타벅스 다대포해수욕장점'). **카테고리 화이트리스트보다 위여야 한다** —
+  // 지점은 소스가 '음식점'·'카페' 로 주므로 아래 화이트리스트가 먼저 true 로 끊어 버린다.
+  if (isChainBranchOutlet(place.name)) return false;
 
   const categoryDetail = normalize(place.categoryDetail ?? '');
   if (EXCLUDED_CATEGORY_KEYWORDS.some((keyword) => categoryDetail.includes(normalize(keyword)))) {
