@@ -79,13 +79,13 @@ export function LiveMap({
             onRecenterToCurrent?.();
             setRecenterKey((key) => key + 1);
           }}
-          className="absolute bottom-3 right-3 z-10 flex size-11 items-center justify-center rounded-full border border-[#E5E8EB] bg-white shadow-[0_4px_12px_rgba(15,23,42,0.16)] active:scale-95"
+          className="absolute bottom-3 right-3 z-10 flex size-11 items-center justify-center rounded-full border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#FFFFFF)] text-[color:var(--primary,#3182F6)] shadow-[0_4px_12px_rgba(15,23,42,0.16)] active:scale-95"
         >
           <svg
             viewBox="0 0 24 24"
             className="size-5"
             fill="none"
-            stroke="#3182F6"
+            stroke="currentColor"
             strokeWidth={2}
             strokeLinecap="round"
             strokeLinejoin="round"

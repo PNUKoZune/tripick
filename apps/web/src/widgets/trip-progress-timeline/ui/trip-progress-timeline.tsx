@@ -14,17 +14,12 @@ type Props = {
 };
 
 const DOT_STYLE: Record<ProgressItem['progress'], string> = {
-  done: 'bg-[#D1D6DB] border-[#D1D6DB]',
-  current: 'bg-[#3182F6] border-[#3182F6]',
-  upcoming: 'bg-white border-[#D1D6DB]',
+  done: 'bg-[color:var(--line-dot)] border-[color:var(--line-dot)]',
+  current: 'bg-[color:var(--primary)] border-[color:var(--primary)]',
+  upcoming: 'bg-[color:var(--card)] border-[color:var(--line-dot)]',
 };
 
-export function TripProgressTimeline({
-  items,
-  selectedItemId,
-  onSelectItem,
-  onSwitchItem,
-}: Props) {
+export function TripProgressTimeline({ items, selectedItemId, onSelectItem, onSwitchItem }: Props) {
   const currentRef = useRef<HTMLLIElement>(null);
   const currentId = items.find((entry) => entry.progress === 'current')?.item.id ?? null;
 
@@ -37,7 +32,7 @@ export function TripProgressTimeline({
 
   if (items.length === 0) {
     return (
-      <div className="rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] px-4 py-6 text-center text-[14px] font-semibold text-[#8B95A1]">
+      <div className="rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-4 py-6 text-center text-[14px] font-semibold text-[color:var(--ink-faint)]">
         오늘 예정된 일정이 없어요.
       </div>
     );
@@ -60,14 +55,14 @@ export function TripProgressTimeline({
             {/* 타임라인 레일: dot 을 카드 세로 중앙에 두고 선이 위아래로 관통 */}
             <div className="relative flex w-3 shrink-0 items-center justify-center">
               {!isFirst ? (
-                <span className="absolute left-1/2 top-0 h-1/2 w-0.5 -translate-x-1/2 bg-[#E5E8EB]" />
+                <span className="absolute left-1/2 top-0 h-1/2 w-0.5 -translate-x-1/2 bg-[color:var(--line)]" />
               ) : null}
               {!isLast ? (
-                <span className="absolute left-1/2 top-1/2 -bottom-3 w-0.5 -translate-x-1/2 bg-[#E5E8EB]" />
+                <span className="absolute left-1/2 top-1/2 -bottom-3 w-0.5 -translate-x-1/2 bg-[color:var(--line)]" />
               ) : null}
               <span
                 className={`relative z-10 size-3 shrink-0 rounded-full border-2 ${DOT_STYLE[progress]} ${
-                  isCurrent ? 'ring-4 ring-[#3182F6]/15' : ''
+                  isCurrent ? 'ring-4 ring-[color:var(--primary)]/15' : ''
                 }`}
               />
             </div>
@@ -78,27 +73,35 @@ export function TripProgressTimeline({
               role={onSelectItem ? 'button' : undefined}
               className={`flex-1 rounded-[14px] border px-4 py-3 transition ${
                 onSelectItem
-                  ? 'cursor-pointer hover:border-[#3182F6]/40 hover:shadow-[0_4px_12px_rgba(49,130,246,0.10)]'
+                  ? 'cursor-pointer hover:border-[color:var(--primary)]/40 hover:shadow-[var(--shadow-card)]'
                   : ''
               } ${
                 isCurrent
-                  ? 'border-[#3182F6] bg-[#F4F9FF] shadow-[0_4px_12px_rgba(49,130,246,0.12)]'
-                  : 'border-[#E5E8EB] bg-white'
-              } ${isSelected ? 'ring-2 ring-[#3182F6] ring-offset-1' : ''} ${
-                isDone ? 'opacity-60' : ''
-              }`}
+                  ? 'border-[color:var(--primary)] bg-[color:var(--primary-tint)] shadow-[var(--shadow-card)]'
+                  : 'border-[color:var(--line)] bg-[color:var(--card)]'
+              } ${
+                isSelected
+                  ? 'ring-2 ring-[color:var(--primary)] ring-offset-1 ring-offset-[color:var(--card)]'
+                  : ''
+              } ${isDone ? 'opacity-60' : ''}`}
             >
               <div className="flex items-center gap-2">
-                <span className="text-[13px] font-bold text-[#4E5968]">{item.scheduledAt}</span>
-                <span className="text-[11px] font-semibold text-[#8B95A1]">{item.typeLabel}</span>
+                <span className="text-[13px] font-bold text-[color:var(--ink-sub)]">
+                  {item.scheduledAt}
+                </span>
+                <span className="text-[11px] font-semibold text-[color:var(--ink-faint)]">
+                  {item.typeLabel}
+                </span>
                 {isCurrent ? (
-                  <span className="rounded-full bg-[#3182F6] px-2 py-0.5 text-[10px] font-bold text-white">
+                  <span className="rounded-full bg-[color:var(--btn-bg)] px-2 py-0.5 text-[10px] font-bold text-[color:var(--btn-text)]">
                     지금
                   </span>
                 ) : null}
               </div>
-              <div className="mt-1 text-[15px] font-bold leading-5 text-[#191F28]">{item.name}</div>
-              <div className="mt-0.5 text-[12px] font-medium text-[#8B95A1]">
+              <div className="mt-1 text-[15px] font-bold leading-5 text-[color:var(--ink)]">
+                {item.name}
+              </div>
+              <div className="mt-0.5 text-[12px] font-medium text-[color:var(--ink-faint)]">
                 {item.durationLabel}
               </div>
 
@@ -109,7 +112,7 @@ export function TripProgressTimeline({
                     e.stopPropagation();
                     onSwitchItem(item);
                   }}
-                  className="mt-3 flex h-9 w-full items-center justify-center gap-1.5 rounded-[10px] border border-[#3182F6] bg-white text-[13px] font-bold text-[#1B64DA] hover:bg-[#EAF2FF]"
+                  className="mt-3 flex h-9 w-full items-center justify-center gap-1.5 rounded-[10px] border border-[color:var(--primary)] bg-[color:var(--card)] text-[13px] font-bold text-[color:var(--primary-deep)] hover:bg-[color:var(--primary-tint)]"
                 >
                   <SwapIcon />
                   일정 변경

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { LuMapPin, LuX } from 'react-icons/lu';
 
 type PermissionState = 'unknown' | 'granted' | 'denied' | 'unavailable';
 
@@ -40,21 +41,23 @@ export function LocationPermissionBanner({ permission }: Props) {
   const copy = COPY[permission];
 
   return (
-    <div className="mb-3 flex items-start gap-3 rounded-[14px] border border-[#FFD2D7] bg-[#FFF0F1] px-4 py-3">
-      <span aria-hidden className="mt-0.5 text-[16px]">
-        📍
-      </span>
+    <div className="mb-3 flex items-start gap-3 rounded-[14px] border border-[color:var(--danger-border,#FFD2D7)] bg-[color:var(--danger-tint,#FFF0F1)] px-4 py-3">
+      <LuMapPin aria-hidden className="mt-0.5 size-4 shrink-0 text-[color:var(--danger,#F04452)]" />
       <div className="min-w-0 flex-1">
-        <div className="text-[13px] font-bold leading-5 text-[#F04452]">{copy.title}</div>
-        <p className="mt-0.5 text-[12px] leading-4 text-[#4E5968]">{copy.message}</p>
+        <div className="text-[13px] font-bold leading-5 text-[color:var(--danger,#F04452)]">
+          {copy.title}
+        </div>
+        <p className="mt-0.5 text-[12px] leading-4 text-[color:var(--ink-sub,#4E5968)]">
+          {copy.message}
+        </p>
       </div>
       <button
         type="button"
         onClick={() => setDismissed(true)}
         aria-label="닫기"
-        className="shrink-0 rounded-md px-1 text-[18px] leading-none text-[#8B95A1] hover:text-[#4E5968]"
+        className="shrink-0 rounded-md px-1 text-[color:var(--ink-faint,#8B95A1)] hover:text-[color:var(--ink-sub,#4E5968)]"
       >
-        ×
+        <LuX className="size-4" />
       </button>
     </div>
   );

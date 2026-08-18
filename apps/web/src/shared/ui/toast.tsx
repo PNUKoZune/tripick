@@ -1,13 +1,26 @@
+import { LuX } from 'react-icons/lu';
 import type { ReactNode } from 'react';
 
 type Tone = 'neutral' | 'primary' | 'success' | 'warning' | 'error';
 
+// 색은 토큰 + hex 폴백 — 폴백값이 기존 라이트 색이라 `.wvr-scope` 밖에선 그대로고,
+// 스코프 안(플래너·Live 등)에서 렌더될 때만 다크까지 따라간다.
+// success·warning 은 wvr 팔레트에 대응 토큰이 없어(--ok 만 있음) 라이트 틴트를 유지한다.
 const toneClass: Record<Tone, { container: string; title: string }> = {
-  neutral: { container: 'bg-white border-[#E5E8EB]', title: 'text-[#4E5968]' },
-  primary: { container: 'bg-[#EAF2FF] border-[#C7DCFF]', title: 'text-[#1B64DA]' },
+  neutral: {
+    container: 'bg-[color:var(--card,#FFFFFF)] border-[color:var(--line,#E5E8EB)]',
+    title: 'text-[color:var(--ink-sub,#4E5968)]',
+  },
+  primary: {
+    container: 'bg-[color:var(--primary-tint,#EAF2FF)] border-[color:var(--primary,#C7DCFF)]/40',
+    title: 'text-[color:var(--primary-deep,#1B64DA)]',
+  },
   success: { container: 'bg-[#E5F7EE] border-[#BCE9D6]', title: 'text-[#00A86B]' },
   warning: { container: 'bg-[#FFF4E5] border-[#FFE0BD]', title: 'text-[#FF8A00]' },
-  error: { container: 'bg-[#FFECEE] border-[#FECDD3]', title: 'text-[#F04452]' },
+  error: {
+    container: 'bg-[color:var(--danger-tint,#FFECEE)] border-[color:var(--danger-border,#FECDD3)]',
+    title: 'text-[color:var(--danger,#F04452)]',
+  },
 };
 
 type Props = {
@@ -56,7 +69,9 @@ export function Toast({ title, message, tone = 'neutral', onClose, onClick, clas
         <div className="min-w-0 flex-1">
           <div className={`text-[14px] font-bold leading-5 ${palette.title}`}>{title}</div>
           {message ? (
-            <p className="mt-0.5 line-clamp-2 text-[13px] leading-5 text-[#4E5968]">{message}</p>
+            <p className="mt-0.5 line-clamp-2 text-[13px] leading-5 text-[color:var(--ink-sub,#4E5968)]">
+              {message}
+            </p>
           ) : null}
         </div>
         {onClose ? (
@@ -67,9 +82,9 @@ export function Toast({ title, message, tone = 'neutral', onClose, onClick, clas
               onClose();
             }}
             aria-label="알림 닫기"
-            className="-mr-1 -mt-0.5 shrink-0 rounded-full px-2 py-1 text-[13px] font-semibold text-[#8B95A1] hover:bg-black/5"
+            className="-mr-1 -mt-0.5 shrink-0 rounded-full p-1.5 text-[color:var(--ink-faint,#8B95A1)] hover:bg-black/5"
           >
-            ✕
+            <LuX className="size-4" aria-hidden />
           </button>
         ) : null}
       </div>

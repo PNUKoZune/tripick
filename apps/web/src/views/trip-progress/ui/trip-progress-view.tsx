@@ -19,11 +19,7 @@ import { ReplanToast, useReplanSubscription } from '@/features/subscribe-replan-
 import { NextStopBar, useTripProgress } from '@/features/track-trip-progress';
 import { queryKeys } from '@/shared/api/query-keys';
 import { LocationPermissionBanner, useCurrentLocation } from '@/shared/location';
-import {
-  AppBottomNavigation,
-  AppDesktopNavigation,
-  useNavSlideClass,
-} from '@/shared/ui/app-frame';
+import { AppBottomNavigation, AppDesktopNavigation, useNavSlideClass } from '@/shared/ui/app-frame';
 import { AlternativeSheet } from '@/widgets/alternative-sheet';
 import { LiveMap } from '@/widgets/live-map';
 import { TripProgressTimeline } from '@/widgets/trip-progress-timeline';
@@ -101,22 +97,26 @@ function TripProgressContent() {
   }
 
   return (
-    <div className="bg-[#F7F8FA]">
+    // wvr-scope: 다른 화면과 같은 "광안리의 하루" 팔레트(다크 자동 감지 포함)를 쓴다.
+    // 이 화면은 AppFrame 을 쓰지 않고 셸을 직접 짜므로 스코프도 직접 연다.
+    <div className="wvr-scope min-h-dvh bg-[color:var(--bg)]">
       {/* 모바일 (< lg): 지도 위 + 일정 아래 풀스크린 셸 */}
       <div className="lg:hidden">
         <div
-          className={`${pageInClass} mx-auto flex h-dvh max-w-[430px] flex-col overflow-hidden bg-white`}
+          className={`${pageInClass} mx-auto flex h-dvh max-w-[430px] flex-col overflow-hidden bg-[color:var(--card)]`}
         >
-          <header className="flex shrink-0 items-center justify-between border-b border-[#E5E8EB] px-5 py-4">
+          <header className="flex shrink-0 items-center justify-between border-b border-[color:var(--line)] px-5 py-4">
             <div>
-              <div className="text-[12px] font-bold tracking-wide text-[#3182F6]">여행 중</div>
-              <h1 className="mt-0.5 text-[18px] font-bold leading-[26px] text-[#191F28]">
+              <div className="text-[12px] font-bold tracking-wide text-[color:var(--primary)]">
+                여행 중
+              </div>
+              <h1 className="mt-0.5 text-[18px] font-bold leading-[26px] text-[color:var(--ink)]">
                 {trip?.title ?? active.title}
               </h1>
             </div>
             <div className="flex items-center gap-2">
               {isReplanning ? <ReplanningPill /> : null}
-              <span className="rounded-full bg-[#F2F4F6] px-3 py-1 text-[12px] font-bold text-[#4E5968]">
+              <span className="rounded-full bg-[color:var(--card-soft)] px-3 py-1 text-[12px] font-bold text-[color:var(--ink-sub)]">
                 {dayNumber}일차
               </span>
             </div>
@@ -157,7 +157,7 @@ function TripProgressContent() {
       <div className="mx-auto hidden h-dvh w-full max-w-[1640px] lg:grid lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:px-6">
         <AppDesktopNavigation />
         <div
-          className={`${pageInClass} grid min-h-0 grid-cols-[minmax(0,1fr)_380px] overflow-hidden border-x border-[#E5E8EB] bg-white xl:grid-cols-[minmax(0,1fr)_440px]`}
+          className={`${pageInClass} grid min-h-0 grid-cols-[minmax(0,1fr)_380px] overflow-hidden border-x border-[color:var(--line)] bg-[color:var(--card)] xl:grid-cols-[minmax(0,1fr)_440px]`}
         >
           <main className="relative min-h-0">
             <LiveMap
@@ -172,15 +172,17 @@ function TripProgressContent() {
             />
           </main>
 
-          <aside className="flex min-h-0 flex-col overflow-hidden border-l border-[#E5E8EB]">
-            <header className="flex shrink-0 items-center justify-between border-b border-[#E5E8EB] px-5 py-4">
+          <aside className="flex min-h-0 flex-col overflow-hidden border-l border-[color:var(--line)]">
+            <header className="flex shrink-0 items-center justify-between border-b border-[color:var(--line)] px-5 py-4">
               <div>
-                <div className="text-[12px] font-bold tracking-wide text-[#3182F6]">여행 중</div>
-                <h1 className="mt-0.5 text-[18px] font-bold leading-[26px] text-[#191F28]">
+                <div className="text-[12px] font-bold tracking-wide text-[color:var(--primary)]">
+                  여행 중
+                </div>
+                <h1 className="mt-0.5 text-[18px] font-bold leading-[26px] text-[color:var(--ink)]">
                   {trip?.title ?? active.title}
                 </h1>
               </div>
-              <span className="rounded-full bg-[#F2F4F6] px-3 py-1 text-[12px] font-bold text-[#4E5968]">
+              <span className="rounded-full bg-[color:var(--card-soft)] px-3 py-1 text-[12px] font-bold text-[color:var(--ink-sub)]">
                 {dayNumber}일차
               </span>
             </header>
@@ -219,8 +221,8 @@ function TripProgressContent() {
 /** 헤더에 표시되는 "AI 재계획 중" 진행 핀 (replan pending/processing 동안). */
 function ReplanningPill() {
   return (
-    <span className="flex items-center gap-1.5 rounded-full bg-[#EAF2FF] px-2.5 py-1 text-[11px] font-bold text-[#1B64DA]">
-      <span className="size-1.5 animate-pulse rounded-full bg-[#3182F6]" />
+    <span className="flex items-center gap-1.5 rounded-full bg-[color:var(--primary-tint)] px-2.5 py-1 text-[11px] font-bold text-[color:var(--primary-deep)]">
+      <span className="size-1.5 animate-pulse rounded-full bg-[color:var(--primary)]" />
       AI 재계획 중
     </span>
   );
@@ -236,20 +238,26 @@ function TripProgressEmpty({
   const pageInClass = useNavSlideClass();
 
   return (
-    <div className="min-h-dvh bg-[#F7F8FA]">
-      <div className={`${pageInClass} mx-auto min-h-dvh max-w-[430px] bg-white pb-[88px]`}>
+    <div className="wvr-scope min-h-dvh bg-[color:var(--bg)]">
+      <div
+        className={`${pageInClass} mx-auto min-h-dvh max-w-[430px] bg-[color:var(--card)] pb-[88px]`}
+      >
         <header className="px-5 pb-4 pt-8">
-          <div className="text-[12px] font-bold tracking-wide text-[#3182F6]">여행 중</div>
-          <h1 className="mt-0.5 text-[22px] font-bold leading-8 text-[#191F28]">실시간 여행</h1>
+          <div className="text-[12px] font-bold tracking-wide text-[color:var(--primary)]">
+            여행 중
+          </div>
+          <h1 className="mt-0.5 text-[22px] font-bold leading-8 text-[color:var(--ink)]">
+            실시간 여행
+          </h1>
         </header>
 
         <div className="px-5">
-          <div className="rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] px-4 py-6 text-center">
-            <div className="text-[15px] font-bold text-[#191F28]">
+          <div className="rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-4 py-6 text-center">
+            <div className="text-[15px] font-bold text-[color:var(--ink)]">
               {loading ? '여행을 확인하는 중…' : '지금 진행 중인 여행이 없어요'}
             </div>
             {!loading ? (
-              <p className="mt-1 text-[13px] leading-5 text-[#6B7684]">
+              <p className="mt-1 text-[13px] leading-5 text-[color:var(--ink-sub)]">
                 여행 시작일이 되면 여기서 현재 위치와 일정을 실시간으로 안내해드려요.
               </p>
             ) : null}
@@ -257,20 +265,20 @@ function TripProgressEmpty({
 
           {upcoming.length > 0 ? (
             <div className="mt-6">
-              <div className="text-[13px] font-bold text-[#4E5968]">다가오는 여행</div>
+              <div className="text-[13px] font-bold text-[color:var(--ink-sub)]">다가오는 여행</div>
               <ul className="mt-2 space-y-2">
                 {upcoming.map((tripItem) => (
                   <li key={tripItem.id}>
                     <Link
                       href={`/planner?tripId=${tripItem.id}`}
-                      className="flex items-center gap-3 rounded-[14px] border border-[#E5E8EB] bg-white px-4 py-3 hover:bg-[#FAFBFC]"
+                      className="flex items-center gap-3 rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card)] px-4 py-3 hover:bg-[color:var(--card-soft)]"
                     >
                       <span className="text-[22px]">{tripItem.coverEmoji}</span>
                       <div className="min-w-0">
-                        <div className="truncate text-[15px] font-bold text-[#191F28]">
+                        <div className="truncate text-[15px] font-bold text-[color:var(--ink)]">
                           {tripItem.title}
                         </div>
-                        <div className="mt-0.5 text-[12px] font-medium text-[#8B95A1]">
+                        <div className="mt-0.5 text-[12px] font-medium text-[color:var(--ink-faint)]">
                           {tripItem.durationLabel} · {tripItem.destination}
                         </div>
                       </div>

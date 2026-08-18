@@ -1,5 +1,6 @@
 'use client';
 
+import { LuArrowRight } from 'react-icons/lu';
 import type { PlannerItineraryItemDto } from '@tripick/types';
 
 import { estimateEtaMinutes, formatDistance } from '../model/estimate-eta';
@@ -23,26 +24,34 @@ export function NextStopBar({ item, distanceM, transportLabel }: Props) {
   const etaMin = distanceM !== null ? estimateEtaMinutes(distanceM, transportLabel) : null;
 
   return (
-    <div className="mb-3 flex items-center gap-3 rounded-[14px] border border-[#D6E4FF] bg-[#EAF2FF] px-4 py-3">
+    <div className="mb-3 flex items-center gap-3 rounded-[14px] border border-[color:var(--primary)]/25 bg-[color:var(--primary-tint)] px-4 py-3">
       <span
         aria-hidden
-        className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#3182F6] text-[14px] text-white"
+        className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[color:var(--btn-bg)] text-[14px] text-[color:var(--btn-text)]"
       >
-        →
+        <LuArrowRight className="size-4" />
       </span>
       <div className="min-w-0 flex-1">
-        <div className="text-[11px] font-bold tracking-wide text-[#1B64DA]">다음 장소</div>
-        <div className="truncate text-[14px] font-bold text-[#191F28]">
+        <div className="text-[11px] font-bold tracking-wide text-[color:var(--primary-deep)]">
+          다음 장소
+        </div>
+        <div className="truncate text-[14px] font-bold text-[color:var(--ink)]">
           {item.scheduledAt} · {item.name}
         </div>
       </div>
       {distanceM !== null && etaMin !== null ? (
         <div className="shrink-0 text-right">
-          <div className="text-[15px] font-bold leading-5 text-[#3182F6]">약 {etaMin}분</div>
-          <div className="text-[11px] font-medium text-[#6B7684]">{formatDistance(distanceM)}</div>
+          <div className="text-[15px] font-bold leading-5 text-[color:var(--primary)]">
+            약 {etaMin}분
+          </div>
+          <div className="text-[11px] font-medium text-[color:var(--ink-sub)]">
+            {formatDistance(distanceM)}
+          </div>
         </div>
       ) : (
-        <div className="shrink-0 text-[12px] font-medium text-[#8B95A1]">위치 확인 중…</div>
+        <div className="shrink-0 text-[12px] font-medium text-[color:var(--ink-faint)]">
+          위치 확인 중…
+        </div>
       )}
     </div>
   );

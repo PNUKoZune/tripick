@@ -36,7 +36,7 @@ export function AlternativeSheet({
   isOwner = true,
   onProposed,
 }: Props) {
-  const controller = useAlternativeController(tripId, open ? item?.id ?? null : null, {
+  const controller = useAlternativeController(tripId, open ? (item?.id ?? null) : null, {
     isOwner,
     ...(onProposed ? { onProposed } : {}),
   });
@@ -71,9 +71,9 @@ export function AlternativeSheet({
   async function handleUndo() {
     if (!swapResult || !item) return;
     // 되돌리기는 swapResult 가 있는 owner 모드에서만 노출되므로 즉시 반영 결과다.
-    const result = (await controller.swapToPlace(swapResult.previousPlace)) as
-      | PlannerSwapResponseDto
-      | null;
+    const result = (await controller.swapToPlace(
+      swapResult.previousPlace,
+    )) as PlannerSwapResponseDto | null;
     if (result) {
       onApplied(result.newItemName, item.id);
       onClose();
@@ -100,10 +100,10 @@ export function AlternativeSheet({
   const activeMarker = mapMarkers.find((m) => m.id === activeMarkerId) ?? null;
   const mapCenter: PlannerMapCenterDto = activeMarker
     ? { lat: activeMarker.lat, lng: activeMarker.lng, level: 4 }
-    : readyData?.mapCenter ?? FALLBACK_CENTER;
+    : (readyData?.mapCenter ?? FALLBACK_CENTER);
 
   const topSlot = (
-    <div className="relative aspect-[16/9] w-full overflow-hidden bg-[#F2F4F6]">
+    <div className="relative aspect-[16/9] w-full overflow-hidden bg-[color:var(--card-soft,#F2F4F6)]">
       {readyData ? (
         <div className="absolute inset-0">
           <PlannerMap
@@ -123,14 +123,14 @@ export function AlternativeSheet({
   );
 
   return (
-    <BottomSheet open={open} onClose={onClose} topSlot={topSlot} label="AI 추천 대안">
+    <BottomSheet open={open} onClose={onClose} topSlot={topSlot} label="AI 추천 대안" themed>
       <div className="min-h-[420px]">
         {controller.state.status === 'loading' || controller.state.status === 'idle' ? (
           <SkeletonBody />
         ) : null}
 
         {controller.state.status === 'error' ? (
-          <div className="rounded-[16px] border border-[#FECDD3] bg-[#FFECEE] p-4 text-[14px] text-[#F04452]">
+          <div className="rounded-[16px] border border-[color:var(--danger-border,#FECDD3)] bg-[color:var(--danger-tint,#FFECEE)] p-4 text-[14px] text-[color:var(--danger,#F04452)]">
             {controller.state.message}
           </div>
         ) : null}
@@ -138,14 +138,14 @@ export function AlternativeSheet({
         {readyData ? (
           <>
             <div className="flex items-start gap-3">
-              <div className="flex size-9 items-center justify-center rounded-[10px] bg-[#FFECEE] text-[18px] font-bold text-[#F04452]">
+              <div className="flex size-9 items-center justify-center rounded-[10px] bg-[color:var(--danger-tint,#FFECEE)] text-[18px] font-bold text-[color:var(--danger,#F04452)]">
                 !
               </div>
               <div className="flex-1">
-                <div className="text-[18px] font-bold leading-[26px] text-[#191F28]">
+                <div className="text-[18px] font-bold leading-[26px] text-[color:var(--ink)]">
                   비슷한 다른 장소
                 </div>
-                <div className="mt-1 text-[14px] leading-[20px] text-[#6B7684]">
+                <div className="mt-1 text-[14px] leading-[20px] text-[color:var(--ink-sub)]">
                   {readyData.itemName} 주변에서 골라볼 수 있어요
                 </div>
               </div>
@@ -159,7 +159,7 @@ export function AlternativeSheet({
             </div>
 
             {controller.isProposalMode ? (
-              <p className="mt-3 rounded-[12px] border border-[#C7DCFF] bg-[#F5F9FF] px-3 py-2 text-[12px] leading-[18px] text-[#1B64DA]">
+              <p className="mt-3 rounded-[12px] border border-[color:var(--primary)]/30 bg-[color:var(--primary-tint)] px-3 py-2 text-[12px] leading-[18px] text-[color:var(--primary-deep)]">
                 대안 변경은 여행 관리자 승인 후 반영돼요. 변경 요청 시 관리자에게 알림이 전송됩니다.
               </p>
             ) : null}
@@ -168,23 +168,23 @@ export function AlternativeSheet({
               <div
                 className={`mt-4 rounded-[16px] border p-4 ${
                   swapResult.warnings.length > 0
-                    ? 'border-[#FDE68A] bg-[#FFFBEB]'
-                    : 'border-[#C7DCFF] bg-[#F4F9FF]'
+                    ? 'border-[color:var(--accent)]/40 bg-[color:var(--accent-tint)]'
+                    : 'border-[color:var(--primary)]/30 bg-[color:var(--primary-tint)]'
                 }`}
               >
                 {swapResult.warnings.length > 0 ? (
                   <>
-                    <div className="text-[13px] font-bold text-[#B45309]">
+                    <div className="text-[13px] font-bold text-[color:var(--accent-deep)]">
                       변경했지만 확인이 필요해요
                     </div>
-                    <ul className="mt-1.5 space-y-1 text-[13px] leading-[18px] text-[#92400E]">
+                    <ul className="mt-1.5 space-y-1 text-[13px] leading-[18px] text-[color:var(--ink-sub)]">
                       {swapResult.warnings.map((w) => (
                         <li key={w}>· {w}</li>
                       ))}
                     </ul>
                   </>
                 ) : (
-                  <div className="text-[14px] font-bold text-[#1B64DA]">
+                  <div className="text-[14px] font-bold text-[color:var(--primary-deep)]">
                     ‘{swapResult.newName}’(으)로 변경했어요.
                   </div>
                 )}
@@ -205,8 +205,8 @@ export function AlternativeSheet({
             ) : null}
 
             {/* 사용자 직접 요청: 자유 텍스트 AI 재계획 + 장소 이름 지정 */}
-            <div className="mt-5 space-y-3 rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] p-4">
-              <div className="text-[13px] font-bold text-[#4E5968]">
+            <div className="mt-5 space-y-3 rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card-soft)] p-4">
+              <div className="text-[13px] font-bold text-[color:var(--ink-sub)]">
                 원하는 곳이 없나요? 직접 요청해보세요
               </div>
 
@@ -221,7 +221,7 @@ export function AlternativeSheet({
                     value={requestText}
                     onChange={(e) => setRequestText(e.target.value)}
                     placeholder="예: 조용한 감성 카페 위주로"
-                    className="h-11 flex-1 rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[14px] text-[#191F28] outline-none placeholder:text-[#B0B8C1] focus:border-[#3182F6]"
+                    className="h-11 flex-1 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[14px] text-[color:var(--ink)] outline-none placeholder:text-[color:var(--ink-faint)] focus:border-[color:var(--primary)]"
                   />
                   <Button
                     type="submit"
@@ -232,7 +232,7 @@ export function AlternativeSheet({
                     {controller.refining ? '찾는 중…' : 'AI 추천'}
                   </Button>
                 </div>
-                <div className="mt-1.5 text-[12px] text-[#8B95A1]">
+                <div className="mt-1.5 text-[12px] text-[color:var(--ink-faint)]">
                   조건을 반영해 이 일정의 대안을 다시 찾아드려요.
                 </div>
               </form>
@@ -248,7 +248,7 @@ export function AlternativeSheet({
                   value={placeName}
                   onChange={(e) => setPlaceName(e.target.value)}
                   placeholder="가고 싶은 장소 이름 입력 (예: 성수 대림창고)"
-                  className="h-11 flex-1 rounded-[12px] border border-[#E5E8EB] bg-white px-3 text-[14px] text-[#191F28] outline-none placeholder:text-[#B0B8C1] focus:border-[#3182F6]"
+                  className="h-11 flex-1 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[14px] text-[color:var(--ink)] outline-none placeholder:text-[color:var(--ink-faint)] focus:border-[color:var(--primary)]"
                 />
                 <Button
                   type="submit"
@@ -261,15 +261,19 @@ export function AlternativeSheet({
               </form>
 
               {controller.searchPlaceError ? (
-                <div className="text-[12px] text-[#F04452]">{controller.searchPlaceError}</div>
+                <div className="text-[12px] text-[color:var(--danger,#F04452)]">
+                  {controller.searchPlaceError}
+                </div>
               ) : null}
             </div>
 
             {/* 장소 이름 검색 결과 — 후보 중 맞는 곳 선택 */}
             {pending ? (
-              <div className="mt-4 rounded-[16px] border border-[#3182F6] bg-[#EAF2FF] p-4">
-                <div className="text-[13px] font-bold text-[#1B64DA]">
-                  {pending.alternatives.length > 1 ? '이 중 맞는 곳을 골라주세요' : '이 장소가 맞나요?'}
+              <div className="mt-4 rounded-[16px] border border-[color:var(--primary)] bg-[color:var(--primary-tint)] p-4">
+                <div className="text-[13px] font-bold text-[color:var(--primary-deep)]">
+                  {pending.alternatives.length > 1
+                    ? '이 중 맞는 곳을 골라주세요'
+                    : '이 장소가 맞나요?'}
                 </div>
                 <div className="mt-2 space-y-2">
                   {pending.alternatives.map((alt) => (
@@ -281,7 +285,7 @@ export function AlternativeSheet({
                     />
                   ))}
                 </div>
-                <div className="mt-1.5 text-[12px] text-[#8B95A1]">
+                <div className="mt-1.5 text-[12px] text-[color:var(--ink-faint)]">
                   위쪽 지도에서 위치를 확인해보세요.
                 </div>
                 <div className="mt-3 flex gap-2">
@@ -323,12 +327,12 @@ export function AlternativeSheet({
               </div>
             ) : null}
 
-            <div className="mt-5 border-t border-[#E5E8EB] pt-4">
+            <div className="mt-5 border-t border-[color:var(--line)] pt-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-[16px] font-bold leading-[22px] text-[#191F28]">
+                <h2 className="text-[16px] font-bold leading-[22px] text-[color:var(--ink)]">
                   {controller.note ? '조건 반영 결과' : 'AI 추천 대안'}
                 </h2>
-                <span className="text-[12px] font-semibold text-[#8B95A1]">
+                <span className="text-[12px] font-semibold text-[color:var(--ink-faint)]">
                   {controller.alternatives.length}곳
                 </span>
               </div>
@@ -340,14 +344,14 @@ export function AlternativeSheet({
                     setRequestText('');
                     controller.clearRefine();
                   }}
-                  className="mt-1 text-[12px] font-semibold text-[#3182F6]"
+                  className="mt-1 text-[12px] font-semibold text-[color:var(--primary)]"
                 >
                   ‘{controller.note}’ 반영 중 · 기본 추천으로 되돌리기
                 </button>
               ) : null}
 
               {controller.alternatives.length === 0 ? (
-                <div className="mt-3 rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC] p-4 text-center text-[13px] text-[#6B7684]">
+                <div className="mt-3 rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card-soft)] p-4 text-center text-[13px] text-[color:var(--ink-sub)]">
                   {controller.note
                     ? '조건에 맞는 장소를 찾지 못했어요. 다른 표현으로 시도해보세요.'
                     : '추천할 대안을 찾지 못했어요.'}
@@ -417,7 +421,7 @@ export function AlternativeSheet({
 
 function SkeletonMap() {
   return (
-    <div className="absolute inset-0 animate-pulse bg-gradient-to-b from-[#EEF2F4] to-[#E5E8EB]" />
+    <div className="absolute inset-0 animate-pulse bg-gradient-to-b from-[color:var(--card-soft,#EEF2F4)] to-[color:var(--line,#E5E8EB)]" />
   );
 }
 
@@ -425,17 +429,20 @@ function SkeletonBody() {
   return (
     <div className="animate-pulse space-y-4">
       <div className="flex items-start gap-3">
-        <div className="size-9 rounded-[10px] bg-[#F2F4F6]" />
+        <div className="size-9 rounded-[10px] bg-[color:var(--card-soft,#F2F4F6)]" />
         <div className="flex-1 space-y-2">
-          <div className="h-5 w-2/3 rounded bg-[#F2F4F6]" />
-          <div className="h-4 w-1/2 rounded bg-[#F2F4F6]" />
+          <div className="h-5 w-2/3 rounded bg-[color:var(--card-soft,#F2F4F6)]" />
+          <div className="h-4 w-1/2 rounded bg-[color:var(--card-soft,#F2F4F6)]" />
         </div>
       </div>
-      <div className="h-7 w-44 rounded-full bg-[#F2F4F6]" />
-      <div className="h-px bg-[#E5E8EB]" />
+      <div className="h-7 w-44 rounded-full bg-[color:var(--card-soft,#F2F4F6)]" />
+      <div className="h-px bg-[color:var(--line,#E5E8EB)]" />
       <div className="space-y-2">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-[84px] rounded-[16px] border border-[#E5E8EB] bg-[#FAFBFC]" />
+          <div
+            key={i}
+            className="h-[84px] rounded-[16px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FAFBFC)]"
+          />
         ))}
       </div>
     </div>
