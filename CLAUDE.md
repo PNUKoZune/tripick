@@ -46,7 +46,7 @@
   - Local LLM Call: LLM 추론 실행 (`PlannerAgentService`)
   - Prompt Building: 단일 파라미터화 프롬프트에 `trigger`(deviation·weather·manual)·notes 를 데이터로 주입해 시나리오 분기. 시나리오별 개별 템플릿 파일은 없음
   - JSON Plan Generator: 일정 JSON 생성·검증(candidateId 검증, 중복 슬롯 제거)
-  - Constraint Validation Loop: AI draft 검증 실패 시 후보 rotate 기반 결정적 재생성 최대 3회 (LLM 재호출 아님)
+  - Constraint Validation Loop: AI draft 검증 실패 시 **근접 후보 우선**(직전 배치 장소에서 하버사인 최근접) 정렬 기반 결정적 재생성 최대 3회 (LLM 재호출 아님). 회차마다 시드를 옮겨 다른 군집을 만들고, 오늘 일차를 다시 짤 때는 사용자 현재 위치에서 가까운 후보를 시드로 잡는다
   - _"Coordinates tools, LLM and constraints to produce a valid itinerary."_
 
 - **Local LLM Serving ★** (프라이빗 추론 인프라)
