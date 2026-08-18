@@ -109,7 +109,7 @@ function FriendsContent() {
               }
             }}
             placeholder="예) koty 또는 @koty"
-            className="h-11 flex-1 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[14px] font-medium text-[color:var(--ink)] outline-none placeholder:text-[color:var(--ink-faint)] focus:border-[color:var(--primary)]"
+            className="h-11 min-w-0 flex-1 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[14px] font-medium text-[color:var(--ink)] outline-none placeholder:text-[color:var(--ink-faint)] focus:border-[color:var(--primary)]"
           />
           <button
             type="button"

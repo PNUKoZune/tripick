@@ -221,7 +221,7 @@ export function AlternativeSheet({
                     value={requestText}
                     onChange={(e) => setRequestText(e.target.value)}
                     placeholder="예: 조용한 감성 카페 위주로"
-                    className="h-11 flex-1 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[14px] text-[color:var(--ink)] outline-none placeholder:text-[color:var(--ink-faint)] focus:border-[color:var(--primary)]"
+                    className="h-11 min-w-0 flex-1 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[14px] text-[color:var(--ink)] outline-none placeholder:text-[color:var(--ink-faint)] focus:border-[color:var(--primary)]"
                   />
                   <Button
                     type="submit"
@@ -248,7 +248,7 @@ export function AlternativeSheet({
                   value={placeName}
                   onChange={(e) => setPlaceName(e.target.value)}
                   placeholder="가고 싶은 장소 이름 입력 (예: 성수 대림창고)"
-                  className="h-11 flex-1 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[14px] text-[color:var(--ink)] outline-none placeholder:text-[color:var(--ink-faint)] focus:border-[color:var(--primary)]"
+                  className="h-11 min-w-0 flex-1 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[14px] text-[color:var(--ink)] outline-none placeholder:text-[color:var(--ink-faint)] focus:border-[color:var(--primary)]"
                 />
                 <Button
                   type="submit"

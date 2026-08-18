@@ -223,7 +223,7 @@ function MapPickerContent({
             }
           }}
           placeholder="예) 해운대해수욕장, 경주역"
-          className="h-11 flex-1 rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FFFFFF)] px-3.5 text-[14px] text-[color:var(--ink,#191F28)] outline-none focus:border-[color:var(--primary,#3182F6)] focus:ring-2 focus:ring-[color:var(--ring,#E1ECFF)]"
+          className="h-11 min-w-0 flex-1 rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FFFFFF)] px-3.5 text-[14px] text-[color:var(--ink,#191F28)] outline-none focus:border-[color:var(--primary,#3182F6)] focus:ring-2 focus:ring-[color:var(--ring,#E1ECFF)]"
         />
         <button
           type="button"
