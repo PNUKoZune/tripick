@@ -1,9 +1,9 @@
 'use client';
 
-import { LuClock, LuSparkles } from 'react-icons/lu';
+import { LuClock, LuSparkles, LuStar } from 'react-icons/lu';
 import type { PlannerAlternativeDto } from '@tripick/types';
 
-import { Button, Chip } from '@/shared/ui';
+import { Button, Chip, ItemTypeIcon } from '@/shared/ui';
 
 const toneToBg: Record<PlannerAlternativeDto['categoryTone'], string> = {
   neutral: 'bg-[color:var(--card-soft,#F2F4F6)] text-[color:var(--ink-sub,#6B7684)]',
@@ -45,9 +45,9 @@ export function AlternativeCard({ alternative, selected, onSelect }: Props) {
     >
       <div className="flex items-stretch gap-3">
         <div
-          className={`flex size-[62px] shrink-0 items-center justify-center rounded-[14px] text-[22px] font-bold ${toneToBg[alternative.categoryTone]}`}
+          className={`flex size-[62px] shrink-0 items-center justify-center rounded-[12px] ${toneToBg[alternative.categoryTone]}`}
         >
-          {alternative.categoryEmoji}
+          <ItemTypeIcon type={alternative.category} className="size-6" />
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-start justify-between gap-2">
@@ -92,7 +92,10 @@ export function AlternativeCard({ alternative, selected, onSelect }: Props) {
             <div className="flex items-center gap-2 text-[13px] leading-[18px] text-[color:var(--ink-sub,#6B7684)]">
               {alternative.rating !== undefined ? (
                 <>
-                  <span className="text-[color:var(--accent-deep,#FF8A00)]">★</span>
+                  <LuStar
+                    aria-hidden
+                    className="size-3.5 fill-current text-[color:var(--accent-deep,#FF8A00)]"
+                  />
                   <span>{alternative.rating.toFixed(1)}</span>
                 </>
               ) : null}

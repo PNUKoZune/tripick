@@ -5,6 +5,7 @@ import { useMutation } from '@tanstack/react-query';
 
 import { requestPasswordReset } from '@/entities/session/api/auth-api';
 import { useRetryCountdown } from '@/shared/lib';
+import { Button } from '@/shared/ui';
 
 export function RequestPasswordResetForm() {
   const [email, setEmail] = useState('');
@@ -59,17 +60,13 @@ export function RequestPasswordResetForm() {
           {errorMessage}
         </p>
       ) : null}
-      <button
-        type="submit"
-        disabled={!canSubmit}
-        className="mt-2 h-12 w-full rounded-[12px] bg-[color:var(--btn-bg)] text-[15px] font-bold text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)] disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)]"
-      >
+      <Button type="submit" size="md" fullWidth className="mt-2" disabled={!canSubmit}>
         {mutation.isPending
           ? '보내는 중…'
           : retryAfter > 0
             ? `${retryAfter}초 후 다시 시도`
             : '재설정 메일 보내기'}
-      </button>
+      </Button>
     </form>
   );
 }

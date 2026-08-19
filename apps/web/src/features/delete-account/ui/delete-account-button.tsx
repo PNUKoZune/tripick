@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { FiChevronRight, FiUserX } from 'react-icons/fi';
+import { LuChevronRight, LuUserX } from 'react-icons/lu';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { clearLocalSession } from '@/entities/session/api/auth-api';
@@ -45,10 +45,10 @@ export function DeleteAccountButton({ onError }: Props) {
         className="mt-2 flex h-12 w-full items-center justify-between rounded-[12px] border border-[color:var(--danger-border,#FECDD3)] bg-[color:var(--card,#FFFFFF)] px-4 text-left text-[14px] font-bold text-[color:var(--danger,#F04452)] hover:bg-[color:var(--danger-tint,#FFECEE)]"
       >
         <span className="flex items-center gap-2">
-          <FiUserX className="size-4" aria-hidden />
+          <LuUserX className="size-4" aria-hidden />
           회원 탈퇴
         </span>
-        <FiChevronRight className="size-4" aria-hidden />
+        <LuChevronRight className="size-4" aria-hidden />
       </button>
       {open ? (
         <WithdrawalDialog

@@ -142,7 +142,7 @@ function LinkRow({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
-      className="flex h-12 items-center justify-between rounded-[10px] px-3 text-[14px] font-semibold text-[color:var(--ink)] hover:bg-[color:var(--card-soft)]"
+      className="flex h-12 items-center justify-between rounded-[12px] px-3 text-[14px] font-semibold text-[color:var(--ink)] hover:bg-[color:var(--card-soft)]"
     >
       <span>{label}</span>
       <LuChevronRight className="size-4 text-[color:var(--ink-faint)]" aria-hidden />
@@ -152,7 +152,7 @@ function LinkRow({ href, label }: { href: string; label: string }) {
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex h-12 items-center justify-between rounded-[10px] px-3 text-[14px]">
+    <div className="flex h-12 items-center justify-between rounded-[12px] px-3 text-[14px]">
       <span className="font-semibold text-[color:var(--ink-sub)]">{label}</span>
       <span className="font-semibold text-[color:var(--ink)]">{value}</span>
     </div>

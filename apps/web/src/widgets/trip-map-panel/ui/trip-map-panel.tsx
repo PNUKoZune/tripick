@@ -61,7 +61,7 @@ export function TripMapPanel({ trip, items, onSelectItem }: Props) {
           return (
             <li key={item.id}>
               <div
-                className={`flex w-full items-center gap-3 rounded-[14px] border px-3 py-2 text-left transition ${
+                className={`flex w-full items-center gap-3 rounded-[16px] border px-3 py-2 text-left transition ${
                   isSelected
                     ? 'border-[color:var(--primary,#3182F6)] bg-[color:var(--primary-tint,#EAF2FF)]'
                     : 'border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] hover:bg-[color:var(--card-soft,#FAFBFC)]'
@@ -100,7 +100,7 @@ export function TripMapPanel({ trip, items, onSelectItem }: Props) {
           );
         })}
         {items.length === 0 ? (
-          <li className="rounded-[14px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FAFBFC)] px-3 py-4 text-center text-[13px] text-[color:var(--ink-faint,#8B95A1)]">
+          <li className="rounded-[16px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FAFBFC)] px-3 py-4 text-center text-[13px] text-[color:var(--ink-faint,#8B95A1)]">
             해당 일차에 일정이 없어요.
           </li>
         ) : null}

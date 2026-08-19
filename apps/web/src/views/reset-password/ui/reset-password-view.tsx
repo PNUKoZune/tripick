@@ -14,7 +14,7 @@ export function ResetPasswordView() {
     <AppFrame showNav={false} themed>
       <div className="mx-auto flex min-h-dvh w-full max-w-[440px] flex-col px-5 pb-10 pt-12">
         <header className="mb-8">
-          <div className="text-[13px] font-black text-[color:var(--primary)]">TriPick</div>
+          <div className="text-[13px] font-extrabold text-[color:var(--primary)]">TriPick</div>
           <h1 className="mt-2 text-[26px] font-bold text-[color:var(--ink)]">새 비밀번호 설정</h1>
         </header>
 
@@ -28,7 +28,7 @@ export function ResetPasswordView() {
             </p>
             <Link
               href="/forgot-password"
-              className="mt-3 inline-flex h-10 items-center rounded-[10px] bg-[color:var(--danger)] px-4 text-[13px] font-bold text-[color:var(--btn-text)]"
+              className="mt-3 inline-flex h-10 items-center rounded-[12px] bg-[color:var(--danger)] px-4 text-[13px] font-bold text-[color:var(--btn-text)]"
             >
               다시 요청하기
             </Link>

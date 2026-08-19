@@ -132,7 +132,7 @@ function FriendsContent() {
         ) : null}
       </div>
 
-      <div className="flex items-center gap-2 rounded-[14px] bg-[color:var(--card-soft)] px-4 py-2.5">
+      <div className="flex items-center gap-2 rounded-[12px] bg-[color:var(--card-soft)] px-4 py-2.5">
         <LuSearch className="size-4 shrink-0 text-[color:var(--ink-faint)]" aria-hidden />
         <input
           type="text"
@@ -163,7 +163,7 @@ function FriendsContent() {
                   <button
                     type="button"
                     onClick={() => acceptMutation.mutate(friend.id)}
-                    className="h-9 rounded-[10px] bg-[color:var(--btn-bg)] px-3 text-[12px] font-bold text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)]"
+                    className="h-9 rounded-[12px] bg-[color:var(--btn-bg)] px-3 text-[12px] font-bold text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)]"
                   >
                     수락
                   </button>
@@ -171,7 +171,7 @@ function FriendsContent() {
                     type="button"
                     onClick={() => removeMutation.mutate(friend.id)}
                     aria-label={`${friend.nickname} 요청 거절`}
-                    className="h-9 rounded-[10px] border border-[color:var(--line)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]"
+                    className="h-9 rounded-[12px] border border-[color:var(--line)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]"
                   >
                     거절
                   </button>
@@ -197,7 +197,7 @@ function FriendsContent() {
                     type="button"
                     onClick={() => removeMutation.mutate(friend.id)}
                     aria-label={`${friend.nickname} 요청 취소`}
-                    className="h-9 rounded-[10px] border border-[color:var(--line)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]"
+                    className="h-9 rounded-[12px] border border-[color:var(--line)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]"
                   >
                     요청 취소
                   </button>
@@ -327,7 +327,7 @@ function FriendRowMenu({
         type="button"
         onClick={() => onCreateTrip(friend.id)}
         aria-label={`${friend.nickname}와(과) 여행 만들기`}
-        className="flex size-9 items-center justify-center rounded-[10px] text-[color:var(--ink-faint)] transition hover:bg-[color:var(--primary-tint)] hover:text-[color:var(--primary)]"
+        className="flex size-9 items-center justify-center rounded-[12px] text-[color:var(--ink-faint)] transition hover:bg-[color:var(--primary-tint)] hover:text-[color:var(--primary)]"
       >
         <LuPlane className="size-4" />
       </button>
@@ -335,7 +335,7 @@ function FriendRowMenu({
         type="button"
         onClick={() => onPin(friend.id)}
         aria-label={friend.pinned ? '즐겨찾기 해제' : '즐겨찾기'}
-        className={`flex size-9 items-center justify-center rounded-[10px] transition ${
+        className={`flex size-9 items-center justify-center rounded-[12px] transition ${
           friend.pinned
             ? 'text-[color:var(--accent-deep)]'
             : 'text-[color:var(--ink-faint)] hover:bg-[color:var(--accent-tint)] hover:text-[color:var(--accent-deep)]'
@@ -352,7 +352,7 @@ function FriendRowMenu({
           }
         }}
         aria-label={`${friend.nickname} 삭제`}
-        className="flex size-9 items-center justify-center rounded-[10px] text-[color:var(--ink-faint)] transition hover:bg-[color:var(--danger-tint)] hover:text-[color:var(--danger)]"
+        className="flex size-9 items-center justify-center rounded-[12px] text-[color:var(--ink-faint)] transition hover:bg-[color:var(--danger-tint)] hover:text-[color:var(--danger)]"
       >
         <LuX className="size-4" />
       </button>
@@ -382,7 +382,7 @@ function MyHandleShare({ handle }: { handle: string }) {
       <button
         type="button"
         onClick={copy}
-        className="flex h-9 items-center gap-1.5 rounded-[10px] bg-[color:var(--card-soft)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--line)]"
+        className="flex h-9 items-center gap-1.5 rounded-[12px] bg-[color:var(--card-soft)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--line)]"
       >
         {copied ? (
           <>

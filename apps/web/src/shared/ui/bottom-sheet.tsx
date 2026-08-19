@@ -152,7 +152,7 @@ export function BottomSheet({ open, onClose, children, label, topSlot, themed = 
         <div
           ref={panelRef}
           tabIndex={-1}
-          className={`relative flex max-h-full w-full max-w-[480px] flex-col overflow-hidden rounded-t-[24px] ${panelBg} shadow-[0_-16px_40px_rgba(15,23,42,0.18)] outline-none lg:max-w-[560px] lg:rounded-[24px] lg:shadow-[0_24px_60px_rgba(15,23,42,0.22)]`}
+          className={`relative flex max-h-full w-full max-w-[480px] flex-col overflow-hidden rounded-t-[20px] ${panelBg} shadow-[0_-16px_40px_rgba(15,23,42,0.18)] outline-none lg:max-w-[560px] lg:rounded-[20px] lg:shadow-[0_24px_60px_rgba(15,23,42,0.22)]`}
         >
           <button
             type="button"

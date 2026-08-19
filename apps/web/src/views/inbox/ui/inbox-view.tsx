@@ -303,7 +303,7 @@ function InboxContent() {
             onClick={() => readAllMutation.mutate()}
             disabled={readAllMutation.isPending || unreadCount === 0}
             aria-label="모두 읽음"
-            className="ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] border border-[color:var(--line)] px-2.5 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--card-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-[12px] border border-[color:var(--line)] px-2.5 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--card-soft)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <LuCheckCheck className="size-3.5" aria-hidden />
             {/* 좁은 폭(웹뷰 430px)에선 아이콘만 — 세그먼트 트랙이 배지까지 안고 있어 자리가 없다. */}
@@ -369,7 +369,7 @@ function InboxContent() {
             <button
               type="button"
               onClick={resetFilters}
-              className="mt-3 h-9 rounded-[10px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--card-soft)]"
+              className="mt-3 h-9 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--card-soft)]"
             >
               필터 초기화
             </button>
@@ -415,7 +415,7 @@ function InboxContent() {
           <>
             <Link
               href="/friends"
-              className="hidden rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card)] px-4 py-2 text-[14px] font-semibold text-[color:var(--ink)] hover:bg-[color:var(--card-soft)] lg:inline-flex"
+              className="hidden rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-4 py-2 text-[14px] font-semibold text-[color:var(--ink)] hover:bg-[color:var(--card-soft)] lg:inline-flex"
             >
               친구 목록
             </Link>
@@ -444,7 +444,7 @@ function InboxSkeleton() {
       {Array.from({ length: 4 }).map((_, index) => (
         <div
           key={index}
-          className="flex items-start gap-3 rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card)] p-3"
+          className="flex items-start gap-3 rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] p-3"
         >
           <Skeleton className="size-10 shrink-0" />
           <div className="min-w-0 flex-1 space-y-2 pt-0.5">
@@ -529,7 +529,7 @@ function InboxRow({
   return (
     <div
       {...interactiveProps}
-      className={`flex items-start gap-3 rounded-[14px] border p-3 transition ${
+      className={`flex items-start gap-3 rounded-[16px] border p-3 transition ${
         unread
           ? 'border-[color:var(--primary-tint)] bg-[color:var(--primary-tint)]'
           : 'border-[color:var(--line)] bg-[color:var(--card)] hover:bg-[color:var(--card-soft)]'
@@ -582,7 +582,7 @@ function InboxRow({
                     event.stopPropagation();
                     onAction(action.type);
                   }}
-                  className={`h-10 rounded-[10px] px-3.5 text-[12px] font-bold transition ${
+                  className={`h-10 rounded-[12px] px-3.5 text-[12px] font-bold transition ${
                     primary
                       ? 'bg-[color:var(--btn-bg)] text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)] disabled:opacity-50'
                       : 'border border-[color:var(--line)] bg-[color:var(--card)] text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]'

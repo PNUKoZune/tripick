@@ -10,7 +10,7 @@ import {
 } from '@/shared/lib';
 import { LuMap } from 'react-icons/lu';
 
-import { BottomSheet } from '@/shared/ui';
+import { BottomSheet, Button } from '@/shared/ui';
 
 type Props = {
   /** 지도에서 지역을 확정했을 때 destination 값으로 전달 */
@@ -36,7 +36,7 @@ export function DestinationMapPicker({ onSelect }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex h-12 shrink-0 items-center gap-1.5 rounded-[14px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FFFFFF)] px-3.5 text-[13px] font-semibold text-[color:var(--ink-sub,#4E5968)] transition hover:border-[color:var(--primary,#3182F6)] hover:text-[color:var(--primary,#3182F6)]"
+        className="flex h-12 shrink-0 items-center gap-1.5 rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FFFFFF)] px-3.5 text-[13px] font-semibold text-[color:var(--ink-sub,#4E5968)] transition hover:border-[color:var(--primary,#3182F6)] hover:text-[color:var(--primary,#3182F6)]"
       >
         <LuMap aria-hidden className="size-4" />
         지도
@@ -255,14 +255,14 @@ function MapPickerContent({
         )}
       </div>
 
-      <button
-        type="button"
+      <Button
+        size="md"
+        fullWidth
         disabled={!picked}
         onClick={() => picked && onConfirm(picked.name)}
-        className="h-12 w-full rounded-[14px] bg-[color:var(--btn-bg,#3182F6)] text-[15px] font-bold text-[color:var(--btn-text,#FFFFFF)] transition disabled:bg-[color:var(--line,#C7DCFF)] disabled:text-[color:var(--ink-faint,#FFFFFF)]"
       >
         {picked ? `‘${picked.name}’(으)로 선택` : '위치를 선택해주세요'}
-      </button>
+      </Button>
     </div>
   );
 }

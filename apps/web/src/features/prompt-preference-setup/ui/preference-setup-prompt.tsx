@@ -3,13 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { FiCompass } from 'react-icons/fi';
+import { LuCompass } from 'react-icons/lu';
 
 import { getMyPreferences } from '@/entities/preferences/api/preferences-api';
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { queryKeys } from '@/shared/api/query-keys';
-import { BottomSheet } from '@/shared/ui';
-import { PrimaryButton, SecondaryButton } from '@/shared/ui/app-frame';
+import { BottomSheet, Button } from '@/shared/ui';
 
 /** 취향 설정 유도 시트를 이번 세션에서 이미 닫았는지 기록하는 키 */
 const DISMISS_KEY = 'tripick.pref-prompt-dismissed';
@@ -55,9 +54,9 @@ export function PreferenceSetupPrompt() {
     <BottomSheet open={open} onClose={dismiss} label="취향 설정 안내" themed>
       <div className="flex flex-col items-center px-1 pb-1 pt-4 text-center">
         <span className="flex size-16 items-center justify-center rounded-full bg-[color:var(--blue-50,#EAF2FF)] text-[color:var(--blue-600,#3182F6)]">
-          <FiCompass className="size-8" aria-hidden />
+          <LuCompass className="size-8" aria-hidden />
         </span>
-        <h2 className="mt-4 text-[20px] font-black leading-7 text-[color:var(--ink,#191F28)]">
+        <h2 className="mt-4 text-[20px] font-extrabold leading-7 text-[color:var(--ink,#191F28)]">
           취향부터 설정해 볼까요?
         </h2>
         <p className="mt-2 text-[14px] font-medium leading-[21px] text-[color:var(--ink-sub,#6B7684)]">
@@ -67,8 +66,12 @@ export function PreferenceSetupPrompt() {
         </p>
 
         <div className="mt-6 w-full space-y-2.5">
-          <PrimaryButton onClick={goToSetup}>취향 설정하러 가기</PrimaryButton>
-          <SecondaryButton onClick={dismiss}>나중에 하기</SecondaryButton>
+          <Button fullWidth onClick={goToSetup}>
+            취향 설정하러 가기
+          </Button>
+          <Button variant="ghost" size="md" fullWidth onClick={dismiss}>
+            나중에 하기
+          </Button>
         </div>
       </div>
     </BottomSheet>

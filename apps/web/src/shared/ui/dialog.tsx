@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 
+import { Button } from './button';
 import { ModalShell } from './modal-shell';
 
 type Props = {
@@ -46,22 +47,17 @@ export function ConfirmDialog({
         </p>
       ) : null}
       <div className="mt-5 flex gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="h-12 flex-1 rounded-[14px] bg-[color:var(--card-soft,#F2F4F6)] text-[15px] font-bold text-[color:var(--ink-sub,#4E5968)] transition active:scale-[0.99]"
-        >
+        <Button variant="ghost" size="md" className="flex-1" onClick={onCancel}>
           {cancelLabel}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant={danger ? 'danger' : 'primary'}
+          size="md"
+          className="flex-1"
           onClick={onConfirm}
-          className={`h-12 flex-1 rounded-[14px] text-[15px] font-bold text-white transition active:scale-[0.99] ${
-            danger ? 'bg-[color:var(--danger,#F04452)]' : 'bg-[color:var(--btn-bg,#3182F6)]'
-          }`}
         >
           {confirmLabel}
-        </button>
+        </Button>
       </div>
     </ModalShell>
   );

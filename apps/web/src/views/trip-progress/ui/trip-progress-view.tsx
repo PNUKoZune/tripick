@@ -271,7 +271,7 @@ function TripProgressEmpty({
                   <li key={tripItem.id}>
                     <Link
                       href={`/planner?tripId=${tripItem.id}`}
-                      className="flex items-center gap-3 rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card)] px-4 py-3 hover:bg-[color:var(--card-soft)]"
+                      className="flex items-center gap-3 rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] px-4 py-3 hover:bg-[color:var(--card-soft)]"
                     >
                       <span className="text-[22px]">{tripItem.coverEmoji}</span>
                       <div className="min-w-0">

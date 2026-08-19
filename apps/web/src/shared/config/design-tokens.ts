@@ -28,12 +28,20 @@ export const colors = {
   disabledText: '#B0B8C1',
 } as const;
 
+/**
+ * 라운드 스케일 SSOT — 4단계 + `rounded-full`. 값이 10가지로 늘어나 있어서
+ * 같은 역할의 요소가 화면마다 2~6px 씩 달랐다. 새 값을 늘리지 말고 역할로 고른다.
+ *
+ * - `micro`(8)   인라인 미세 요소 — 메모 pill, 툴팁, h-7~h-8 태그
+ * - `control`(12) 컨트롤 — 버튼 · 인풋 · 칩 · 세그먼트 · 지도 위 컨트롤
+ * - `card`(16)   카드 · 패널 · 드롭다운 · 선택 가능한 리스트 행
+ * - `surface`(20) 큰 표면 — 모달 · 바텀시트 · mega-card · 랜딩 히어로
+ */
 export const radius = {
-  base: 20,
-  sub: 16,
-  chip: 14,
-  button: 18,
-  input: 16,
+  micro: 8,
+  control: 12,
+  card: 16,
+  surface: 20,
 } as const;
 
 /**

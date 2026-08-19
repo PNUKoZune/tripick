@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { FiSearch } from 'react-icons/fi';
+import { LuLuggage, LuPlus, LuSearch } from 'react-icons/lu';
 import { useQuery } from '@tanstack/react-query';
 import type { TripSummaryStatus, TripSummaryDto } from '@tripick/types';
 
@@ -109,17 +109,15 @@ function TripsContent() {
           <>
             <Link
               href={latestTrip ? `/planner?tripId=${latestTrip.id}` : '/trips/new'}
-              className="hidden rounded-[14px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] px-4 py-2 text-[14px] font-semibold text-[color:var(--ink,#191F28)] hover:bg-[color:var(--card-soft,#FAFBFC)] lg:inline-flex"
+              className="hidden rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] px-4 py-2 text-[14px] font-semibold text-[color:var(--ink,#191F28)] hover:bg-[color:var(--card-soft,#FAFBFC)] lg:inline-flex"
             >
               {latestTrip ? '최근 여행 일정 보기' : '첫 여행 만들기'}
             </Link>
             <Link
               href="/trips/new"
-              className="inline-flex h-10 items-center gap-1 rounded-full bg-[color:var(--blue-600,#3182F6)] px-4 text-[13px] font-bold text-white shadow-[0_6px_16px_rgba(49,130,246,0.28)] hover:bg-[color:var(--blue-700,#1B64DA)] lg:gap-0 lg:rounded-[14px] lg:px-4 lg:text-[14px] lg:font-semibold lg:shadow-none"
+              className="inline-flex h-10 items-center gap-1 rounded-full bg-[color:var(--blue-600,#3182F6)] px-4 text-[13px] font-bold text-white shadow-[0_6px_16px_rgba(49,130,246,0.28)] hover:bg-[color:var(--blue-700,#1B64DA)] lg:gap-0 lg:rounded-[12px] lg:px-4 lg:text-[14px] lg:font-semibold lg:shadow-none"
             >
-              <span aria-hidden className="lg:hidden">
-                ＋
-              </span>
+              <LuPlus aria-hidden className="size-4 lg:hidden" />
               <span>새 여행</span>
             </Link>
           </>
@@ -247,7 +245,7 @@ function SearchSortBar({
   return (
     <div className="flex items-center gap-2 px-4 lg:px-0">
       <div className="relative flex-1">
-        <FiSearch
+        <LuSearch
           aria-hidden
           className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[color:var(--ink-faint,#8B95A1)]"
         />
@@ -296,7 +294,7 @@ function SummaryTile({
         ? 'text-[color:var(--ok,#00A86B)]'
         : 'text-[color:var(--ink,#191F28)]';
   return (
-    <div className="rounded-[14px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] px-3 py-3 text-center">
+    <div className="rounded-[16px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] px-3 py-3 text-center">
       <div className="text-[11px] font-semibold text-[color:var(--ink-faint,#8B95A1)]">{label}</div>
       <div className={`mt-1 text-[18px] font-bold ${valueClass}`}>{value}</div>
     </div>
@@ -355,7 +353,7 @@ function EmptyState({ hasTrips }: { hasTrips: boolean }) {
   // 여행 자체가 없는 신규 사용자와, 필터 결과만 비어 있는 경우의 안내를 구분한다.
   return (
     <div className="rounded-[16px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FAFBFC)] p-6 text-center">
-      <div className="text-[24px]">🧳</div>
+      <LuLuggage aria-hidden className="mx-auto size-7 text-[color:var(--ink-faint,#8B95A1)]" />
       <div className="mt-2 text-[14px] font-bold text-[color:var(--ink,#191F28)]">
         {hasTrips ? '해당 조건의 여행이 없어요' : '아직 만든 여행이 없어요'}
       </div>

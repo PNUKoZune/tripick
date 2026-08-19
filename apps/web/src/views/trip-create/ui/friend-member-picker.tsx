@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { LuCheck, LuPlus, LuX } from 'react-icons/lu';
 import { useQuery } from '@tanstack/react-query';
 import type { PlannerMemberDto } from '@tripick/types';
 
@@ -113,7 +114,7 @@ export function FriendMemberPicker({ members, onAdd, onRemove }: Props) {
                   aria-label={`${member.initial} 제거`}
                   className="ml-0.5 flex size-6 items-center justify-center rounded-full text-[color:var(--ink-faint,#8B95A1)] hover:bg-[color:var(--line,#E5E8EB)] hover:text-[color:var(--ink,#191F28)]"
                 >
-                  ×
+                  <LuX aria-hidden className="size-3.5" />
                 </button>
               ) : null}
             </span>
@@ -130,14 +131,14 @@ export function FriendMemberPicker({ members, onAdd, onRemove }: Props) {
               : 'border-dashed border-[color:var(--line,#D6DBE1)] bg-[color:var(--card,#fff)] text-[color:var(--ink-sub,#6B7684)] hover:bg-[color:var(--card-soft,#FAFBFC)]'
           }`}
         >
-          <span aria-hidden>＋</span>
+          <LuPlus aria-hidden className="size-3.5" />
           <span>친구 추가</span>
         </button>
       </div>
 
       {open ? (
         <div
-          className={`absolute left-0 right-0 z-30 flex flex-col overflow-hidden rounded-[14px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] shadow-[0_12px_28px_rgba(0,0,0,0.08)] ${
+          className={`absolute left-0 right-0 z-30 flex flex-col overflow-hidden rounded-[16px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] shadow-[0_12px_28px_rgba(0,0,0,0.08)] ${
             direction === 'down' ? 'top-[calc(100%+8px)]' : 'bottom-[calc(100%+8px)]'
           }`}
           style={{ maxHeight }}
@@ -210,14 +211,14 @@ export function FriendMemberPicker({ members, onAdd, onRemove }: Props) {
                       </div>
                     </div>
                     <span
-                      className={`flex size-6 items-center justify-center rounded-full border text-[12px] ${
+                      className={`flex size-6 items-center justify-center rounded-full border ${
                         selected
                           ? 'border-[color:var(--primary,#3182F6)] bg-[color:var(--primary,#3182F6)] text-white'
                           : 'border-[color:var(--line,#D6DBE1)] text-transparent'
                       }`}
                       aria-hidden
                     >
-                      ✓
+                      <LuCheck className="size-3.5" />
                     </span>
                   </button>
                 );

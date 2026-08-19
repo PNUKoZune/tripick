@@ -24,7 +24,7 @@ export function NextStopBar({ item, distanceM, transportLabel }: Props) {
   const etaMin = distanceM !== null ? estimateEtaMinutes(distanceM, transportLabel) : null;
 
   return (
-    <div className="mb-3 flex items-center gap-3 rounded-[14px] border border-[color:var(--primary)]/25 bg-[color:var(--primary-tint)] px-4 py-3">
+    <div className="mb-3 flex items-center gap-3 rounded-[16px] border border-[color:var(--primary)]/25 bg-[color:var(--primary-tint)] px-4 py-3">
       <span
         aria-hidden
         className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[color:var(--btn-bg)] text-[14px] text-[color:var(--btn-text)]"

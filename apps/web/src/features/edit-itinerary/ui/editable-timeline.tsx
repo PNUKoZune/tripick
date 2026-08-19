@@ -113,7 +113,7 @@ export function EditableTimeline({
       ) : (
         <>
           {orderedItems.length >= 2 ? (
-            <p className="mb-2 flex items-center gap-1.5 rounded-[10px] bg-[color:var(--card-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[color:var(--ink-sub)]">
+            <p className="mb-2 flex items-center gap-1.5 rounded-[12px] bg-[color:var(--card-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[color:var(--ink-sub)]">
               <LuGripVertical className="size-3.5 shrink-0 text-[color:var(--ink-faint)]" />
               왼쪽 손잡이를 잡고 끌어 순서를 바꿀 수 있어요
             </p>

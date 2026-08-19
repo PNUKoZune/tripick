@@ -1,18 +1,13 @@
 import { forwardRef } from 'react';
 import type { PlannerDayDto, PlannerItineraryItemDto } from '@tripick/types';
 
+import { ItemTypeIcon } from '@/shared/ui';
+
 type Props = {
   title: string;
   subtitle: string;
   days: PlannerDayDto[];
   items: PlannerItineraryItemDto[];
-};
-
-const TYPE_EMOJI: Record<PlannerItineraryItemDto['type'], string> = {
-  attraction: '📍',
-  restaurant: '🍽️',
-  cafe: '☕',
-  transport: '🚌',
 };
 
 /**
@@ -31,7 +26,9 @@ export const ShareableItinerary = forwardRef<HTMLDivElement, Props>(function Sha
     >
       <div className="flex items-start justify-between border-b border-[#E5E8EB] pb-4">
         <div>
-          <div className="text-[12px] font-bold tracking-wide text-[#3182F6]">TRIPICK · 여행 일정</div>
+          <div className="text-[12px] font-bold tracking-wide text-[#3182F6]">
+            TRIPICK · 여행 일정
+          </div>
           <h1 className="mt-1 text-[26px] font-bold leading-[34px]">{title}</h1>
           <div className="mt-1 text-[14px] text-[#6B7684]">{subtitle}</div>
         </div>
@@ -70,7 +67,10 @@ export const ShareableItinerary = forwardRef<HTMLDivElement, Props>(function Sha
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[15px]">{TYPE_EMOJI[item.type]}</span>
+                          <ItemTypeIcon
+                            type={item.type}
+                            className="size-4 shrink-0 text-[#6B7684]"
+                          />
                           <span className="text-[16px] font-semibold">{item.name}</span>
                         </div>
                         <div className="mt-0.5 text-[12px] text-[#6B7684]">

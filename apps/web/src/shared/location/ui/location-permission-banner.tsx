@@ -41,7 +41,7 @@ export function LocationPermissionBanner({ permission }: Props) {
   const copy = COPY[permission];
 
   return (
-    <div className="mb-3 flex items-start gap-3 rounded-[14px] border border-[color:var(--danger-border,#FFD2D7)] bg-[color:var(--danger-tint,#FFF0F1)] px-4 py-3">
+    <div className="mb-3 flex items-start gap-3 rounded-[16px] border border-[color:var(--danger-border,#FFD2D7)] bg-[color:var(--danger-tint,#FFF0F1)] px-4 py-3">
       <LuMapPin aria-hidden className="mt-0.5 size-4 shrink-0 text-[color:var(--danger,#F04452)]" />
       <div className="min-w-0 flex-1">
         <div className="text-[13px] font-bold leading-5 text-[color:var(--danger,#F04452)]">

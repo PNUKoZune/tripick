@@ -21,13 +21,13 @@ export default function NotFound() {
           <div className="mt-4 flex flex-wrap justify-center gap-2">
             <Link
               href="/"
-              className="inline-flex h-11 items-center rounded-[14px] bg-[color:var(--btn-bg)] px-5 text-[14px] font-bold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)]"
+              className="inline-flex h-11 items-center rounded-[12px] bg-[color:var(--btn-bg)] px-5 text-[14px] font-bold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)]"
             >
               내 여행으로
             </Link>
             <Link
               href="/support"
-              className="inline-flex h-11 items-center rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card)] px-5 text-[14px] font-bold text-[color:var(--ink-sub)] transition-colors hover:bg-[color:var(--card-soft)]"
+              className="inline-flex h-11 items-center rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-5 text-[14px] font-bold text-[color:var(--ink-sub)] transition-colors hover:bg-[color:var(--card-soft)]"
             >
               고객센터
             </Link>

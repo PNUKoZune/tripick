@@ -32,7 +32,7 @@ function SignupContent() {
     <AppFrame showNav={false} themed>
       <div className="mx-auto flex min-h-dvh w-full max-w-[440px] flex-col px-5 pb-10 pt-12">
         <header className="mb-8">
-          <div className="text-[13px] font-black text-[color:var(--primary)]">TriPick</div>
+          <div className="text-[13px] font-extrabold text-[color:var(--primary)]">TriPick</div>
           <h1 className="mt-2 text-[26px] font-bold text-[color:var(--ink)]">회원가입</h1>
           <p className="mt-1 text-[13px] text-[color:var(--ink-sub)]">
             이메일로 가입하고 인증 메일을 확인하면 시작할 수 있어요.

@@ -34,7 +34,7 @@ export function TripSummaryCard({ trip, draftAction }: Props) {
       }`}
     >
       <div className="relative flex h-16 items-center bg-[linear-gradient(135deg,var(--blue-50,#EAF2FF)_0%,var(--card-soft,#F4F7FB)_100%)] px-4">
-        <div className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-[color:var(--card,#fff)] text-[24px] shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+        <div className="flex h-11 w-11 items-center justify-center rounded-[12px] bg-[color:var(--card,#fff)] text-[24px] shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
           <span aria-hidden>{trip.coverEmoji}</span>
         </div>
         <div className="absolute right-3 top-1/2 -translate-y-1/2">

@@ -1,6 +1,6 @@
 'use client';
 
-import { FiDroplet, FiInfo } from 'react-icons/fi';
+import { LuDroplet, LuInfo } from 'react-icons/lu';
 import { useQuery } from '@tanstack/react-query';
 
 import type { PlannerTripDto, PlannerTripMetaDto } from '@tripick/types';
@@ -105,7 +105,7 @@ function WeatherCard({ tripId, dayCount }: { tripId: string; dayCount: number })
               <div className="flex items-center gap-2">
                 {typeof w.precipitationProbability === 'number' ? (
                   <span className="flex items-center gap-1 text-[13px] font-semibold text-[color:var(--primary,#3182F6)]">
-                    <FiDroplet aria-hidden className="h-[13px] w-[13px]" />
+                    <LuDroplet aria-hidden className="h-[13px] w-[13px]" />
                     {w.precipitationProbability}%
                   </span>
                 ) : null}
@@ -128,7 +128,7 @@ function WeatherHint() {
         aria-label={message}
         className="flex items-center justify-center text-[color:var(--ink-faint,#8B95A1)]"
       >
-        <FiInfo aria-hidden className="h-[15px] w-[15px]" />
+        <LuInfo aria-hidden className="h-[15px] w-[15px]" />
       </button>
       <span
         role="tooltip"

@@ -248,7 +248,7 @@ function DiffBox({
         ? 'bg-[color:var(--danger-tint,#FFECEE)] text-[color:var(--danger,#F04452)]'
         : 'bg-[color:var(--primary-tint,#EAF2FF)] text-[color:var(--primary-deep,#1B64DA)]';
   return (
-    <div className={`rounded-[14px] border p-3.5 ${palette}`}>
+    <div className={`rounded-[16px] border p-3.5 ${palette}`}>
       <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ${badge}`}>
         {label}
       </span>

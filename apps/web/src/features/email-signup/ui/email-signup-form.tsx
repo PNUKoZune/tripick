@@ -6,6 +6,7 @@ import { NICKNAME_MAX_LENGTH } from '@tripick/types';
 
 import { signupWithEmail } from '@/entities/session/api/auth-api';
 import { useRetryCountdown } from '@/shared/lib';
+import { Button } from '@/shared/ui';
 
 type Props = {
   onSent?: (email: string) => void;
@@ -77,17 +78,13 @@ export function EmailSignupForm({ onSent }: Props) {
         </p>
       ) : null}
 
-      <button
-        type="submit"
-        disabled={!canSubmit}
-        className="mt-2 h-12 w-full rounded-[12px] bg-[color:var(--btn-bg)] text-[15px] font-bold text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)] disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)]"
-      >
+      <Button type="submit" size="md" fullWidth className="mt-2" disabled={!canSubmit}>
         {mutation.isPending
           ? '가입 중…'
           : retryAfter > 0
             ? `${retryAfter}초 후 다시 시도`
             : '회원가입'}
-      </button>
+      </Button>
     </form>
   );
 }

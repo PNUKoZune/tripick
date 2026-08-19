@@ -200,7 +200,7 @@ export function ReplanModal({
               placeholder="예) 카페는 1곳만 가고 싶어요. 둘째 날은 바다 위주로 해주세요."
               maxLength={300}
               rows={3}
-              className="w-full resize-none rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-3 py-2.5 text-[15px] text-[color:var(--ink)] outline-none focus:border-[color:var(--primary)] focus:bg-[color:var(--card)] focus:ring-2 focus:ring-[color:var(--ring)]"
+              className="w-full resize-none rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-3 py-2.5 text-[15px] text-[color:var(--ink)] outline-none focus:border-[color:var(--primary)] focus:bg-[color:var(--card)] focus:ring-2 focus:ring-[color:var(--ring)]"
             />
           </Field>
 
@@ -233,7 +233,7 @@ export function ReplanModal({
               onChange={(e) => setAvoid(e.target.value)}
               placeholder="예) 대기 긴 맛집, 계단 많은 곳"
               maxLength={200}
-              className="h-11 w-full rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-3 text-[15px] text-[color:var(--ink)] outline-none focus:border-[color:var(--primary)] focus:bg-[color:var(--card)] focus:ring-2 focus:ring-[color:var(--ring)]"
+              className="h-11 w-full rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-3 text-[15px] text-[color:var(--ink)] outline-none focus:border-[color:var(--primary)] focus:bg-[color:var(--card)] focus:ring-2 focus:ring-[color:var(--ring)]"
             />
           </Field>
 
@@ -265,7 +265,7 @@ export function ReplanModal({
             type="button"
             onClick={onClose}
             disabled={mutation.isPending}
-            className="inline-flex h-14 flex-1 items-center justify-center rounded-[18px] border border-[color:var(--line)] bg-[color:var(--card)] text-[16px] font-semibold text-[color:var(--ink)] transition-colors hover:bg-[color:var(--card-soft)] disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-14 flex-1 items-center justify-center rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] text-[16px] font-semibold text-[color:var(--ink)] transition-colors hover:bg-[color:var(--card-soft)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             취소
           </button>
@@ -273,7 +273,7 @@ export function ReplanModal({
             type="button"
             disabled={mutation.isPending || !canSubmit}
             onClick={handleSubmit}
-            className="inline-flex h-14 flex-1 items-center justify-center rounded-[18px] bg-[color:var(--btn-bg)] text-[16px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none"
+            className="inline-flex h-14 flex-1 items-center justify-center rounded-[16px] bg-[color:var(--btn-bg)] text-[16px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none"
           >
             {/* 전송 중 로딩 상태 문구 — 기존 mutation.isPending "요청 중…" 유지(REQ-WVR-052) */}
             {mutation.isPending ? (

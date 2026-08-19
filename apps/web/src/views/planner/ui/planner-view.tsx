@@ -3,15 +3,20 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { IconType } from 'react-icons';
 import {
-  FiChevronLeft,
-  FiChevronRight,
-  FiChevronsLeft,
-  FiChevronsRight,
-  FiUserPlus,
-  FiX,
-} from 'react-icons/fi';
-import { LuShare2, LuSparkles } from 'react-icons/lu';
+  LuChevronLeft,
+  LuChevronRight,
+  LuChevronsLeft,
+  LuChevronsRight,
+  LuCloudSun,
+  LuFootprints,
+  LuMapPin,
+  LuShare2,
+  LuSparkles,
+  LuUserPlus,
+  LuX,
+} from 'react-icons/lu';
 import { useQuery } from '@tanstack/react-query';
 import type {
   PlannerItineraryItemDto,
@@ -88,7 +93,7 @@ function TripLightSummaryCard({
 
   return (
     <section
-      className={`wvr-scope rounded-[22px] border border-[color:var(--line)] bg-[color:var(--card)] shadow-[var(--shadow-card)] ${
+      className={`wvr-scope rounded-[20px] border border-[color:var(--line)] bg-[color:var(--card)] shadow-[var(--shadow-card)] ${
         compact ? 'p-4' : 'mb-3 p-5'
       }`}
       aria-label="여행 요약"
@@ -190,23 +195,23 @@ function TripLightSummaryCard({
 const REPLAN_BANNER_COPY: Record<
   Exclude<ReplanTrigger, 'manual'>,
   {
-    emoji: string;
+    Icon: IconType;
     title: string;
     body: string;
   }
 > = {
   weather: {
-    emoji: '⛅',
+    Icon: LuCloudSun,
     title: '이 날 날씨 변화가 예상돼요',
     body: '실내·대체 장소 위주로 일정을 다시 짜볼까요?',
   },
   crowd: {
-    emoji: '🚶',
+    Icon: LuFootprints,
     title: '이 날 혼잡이 예상돼요',
     body: '덜 붐비는 장소로 일정을 다시 짜볼까요?',
   },
   deviation: {
-    emoji: '📍',
+    Icon: LuMapPin,
     title: '일정 장소에 도착하지 못한 것 같아요',
     body: '지금 위치에 맞춰 일정을 다시 짜볼까요?',
   },
@@ -576,7 +581,7 @@ function PlannerContent({
                   href="/trips"
                   className="flex h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] pl-2 pr-3 text-[13px] font-semibold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink)]"
                 >
-                  <FiChevronLeft className="size-4" aria-hidden />
+                  <LuChevronLeft className="size-4" aria-hidden />
                   <span>내 여행</span>
                 </Link>
                 <div className="min-w-0">
@@ -603,7 +608,7 @@ function PlannerContent({
                     className="flex items-center gap-2 rounded-full px-2 py-1 transition hover:bg-[color:var(--card-soft)]"
                   >
                     <MemberAvatars members={trip.members} />
-                    <FiUserPlus className="size-4 text-[color:var(--ink-faint)]" aria-hidden />
+                    <LuUserPlus className="size-4 text-[color:var(--ink-faint)]" aria-hidden />
                   </button>
                 ) : null}
                 {trip ? (
@@ -623,7 +628,7 @@ function PlannerContent({
                   <button
                     type="button"
                     onClick={() => openReplan('manual')}
-                    className="inline-flex h-10 items-center justify-center rounded-[14px] bg-[color:var(--btn-bg)] px-4 text-[14px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)]"
+                    className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[color:var(--btn-bg)] px-4 text-[14px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)]"
                   >
                     <span className="flex items-center gap-1.5">
                       <LuSparkles className="size-4" aria-hidden />
@@ -671,7 +676,7 @@ function PlannerContent({
                         title="패널 접기"
                         className="flex size-7 items-center justify-center rounded-[8px] text-[color:var(--ink-faint)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink-sub)] 2xl:hidden"
                       >
-                        <FiChevronsLeft className="size-4" />
+                        <LuChevronsLeft className="size-4" />
                       </button>
                     </div>
                   </div>
@@ -766,9 +771,9 @@ function PlannerContent({
                   onClick={() => setSidebarCollapsed(false)}
                   aria-label="일정 패널 펼치기"
                   title="일정 패널 펼치기"
-                  className="absolute left-0 top-1/2 z-20 flex -translate-y-1/2 items-center rounded-r-[14px] border border-l-0 border-[color:var(--line)] bg-[color:var(--card)] py-4 pl-1 pr-1.5 text-[color:var(--ink-sub)] shadow-[0_4px_12px_rgba(15,23,42,0.1)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink)]"
+                  className="absolute left-0 top-1/2 z-20 flex -translate-y-1/2 items-center rounded-r-[12px] border border-l-0 border-[color:var(--line)] bg-[color:var(--card)] py-4 pl-1 pr-1.5 text-[color:var(--ink-sub)] shadow-[0_4px_12px_rgba(15,23,42,0.1)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink)]"
                 >
-                  <FiChevronsRight className="size-5" />
+                  <LuChevronsRight className="size-5" />
                 </button>
               ) : null}
               {trip ? (
@@ -880,9 +885,15 @@ function PlannerContent({
       {alertBanner && alertBanner !== 'manual' && trip ? (
         <div className="fixed left-1/2 top-3 z-40 w-[calc(100%-24px)] max-w-[420px] -translate-x-1/2">
           <div className="flex items-start gap-3 rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] p-3.5 shadow-[var(--shadow-btn)]">
-            <span className="text-[20px] leading-none" aria-hidden>
-              {REPLAN_BANNER_COPY[alertBanner].emoji}
-            </span>
+            {(() => {
+              const BannerIcon = REPLAN_BANNER_COPY[alertBanner].Icon;
+              return (
+                <BannerIcon
+                  className="mt-0.5 size-5 shrink-0 text-[color:var(--primary)]"
+                  aria-hidden
+                />
+              );
+            })()}
             <div className="min-w-0 flex-1">
               <p className="text-[14px] font-bold text-[color:var(--ink)]">
                 {REPLAN_BANNER_COPY[alertBanner].title}
@@ -918,7 +929,7 @@ function PlannerContent({
               onClick={dismissAlertBanner}
               className="-mr-1 -mt-1 flex size-7 shrink-0 items-center justify-center rounded-full text-[color:var(--ink-faint)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink)]"
             >
-              <FiX className="size-4" aria-hidden />
+              <LuX className="size-4" aria-hidden />
             </button>
           </div>
         </div>
@@ -952,7 +963,7 @@ function LivePromoBanner() {
       </span>
       <span className="flex items-center gap-0.5 text-[12px] font-semibold">
         실시간 화면 보기
-        <FiChevronRight className="size-3.5" aria-hidden />
+        <LuChevronRight className="size-3.5" aria-hidden />
       </span>
     </Link>
   );

@@ -3,17 +3,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  FiAlertCircle,
-  FiCheck,
-  FiLoader,
-  FiLock,
-  FiPlus,
-  FiRefreshCw,
-  FiRotateCcw,
-  FiThumbsDown,
-  FiThumbsUp,
-  FiX,
-} from 'react-icons/fi';
+  LuCheck,
+  LuCircleAlert,
+  LuLoader,
+  LuLock,
+  LuPlus,
+  LuRefreshCw,
+  LuRotateCcw,
+  LuThumbsDown,
+  LuThumbsUp,
+  LuX,
+} from 'react-icons/lu';
 import {
   MAX_PREFERENCE_PHOTOS,
   MAX_PREFERENCE_UPLOAD,
@@ -48,7 +48,7 @@ import {
 import { getStoredSession, type Session } from '@/entities/session/model/session-storage';
 import { queryKeys } from '@/shared/api/query-keys';
 import { downscaleImage, PREFERENCE_MAX_DIMENSION } from '@/shared/lib';
-import { ConfirmDialog, ImageLightbox, TimeField, Toast } from '@/shared/ui';
+import { Button, ConfirmDialog, ImageLightbox, TimeField, Toast } from '@/shared/ui';
 
 type ToastState = {
   title: string;
@@ -574,7 +574,7 @@ export function PreferenceSetupForm() {
             setDragActive(false);
             addPhotos(event.dataTransfer.files);
           }}
-          className={`rounded-[18px] p-1.5 transition ${
+          className={`rounded-[16px] p-1.5 transition ${
             dragActive
               ? 'bg-[color:var(--primary-tint)] ring-2 ring-[color:var(--primary)]'
               : 'bg-transparent'
@@ -596,7 +596,7 @@ export function PreferenceSetupForm() {
                   aria-hidden
                   className="absolute left-1.5 top-1.5 flex size-[22px] items-center justify-center rounded-full border-2 border-[color:var(--card)] bg-[color:var(--primary)] text-[color:var(--btn-text)]"
                 >
-                  <FiCheck className="size-3" />
+                  <LuCheck className="size-3" />
                 </span>
               </button>
             ))}
@@ -618,7 +618,7 @@ export function PreferenceSetupForm() {
                   aria-hidden
                   className="absolute left-1.5 top-1.5 flex size-[22px] items-center justify-center rounded-full border-2 border-[color:var(--card)] bg-[color:var(--primary)] text-[color:var(--btn-text)]"
                 >
-                  <FiCheck className="size-3" />
+                  <LuCheck className="size-3" />
                 </span>
                 <button
                   type="button"
@@ -626,7 +626,7 @@ export function PreferenceSetupForm() {
                   aria-label="사진 제거"
                   className="absolute right-1.5 top-1.5 flex size-[22px] items-center justify-center rounded-full bg-black/55 text-white"
                 >
-                  <FiX className="size-3" aria-hidden />
+                  <LuX className="size-3" aria-hidden />
                 </button>
               </div>
             ))}
@@ -637,7 +637,7 @@ export function PreferenceSetupForm() {
                 className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-[16px] border-[1.5px] border-dashed border-[color:var(--primary)] bg-[color:var(--primary-tint)] text-[color:var(--primary-deep)] transition hover:bg-[color:var(--card)]"
               >
                 <span className="flex size-7 items-center justify-center rounded-full bg-[color:var(--card)] text-[color:var(--primary)]">
-                  <FiPlus className="size-3.5" aria-hidden />
+                  <LuPlus className="size-3.5" aria-hidden />
                 </span>
                 <span className="text-center text-[11.5px] font-bold leading-[1.3]">
                   갤러리에서
@@ -693,7 +693,7 @@ export function PreferenceSetupForm() {
             type="button"
             onClick={() => analyzePhotosMutation.mutate(photos)}
             disabled={analyzePhotosMutation.isPending || analyzing}
-            className="mt-3 h-11 w-full rounded-[14px] bg-[color:var(--primary-tint)] text-[14px] font-bold text-[color:var(--primary-deep)] transition active:scale-[0.99] disabled:text-[color:var(--ink-faint)] lg:max-w-[280px]"
+            className="mt-3 h-11 w-full rounded-[12px] bg-[color:var(--primary-tint)] text-[14px] font-bold text-[color:var(--primary-deep)] transition active:scale-[0.99] disabled:text-[color:var(--ink-faint)] lg:max-w-[280px]"
           >
             {analyzePhotosMutation.isPending
               ? '올리는 중…'
@@ -704,7 +704,7 @@ export function PreferenceSetupForm() {
         ) : null}
 
         <p className="mt-3 flex items-start gap-1.5 text-[12px] font-medium leading-5 text-[color:var(--ink-faint)]">
-          <FiLock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          <LuLock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
           <span>
             올린 사진은 취향 분석 용도로만 저장·사용돼요. 언제든 사진을 지우면 함께 삭제돼요.
           </span>
@@ -713,9 +713,9 @@ export function PreferenceSetupForm() {
 
       {/* 분석 결과 카드 — 목업 .result-card(완료 칩 · 겹친 썸네일 · 태그 그룹 · 정정 힌트) */}
       {savedPhotoUrls.length > 0 || analyzedTags ? (
-        <section className="wvr-rise wvr-rise-2 rounded-[22px] border border-[color:var(--line)] bg-[color:var(--card)] p-5 shadow-[var(--shadow-card)]">
+        <section className="wvr-rise wvr-rise-2 rounded-[20px] border border-[color:var(--line)] bg-[color:var(--card)] p-5 shadow-[var(--shadow-card)]">
           <span className="inline-flex items-center gap-1.5 rounded-[8px] bg-[color:var(--primary-tint)] px-2 py-1 text-[11px] font-bold text-[color:var(--primary)]">
-            <FiCheck className="size-3" aria-hidden />
+            <LuCheck className="size-3" aria-hidden />
             {analyzing ? '사진 분석 중' : '사진 분석 완료'}
           </span>
           <h2 className="mt-2.5 text-[19px] font-extrabold leading-[1.4] tracking-[-0.025em] text-[color:var(--ink)]">
@@ -803,9 +803,9 @@ export function PreferenceSetupForm() {
                   type="button"
                   onClick={() => reanalyzePhotosMutation.mutate()}
                   disabled={reanalyzePhotosMutation.isPending}
-                  className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-[14px] bg-[color:var(--card-soft)] text-[13px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--line)] active:scale-[0.99] disabled:text-[color:var(--ink-faint)] lg:max-w-[280px]"
+                  className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-[12px] bg-[color:var(--card-soft)] text-[13px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--line)] active:scale-[0.99] disabled:text-[color:var(--ink-faint)] lg:max-w-[280px]"
                 >
-                  <FiRefreshCw
+                  <LuRefreshCw
                     className={`size-3.5 ${reanalyzePhotosMutation.isPending ? 'animate-spin' : ''}`}
                     aria-hidden
                   />
@@ -815,7 +815,7 @@ export function PreferenceSetupForm() {
                 </button>
               ) : null}
               <p className="mt-3 flex items-start gap-2 text-[12.5px] leading-[1.55] text-[color:var(--ink-sub)]">
-                <FiAlertCircle
+                <LuCircleAlert
                   className="mt-0.5 size-3.5 shrink-0 text-[color:var(--accent-deep)]"
                   aria-hidden
                 />
@@ -845,20 +845,21 @@ export function PreferenceSetupForm() {
               {ctaHint}
             </p>
           ) : null}
-          <button
-            type="button"
+          <Button
+            size="lg"
+            fullWidth
+            className="shadow-[var(--shadow-btn)] disabled:shadow-none lg:order-3 lg:h-12 lg:w-auto lg:min-w-[200px] lg:px-8 lg:text-[15px]"
             disabled={savePreferenceMutation.isPending || !ready}
             onClick={handleSubmit}
-            className="h-14 w-full rounded-[18px] bg-[color:var(--btn-bg)] text-[16px] font-bold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none lg:order-3 lg:h-12 lg:w-auto lg:min-w-[200px] lg:px-8 lg:text-[15px]"
           >
             {savePreferenceMutation.isPending ? '저장 중' : '취향 저장'}
-          </button>
+          </Button>
           <button
             type="button"
             onClick={() => setResetDialogOpen(true)}
-            className="mx-auto flex h-11 items-center justify-center gap-1.5 rounded-[14px] px-4 text-[13.5px] font-semibold text-[color:var(--ink-faint)] transition-colors hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink-sub)] lg:order-2 lg:mx-0"
+            className="mx-auto flex h-11 items-center justify-center gap-1.5 rounded-[12px] px-4 text-[13.5px] font-semibold text-[color:var(--ink-faint)] transition-colors hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink-sub)] lg:order-2 lg:mx-0"
           >
-            <FiRotateCcw className="size-3.5" aria-hidden />
+            <LuRotateCcw className="size-3.5" aria-hidden />
             기본값 되돌리기
           </button>
         </div>
@@ -1044,7 +1045,7 @@ function SavedPhotoRow({
   onZoom: () => void;
 }) {
   return (
-    <li className="flex gap-3 rounded-[14px] border border-[color:var(--line)] p-2">
+    <li className="flex gap-3 rounded-[16px] border border-[color:var(--line)] p-2">
       <button
         type="button"
         onClick={onZoom}
@@ -1071,9 +1072,9 @@ function SavedPhotoRow({
                 }`}
               >
                 {enabled ? (
-                  <FiCheck className="size-3" aria-hidden />
+                  <LuCheck className="size-3" aria-hidden />
                 ) : (
-                  <FiPlus className="size-3" aria-hidden />
+                  <LuPlus className="size-3" aria-hidden />
                 )}
                 {TASTE_TAG_LABELS[tag] ?? tag}
               </button>
@@ -1081,12 +1082,12 @@ function SavedPhotoRow({
           </div>
         ) : state === 'analyzing' ? (
           <p className="flex items-center gap-1.5 text-[13px] font-medium text-[color:var(--ink-faint)]">
-            <FiLoader className="size-3.5 animate-spin" aria-hidden />
+            <LuLoader className="size-3.5 animate-spin" aria-hidden />
             취향을 분석하고 있어요…
           </p>
         ) : state === 'unanalyzed' ? (
           <p className="flex items-center gap-1.5 text-[13px] font-medium text-[color:var(--danger)]">
-            <FiAlertCircle className="size-3.5 shrink-0" aria-hidden />
+            <LuCircleAlert className="size-3.5 shrink-0" aria-hidden />
             분석하지 못한 사진이에요. 아래에서 다시 분석할 수 있어요.
           </p>
         ) : (
@@ -1102,7 +1103,7 @@ function SavedPhotoRow({
         aria-label="사진 삭제"
         className="size-7 shrink-0 self-start rounded-full text-[color:var(--ink-faint)] transition hover:bg-[color:var(--card-soft)] disabled:opacity-50"
       >
-        <FiX className="mx-auto size-4" aria-hidden />
+        <LuX className="mx-auto size-4" aria-hidden />
       </button>
     </li>
   );
@@ -1121,7 +1122,7 @@ function AnalysisProgress({ job }: { job: PreferenceAnalysisJobDto | null | unde
 
   return (
     <div
-      className="mb-3 flex flex-col gap-2 rounded-[18px] border border-[color:var(--line)] bg-[color:var(--card)] p-4 shadow-[var(--shadow-card)]"
+      className="mb-3 flex flex-col gap-2 rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] p-4 shadow-[var(--shadow-card)]"
       role="status"
     >
       <p className="flex items-center gap-2.5 text-[14px] font-bold tracking-[-0.015em] text-[color:var(--ink)]">
@@ -1225,9 +1226,9 @@ function SetupBlock({
 }) {
   return (
     <section
-      className={`rounded-[22px] border border-[color:var(--line)] bg-[color:var(--card)] p-5 shadow-[var(--shadow-card)] ${className}`}
+      className={`rounded-[20px] border border-[color:var(--line)] bg-[color:var(--card)] p-5 shadow-[var(--shadow-card)] ${className}`}
     >
-      <h2 className="mb-3 text-[18px] font-black leading-6 text-[color:var(--ink)]">{title}</h2>
+      <h2 className="mb-3 text-[18px] font-extrabold leading-6 text-[color:var(--ink)]">{title}</h2>
       {children}
     </section>
   );
@@ -1376,9 +1377,9 @@ function StanceButton({
       }`}
     >
       {like ? (
-        <FiThumbsUp className="size-3.5" aria-hidden />
+        <LuThumbsUp className="size-3.5" aria-hidden />
       ) : (
-        <FiThumbsDown className="size-3.5" aria-hidden />
+        <LuThumbsDown className="size-3.5" aria-hidden />
       )}
     </button>
   );

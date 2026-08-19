@@ -84,7 +84,7 @@ export function TripProgressTimeline({ items, selectedItemId, onSelectItem, onSw
                     }
                   : undefined
               }
-              className={`flex-1 rounded-[14px] border px-4 py-3 outline-none transition focus-visible:ring-2 focus-visible:ring-[color:var(--primary)] ${
+              className={`flex-1 rounded-[16px] border px-4 py-3 outline-none transition focus-visible:ring-2 focus-visible:ring-[color:var(--primary)] ${
                 onSelectItem
                   ? 'cursor-pointer hover:border-[color:var(--primary)]/40 hover:shadow-[var(--shadow-card)]'
                   : ''
@@ -125,7 +125,7 @@ export function TripProgressTimeline({ items, selectedItemId, onSelectItem, onSw
                     e.stopPropagation();
                     onSwitchItem(item);
                   }}
-                  className="mt-3 flex h-9 w-full items-center justify-center gap-1.5 rounded-[10px] border border-[color:var(--primary)] bg-[color:var(--card)] text-[13px] font-bold text-[color:var(--primary-deep)] hover:bg-[color:var(--primary-tint)]"
+                  className="mt-3 flex h-9 w-full items-center justify-center gap-1.5 rounded-[12px] border border-[color:var(--primary)] bg-[color:var(--card)] text-[13px] font-bold text-[color:var(--primary-deep)] hover:bg-[color:var(--primary-tint)]"
                 >
                   <SwapIcon />
                   일정 변경

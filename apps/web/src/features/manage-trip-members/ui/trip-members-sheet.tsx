@@ -153,7 +153,7 @@ export function TripMembersSheet({
                       type="button"
                       onClick={() => removeMutation.mutate(member.id)}
                       disabled={removeMutation.isPending}
-                      className="h-9 rounded-[10px] border border-[color:var(--line,#E5E8EB)] px-3 text-[12px] font-bold text-[color:var(--ink-sub,#6B7684)] hover:bg-[color:var(--card-soft,#FAFBFC)] disabled:opacity-50"
+                      className="h-9 rounded-[12px] border border-[color:var(--line,#E5E8EB)] px-3 text-[12px] font-bold text-[color:var(--ink-sub,#6B7684)] hover:bg-[color:var(--card-soft,#FAFBFC)] disabled:opacity-50"
                     >
                       {isPending ? '초대 취소' : '제외'}
                     </button>
@@ -175,7 +175,7 @@ export function TripMembersSheet({
               {candidateFriends.length}명
             </span>
           </div>
-          <div className="mt-2 rounded-[14px] bg-[color:var(--card-soft,#F2F4F6)] px-4 py-2.5">
+          <div className="mt-2 rounded-[12px] bg-[color:var(--card-soft,#F2F4F6)] px-4 py-2.5">
             <input
               type="text"
               value={search}
@@ -218,7 +218,7 @@ export function TripMembersSheet({
                     type="button"
                     onClick={() => addMutation.mutate(friend.id)}
                     disabled={addMutation.isPending}
-                    className="h-9 rounded-[10px] bg-[color:var(--primary,#3182F6)] px-3 text-[12px] font-bold text-white hover:bg-[color:var(--primary-deep,#1B64DA)] disabled:opacity-50"
+                    className="h-9 rounded-[12px] bg-[color:var(--primary,#3182F6)] px-3 text-[12px] font-bold text-white hover:bg-[color:var(--primary-deep,#1B64DA)] disabled:opacity-50"
                   >
                     추가
                   </button>

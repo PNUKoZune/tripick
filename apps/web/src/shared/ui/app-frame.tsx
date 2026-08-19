@@ -185,7 +185,7 @@ export function AppBottomNavigation({ className = '' }: { className?: string }) 
   return (
     <nav
       aria-label="하단 탭"
-      className={`fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 rounded-t-[24px] border-t border-[color:var(--line-strong)] bg-[color:var(--app-surface)]/85 px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_28px_-14px_rgba(25,31,40,0.16)] backdrop-blur-xl ${className}`}
+      className={`fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 rounded-t-[20px] border-t border-[color:var(--line-strong)] bg-[color:var(--app-surface)]/85 px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_28px_-14px_rgba(25,31,40,0.16)] backdrop-blur-xl ${className}`}
     >
       <div className="grid h-[62px] grid-cols-5 items-stretch">
         {NAV_ITEMS.map((item) => {
@@ -196,7 +196,7 @@ export function AppBottomNavigation({ className = '' }: { className?: string }) 
               key={item.href}
               href={item.href}
               aria-current={active ? 'page' : undefined}
-              className={`group flex h-full flex-col items-center justify-center gap-[3px] text-[11px] font-black leading-4 transition-colors active:scale-[0.96] ${
+              className={`group flex h-full flex-col items-center justify-center gap-[3px] text-[11px] font-bold leading-4 transition-colors active:scale-[0.96] ${
                 active
                   ? 'text-[color:var(--blue-600)]'
                   : 'text-[color:var(--text-tertiary)] hover:text-[color:var(--text-secondary)]'
@@ -255,7 +255,10 @@ export function AppDesktopNavigation() {
   return (
     <aside className="hidden py-8 lg:block">
       <div className="sticky top-8">
-        <Link href="/" className="text-[24px] font-black leading-8 text-[color:var(--blue-600)]">
+        <Link
+          href="/"
+          className="text-[24px] font-extrabold leading-8 text-[color:var(--blue-600)]"
+        >
           Tripick
         </Link>
         <nav aria-label="데스크탑 내비게이션" className="mt-8 space-y-1">
@@ -267,7 +270,7 @@ export function AppDesktopNavigation() {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
-                className={`flex h-12 items-center gap-3 rounded-[16px] px-4 text-[15px] font-black transition-colors ${
+                className={`flex h-12 items-center gap-3 rounded-[16px] px-4 text-[15px] font-bold transition-colors ${
                   active
                     ? 'bg-[color:var(--app-surface)] text-[color:var(--blue-600)]'
                     : 'text-[color:var(--text-secondary)] hover:bg-[color:var(--app-surface)]/70 hover:text-[color:var(--text-primary)]'
@@ -302,62 +305,6 @@ function isNavItemActive(pathname: string, href: (typeof NAV_ITEMS)[number]['hre
 function NavIcon({ name, active }: { name: NavIconName; active: boolean }) {
   const Icon = active ? NAV_ICONS[name].filled : NAV_ICONS[name].outline;
   return <Icon aria-hidden="true" className="size-[23px]" />;
-}
-
-export function PrimaryButton({
-  children,
-  disabled,
-  onClick,
-  type = 'button',
-  tone = 'blue',
-}: {
-  children: ReactNode;
-  disabled?: boolean;
-  onClick?: () => void;
-  type?: 'button' | 'submit';
-  tone?: 'blue' | 'dark' | 'kakao';
-}) {
-  const toneClass = {
-    blue: 'bg-[color:var(--blue-600)] text-white',
-    dark: 'bg-[color:var(--text-primary)] text-white',
-    kakao: 'bg-[#FEE500] text-[#191919]',
-  }[tone];
-
-  return (
-    <button
-      type={type}
-      disabled={disabled}
-      onClick={onClick}
-      className={`h-14 w-full rounded-[16px] px-5 text-[16px] font-black leading-6 transition active:scale-[0.99] ${
-        disabled ? 'bg-[color:var(--pressed-bg)] text-[color:var(--text-tertiary)]' : toneClass
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-export function SecondaryButton({
-  children,
-  disabled,
-  onClick,
-  type = 'button',
-}: {
-  children: ReactNode;
-  disabled?: boolean;
-  onClick?: () => void;
-  type?: 'button' | 'submit';
-}) {
-  return (
-    <button
-      type={type}
-      disabled={disabled}
-      onClick={onClick}
-      className="h-12 w-full rounded-[16px] bg-[color:var(--soft-bg)] px-4 text-[15px] font-black text-[color:var(--text-secondary)] transition active:scale-[0.99] disabled:text-[color:var(--text-tertiary)]"
-    >
-      {children}
-    </button>
-  );
 }
 
 export function InlineNotice({

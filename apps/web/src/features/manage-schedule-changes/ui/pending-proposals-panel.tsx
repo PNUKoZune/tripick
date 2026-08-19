@@ -54,7 +54,7 @@ export function PendingProposalsPanel({ tripId, isOwner, onOpenProposal }: Props
               <button
                 type="button"
                 onClick={() => onOpenProposal?.(proposal.id)}
-                className="flex h-8 shrink-0 items-center gap-1 rounded-[10px] bg-[color:var(--primary,#3182F6)] px-3 text-[12px] font-bold text-white hover:bg-[color:var(--primary-deep,#1B64DA)]"
+                className="flex h-8 shrink-0 items-center gap-1 rounded-[12px] bg-[color:var(--primary,#3182F6)] px-3 text-[12px] font-bold text-white hover:bg-[color:var(--primary-deep,#1B64DA)]"
               >
                 <LuCheck className="size-3.5" aria-hidden />
                 검토
@@ -65,7 +65,7 @@ export function PendingProposalsPanel({ tripId, isOwner, onOpenProposal }: Props
                 onClick={() => cancel.mutate(proposal.id)}
                 // 여러 제안이 있을 때 눌린 행만 비활성화한다(공유 mutation 오작동 방지)
                 disabled={cancel.isPending && cancel.variables === proposal.id}
-                className="h-8 shrink-0 rounded-[10px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] px-3 text-[12px] font-semibold text-[color:var(--ink-sub,#6B7684)] hover:bg-[color:var(--card-soft,#FAFBFC)] disabled:opacity-50"
+                className="h-8 shrink-0 rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] px-3 text-[12px] font-semibold text-[color:var(--ink-sub,#6B7684)] hover:bg-[color:var(--card-soft,#FAFBFC)] disabled:opacity-50"
               >
                 {cancel.isPending && cancel.variables === proposal.id ? '취소 중…' : '요청 취소'}
               </button>

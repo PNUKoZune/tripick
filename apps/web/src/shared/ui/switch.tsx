@@ -14,16 +14,19 @@ export function Switch({ checked, disabled, onChange, ...aria }: Props) {
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      // 색은 전역 토큰으로 — 라이트 값은 그대로고, .wvr-scope 안에서 렌더될 때만 그
-      // 스코프의 다크 값을 상속받아 화면 안 파랑이 어긋나지 않는다.
+      // 색은 wvr 토큰 우선, 스코프 밖에서는 전역 토큰으로 폴백한다 — 스위치는
+      // .wvr-scope 안팎 양쪽에서 쓰이는데 --primary/--line-dot 은 스코프에만 있어
+      // 폴백이 없으면 선언이 통째로 무효가 되며 색이 사라진다.
       className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition disabled:opacity-50 ${
-        checked ? 'bg-[color:var(--blue-600)]' : 'bg-[color:var(--line-strong)]'
+        checked
+          ? 'bg-[color:var(--primary,var(--blue-600))]'
+          : 'bg-[color:var(--line-dot,var(--line-strong))]'
       }`}
       {...aria}
     >
       <span
         aria-hidden
-        className={`inline-block size-5 transform rounded-full bg-white shadow transition ${
+        className={`inline-block size-5 transform rounded-full bg-[color:var(--card,#fff)] shadow transition ${
           checked ? 'translate-x-6' : 'translate-x-1'
         }`}
       />

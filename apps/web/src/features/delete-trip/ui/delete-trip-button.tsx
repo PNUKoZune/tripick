@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { FiChevronRight, FiTrash2 } from 'react-icons/fi';
+import { LuChevronRight, LuTrash2 } from 'react-icons/lu';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { deleteTrip } from '@/entities/trip-plan';
@@ -43,7 +43,7 @@ export function DeleteTripButton({ tripId, tripTitle, variant = 'menu', onError 
           aria-label="이 여행 삭제"
           className="flex h-9 items-center gap-1 rounded-[12px] border border-[color:var(--danger-border,#FECDD3)] bg-[color:var(--card,#FFFFFF)] px-3 text-[13px] font-semibold text-[color:var(--danger,#F04452)] hover:bg-[color:var(--danger-tint,#FFECEE)]"
         >
-          <FiTrash2 className="size-4" aria-hidden />
+          <LuTrash2 className="size-4" aria-hidden />
           <span className="hidden sm:inline">삭제</span>
         </button>
       ) : (
@@ -53,10 +53,9 @@ export function DeleteTripButton({ tripId, tripTitle, variant = 'menu', onError 
           className="flex h-12 w-full items-center justify-between rounded-[12px] border border-[color:var(--danger-border,#FECDD3)] bg-[color:var(--card,#FFFFFF)] px-4 text-left text-[14px] font-bold text-[color:var(--danger,#F04452)] hover:bg-[color:var(--danger-tint,#FFECEE)]"
         >
           <span className="flex items-center gap-2">
-            <FiTrash2 className="size-4" aria-hidden />
-            이 여행 삭제
+            <LuTrash2 className="size-4" aria-hidden />이 여행 삭제
           </span>
-          <FiChevronRight className="size-4" aria-hidden />
+          <LuChevronRight className="size-4" aria-hidden />
         </button>
       )}
       {open ? (
@@ -91,7 +90,9 @@ function ConfirmDialog({
       themed
       panelClassName="w-full max-w-[400px] rounded-[20px] bg-[color:var(--card,#FFFFFF)] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
     >
-      <h2 className="text-[18px] font-bold text-[color:var(--ink,#191F28)]">이 여행을 삭제할까요?</h2>
+      <h2 className="text-[18px] font-bold text-[color:var(--ink,#191F28)]">
+        이 여행을 삭제할까요?
+      </h2>
       <p className="mt-2 text-[13px] leading-[20px] text-[color:var(--ink-sub,#4E5968)]">
         &ldquo;{tripTitle}&rdquo; 의 일정, 지도, 취향 조율 결과가 모두 삭제됩니다. 이 작업은 되돌릴
         수 없어요.

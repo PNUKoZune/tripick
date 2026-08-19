@@ -6,7 +6,7 @@ import { useId, useMemo, useState } from 'react';
 import { DayPicker, type DateRange } from 'react-day-picker';
 import { ko } from 'react-day-picker/locale';
 import { format } from 'date-fns';
-import { LuChevronDown, LuPlus, LuX } from 'react-icons/lu';
+import { LuChevronDown, LuChevronLeft, LuPlus, LuX } from 'react-icons/lu';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PlannerMemberDto, ReplanBudget, ReplanPace, ReplanPlaceDto } from '@tripick/types';
 
@@ -15,7 +15,7 @@ import { SessionGuard } from '@/entities/session';
 import { createTrip } from '@/entities/trip-plan';
 import { DestinationSearchInput, DestinationMapPicker } from '@/features/destination-search';
 import { queryKeys } from '@/shared/api/query-keys';
-import { PlaceSearchPicker, SegmentToggle, TimeField } from '@/shared/ui';
+import { Button, PlaceSearchPicker, SegmentToggle, Switch, TimeField } from '@/shared/ui';
 import { AppFrame } from '@/shared/ui/app-frame';
 
 import { FriendMemberPicker, friendIdToMemberId } from './friend-member-picker';
@@ -260,7 +260,7 @@ function TripCreateContent({
   })();
 
   const formBody = (
-    <div className="rounded-[22px] border border-[color:var(--line)] bg-[color:var(--card)] px-5 pb-6 pt-1 shadow-[var(--shadow-card)]">
+    <div className="rounded-[20px] border border-[color:var(--line)] bg-[color:var(--card)] px-5 pb-6 pt-1 shadow-[var(--shadow-card)]">
       {/* 01 어디로, 언제 — 기존 3개 필드(여행 제목·지역·기간) 그대로, mega-card 시각만 재스타일 */}
       <Group index="01" label="어디로, 언제">
         <Field label="여행 제목" hint="예) 경주 1박 2일 · 친구들과 봄나들이" htmlFor="trip-title">
@@ -271,7 +271,7 @@ function TripCreateContent({
             onChange={(event) => setTitle(event.target.value)}
             placeholder="여행 이름을 입력해주세요"
             maxLength={40}
-            className="h-14 w-full rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-4 text-[15px] font-medium text-[color:var(--ink)] outline-none transition placeholder:text-[color:var(--ink-faint)] focus:border-[color:var(--primary)] focus:bg-[color:var(--card)] focus:ring-2 focus:ring-[color:var(--ring)]"
+            className="h-14 w-full rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-4 text-[15px] font-medium text-[color:var(--ink)] outline-none transition placeholder:text-[color:var(--ink-faint)] focus:border-[color:var(--primary)] focus:bg-[color:var(--card)] focus:ring-2 focus:ring-[color:var(--ring)]"
           />
         </Field>
 
@@ -287,22 +287,7 @@ function TripCreateContent({
             <span className="text-[13px] font-semibold text-[color:var(--ink)]">
               모든 날 같은 지역
             </span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={sameRegion}
-              aria-label="모든 날 같은 지역"
-              onClick={() => setSameRegion((prev) => !prev)}
-              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-                sameRegion ? 'bg-[color:var(--primary)]' : 'bg-[color:var(--line-dot)]'
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 size-5 rounded-full bg-[color:var(--card)] shadow transition-all ${
-                  sameRegion ? 'left-[22px]' : 'left-0.5'
-                }`}
-              />
-            </button>
+            <Switch checked={sameRegion} onChange={setSameRegion} aria-label="모든 날 같은 지역" />
           </div>
 
           {sameRegion ? (
@@ -422,7 +407,7 @@ function TripCreateContent({
               '예) 유아 동반이라 동선이 짧았으면 좋겠어요\n사진 찍기 좋은 장소 위주로 부탁드려요'
             }
             rows={4}
-            className="w-full resize-none rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-4 py-3 text-[14px] leading-[22px] text-[color:var(--ink)] outline-none transition placeholder:text-[color:var(--ink-faint)] focus:border-[color:var(--primary)] focus:bg-[color:var(--card)] focus:ring-2 focus:ring-[color:var(--ring)]"
+            className="w-full resize-none rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-4 py-3 text-[14px] leading-[22px] text-[color:var(--ink)] outline-none transition placeholder:text-[color:var(--ink-faint)] focus:border-[color:var(--primary)] focus:bg-[color:var(--card)] focus:ring-2 focus:ring-[color:var(--ring)]"
           />
           <p className="mt-1.5 text-[12px] text-[color:var(--ink-faint)]">
             이동 제약·동행 정보·취향 등 자유롭게 적어주세요. AI 일정 생성에 반영됩니다.
@@ -458,9 +443,10 @@ function TripCreateContent({
                 aria-label="뒤로"
                 className="flex size-9 items-center justify-center rounded-full hover:bg-[color:var(--card-soft)] lg:size-auto lg:gap-1 lg:rounded-[12px] lg:border lg:border-[color:var(--line)] lg:bg-[color:var(--card)] lg:px-3 lg:py-2 lg:text-[13px] lg:font-semibold lg:text-[color:var(--ink-sub)] lg:hover:bg-[color:var(--card-soft)] lg:hover:text-[color:var(--ink)]"
               >
-                <span aria-hidden className="text-[20px] text-[color:var(--ink)] lg:text-inherit">
-                  ‹
-                </span>
+                <LuChevronLeft
+                  aria-hidden
+                  className="size-5 text-[color:var(--ink)] lg:size-4 lg:text-inherit"
+                />
                 <span className="hidden lg:inline">내 여행</span>
               </Link>
               <div className="min-w-0">
@@ -474,14 +460,14 @@ function TripCreateContent({
             </div>
             {/* 데스크탑 CTA — 모바일에선 wrapper 로 확실히 숨긴다(모바일 primary CTA 는 sticky 1개만) */}
             <div className="hidden lg:block">
-              <button
-                type="button"
-                onClick={handleSubmit}
+              <Button
+                size="sm"
+                className="px-5 shadow-[var(--shadow-btn)] disabled:shadow-none"
                 disabled={!canSubmit || showLoading}
-                className="inline-flex h-10 items-center justify-center rounded-[14px] bg-[color:var(--btn-bg)] px-5 text-[14px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none"
+                onClick={handleSubmit}
               >
                 {showLoading ? '생성 중…' : '여행 만들기'}
-              </button>
+              </Button>
             </div>
           </div>
         </header>
@@ -498,7 +484,7 @@ function TripCreateContent({
               type="button"
               onClick={handleSubmit}
               disabled={!canSubmit || showLoading}
-              className="inline-flex h-14 shrink-0 items-center justify-center rounded-[18px] bg-[color:var(--btn-bg)] px-8 text-[16px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none"
+              className="inline-flex h-14 shrink-0 items-center justify-center rounded-[16px] bg-[color:var(--btn-bg)] px-8 text-[16px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none"
             >
               {showLoading ? '생성 중…' : '여행 만들기'}
             </button>
@@ -507,14 +493,15 @@ function TripCreateContent({
 
         {/* 모바일 sticky CTA: bottom nav 바로 위 (nav 높이 = pt-1.5 6px + grid 66px + safe-area pb) */}
         <div className="fixed inset-x-0 bottom-[calc(72px+max(10px,env(safe-area-inset-bottom)))] z-20 mx-auto max-w-[430px] border-t border-[color:var(--line)] bg-[color:var(--card)] px-5 py-3 lg:hidden">
-          <button
-            type="button"
-            onClick={handleSubmit}
+          <Button
+            size="lg"
+            fullWidth
+            className="shadow-[var(--shadow-btn)] disabled:shadow-none"
             disabled={!canSubmit || showLoading}
-            className="inline-flex h-14 w-full items-center justify-center rounded-[18px] bg-[color:var(--btn-bg)] text-[16px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none"
+            onClick={handleSubmit}
           >
             {showLoading ? '생성 중…' : '여행 만들기'}
-          </button>
+          </Button>
           {ctaHelper ? (
             <p className="mt-2 text-center text-[12.5px] text-[color:var(--ink-faint)]">
               {ctaHelper}
@@ -612,7 +599,7 @@ function DayRegionAccordionItem({
   };
 
   return (
-    <div className="overflow-hidden rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card)]">
+    <div className="overflow-hidden rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)]">
       {/* 접힘 상태에서도 일차·선택 지역을 한 줄로 요약해 세로 길이를 최소화 */}
       <button
         type="button"
@@ -673,7 +660,7 @@ function DayRegionAccordionItem({
               aria-label="지역 추가"
               onClick={() => commit(draft)}
               disabled={!draft.trim()}
-              className="flex h-12 items-center gap-1 rounded-[14px] bg-[color:var(--primary)] px-3.5 text-[14px] font-semibold text-[color:var(--btn-text)] transition disabled:bg-[color:var(--line-dot)]"
+              className="flex h-12 items-center gap-1 rounded-[12px] bg-[color:var(--primary)] px-3.5 text-[14px] font-semibold text-[color:var(--btn-text)] transition disabled:bg-[color:var(--line-dot)]"
             >
               <LuPlus className="size-4" />
               추가

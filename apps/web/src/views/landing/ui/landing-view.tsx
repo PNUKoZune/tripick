@@ -107,7 +107,7 @@ export function LandingView() {
             </p>
 
             {/* 광안리의 저녁 — 인라인 SVG 장면 (REQ-WVR-010, 래스터 이미지 아님) */}
-            <div className="wvr-rise wvr-rise-4 relative mt-6 overflow-hidden rounded-[26px] border border-[color:var(--line)] leading-none shadow-[var(--shadow-card)]">
+            <div className="wvr-rise wvr-rise-4 relative mt-6 overflow-hidden rounded-[20px] border border-[color:var(--line)] leading-none shadow-[var(--shadow-card)]">
               <GwangalliDuskScene />
               <span
                 className="absolute bottom-3.5 left-3.5 inline-flex items-center gap-[7px] rounded-full py-[7px] pl-2.5 pr-[13px] text-[12.5px] font-bold leading-[1.2] tracking-[-0.01em] text-[color:var(--ink)]"
@@ -182,7 +182,7 @@ export function LandingView() {
               바다 사진을 오래 보고, 한식을 즐겨 찍는 취향이라면 —
             </p>
 
-            <article className="mt-[26px] rounded-[22px] border border-[color:var(--line)] bg-[color:var(--card)] px-5 pb-5 pt-[22px] shadow-[var(--shadow-card)]">
+            <article className="mt-[26px] rounded-[20px] border border-[color:var(--line)] bg-[color:var(--card)] px-5 pb-5 pt-[22px] shadow-[var(--shadow-card)]">
               <span className="inline-block rounded-[8px] bg-[color:var(--primary-tint)] px-[9px] py-1 font-mono text-[11px] font-bold text-[color:var(--primary)]">
                 DAY 1
               </span>
@@ -250,7 +250,7 @@ export function LandingView() {
 
           {/* ===== 마무리 ===== */}
           <section
-            className="mt-[72px] rounded-[26px] px-6 py-[30px] lg:mt-[88px] lg:px-8 lg:py-9"
+            className="mt-[72px] rounded-[20px] px-6 py-[30px] lg:mt-[88px] lg:px-8 lg:py-9"
             style={{ background: 'var(--primary-tint)' }}
           >
             <h2 className="text-balance text-[24px] font-extrabold leading-[1.38] tracking-[-0.03em] text-[color:var(--ink)]">
