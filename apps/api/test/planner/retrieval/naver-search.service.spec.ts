@@ -41,6 +41,33 @@ describe('NaverPopularityIndex', () => {
     expect(index.score('불국사')).toBeGreaterThan(index.score('석굴암'));
   });
 
+  it('앞머리 토큰으로 남의 인지도를 물려받지 않는다', () => {
+    const corpus = Array.from({ length: 20 }, () => '전주수목원 ').join('');
+    const index = new NaverPopularityIndex(corpus, 10);
+
+    // 모시설은 제 언급을 그대로 받는다.
+    expect(index.mentions('전주수목원')).toBe(20);
+    // 부속 시설은 앞머리(모시설)를 매칭 키로 못 쓴다 — 제 이름은 코퍼스에 없다.
+    expect(index.mentions('전주수목원 무궁화화원1')).toBe(0);
+    expect(index.mentions('한옥마을 선비문화관')).toBe(0);
+  });
+
+  it('장식 구분자가 있는 등록명은 앞머리가 곧 정체성이라 예외다', () => {
+    const corpus = Array.from({ length: 12 }, () => '롯데월드타워 ').join('');
+    const index = new NaverPopularityIndex(corpus, 10);
+
+    // '&' 로 이어 붙인 등록명 — 앞머리를 막으면 정답을 통째로 잃는다.
+    expect(index.mentions('롯데월드타워&롯데월드몰')).toBe(12);
+  });
+
+  it('괄호 안 구분자를 뗀 이름으로도 센다 — 카탈로그의 동명이지 표기', () => {
+    const corpus = Array.from({ length: 7 }, () => '사직공원 ').join('');
+    const index = new NaverPopularityIndex(corpus, 10);
+
+    // 블로그는 '사직공원(광주)' 라고 안 쓴다. 못 세면 실제 정답이 하한(0.15)을 맞는다.
+    expect(index.mentions('사직공원(광주)')).toBe(7);
+  });
+
   it('많이 언급된 장소끼리도 갈라야 한다 — 상위가 전부 1.00 이면 인지도가 순위를 못 만든다', () => {
     const many = Array.from({ length: 40 }, () => '해운대 ').join('');
     const some = Array.from({ length: 9 }, () => '광안리 ').join('');

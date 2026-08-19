@@ -71,6 +71,12 @@ const MENTION_SCORE_BASE = 0.45;
  * **상위 16 이 평평해지지 않을 만큼만** 미루는 것이 목표다.
  */
 const DEFAULT_MENTION_LOG_SLOPE = 0.12;
+
+/** 앞머리 토큰 배제 스위치 (스윕용). {@link NaverPopularityIndex.dropLeadingQualifier} 참고. */
+function leadingQualifierDropEnabled(): boolean {
+  const raw = process.env.NAVER_POPULARITY_DROP_LEADING_TOKEN;
+  return raw === undefined || String(raw).trim() === '' ? true : String(raw).trim() !== 'false';
+}
 /** 인덱스 비활성(키 없음·조회 실패) 시 evaluator 가 쓰는 중립 점수. */
 export const NEUTRAL_POPULARITY = 0.5;
 
@@ -398,6 +404,8 @@ export class NaverPopularityIndex implements PopularityIndex {
 
   /** 등록명을 쪼갤 구분자. '대구 서문시장 & 서문시장 야시장' 같은 장식적 등록명 대응. */
   private static readonly NAME_SPLIT = /[\s&,·/()[\]]+/;
+  /** 등록명 구분자 중 **공백이 아닌 것**. 있으면 장식적 등록명으로 본다. */
+  private static readonly DECORATIVE_SPLIT = /[&,·/()[\]]/;
 
   /**
    * 이름이 코퍼스 언급을 셀 수 있는 형태인지. 셀 수 없으면 null → 호출 측이 중립 처리한다.
@@ -452,16 +460,53 @@ export class NaverPopularityIndex implements PopularityIndex {
       keys.push(core);
     }
 
+    // 괄호 안 구분자를 뗀 이름. 카탈로그엔 동명이지를 가르려고 '사직공원(광주)'·'동궁과월지(안압지)'
+    // 처럼 등록돼 있는데, 블로그는 괄호 없이 쓰므로 전체명 매칭이 0 이 된다. 실측에서 광주 정답
+    // '사직공원' 의 실제 행이 인지도 하한(0.15)을 맞고, 대신 '사직공원 전망타워' 가 모(母)장소
+    // 언급을 물려받아 그 자리를 차지했다.
+    const unparenthesized = needle.replace(/\([^)]*\)/g, '');
+    if (
+      unparenthesized.length >= NaverPopularityIndex.MIN_CORE_LENGTH &&
+      unparenthesized.length < needle.length
+    ) {
+      keys.push(unparenthesized);
+    }
+
     // 토큰 폴백은 이름이 여러 토큰일 때만 의미가 있다(단일 토큰이면 needle 과 같다).
     const tokens = name
       .toLowerCase()
       .split(NaverPopularityIndex.NAME_SPLIT)
       .filter((token) => token.length >= NaverPopularityIndex.MIN_CORE_LENGTH);
     if (tokens.length > 1) {
-      keys.push(...[...new Set(tokens)].sort((a, b) => b.length - a.length));
+      const usable = this.dropLeadingQualifier(name, tokens);
+      keys.push(...[...new Set(usable)].sort((a, b) => b.length - a.length));
     }
 
     return keys;
+  }
+
+  /**
+   * 앞머리 토큰을 매칭 키에서 뺀다 — 한국어 장소명에서 앞에 붙는 토큰은 그 장소의 정체성이
+   * 아니라 **담고 있는 것**(행정구역·모시설)이다. 뒤가 정체성이다.
+   *
+   * 토큰 폴백은 장식적 등록명을 살리려고 넣었는데('대구 서문시장 & 서문시장 야시장' → '서문시장')
+   * 앞머리까지 열어 두는 바람에 남의 인지도를 물려받는 통로가 됐다. 골든셋 상위 16 계측에서
+   * **36/248(14.5%)** 이 전체명 언급 0 인데 토큰으로만 점수를 얻었고, 그중 30건이 관광지다:
+   *
+   *   전주수목원 무궁화화원1 · 남부수종원 · 일반수목원 · 로드덴드론 가든 · 교육홍보관
+   *     → 다섯 개가 전부 모시설 '전주수목원' 의 20회를 나눠 가짐 (전주 케이스 10/16)
+   *   한옥마을 선비문화관 · 한옥마을 예술공동체 → '한옥마을' 170회
+   *   광주광역시 서구문화원 · 부산광역시 119안전체험관 → 행정구역명 언급
+   *
+   * 앞머리만 빼면 폴백의 원래 목적은 그대로다 — '서문시장' 은 앞머리가 아니라 살아남는다.
+   */
+  private dropLeadingQualifier(name: string, tokens: string[]): string[] {
+    if (!leadingQualifierDropEnabled()) return tokens;
+    // 장식 구분자(&·,·괄호)가 있는 등록명은 **앞머리가 곧 정체성**이라 예외다 —
+    // '롯데월드타워&롯데월드몰' 의 앞머리를 막으면 정답 '롯데월드타워' 를 통째로 잃는다.
+    // 공백만으로 이어진 이름에서만 앞머리를 담는 것(행정구역·모시설)으로 본다.
+    if (NaverPopularityIndex.DECORATIVE_SPLIT.test(name)) return tokens;
+    return tokens.slice(1);
   }
 
   private countOccurrences(needle: string, haystack: string): number {
