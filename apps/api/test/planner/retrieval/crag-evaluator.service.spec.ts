@@ -317,6 +317,33 @@ describe('CragEvaluatorService', () => {
       expect(selected).toHaveLength(6);
     });
 
+    it('식음이 풀을 뒤덮으면 상한만큼 관광지로 바꾼다', () => {
+      // 카카오 조밀 적재의 실제 모양 — 식음이 점수 상위를 쓸어 가고 관광지는 뒤로 밀린다.
+      const candidates = [
+        ...Array.from({ length: 14 }, (_, i) => candidate(`r${i}`, 'restaurant', 0.9 - i * 0.01)),
+        ...Array.from({ length: 16 }, (_, i) => candidate(`a${i}`, 'attraction', 0.7 - i * 0.01)),
+      ];
+
+      const selected = service.selectTopDiverse(candidates, 16);
+
+      expect(selected).toHaveLength(16);
+      // 상한 0.375 → 16칸 중 식음은 6칸까지.
+      expect(selected.filter((c) => c.category === 'restaurant')).toHaveLength(6);
+      // 바꿔 넣는 건 점수 높은 관광지부터고, 머리의 식음 순서는 그대로 둔다.
+      expect(selected.slice(0, 6).map((c) => c.id)).toEqual(['r0', 'r1', 'r2', 'r3', 'r4', 'r5']);
+      expect(selected).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'a0' })]));
+    });
+
+    it('바꿔 넣을 관광지가 없으면 상한을 포기하고 후보를 버리지 않는다', () => {
+      const candidates = Array.from({ length: 8 }, (_, i) =>
+        candidate(`r${i}`, 'restaurant', 0.9 - i * 0.01),
+      );
+
+      const selected = service.selectTopDiverse(candidates, 6);
+
+      expect(selected.map((c) => c.id)).toEqual(['r0', 'r1', 'r2', 'r3', 'r4', 'r5']);
+    });
+
     it('점수만으로 뽑으면 없을 종류를 최소 보유량만큼 채운다', () => {
       const candidates = [
         ...Array.from({ length: 6 }, (_, i) => candidate(`a${i}`, 'attraction', 0.9 - i * 0.01)),

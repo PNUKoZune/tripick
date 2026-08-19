@@ -53,6 +53,23 @@ const INDOOR_TAGS = new Set<string>([
 ]);
 
 /** 후보 풀 구성을 보장할 때 쓰는 종류 묶음 (식음 / 볼거리). */
+/**
+ * 후보 풀에서 식음(음식점·카페)이 차지할 수 있는 최대 비율. 골든셋 스윕으로 잡았다.
+ *
+ * | 비율 | 희소 카탈로그 R\|cat | 조밀 카탈로그 R\|cat |
+ * | --- | --- | --- |
+ * | 1 (상한 없음) | 0.471 | 0.439 |
+ * | 0.5 | 0.471 | 0.444 |
+ * | **0.375** | **0.475** | **0.458** |
+ * | 0.25 | 0.475 | 0.463 |
+ *
+ * 희소 카탈로그에서 움직이는 케이스는 `daegu-nostalgic` **하나뿐이고(0.23 → 0.31)**
+ * 나빠지는 케이스가 없다. 0.25 가 조밀 카탈로그에서 조금 더 좋지만 **안 쓴다** — 풀 크기가
+ * `일정 항목 수 + 4` 라 3일 여행이면 limit 19 이고, 0.25 는 식음 후보 4개로 6끼를 채워야 한다.
+ * 골든셋 정답에는 식당이 거의 없어 지표는 언제나 식음을 줄이는 쪽을 가리키므로, 여기서만은
+ * 지표가 아니라 일정이 실제로 필요로 하는 슬롯 수를 따른다.
+ */
+const DEFAULT_MAX_DINING_RATIO = 0.375;
 const DINING_CATEGORIES: ReadonlySet<string> = new Set(['restaurant', 'cafe']);
 const ATTRACTION_CATEGORIES: ReadonlySet<string> = new Set(['attraction']);
 
@@ -228,7 +245,61 @@ export class CragEvaluatorService {
       }
     }
 
+    this.capDiningShare(selected, candidates);
     return selected;
+  }
+
+  /**
+   * 식음(음식점·카페)이 풀에서 차지하는 몫에 **상한**을 건다. 하한만 있고 상한이 없어서
+   * 생기던 문제를 막는다 — 카카오 카탈로그는 어디를 찍어도 식음이 관광보다 많고(부산 실측
+   * 음식점 2,915 + 카페 1,565 대 관광 1,463), 질의에 음식 취향 태그가 하나라도 있으면
+   * ('바다·힐링·**해산물**' 부산) 식음이 상위를 쓸어 간다. 실측에서 상위 16 중 14가 횟집·카페였고
+   * 해변 정답 13개는 전부 카탈로그에 있는데도 하나도 못 들어왔다.
+   *
+   * 두 가지를 지킨다 — 예전 상한 구현이 틀렸던 지점이다(위 주석 참고).
+   *   1. **후보를 버리지 않는다.** 채울 관광 후보가 없으면 상한을 포기하고 그대로 둔다.
+   *   2. **머리가 아니라 꼬리를 깎는다.** 넘치는 만큼 식음 꼬리를 관광 상위로 바꿀 뿐,
+   *      점수 순서 자체는 건드리지 않는다.
+   */
+  private capDiningShare(selected: CandidatePlace[], candidates: CandidatePlace[]): void {
+    const ratio = this.maxDiningRatio();
+    if (!(ratio < 1)) return;
+
+    const cap = Math.max(
+      CragEvaluatorService.POOL_MIN_PER_KIND,
+      Math.floor(selected.length * ratio),
+    );
+    const chosen = new Set(selected.map((candidate) => candidate.id));
+    const fills = candidates.filter(
+      (candidate) => ATTRACTION_CATEGORIES.has(candidate.category) && !chosen.has(candidate.id),
+    );
+
+    let fillIndex = 0;
+    let dining = selected.filter((candidate) => DINING_CATEGORIES.has(candidate.category)).length;
+    while (dining > cap && fillIndex < fills.length) {
+      const dropIndex = this.lastIndexOfKind(selected, DINING_CATEGORIES);
+      if (dropIndex < 0) break;
+      selected.splice(dropIndex, 1, fills[fillIndex]!);
+      fillIndex += 1;
+      dining -= 1;
+    }
+  }
+
+  /** 풀에서 식음이 차지할 수 있는 최대 비율. 1 이면 상한 없음(종전 동작). */
+  private maxDiningRatio(): number {
+    const value = this.readWeight('CRAG_POOL_MAX_DINING_RATIO', DEFAULT_MAX_DINING_RATIO);
+    return Math.max(0, Math.min(1, value));
+  }
+
+  /** 뒤에서부터 찾은 그 종류의 마지막 자리 (`findLastIndex` 는 이 tsconfig 의 lib 밖). */
+  private lastIndexOfKind(
+    selected: CandidatePlace[],
+    kind: ReadonlySet<string>,
+  ): number {
+    for (let i = selected.length - 1; i >= 0; i -= 1) {
+      if (kind.has(selected[i]!.category)) return i;
+    }
+    return -1;
   }
 
   /**
