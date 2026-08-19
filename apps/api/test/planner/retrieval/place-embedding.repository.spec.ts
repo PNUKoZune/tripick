@@ -86,6 +86,94 @@ describe('PlaceEmbeddingRepository.countRegionCandidates', () => {
   });
 });
 
+describe('PlaceEmbeddingRepository.searchByEmbedding scope', () => {
+  it('지역 스코프는 정본 코드 등가 비교 + 라벨 없는 행 예외', async () => {
+    const { repo, calls } = build();
+
+    await repo.searchByEmbedding([1, 0], { kind: 'region', region: { sido: '부산', sigungu: null } }, 16);
+
+    const { sql, params } = calls[0]!;
+    expect(sql).toContain('region_code = $2');
+    expect(sql).toContain('region_code IS NULL AND sigungu_code IS NULL');
+    expect(params[1]).toBe('부산');
+    // LIMIT 은 스코프·행사기간 바인딩 뒤에 온다 — 자리번호가 밀리면 조용히 다른 값이 들어간다.
+    expect(sql).toContain('LIMIT $5');
+  });
+
+  it('시도가 없으면 시군구 코드로 좁힌다', async () => {
+    const { repo, calls } = build();
+
+    await repo.searchByEmbedding([1, 0], { kind: 'region', region: { sido: null, sigungu: '경주' } }, 16);
+
+    expect(calls[0]!.sql).toContain('sigungu_code = $2');
+    expect(calls[0]!.params[1]).toBe('경주');
+  });
+
+  it('지역 코드가 둘 다 없으면 필터 없이 전역 검색', async () => {
+    const { repo, calls } = build();
+
+    await repo.searchByEmbedding([1, 0], { kind: 'region', region: { sido: null, sigungu: null } }, 16);
+
+    expect(calls[0]!.sql).not.toContain('region_code =');
+    expect(calls[0]!.sql).toContain('LIMIT $4');
+  });
+
+  it('앵커 스코프는 bbox 로 인덱스를 타고 정확 거리로 모서리를 깎는다', async () => {
+    const { repo, calls } = build();
+
+    await repo.searchByEmbedding(
+      [1, 0],
+      { kind: 'anchor', center: { lat: 35.1532, lng: 129.119 }, radiusM: 5000 },
+      16,
+    );
+
+    const { sql, params } = calls[0]!;
+    expect(sql).toContain('lat BETWEEN $2 AND $3');
+    expect(sql).toContain('lng BETWEEN $4 AND $5');
+    // 반경 5km → 위도 5/111도, 경도 5/88도. near-duplicate 의 평면 근사와 같은 상수여야
+    // 같은 좌표가 JS·SQL 두 곳에서 다르게 판정되지 않는다.
+    expect(params[2] as number).toBeCloseTo(35.1532 + 5 / 111, 6);
+    expect(params[4] as number).toBeCloseTo(129.119 + 5 / 88, 6);
+    // bbox 만 쓰면 대각선이 반경의 1.41배라 밀집 지역이 모서리로 딸려 들어온다
+    // (실측: 에버랜드 10km 원 15건 vs bbox 54건).
+    expect(sql).toContain('<= $8');
+    expect(params.slice(5, 8)).toEqual([35.1532, 129.119, 5]);
+    expect(sql).toContain('LIMIT $11');
+  });
+});
+
+describe('PlaceEmbeddingRepository 행사 기간 필터', () => {
+  it('여행 구간과 겹치는 행사만 남긴다 (NULL 은 기간 없는 상시 장소)', async () => {
+    const { repo, calls } = build();
+
+    await repo.searchByEmbedding(
+      [1, 0],
+      { kind: 'region', region: { sido: '부산', sigungu: null } },
+      16,
+      undefined,
+      { from: '2026-10-01', to: '2026-10-03' },
+    );
+
+    const { sql, params } = calls[0]!;
+    expect(sql).toContain('event_end_date IS NULL OR event_end_date >= $3::date');
+    expect(sql).toContain('event_start_date IS NULL OR event_start_date <= $4::date');
+    expect(params.slice(2, 4)).toEqual(['2026-10-01', '2026-10-03']);
+  });
+
+  it('구간을 안 주면 오늘로 판정한다 (끝난 행사를 기본으로 내주지 않는다)', async () => {
+    const { repo, calls } = build();
+
+    await repo.searchByEmbedding(
+      [1, 0],
+      { kind: 'region', region: { sido: null, sigungu: null } },
+      16,
+    );
+
+    const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    expect(calls[0]!.params.slice(1, 3)).toEqual([today, today]);
+  });
+});
+
 describe('PlaceEmbeddingRepository.findSamePlace', () => {
   it('이름은 정규화해 비교하고 반경 안의 가장 가까운 행을 준다', async () => {
     const { repo, calls } = build([{ id: 'row-1', opening_hours: '09:00-18:00' }]);

@@ -6,6 +6,7 @@ import { KakaoLocalService } from './kakao-local.service';
 import { NaverSearchService } from './naver-search.service';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
 import { PlaceIngestionService } from './place-ingestion.service';
+import { KeywordPlaceService } from './keyword-place.service';
 import { PopularPlaceService } from './popular-place.service';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { TourApiService } from './tour-api.service';
@@ -35,6 +36,7 @@ import { TourApiService } from './tour-api.service';
     TourApiService,
     KakaoLocalService,
     NaverSearchService,
+    KeywordPlaceService,
     PopularPlaceService,
     TextEmbeddingService,
     PlaceEmbeddingRepository,

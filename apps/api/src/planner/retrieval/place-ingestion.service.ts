@@ -7,12 +7,32 @@ import { IngestCursorRepository } from './ingest-cursor.repository';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { KtoCallBudget, TourApiService } from './tour-api.service';
+import { KeywordPlaceService } from './keyword-place.service';
 import { PopularPlaceService } from './popular-place.service';
 import { isSeoBusinessName } from './place-name-quality';
+import { isEligibleItineraryCandidate } from './place-eligibility';
 import { SAME_PLACE_RADIUS_M, metersBetween, normalizeCatalogName } from './near-duplicate';
 import { inferPlaceTags, parseSigungu } from './place-seeds';
 import { SIDO_CODES, placeRegionCodes } from './region-code';
 import type { IngestPlace, IngestRegionResult, IngestSource, IngestSummary } from './ingestion.types';
+
+/**
+ * 앵커 격자 한 칸의 크기를 적재 반경에서 뽑는 계수. 반경 10,000m → 0.1°(위도 ≈11.1km)로,
+ * 격자가 0.1° 로 굳어 있던 종전 동작과 같은 값이다.
+ */
+const ANCHOR_GRID_DEGREES_PER_METER = 1 / 100000;
+
+/**
+ * 카탈로그에서 앵커를 뽑을 때 읽는 좌표 상한. 한 시도 최대치(실측 경기 6,524행)를 넉넉히 덮는다
+ * — 표본이 지역 전체보다 작으면 앵커가 그 표본 쪽으로 쏠린다. 읽는 건 double 두 개뿐이다.
+ */
+const CATALOG_ANCHOR_SAMPLE = 20000;
+
+/**
+ * 카탈로그 앵커를 채울 때 필요한 개수의 몇 배를 뽑아 둘지. 기존 앵커와 겹치는 후보가 버려지므로
+ * 딱 맞게 뽑으면 걸러진 만큼 슬롯이 빈다.
+ */
+const ANCHOR_FILL_OVERFETCH = 4;
 
 export interface IngestOptions {
   /** 특정 시도명만 적재 (예: '서울'). 미지정 시 전국 시도. */
@@ -21,6 +41,8 @@ export interface IngestOptions {
   sources?: IngestSource[];
   /** 소스별 시도당 최대 수집 건수. */
   maxPerRegion?: number;
+  /** `keyword` 소스가 적재할 장소명 목록. 이 소스를 쓸 때 필수. */
+  keywords?: string[];
   /**
    * 적재 전 해당 지역의 기존 벡터를 삭제한다.
    * 임베딩 모델 서버를 전환했을 때 place 벡터를 새 공간으로 재생성하기 위해 사용.
@@ -52,6 +74,7 @@ export class PlaceIngestionService {
     private readonly tourApi: TourApiService,
     private readonly kakaoLocal: KakaoLocalService,
     private readonly popularPlaces: PopularPlaceService,
+    private readonly keywordPlaces: KeywordPlaceService,
     private readonly embeddings: TextEmbeddingService,
     private readonly repository: PlaceEmbeddingRepository,
     private readonly cursors: IngestCursorRepository,
@@ -64,6 +87,13 @@ export class PlaceIngestionService {
 
     // 안전장치: 적재 전 임베딩 서버가 실제 벡터를 주는지 확인. 해시 폴백이면 중단.
     await this.assertEmbeddingServerReady(allowHash);
+    // keyword 는 넣을 이름을 안 주면 할 일이 없다. 0건으로 조용히 끝나는 대신 앞에서 막는다.
+    if (sources.includes('keyword') && (options.keywords ?? []).length === 0) {
+      throw new Error(
+        'keyword 소스는 --keywords=이름1,이름2 가 필요합니다 (자동 소스가 못 닿는 장소를 직접 지정하는 경로).',
+      );
+    }
+
     // popular 은 네이버 코퍼스 없이는 전 지역에서 0건이 된다. 조용히 헛도는 대신 앞에서 막는다.
     if (sources.includes('popular') && !this.popularPlaces.isAvailable) {
       throw new Error(
@@ -100,7 +130,17 @@ export class PlaceIngestionService {
     const regions: IngestRegionResult[] = [];
     for (const sido of targets) {
       regions.push(
-        await this.ingestRegion(sido.code, sido.name, sources, maxPerRegion, reseed, allowHash, append, budget),
+        await this.ingestRegion(
+          sido.code,
+          sido.name,
+          sources,
+          maxPerRegion,
+          reseed,
+          allowHash,
+          append,
+          budget,
+          options.keywords ?? [],
+        ),
       );
       if (budget.isExhausted) {
         this.logger.warn(
@@ -201,6 +241,7 @@ export class PlaceIngestionService {
     allowHash: boolean,
     append: boolean,
     budget: KtoCallBudget,
+    keywords: readonly string[],
   ): Promise<IngestRegionResult> {
     const deleted = reseed ? await this.repository.deleteRegion(region) : 0;
     if (deleted > 0) {
@@ -209,8 +250,13 @@ export class PlaceIngestionService {
 
     const collected: IngestPlace[] = [];
 
-    // popular(대표 명소·맛집)을 맨 앞에 둔다. dedupe 가 먼저 온 쪽을 남기므로
-    // 같은 장소가 KTO/카카오에도 있으면 네이버로 확인된 정본 쪽이 살아남는다.
+    // keyword(운영자 지정)를 가장 앞에 둔다. dedupe 가 먼저 온 쪽을 남기므로, 사람이 콕 집어
+    // 넣은 정본이 같은 장소의 다른 소스 행보다 우선한다.
+    if (sources.includes('keyword')) {
+      collected.push(...(await this.keywordPlaces.collect(region, keywords)));
+    }
+
+    // popular(대표 명소·맛집)을 그다음에. 같은 이유로 KTO/카카오보다 앞이다.
     let popularPlaces: IngestPlace[] = [];
     if (sources.includes('popular')) {
       popularPlaces = await this.popularPlaces.collect(region, maxPerRegion);
@@ -247,12 +293,32 @@ export class PlaceIngestionService {
       );
     }
 
-    // SEO 상호는 소스를 가리지 않고 들어온다 — popular 관문이 막아도 카카오 주변 검색이
-    // '경주맛집' 을 실존 음식점으로 다시 주워 온다. 소스 합류 후 한 곳에서 막는다.
+    // 자동 일정에 부적합한 장소는 소스를 가리지 않고 들어온다 — popular 관문이 막아도 카카오
+    // 주변 검색이 '경주맛집' 을 실존 음식점으로 다시 주워 온다. 소스 합류 후 한 곳에서 막는다.
+    //
+    // **검색 게이트와 같은 함수로, 같은 입력으로 판정한다.** 예전엔 SEO 상호만 걸러서, 검색이
+    // 절대 후보로 안 쓰는 행(약국·의원 등)이 적재만 되고 쌓였다 — 정리 CLI 로 걷어내도 재적재가
+    // 그대로 되돌려 놨다(부산 재적재 후 13건 재유입).
+    //
+    // `categoryDetail` 을 함께 넘긴다 — place_embeddings 가 그 값을 저장하므로 검색 단계
+    // pgvector 후보도 같은 값을 갖는다. 예전엔 저장을 안 해서 적재 게이트가 검색보다 후해지지
+    // 않도록 **일부러 빼고** 판정했는데(§1786500000000-AddPlaceCategoryDetail), 그러면 소스가
+    // 관광지로 준 실제 명소('부산 구 백제병원' 등록문화재)가 이름 때문에 함께 죽었다.
     const unique = this.dedupe(collected);
-    const deduped = unique.filter((place) => !isSeoBusinessName(place.name));
-    if (deduped.length < unique.length) {
-      this.logger.log(`[${region}] SEO 상호 ${unique.length - deduped.length}건 제외`);
+    const deduped = unique.filter((place) =>
+      isEligibleItineraryCandidate({
+        name: place.name,
+        category: place.category,
+        ...(place.categoryDetail ? { categoryDetail: place.categoryDetail } : {}),
+        coordinates: place.coordinates,
+      }),
+    );
+    const excluded = unique.length - deduped.length;
+    if (excluded > 0) {
+      const seo = unique.filter((place) => isSeoBusinessName(place.name)).length;
+      this.logger.log(
+        `[${region}] 자동 일정 부적합 ${excluded}건 제외` + (seo > 0 ? ` (SEO 상호 ${seo})` : ''),
+      );
     }
     const model = this.embeddingModelId();
 
@@ -262,6 +328,8 @@ export class PlaceIngestionService {
     let duplicates = 0;
     // 재임베딩 없이 영업시간만 채운 건수 (해시가 같아 unchanged 로 분류된 기존 행)
     let openingHoursFilled = 0;
+    let eventPeriodsFilled = 0;
+    let categoryDetailsFilled = 0;
     for (const place of deduped) {
       const text = this.buildText(place);
       const textHash = createHash('sha256').update(text).digest('hex');
@@ -302,6 +370,28 @@ export class PlaceIngestionService {
           await this.repository.updateOpeningHours(existing.id, next);
           openingHoursFilled += 1;
         }
+        // 행사 기간도 같은 이유로 따로 채운다. 연례 축제는 같은 contentId 의 날짜가 매년 바뀌는데
+        // 이름·주소가 그대로라 해시는 변하지 않는다 — 이 경로가 없으면 작년 날짜에 갇힌다.
+        // 기간을 못 받은 이번 실행(undefined)은 저장된 값을 건드리지 않는다.
+        if (
+          place.eventStartDate &&
+          place.eventEndDate &&
+          (place.eventStartDate !== existing.eventStartDate ||
+            place.eventEndDate !== existing.eventEndDate)
+        ) {
+          await this.repository.updateEventPeriod(
+            existing.id,
+            place.eventStartDate,
+            place.eventEndDate,
+          );
+          eventPeriodsFilled += 1;
+        }
+        // 카테고리 상세는 컬럼을 나중에 추가해 기존 행이 NULL 이다. 임베딩 텍스트엔 이미 들어가
+        // 있어 해시가 같으므로, 백필은 이 경로로만 된다(1회성 — 이후는 해시가 변화를 잡는다).
+        if (place.categoryDetail && place.categoryDetail !== existing.categoryDetail) {
+          await this.repository.updateCategoryDetail(existing.id, place.categoryDetail);
+          categoryDetailsFilled += 1;
+        }
         unchanged += 1;
         continue;
       }
@@ -314,6 +404,7 @@ export class PlaceIngestionService {
           name: place.name,
           address: place.address,
           category: place.category,
+          categoryDetail: place.categoryDetail ?? null,
           region: place.region,
           regionSigungu: place.sigungu ?? null,
           coordinates: place.coordinates,
@@ -322,6 +413,10 @@ export class PlaceIngestionService {
           // 재임베딩(update) 경로가 무조건 null 로 덮어써 저장된 영업시간을 날리던 것을 막는다.
           // insert 시엔 existing 이 없어 null → 정상. backfill(unchanged) 경로와 대칭.
           openingHours: place.openingHours ?? existing?.openingHours ?? null,
+          // 행사 기간은 매 적재에 새로 받으므로 그대로 덮어쓴다 — 연례 축제는 KTO 가 같은
+          // contentId 의 날짜를 갱신하고, 그 갱신이 반영돼야 다음 회차가 다시 후보로 살아난다.
+          eventStartDate: place.eventStartDate ?? null,
+          eventEndDate: place.eventEndDate ?? null,
           textHash,
           embeddingModel: source === 'remote' ? model : 'hash',
         },
@@ -345,7 +440,9 @@ export class PlaceIngestionService {
     this.logger.log(
       `[${region}] 수집 ${result.fetched} → dedupe ${result.deduped} → 신규 ${inserted} / 갱신 ${updated} / 유지 ${unchanged} (삭제 ${deleted})` +
         (duplicates > 0 ? ` · 기존 장소와 중복 ${duplicates}건 건너뜀` : '') +
-        (openingHoursFilled > 0 ? ` · 영업시간 backfill ${openingHoursFilled}` : ''),
+        (openingHoursFilled > 0 ? ` · 영업시간 backfill ${openingHoursFilled}` : '') +
+        (eventPeriodsFilled > 0 ? ` · 행사기간 backfill ${eventPeriodsFilled}` : '') +
+        (categoryDetailsFilled > 0 ? ` · 카테고리상세 backfill ${categoryDetailsFilled}` : ''),
     );
     return result;
   }
@@ -354,7 +451,12 @@ export class PlaceIngestionService {
    * 앞선 소스(popular·관광공사) 좌표에서 뽑은 앵커들을 중심으로 카카오 카테고리 검색
    * (위치+category_group_code)을 돌려 지역 장소를 수집한다. budget(=관광공사와 동일 상한)을
    * 앵커·카테고리에 고르게 분배해 소스 비중을 반반으로 맞춘다.
-   * 앵커가 하나도 없으면 지역 중심 1곳으로 폴백한다.
+   *
+   * 앵커는 **이번 실행 좌표가 1순위, 카탈로그 좌표가 채움**이다. 순서가 뒤집히면 안 된다 —
+   * 카탈로그 앵커는 실행마다 같은 상위 버킷이라, 그게 앞에 오면 append 모드가 매 배치 같은
+   * 곳만 다시 훑는다. 이번 배치 좌표를 먼저 쓰면 배치가 넘어갈 때 탐색 지점도 함께 옮겨간다.
+   * 남은 슬롯만 카탈로그로 채우므로 카카오 단독 실행(앵커 0개)에서도 지역 전역이 잡힌다.
+   * 채움 앵커는 기존 앵커와 반경 절반 안이면 버린다 — 원이 겹치는 만큼 budget 이 낭비된다.
    */
   private async fetchKakao(
     region: string,
@@ -362,7 +464,25 @@ export class PlaceIngestionService {
     anchorPlaces: IngestPlace[],
   ): Promise<IngestPlace[]> {
     const radius = this.ingestRadius();
-    let centers = this.deriveAnchors(anchorPlaces, this.maxAnchors());
+    const maxAnchors = this.maxAnchors();
+    let centers = this.deriveAnchors(
+      anchorPlaces.map((place) => place.coordinates),
+      maxAnchors,
+    );
+
+    const fromRunCount = centers.length;
+    if (fromRunCount < maxAnchors) {
+      const catalog = await this.repository.findRegionCoordinates(region, CATALOG_ANCHOR_SAMPLE);
+      const fill = this.deriveAnchors(catalog, maxAnchors * ANCHOR_FILL_OVERFETCH).filter(
+        (candidate) => !centers.some((taken) => metersBetween(taken, candidate) <= radius / 2),
+      );
+      centers = [...centers, ...fill].slice(0, maxAnchors);
+      if (centers.length > fromRunCount) {
+        this.logger.log(
+          `[${region}] 카카오 앵커 ${centers.length}곳 = 이번 실행 ${fromRunCount} + 카탈로그 ${centers.length - fromRunCount} (반경 ${radius}m)`,
+        );
+      }
+    }
 
     if (centers.length === 0) {
       const center = await this.kakaoLocal.resolveCenter(region);
@@ -406,15 +526,19 @@ export class PlaceIngestionService {
   }
 
   /**
-   * 관광공사 장소 좌표를 격자(≈0.1°, 약 10km)로 버킷팅해 밀집 순으로 앵커(버킷 중심)를 뽑는다.
+   * 장소 좌표를 격자로 버킷팅해 밀집 순으로 앵커(버킷 중심)를 뽑는다.
    * 장소가 실제로 몰린 지역(관광 중심지)을 카카오 검색의 중심으로 삼아 시도 전역을 고르게 훑는다.
+   *
+   * 격자 크기는 **적재 반경에 묶는다**({@link ANCHOR_GRID_DEGREES_PER_METER}). 예전엔 `toFixed(1)`
+   * 로 0.1°(≈10km)에 고정돼 있었는데, 그건 반경 10km 를 전제한 값이라 반경을 줄이면 앵커가
+   * 여전히 10km 씩 떨어져 그 사이가 안 걷힌다. 반경과 격자가 같이 움직여야 원들이 맞물린다.
    */
-  private deriveAnchors(places: IngestPlace[], maxAnchors: number): Coordinates[] {
-    if (places.length === 0) return [];
+  private deriveAnchors(coordinates: Coordinates[], maxAnchors: number): Coordinates[] {
+    if (coordinates.length === 0) return [];
+    const step = this.ingestRadius() * ANCHOR_GRID_DEGREES_PER_METER;
     const buckets = new Map<string, { latSum: number; lngSum: number; count: number }>();
-    for (const place of places) {
-      const { lat, lng } = place.coordinates;
-      const key = `${lat.toFixed(1)},${lng.toFixed(1)}`;
+    for (const { lat, lng } of coordinates) {
+      const key = `${Math.round(lat / step)},${Math.round(lng / step)}`;
       const bucket = buckets.get(key) ?? { latSum: 0, lngSum: 0, count: 0 };
       bucket.latSum += lat;
       bucket.lngSum += lng;
@@ -432,9 +556,16 @@ export class PlaceIngestionService {
     return Number.isFinite(value) && value > 0 ? Math.min(value, 20000) : 10000;
   }
 
+  /**
+   * 기본 8 → 24. 앵커 하나가 덮는 면적은 반경 10km 원(≈314km²)이라 8곳으로는 시도 하나를
+   * 못 덮는다(경기 10,200km²). 앵커가 KTO 좌표에 묶여 있던 동안엔 8개 넘게 뽑아도 이번 배치
+   * 안에서만 나뉘어 의미가 없었지만, 카탈로그로 채우게 된 뒤로는 24곳이 실제로 서로 다른
+   * 관광 밀집지를 짚는다. 호출 비용은 앵커×카테고리 4×페이지 ≤3 = 시도당 ≤288 콜로,
+   * 일 한도가 KTO 와 별개인 카카오에선 전국(17시도)을 돌려도 여유가 있다.
+   */
   private maxAnchors(): number {
-    const value = Number(this.config.get<string | number>('KAKAO_INGEST_MAX_ANCHORS', 8));
-    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 8;
+    const value = Number(this.config.get<string | number>('KAKAO_INGEST_MAX_ANCHORS', 24));
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 24;
   }
 
   /**

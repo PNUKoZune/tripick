@@ -57,6 +57,16 @@
 - [preference/merged-sido-label-v1.md](preference/merged-sido-label-v1.md) — 통합 행정구역 라벨 분리(광주가 전남으로 묻히던 문제, 백필)
 - [preference/retrieval-ranking-tuning-v1.md](preference/retrieval-ranking-tuning-v1.md) — 검색 랭킹 튜닝(다양성 상한이 상위 후보를 버리던 버그, 인지도 매칭 정확도, R|cat 0.16→0.38)
 - [preference/catalog-name-quality-v1.md](preference/catalog-name-quality-v1.md) — 카탈로그 이름 품질(일반어 상호 지역 특이도, SEO 상호·여행코스 기사 제거)
+- [preference/national-ingest-retuning-v1.md](preference/national-ingest-retuning-v1.md) — 전국 적재(카탈로그 10,721→40,304행) 후 랭킹 재튜닝(후보 풀 배수는 카탈로그 크기에 묶임, 나머지 노브는 기존 값 유지)
+- [preference/destination-anchor-retrieval-v1.md](preference/destination-anchor-retrieval-v1.md) — 목적지 앵커 반경 검색(행정구역으로 안 잡히는 '광안리'·'남이섬'이 후보 0건이던 문제, 적응형 반경·앵커 거리 locality)
+- [preference/catalog-ingestion-gates-v1.md](preference/catalog-ingestion-gates-v1.md) — 카탈로그 적재 게이트(KTO 쇼핑 소매 점포·축제 행사 기간·적재↔검색 게이트 일치)
+- [preference/retrieval-eval-harness-hardening-v1.md](preference/retrieval-eval-harness-hardening-v1.md) — 평가 하네스 보강(골든셋 정답·매칭 교정, 인지도 판정 가능성 게이트, 측정 방법론)
+- [preference/kakao-source-enrichment-v1.md](preference/kakao-source-enrichment-v1.md) — 카카오 소스 보강(앵커를 카탈로그 좌표로 채움) + 체인 지점 게이트(프랜차이즈 지점이 랜드마크 신호를 빨아가 정답을 밀어냈다)
+- [preference/kakao-category-search-ceiling-v1.md](preference/kakao-category-search-ceiling-v1.md) — `category_detail` 백필(랭킹 중립) + 카카오 카테고리 검색 45건 상한(반경을 넓혀도 3km 에서 끊긴다)과 앵커 격자를 반경에 묶은 수정
+- [preference/candidate-pool-dining-ceiling-v1.md](preference/candidate-pool-dining-ceiling-v1.md) — 후보 풀의 식음 상한(하한만 있고 상한이 없어 식음이 풀을 뒤덮었다). 골든셋 `intent` 는 파이프라인에 안 들어간다
+- [preference/popularity-saturation-and-pool-size-v1.md](preference/popularity-saturation-and-pool-size-v1.md) — 인지도가 상위 16 안에서만 포화해 순위를 못 만들던 문제(로그 기울기 0.18→0.12)와 그 뒤 옮겨간 후보 풀 배수 무릎(20→40)
+- [preference/landmark-name-absorption-v1.md](preference/landmark-name-absorption-v1.md) — 부속 시설·상호가 모시설·랜드마크 인지도를 물려받던 통로(앞머리 토큰) 차단, 흡수율 14.5%→6.9%
+- [preference/keyword-ingest-source-v1.md](preference/keyword-ingest-source-v1.md) — 자동 소스가 구조적으로 못 닿는 장소를 이름으로 직접 넣는 `keyword` 적재 소스, `popular` 서브지역 패스
 - [preference/crag-term-weight-tuning-v1.md](preference/crag-term-weight-tuning-v1.md) — CRAG 항목 가중치 튜닝(retrieval 0.24→0.06, 유사도 정규화·죽은 가중 재분배 두 부정 결과)
 - [preference/embedding-server-separation-v1.md](preference/embedding-server-separation-v1.md) — 임베딩 서버 분리
 - [preference/place-catalog-integrity-v1.md](preference/place-catalog-integrity-v1.md) — 장소 카탈로그 정합성 점검(적재 타깃·reseed 키·auto-seed 게이트·해시 churn·커서 단위·숙박·소스 간 중복, 영업시간 역조회 6.7% 배제)

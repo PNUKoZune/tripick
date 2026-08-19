@@ -223,6 +223,13 @@ export class PlannerService {
         this.offsetDate(trip.startDate, planDays[0]! - 1),
         this.dayStartTime(anchorByDay, planDays[0]!, wakeTime),
       ),
+      // 기간 있는 행사(축제)를 여행 날짜와 겹칠 때만 후보로 남기기 위한 날짜 구간.
+      // 끝이 다시 짜는 **마지막** 일차여야 한다 — 시작일만 보면 3일차에 열리는 축제가 통째로 빠진다.
+      // (일자별 경로는 아래에서 그 날 하루로 좁혀 덮어쓴다.)
+      visitWindow: {
+        from: this.offsetDate(trip.startDate, planDays[0]! - 1),
+        to: this.offsetDate(trip.startDate, planDays[planDays.length - 1]! - 1),
+      },
       ...(tasteTags !== undefined ? { tasteTags } : {}),
       ...(preferenceVector ? { preferenceVector } : {}),
       ...(options.trigger !== undefined ? { trigger: options.trigger } : {}),
@@ -250,9 +257,11 @@ export class PlannerService {
     if (perDayMode) {
       // 다시 짜는 일차의 지역만 조회한다(index 는 planDays 와 1:1).
       const planDayRegions = planDays.map((day) => dayRegions[day - 1] ?? [trip.destination]);
-      poolsByDay = (await this.retrievePerDay(planDayRegions, sharedRetrieval, itemsPerDay)).map(
-        (pool) => this.excludeKeptPlaces(pool, untouchedItems),
-      );
+      // 일차별 날짜를 함께 넘겨 그 날 열리는 행사만 그 일차 후보로 들어가게 한다.
+      const planDayDates = planDays.map((day) => this.offsetDate(trip.startDate, day - 1));
+      poolsByDay = (
+        await this.retrievePerDay(planDayRegions, sharedRetrieval, itemsPerDay, planDayDates)
+      ).map((pool) => this.excludeKeptPlaces(pool, untouchedItems));
       candidates = [...mustCandidates, ...poolsByDay.flat()];
       traceLabel = `per-day[${planDayRegions.map((regions) => regions.join('/')).join(' | ')}]`;
     } else {
@@ -801,15 +810,19 @@ export class PlannerService {
     dayRegions: string[][],
     sharedRetrieval: Omit<RetrievalContext, 'destination' | 'limit'>,
     itemsPerDay: number,
+    /** dayRegions 와 1:1 인 일차 날짜('YYYY-MM-DD'). 기간 있는 행사를 그 날로 좁히는 데 쓴다. */
+    dayDates: string[],
   ): Promise<CandidatePlace[][]> {
     const perRegionLimit = Math.max(itemsPerDay + 3, 8);
     // 여행 전체의 실제 지역 목록(폴백 후보). 결합 라벨이 아닌 개별 지역만 담긴다.
     const allRegions = [...new Set(dayRegions.flat().map((r) => r.trim()).filter(Boolean))];
-    const retrieveRegion = async (region: string): Promise<CandidatePlace[]> => {
+    const retrieveRegion = async (region: string, date?: string): Promise<CandidatePlace[]> => {
       const result = await this.placeRetrieval.retrieve({
         ...sharedRetrieval,
         destination: region,
         limit: perRegionLimit,
+        // 그 일차 하루가 곧 방문 구간이다. 날짜를 모르면 여행 전체 구간(sharedRetrieval)을 쓴다.
+        ...(date ? { visitWindow: { from: date, to: date } } : {}),
       });
       return result.places;
     };
@@ -822,15 +835,19 @@ export class PlannerService {
       }
     };
     return Promise.all(
-      dayRegions.map(async (regions) => {
+      dayRegions.map(async (regions, dayIndex) => {
+        const date = dayDates[dayIndex];
         const merged = new Map<string, CandidatePlace>();
         // 한 일차의 여러 지역은 서로 독립이라 병렬 조회한다.
-        mergeOrdered(merged, await Promise.all(regions.map((region) => retrieveRegion(region))));
+        mergeOrdered(
+          merged,
+          await Promise.all(regions.map((region) => retrieveRegion(region, date))),
+        );
         // 그 날 지역이 0건이면 여행 내 다른 지역으로 채운다 (이미 조회한 그 날 지역은 건너뜀).
         if (merged.size === 0) {
           for (const region of allRegions) {
             if (regions.includes(region)) continue;
-            mergeOrdered(merged, [await retrieveRegion(region)]);
+            mergeOrdered(merged, [await retrieveRegion(region, date)]);
             if (merged.size > 0) break;
           }
         }

@@ -200,4 +200,61 @@ describe('tasteTagsToKeywords', () => {
       'nature',
     ]);
   });
+
+  /**
+   * 산 이외의 자연 지형 접미. 카탈로그 실측(10,721행)으로 오탐률을 재서 고른 것들이라,
+   * 접미를 늘릴 때도 같은 방식으로 재고 나서 넣어야 한다.
+   */
+  it('자연 지형 접미를 산악·자연 신호로 읽는다', () => {
+    // 이게 없어서 제주 최대 명소가 cultural 하나로 떨어졌다.
+    expect(
+      inferPlaceTags({ name: '성산일출봉', category: 'attraction', address: '제주특별자치도 서귀포시 성산읍 일출로 284-12' }),
+    ).toEqual(expect.arrayContaining(['mountain', 'nature']));
+    expect(
+      inferPlaceTags({ name: '추암 촛대바위', category: 'attraction', address: '강원특별자치도 동해시 촛대바위길' }),
+    ).toEqual(expect.arrayContaining(['mountain', 'nature']));
+  });
+
+  it('동굴은 자연이되 산악은 아니다', () => {
+    // '군산 해망굴'은 해안 터널이라 mountain 을 주면 산악 취향 질의에 잘못 걸린다.
+    const tags = inferPlaceTags({ name: '군산 해망굴', category: 'attraction', address: '전북특별자치도 군산시 군산창2길 48' });
+    expect(tags).toContain('nature');
+    expect(tags).not.toContain('mountain');
+  });
+
+  it("전망대·등대는 자연 지형이 아니다 ('대' 를 접미로 넣지 않은 이유)", () => {
+    // 실측 178건이 거의 전부 전망대·등대·천문대라 '대' 를 넣으면 시설이 통째로 nature 가 된다.
+    // (산 이름이 든 '구봉산전망대'는 MOUNTAIN_FACILITY_WORDS 규칙으로 산악이 맞다 — 여기선 제외)
+    for (const name of ['송대말등대', '동춘터널전망대']) {
+      expect(
+        inferPlaceTags({ name, category: 'attraction', address: '강원특별자치도 삼척시' }),
+      ).not.toContain('nature');
+    }
+  });
+
+  /**
+   * 도심 거리·광장·전망 타워. 태그는 임베딩 텍스트에도 들어가므로(`buildPlaceEmbeddingText`)
+   * 이 사전의 빈틈은 점수뿐 아니라 **선발**에서 손실을 낸다 — 서울 정답 6개가 `cultural` 하나만
+   * 받아 도심·야경 질의와 벡터 거리가 멀어 풀 배수 60(4,110행의 23%)에서도 안 들어왔다.
+   */
+  it('도심 거리·광장·상점가를 도심 신호로 읽는다', () => {
+    for (const name of ['명동거리', '홍대걷고싶은거리', 'BIFF광장', '제주칠성로상점가']) {
+      expect(
+        inferPlaceTags({ name, category: 'attraction', address: '서울 중구' }),
+      ).toContain('city');
+    }
+  });
+
+  it('전망 타워는 야경 신호를 받는다', () => {
+    expect(
+      inferPlaceTags({ name: '롯데월드타워', category: 'attraction', address: '서울 송파구 올림픽로 300' }),
+    ).toEqual(expect.arrayContaining(['nightview', 'city']));
+  });
+
+  it('교차로·지명·건물은 도심 접미로 오인하지 않는다', () => {
+    // '전포 삼거리'는 교차로, '광장동'은 서울 광진구 지명, '타워팰리스'는 아파트다.
+    expect(inferPlaceTags({ name: '전포 삼거리', category: 'attraction', address: '부산 부산진구' })).not.toContain('city');
+    expect(inferPlaceTags({ name: '서울 광장동', category: 'attraction', address: '서울 광진구' })).not.toContain('city');
+    expect(inferPlaceTags({ name: '타워팰리스', category: 'attraction', address: '서울 강남구' })).not.toContain('nightview');
+  });
 });

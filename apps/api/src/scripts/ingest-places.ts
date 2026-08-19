@@ -14,10 +14,16 @@
  *   --reseed              적재 전 대상 지역의 기존 벡터 삭제 (임베딩 서버 전환 시)
  *   --append              지역별 페이지 커서를 이어받아 새 페이지부터 적재 (크론 반복 시 누적)
  *   --allow-hash          임베딩 서버가 없어도 해시 폴백으로 적재 강행 (기본: 중단)
+ *   --keywords=a,b        keyword 소스가 적재할 장소명 (이 소스를 쓸 때 필수)
  *
  * 소스:
  *   tour     KTO areaBasedList2 — 지역 전역을 넓게 채운다 (일일 호출 예산 있음)
  *   kakao    앞선 소스 좌표를 앵커로 주변 카테고리 검색 — 카카오 전용 장소 보강
+ *   keyword  운영자가 이름을 직접 지정 → 카카오 키워드 검색으로 정본을 받아 적재.
+ *            위 소스들이 **구조적으로 못 닿는** 장소용이다 — KTO 미등록 + 카카오
+ *            `category_group_code` 가 빈 문서('자만벽화마을') + 서브지역 코퍼스가 안 만들어져
+ *            popular 도 비는 경우('전리단길'). 지역 검증·적격 게이트는 다른 소스와 동일하다.
+ *              pnpm ingest:places -- --regions=부산 --sources=keyword --keywords=전리단길
  *   popular  네이버 추천 글에 자주 언급되는 대표 명소·맛집을 카카오로 정규화해 적재.
  *            KTO 는 인기순 정렬이 없어 남산서울타워·설악산 같은 대표 명소를 못 잡는다.
  *            네이버 검색 키(NAVER_SEARCH_CLIENT_ID/_SECRET) 필수 — 없으면 시작 시 중단한다.
@@ -37,7 +43,7 @@ import type { IngestOptions } from '../planner/retrieval/place-ingestion.service
 import type { IngestSource } from '../planner/retrieval/ingestion.types';
 
 function isIngestSource(value: string): value is IngestSource {
-  return value === 'tour' || value === 'kakao' || value === 'popular';
+  return value === 'tour' || value === 'kakao' || value === 'popular' || value === 'keyword';
 }
 
 function parseArgs(argv: string[]): IngestOptions {
@@ -55,6 +61,10 @@ function parseArgs(argv: string[]): IngestOptions {
     }
     if (rawKey === 'allow-hash') {
       options.allowHash = true;
+      continue;
+    }
+    if (rawKey === 'keywords' && value) {
+      options.keywords = value.split(',').map((k) => k.trim()).filter(Boolean);
       continue;
     }
     if (!value) continue;

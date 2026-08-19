@@ -65,12 +65,39 @@ const KAKAO_KEYWORD_URL = 'https://dapi.kakao.com/v2/local/search/keyword.json';
 const KAKAO_CATEGORY_URL = 'https://dapi.kakao.com/v2/local/search/category.json';
 const KAKAO_MAX_RADIUS_M = 20000; // 카카오 radius 상한
 const KAKAO_PAGE_SIZE = 15; // 페이지당 최대 문서 수
-const KAKAO_MAX_PAGE = 45; // 카카오가 허용하는 최대 페이지
+
+/**
+ * 카테고리 검색이 한 질의로 돌려주는 **문서 상한 45건**(= 3페이지). `page=4` 는 에러가 아니라
+ * 3페이지와 같은 내용을 다시 준다 — `meta.pageable_count` 도 45 로 잘려 온다.
+ *
+ * 45 를 "최대 페이지"로 알고 있던 게 적재 커버리지를 갉아먹고 있었다. 실측(부산 전포동 중심,
+ * AT4): 반경 10km 안에 `total_count` 378 건인데 도달 가능한 건 45 건뿐이고, 그 45 건은
+ * 거리순이라 **0~3.6km 안에서 끝난다.** 즉 반경을 10km 로 넓혀도 실제로 걷히는 건 3km 원 하나다.
+ * 앵커를 10km 간격으로 놓으면 그 사이가 통째로 안 걷힌다.
+ */
+const KAKAO_CATEGORY_MAX_RESULTS = 45;
+const KAKAO_MAX_PAGE = KAKAO_CATEGORY_MAX_RESULTS / KAKAO_PAGE_SIZE;
 
 interface KeywordSearchOptions {
   center?: Coordinates;
   radius?: number;
   categoryGroupCode?: string;
+}
+
+/**
+ * 목적지 앵커 해석용 최소 문서.
+ *
+ * `RawPlaceCandidate` 로는 부족해서 따로 둔다 — 앵커 선별은 (a) `category_group_code` 로
+ * 주차장·숙박 같은 "그 자체가 목적지가 아닌" 문서를 걸러야 하고, (b) 지역 코드를 **지번 주소**
+ * 에서 파생해야 한다. `mapDocument` 는 group code 를 내부 라벨로 접어 버리고 주소도
+ * 도로명 우선이라 둘 다 잃는다(도로명은 비어 오는 문서가 있다 — 실측: 광안리 공영주차장).
+ */
+export interface KakaoPlaceBrief {
+  name: string;
+  /** 지번 주소(address_name). 항상 채워져 시도·시군구 토큰의 정본으로 쓴다. */
+  address: string;
+  coordinates: Coordinates;
+  categoryGroupCode: string | null;
 }
 
 @Injectable()
@@ -88,10 +115,14 @@ export class KakaoLocalService {
     if (!apiKey) return [];
 
     const keywords = this.buildKeywords(context);
-    const center = context.currentLocation;
-    const opts: KeywordSearchOptions | undefined = center
-      ? { center, radius: this.searchRadius() }
-      : undefined;
+    // 현재 위치(재계획)가 1순위, 없으면 목적지 앵커. 앵커가 있으면 그 반경이 곧 검색 반경이라
+    // '광안리 카페' 질의가 타지역 동명 카페를 물어오는 걸 좌표로 막는다 — 키워드 검색은
+    // 지역명을 문자열로만 붙이므로 좌표를 안 주면 전국이 사정권이다.
+    const opts: KeywordSearchOptions | undefined = context.currentLocation
+      ? { center: context.currentLocation, radius: this.searchRadius() }
+      : context.anchor
+        ? { center: context.anchor.coordinates, radius: context.anchor.radiusM }
+        : undefined;
 
     const collected: RawPlaceCandidate[] = [];
     const seen = new Set<string>();
@@ -207,12 +238,48 @@ export class KakaoLocalService {
     return results;
   }
 
+  /**
+   * 목적지 문자열을 좌표로 해석하기 위한 키워드 검색.
+   * 후보를 일정에 넣을 장소가 아니라 **앵커 후보**로 다루므로 원본 필드를 그대로 돌려준다.
+   */
+  async searchBrief(query: string, limit: number): Promise<KakaoPlaceBrief[]> {
+    const apiKey = this.apiKey();
+    if (!apiKey) return [];
+    const docs = await this.fetchKeywordDocuments(apiKey, query, limit);
+    return docs.flatMap((doc) => {
+      const lat = Number(doc.y);
+      const lng = Number(doc.x);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return [];
+      return [
+        {
+          name: doc.place_name,
+          address: doc.address_name,
+          coordinates: { lat, lng },
+          categoryGroupCode: doc.category_group_code || null,
+        },
+      ];
+    });
+  }
+
   private async searchKeyword(
     apiKey: string,
     keyword: string,
     limit: number,
     opts?: KeywordSearchOptions,
   ): Promise<RawPlaceCandidate[]> {
+    const docs = await this.fetchKeywordDocuments(apiKey, keyword, limit, opts);
+    return docs.flatMap((doc) => {
+      const candidate = this.mapDocument(doc);
+      return candidate ? [candidate] : [];
+    });
+  }
+
+  private async fetchKeywordDocuments(
+    apiKey: string,
+    keyword: string,
+    limit: number,
+    opts?: KeywordSearchOptions,
+  ): Promise<KakaoDocument[]> {
     try {
       const params: Record<string, unknown> = {
         query: keyword,
@@ -233,10 +300,7 @@ export class KakaoLocalService {
         timeout: 5000,
       });
 
-      return (res.data.documents ?? []).flatMap((doc) => {
-        const candidate = this.mapDocument(doc);
-        return candidate ? [candidate] : [];
-      });
+      return res.data.documents ?? [];
     } catch (error) {
       this.logger.warn(
         `Kakao Local fallback failed for "${keyword}": ${error instanceof Error ? error.message : String(error)}`,

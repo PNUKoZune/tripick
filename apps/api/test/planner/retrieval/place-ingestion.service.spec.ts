@@ -200,6 +200,135 @@ function kakaoDoc(kakaoPlaceId: string, lat: number) {
   };
 }
 
+/**
+ * 검색 게이트가 후보로 절대 안 쓰는 행이 적재만 되고 쌓이던 회귀를 막는다.
+ * 정리 CLI 로 걷어내도 재적재가 그대로 되돌려 놨다(부산 재적재 후 13건 재유입).
+ */
+describe('PlaceIngestionService 부적합 장소 차단', () => {
+  it('검색이 안 쓰는 장소(의료 시설·SEO 상호)는 적재하지 않는다', async () => {
+    // ⚠️ 소스 카테고리가 이름보다 우선한다 — 소스가 '관광명소' 로 준 것은 이름에 '약국' 이
+    // 들어 있어도 통과한다('부산 구 백제병원' 같은 실제 명소를 살리기 위한 설계).
+    const deps = mockDeps();
+    deps.kakaoLocal.searchAround.mockResolvedValue([
+      // 카카오는 약국에 '의료,건강 > 약국' 을 준다 — 게이트는 이름보다 이 값을 먼저 본다.
+      { ...kakaoDoc('k-drug', 38.2115), name: '가까운약국', categoryDetail: '의료,건강 > 약국' },
+      { ...kakaoDoc('k-seo', 38.2116), name: '속초맛집' },
+      { ...kakaoDoc('k-ok', 38.2117), name: '속초 등대 전망대' },
+    ]);
+    const service = build(deps);
+
+    const summary = await service.ingest({ regions: ['속초'], sources: ['kakao'], maxPerRegion: 8 });
+
+    const upserted = deps.repository.upsertPlace.mock.calls.map((call) => (call[0] as { name: string }).name);
+    expect(upserted).toEqual(['속초 등대 전망대']);
+    expect(summary.totalInserted).toBe(1);
+  });
+
+  it('국내 좌표 밖(KTO placeholder)도 같은 게이트에서 막힌다', async () => {
+    const deps = mockDeps();
+    deps.kakaoLocal.searchAround.mockResolvedValue([
+      { ...kakaoDoc('k-bad', 38.2115), name: '남중국해 좌표 장소', coordinates: { lat: 19.694, lng: 117.993 } },
+    ]);
+    const service = build(deps);
+
+    const summary = await service.ingest({ regions: ['속초'], sources: ['kakao'], maxPerRegion: 8 });
+
+    expect(deps.repository.upsertPlace).not.toHaveBeenCalled();
+    expect(summary.totalInserted).toBe(0);
+  });
+});
+
+/**
+ * 카카오만 돌리는 실행이 지역 중심 1곳으로 떨어져 시도 전역을 못 훑던 회귀를 막는다.
+ * (KTO 일 한도를 다 쓴 날에도 카카오 단독 보강이 되어야 한다)
+ */
+describe('PlaceIngestionService 카카오 앵커', () => {
+  it('이번 실행에 앵커가 없으면 카탈로그 좌표에서 뽑는다 (지역 중심 폴백 금지)', async () => {
+    const deps = mockDeps();
+    // 서로 다른 0.1° 버킷 3곳 — 앵커 3곳이 나와야 한다.
+    deps.repository.findRegionCoordinates.mockResolvedValue([
+      { lat: 38.21, lng: 128.59 },
+      { lat: 37.55, lng: 126.98 },
+      { lat: 35.16, lng: 129.16 },
+    ]);
+    const service = build(deps);
+
+    await service.ingest({ regions: ['강원'], sources: ['kakao'], maxPerRegion: 40 });
+
+    expect(deps.kakaoLocal.resolveCenter).not.toHaveBeenCalled();
+    expect(deps.kakaoLocal.searchAround).toHaveBeenCalledTimes(3);
+  });
+
+  it('이번 실행 앵커를 앞에 두고 남은 슬롯만 카탈로그로 채운다', async () => {
+    const deps = mockDeps();
+    deps.config.get = jest.fn((key: string, fallback?: unknown) =>
+      key === 'KAKAO_INGEST_MAX_ANCHORS' ? 2 : fallback,
+    );
+    deps.tourApi.fetchByArea.mockResolvedValue({
+      places: [
+        {
+          tourismApiId: 't-1',
+          name: '속초시립박물관',
+          category: 'attraction',
+          address: '강원특별자치도 속초시 신흥2길 16',
+          coordinates: { lat: 38.19, lng: 128.6 },
+          region: '강원특별자치도',
+          source: 'tour',
+        },
+      ],
+      nextOffset: 0,
+      quotaExceeded: false,
+    });
+    // 첫 좌표는 이번 실행 앵커와 반경 절반(5km) 안이라 버려지고, 먼 쪽이 남은 슬롯을 채운다.
+    deps.repository.findRegionCoordinates.mockResolvedValue([
+      { lat: 38.192, lng: 128.601 },
+      { lat: 37.55, lng: 126.98 },
+    ]);
+    const service = build(deps);
+
+    await service.ingest({ regions: ['강원'], sources: ['tour', 'kakao'], maxPerRegion: 40 });
+
+    const centers = deps.kakaoLocal.searchAround.mock.calls.map((call) => call[0]);
+    expect(centers).toEqual([
+      { lat: 38.19, lng: 128.6 },
+      { lat: 37.55, lng: 126.98 },
+    ]);
+  });
+
+  it('반경을 줄이면 앵커 격자도 같이 촘촘해진다', async () => {
+    // 약 5km 떨어진 두 좌표. 반경 10km(격자 0.1°) 에선 한 버킷이라 앵커가 1곳이지만,
+    // 반경 3km(격자 0.03°) 에선 서로 다른 버킷이라 2곳이 나와야 한다 — 격자가 반경에
+    // 안 따라오면 앵커 사이가 통째로 안 걷힌다.
+    const coordinates = [
+      { lat: 35.16, lng: 129.06 },
+      { lat: 35.2, lng: 129.09 },
+    ];
+
+    const wide = mockDeps();
+    wide.repository.findRegionCoordinates.mockResolvedValue(coordinates);
+    await build(wide).ingest({ regions: ['부산'], sources: ['kakao'], maxPerRegion: 40 });
+    expect(wide.kakaoLocal.searchAround).toHaveBeenCalledTimes(1);
+
+    const tight = mockDeps();
+    tight.config.get = jest.fn((key: string, fallback?: unknown) =>
+      key === 'KAKAO_INGEST_RADIUS_M' ? 3000 : fallback,
+    );
+    tight.repository.findRegionCoordinates.mockResolvedValue(coordinates);
+    await build(tight).ingest({ regions: ['부산'], sources: ['kakao'], maxPerRegion: 40 });
+    expect(tight.kakaoLocal.searchAround).toHaveBeenCalledTimes(2);
+  });
+
+  it('카탈로그도 비면 지역 중심 1곳으로 폴백한다', async () => {
+    const deps = mockDeps();
+    const service = build(deps);
+
+    await service.ingest({ regions: ['강원'], sources: ['kakao'], maxPerRegion: 40 });
+
+    expect(deps.kakaoLocal.resolveCenter).toHaveBeenCalledWith('강원특별자치도');
+    expect(deps.kakaoLocal.searchAround).toHaveBeenCalledTimes(1);
+  });
+});
+
 function mockDeps() {
   return {
     config: { get: jest.fn((_key: string, fallback?: unknown) => fallback) },
@@ -213,6 +342,7 @@ function mockDeps() {
       searchAround: jest.fn().mockResolvedValue([kakaoDoc('k-1', 38.2115)]),
     },
     popularPlaces: { isAvailable: true, collect: jest.fn().mockResolvedValue([]) },
+    keywordPlaces: { collect: jest.fn().mockResolvedValue([]) },
     embeddings: {
       embedWithSource: jest
         .fn()
@@ -223,6 +353,7 @@ function mockDeps() {
       deleteRegion: jest.fn().mockResolvedValue(0),
       findProvenance: jest.fn().mockResolvedValue(null),
       findSamePlace: jest.fn().mockResolvedValue(null),
+      findRegionCoordinates: jest.fn().mockResolvedValue([]),
       upsertPlace: jest.fn().mockResolvedValue(undefined),
       updateOpeningHours: jest.fn().mockResolvedValue(undefined),
     },
@@ -236,6 +367,7 @@ function build(deps: MockDeps): PlaceIngestionService {
     deps.tourApi as never,
     deps.kakaoLocal as never,
     deps.popularPlaces as never,
+    deps.keywordPlaces as never,
     deps.embeddings as never,
     deps.repository as never,
     deps.cursors as never,

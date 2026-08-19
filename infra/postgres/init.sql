@@ -58,6 +58,22 @@ ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS updated_at      TIMESTAMPT
 ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS region_code     TEXT;
 ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS sigungu_code    TEXT;
 
+-- 소스가 준 카테고리 상세(KTO 유형명 / 카카오 category_name). 임베딩 텍스트·태그 유추·검색
+-- eligibility 판정이 모두 이 값을 쓰므로, 저장해 두지 않으면 적재 시점과 검색 시점의 판정이 갈린다.
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS category_detail TEXT;
+
+-- 행사 기간 (KTO 축제공연행사). NULL 은 '기간 없음 = 상시'로 읽는다.
+-- 축제는 장소가 아니라 기간이 있는 이벤트라, 소비 시점(여행 날짜)에 판정해야 한다.
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS event_start_date date;
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS event_end_date   date;
+
+-- 앵커 반경(bbox) 검색용 위경도. coordinates jsonb 가 정본이고 이건 항상 그 파생이라
+-- 손으로 동기화할 여지가 없다. jsonb 표현식은 인덱스를 못 타 전체 스캔이 된다.
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS lat double precision
+  GENERATED ALWAYS AS ((coordinates->>'lat')::double precision) STORED;
+ALTER TABLE place_embeddings ADD COLUMN IF NOT EXISTS lng double precision
+  GENERATED ALWAYS AS ((coordinates->>'lng')::double precision) STORED;
+
 -- pgvector HNSW 인덱스 (코사인 유사도 검색)
 CREATE INDEX IF NOT EXISTS idx_preference_embeddings_hnsw
   ON preference_embeddings USING hnsw (embedding vector_cosine_ops)
@@ -83,6 +99,10 @@ CREATE INDEX IF NOT EXISTS idx_place_embeddings_region_code
 
 CREATE INDEX IF NOT EXISTS idx_place_embeddings_sigungu_code
   ON place_embeddings (sigungu_code);
+
+-- 앵커 반경 bbox 인덱스. 실측(10,333행, 광안리 3km) 26.8ms 전체 스캔 → 0.8ms.
+CREATE INDEX IF NOT EXISTS idx_place_embeddings_lat_lng
+  ON place_embeddings (lat, lng);
 
 -- 로컬 seed 및 외부 API 후보 중복 방지/조회 최적화용 보조 인덱스
 CREATE INDEX IF NOT EXISTS idx_place_embeddings_region_name
