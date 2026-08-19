@@ -41,6 +41,18 @@ describe('NaverPopularityIndex', () => {
     expect(index.score('불국사')).toBeGreaterThan(index.score('석굴암'));
   });
 
+  it('많이 언급된 장소끼리도 갈라야 한다 — 상위가 전부 1.00 이면 인지도가 순위를 못 만든다', () => {
+    const many = Array.from({ length: 40 }, () => '해운대 ').join('');
+    const some = Array.from({ length: 9 }, () => '광안리 ').join('');
+    const dense = new NaverPopularityIndex(`${many}${some}`, 10);
+
+    // 종전 기울기 0.18 은 8회에서 이미 1.00 이라 40회와 9회가 동점이 된다.
+    const saturating = new NaverPopularityIndex(`${many}${some}`, 10, 0.18);
+    expect(saturating.score('해운대')).toBe(saturating.score('광안리'));
+
+    expect(dense.score('해운대')).toBeGreaterThan(dense.score('광안리'));
+  });
+
   it('gives an unmentioned place a low soft score, not zero', () => {
     const score = index.score('무명 골목 카페');
     expect(score).toBeGreaterThan(0);

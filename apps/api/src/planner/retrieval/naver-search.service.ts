@@ -44,6 +44,33 @@ const DEFAULT_MIN_REGION_SPECIFICITY = 5;
 
 /** 언급 0 인 마이너 장소에 주는 하한 점수 (제거가 아닌 소프트 감점). */
 const UNMENTIONED_SCORE = 0.15;
+/** 1회 언급의 점수 = 이 값 + slope. 언급 0(0.15)과 확실히 갈라 놓는 바닥. */
+const MENTION_SCORE_BASE = 0.45;
+/**
+ * 언급 수 → 점수의 로그 기울기. `min(1, 0.45 + slope*log2(m+1))` 이라 **기울기가 곧 포화 지점**이다.
+ *
+ * 종전 0.18 은 언급 8회에서 1.00 에 닿는다. 전체 풀에서는 문제가 안 보인다 — 후보 80.2%가
+ * 언급 0(0.15)이라 popularity AUC 0.763 으로 가장 센 항이다. 문제는 **상위 16 안**이다:
+ * 실측에서 top-16 의 41~53%가 정확히 1.00 이고 confidence 전체 스프레드가 0.039 로 눌린다.
+ * 정답을 가려야 하는 바로 그 구간에서 제일 센 신호가 평평해지는 것이다.
+ * (경주 실측: 불국사·석굴암·대릉원이 '추억의달동네'·'코스믹 리조트'·'키덜트뮤지엄' 뒤로 밀렸다)
+ *
+ * 스윕(`NAVER_POPULARITY_LOG_SLOPE`, 한 프로세스 연속 측정):
+ *
+ * | slope | 포화 지점 | top-16 포화율 | R@5 | R@10 | R\|cat | MRR |
+ * | --- | --- | --- | --- | --- | --- | --- |
+ * | 0.18 | 8회 | 40% | 0.228 | 0.408 | 0.475 | 0.690 |
+ * | **0.12** | **23회** | **16%** | **0.263** | **0.408** | **0.487** | **0.716** |
+ * | 0.09 | 63회 | 3% | 0.264 | 0.385 | 0.481 | 0.809 |
+ * | 0.07 | 141회 | 0% | 0.246 | 0.392 | 0.500 | 0.775 |
+ * | 0.05 | — | 0% | 0.223 | 0.343 | 0.494 | 0.691 |
+ *
+ * 0.12 가 무릎이다 — 속초 0.40→0.50, 서면역 0.42→0.50 이 오르고 **내려가는 케이스가 없다.**
+ * 그 아래부터는 맞바꾸기가 시작된다(0.09 는 MRR 0.809 로 제일 높지만 강릉 0.60→0.50 ·
+ * 광안리 0.64→0.55 를 내주고 R@10 도 0.385 로 떨어진다). 포화를 0%까지 없애는 게 목표가 아니라,
+ * **상위 16 이 평평해지지 않을 만큼만** 미루는 것이 목표다.
+ */
+const DEFAULT_MENTION_LOG_SLOPE = 0.12;
 /** 인덱스 비활성(키 없음·조회 실패) 시 evaluator 가 쓰는 중립 점수. */
 export const NEUTRAL_POPULARITY = 0.5;
 
@@ -78,6 +105,16 @@ export class NaverSearchService {
    * 비활성 인덱스(모든 장소 중립)를 돌려 랭킹에 영향을 주지 않는다.
    * 목적지 단위로 TTL 캐시한다 (추천 글은 빠르게 바뀌지 않음).
    */
+  /** 언급 수 → 점수의 로그 기울기. {@link DEFAULT_MENTION_LOG_SLOPE} 참고. */
+  private mentionLogSlope(): number {
+    const raw = this.config.get<string>('NAVER_POPULARITY_LOG_SLOPE');
+    if (raw === undefined || raw === null || String(raw).trim() === '') {
+      return DEFAULT_MENTION_LOG_SLOPE;
+    }
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? value : DEFAULT_MENTION_LOG_SLOPE;
+  }
+
   async getPopularityIndex(destination: string): Promise<PopularityIndex> {
     const credentials = this.credentials();
     if (!credentials) return DISABLED_INDEX;
@@ -163,7 +200,7 @@ export class NaverSearchService {
       return {
         text: corpus.text,
         docCount: corpus.docCount,
-        index: new NaverPopularityIndex(corpus.text, corpus.docCount),
+        index: new NaverPopularityIndex(corpus.text, corpus.docCount, this.mentionLogSlope()),
       };
     } catch (error) {
       this.logger.warn(
@@ -193,7 +230,7 @@ export class NaverSearchService {
         this.logger.warn(`네이버 코퍼스가 비어 인지도 보정 건너뜀 ("${label}")`);
         return DISABLED_INDEX;
       }
-      const index = new NaverPopularityIndex(corpus.text, corpus.docCount);
+      const index = new NaverPopularityIndex(corpus.text, corpus.docCount, this.mentionLogSlope());
       this.cache.set(cacheKey, { index, expires: Date.now() + this.cacheTtlMs() });
       this.logger.log(
         `네이버 인지도 인덱스 "${label}" docs=${corpus.docCount} chars=${corpus.text.length}`,
@@ -324,6 +361,7 @@ export class NaverPopularityIndex implements PopularityIndex {
   constructor(
     corpus: string,
     readonly docCount: number,
+    private readonly logSlope: number = DEFAULT_MENTION_LOG_SLOPE,
   ) {
     this.compact = corpus.replace(/\s+/g, '');
     this.spaced = corpus.replace(/\s+/g, ' ');
@@ -441,8 +479,7 @@ export class NaverPopularityIndex implements PopularityIndex {
     // 셀 수 없는 이름(2글자·공백 건너뛴 매칭)은 중립 — 감점 대상인 '언급 0' 과 구분한다.
     if (!countable) return NEUTRAL_POPULARITY;
     if (mentions === 0) return UNMENTIONED_SCORE;
-    // 로그 스케일: 1회→0.63, 2회→0.74, 4회→0.87. 소수 언급도 완만하게 상승.
-    return Math.min(1, 0.45 + 0.18 * Math.log2(mentions + 1));
+    return Math.min(1, MENTION_SCORE_BASE + this.logSlope * Math.log2(mentions + 1));
   }
 }
 
