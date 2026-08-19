@@ -295,6 +295,29 @@ describe('PlaceIngestionService 카카오 앵커', () => {
     ]);
   });
 
+  it('반경을 줄이면 앵커 격자도 같이 촘촘해진다', async () => {
+    // 약 5km 떨어진 두 좌표. 반경 10km(격자 0.1°) 에선 한 버킷이라 앵커가 1곳이지만,
+    // 반경 3km(격자 0.03°) 에선 서로 다른 버킷이라 2곳이 나와야 한다 — 격자가 반경에
+    // 안 따라오면 앵커 사이가 통째로 안 걷힌다.
+    const coordinates = [
+      { lat: 35.16, lng: 129.06 },
+      { lat: 35.2, lng: 129.09 },
+    ];
+
+    const wide = mockDeps();
+    wide.repository.findRegionCoordinates.mockResolvedValue(coordinates);
+    await build(wide).ingest({ regions: ['부산'], sources: ['kakao'], maxPerRegion: 40 });
+    expect(wide.kakaoLocal.searchAround).toHaveBeenCalledTimes(1);
+
+    const tight = mockDeps();
+    tight.config.get = jest.fn((key: string, fallback?: unknown) =>
+      key === 'KAKAO_INGEST_RADIUS_M' ? 3000 : fallback,
+    );
+    tight.repository.findRegionCoordinates.mockResolvedValue(coordinates);
+    await build(tight).ingest({ regions: ['부산'], sources: ['kakao'], maxPerRegion: 40 });
+    expect(tight.kakaoLocal.searchAround).toHaveBeenCalledTimes(2);
+  });
+
   it('카탈로그도 비면 지역 중심 1곳으로 폴백한다', async () => {
     const deps = mockDeps();
     const service = build(deps);

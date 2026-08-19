@@ -19,6 +19,12 @@ import type { IngestPlace, IngestRegionResult, IngestSource, IngestSummary } fro
  * 카탈로그에서 앵커를 뽑을 때 읽는 좌표 상한. 한 시도 최대치(실측 경기 6,524행)를 넉넉히 덮는다
  * — 표본이 지역 전체보다 작으면 앵커가 그 표본 쪽으로 쏠린다. 읽는 건 double 두 개뿐이다.
  */
+/**
+ * 앵커 격자 한 칸의 크기를 적재 반경에서 뽑는 계수. 반경 10,000m → 0.1°(위도 ≈11.1km)로,
+ * 격자가 0.1° 로 굳어 있던 종전 동작과 같은 값이다.
+ */
+const ANCHOR_GRID_DEGREES_PER_METER = 1 / 100000;
+
 const CATALOG_ANCHOR_SAMPLE = 20000;
 
 /**
@@ -493,14 +499,19 @@ export class PlaceIngestionService {
   }
 
   /**
-   * 장소 좌표를 격자(≈0.1°, 약 10km)로 버킷팅해 밀집 순으로 앵커(버킷 중심)를 뽑는다.
+   * 장소 좌표를 격자로 버킷팅해 밀집 순으로 앵커(버킷 중심)를 뽑는다.
    * 장소가 실제로 몰린 지역(관광 중심지)을 카카오 검색의 중심으로 삼아 시도 전역을 고르게 훑는다.
+   *
+   * 격자 크기는 **적재 반경에 묶는다**({@link ANCHOR_GRID_DEGREES_PER_METER}). 예전엔 `toFixed(1)`
+   * 로 0.1°(≈10km)에 고정돼 있었는데, 그건 반경 10km 를 전제한 값이라 반경을 줄이면 앵커가
+   * 여전히 10km 씩 떨어져 그 사이가 안 걷힌다. 반경과 격자가 같이 움직여야 원들이 맞물린다.
    */
   private deriveAnchors(coordinates: Coordinates[], maxAnchors: number): Coordinates[] {
     if (coordinates.length === 0) return [];
+    const step = this.ingestRadius() * ANCHOR_GRID_DEGREES_PER_METER;
     const buckets = new Map<string, { latSum: number; lngSum: number; count: number }>();
     for (const { lat, lng } of coordinates) {
-      const key = `${lat.toFixed(1)},${lng.toFixed(1)}`;
+      const key = `${Math.round(lat / step)},${Math.round(lng / step)}`;
       const bucket = buckets.get(key) ?? { latSum: 0, lngSum: 0, count: 0 };
       bucket.latSum += lat;
       bucket.lngSum += lng;

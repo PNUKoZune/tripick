@@ -62,6 +62,7 @@
 - [preference/catalog-ingestion-gates-v1.md](preference/catalog-ingestion-gates-v1.md) — 카탈로그 적재 게이트(KTO 쇼핑 소매 점포·축제 행사 기간·적재↔검색 게이트 일치)
 - [preference/retrieval-eval-harness-hardening-v1.md](preference/retrieval-eval-harness-hardening-v1.md) — 평가 하네스 보강(골든셋 정답·매칭 교정, 인지도 판정 가능성 게이트, 측정 방법론)
 - [preference/kakao-source-enrichment-v1.md](preference/kakao-source-enrichment-v1.md) — 카카오 소스 보강(앵커를 카탈로그 좌표로 채움) + 체인 지점 게이트(프랜차이즈 지점이 랜드마크 신호를 빨아가 정답을 밀어냈다)
+- [preference/kakao-category-search-ceiling-v1.md](preference/kakao-category-search-ceiling-v1.md) — `category_detail` 백필(랭킹 중립) + 카카오 카테고리 검색 45건 상한(반경을 넓혀도 3km 에서 끊긴다)과 앵커 격자를 반경에 묶은 수정
 - [preference/crag-term-weight-tuning-v1.md](preference/crag-term-weight-tuning-v1.md) — CRAG 항목 가중치 튜닝(retrieval 0.24→0.06, 유사도 정규화·죽은 가중 재분배 두 부정 결과)
 - [preference/embedding-server-separation-v1.md](preference/embedding-server-separation-v1.md) — 임베딩 서버 분리
 - [preference/place-catalog-integrity-v1.md](preference/place-catalog-integrity-v1.md) — 장소 카탈로그 정합성 점검(적재 타깃·reseed 키·auto-seed 게이트·해시 churn·커서 단위·숙박·소스 간 중복, 영업시간 역조회 6.7% 배제)

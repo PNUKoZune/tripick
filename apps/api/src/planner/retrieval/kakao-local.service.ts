@@ -65,7 +65,18 @@ const KAKAO_KEYWORD_URL = 'https://dapi.kakao.com/v2/local/search/keyword.json';
 const KAKAO_CATEGORY_URL = 'https://dapi.kakao.com/v2/local/search/category.json';
 const KAKAO_MAX_RADIUS_M = 20000; // 카카오 radius 상한
 const KAKAO_PAGE_SIZE = 15; // 페이지당 최대 문서 수
-const KAKAO_MAX_PAGE = 45; // 카카오가 허용하는 최대 페이지
+
+/**
+ * 카테고리 검색이 한 질의로 돌려주는 **문서 상한 45건**(= 3페이지). `page=4` 는 에러가 아니라
+ * 3페이지와 같은 내용을 다시 준다 — `meta.pageable_count` 도 45 로 잘려 온다.
+ *
+ * 45 를 "최대 페이지"로 알고 있던 게 적재 커버리지를 갉아먹고 있었다. 실측(부산 전포동 중심,
+ * AT4): 반경 10km 안에 `total_count` 378 건인데 도달 가능한 건 45 건뿐이고, 그 45 건은
+ * 거리순이라 **0~3.6km 안에서 끝난다.** 즉 반경을 10km 로 넓혀도 실제로 걷히는 건 3km 원 하나다.
+ * 앵커를 10km 간격으로 놓으면 그 사이가 통째로 안 걷힌다.
+ */
+const KAKAO_CATEGORY_MAX_RESULTS = 45;
+const KAKAO_MAX_PAGE = KAKAO_CATEGORY_MAX_RESULTS / KAKAO_PAGE_SIZE;
 
 interface KeywordSearchOptions {
   center?: Coordinates;
