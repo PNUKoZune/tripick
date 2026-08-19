@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   LuCheckCheck,
@@ -383,10 +383,11 @@ function InboxContent() {
             {group.label}
           </h2>
           <div className="space-y-2">
-            {group.items.map((item) => (
+            {group.items.map((item, index) => (
               <InboxRow
                 key={item.id}
                 item={item}
+                index={index}
                 pending={
                   ((acceptMutation.isPending || rejectMutation.isPending) &&
                     item.kind === 'friend_request') ||
@@ -497,11 +498,14 @@ function CategoryChip({
 
 function InboxRow({
   item,
+  index,
   pending,
   onAction,
   onClick,
 }: {
   item: InboxItemDto;
+  /** 그룹 안 순서 — 등장 stagger 지연에만 쓴다(0-based) */
+  index: number;
   pending: boolean;
   onAction: (actionType: string) => void;
   onClick: () => void;
@@ -529,7 +533,9 @@ function InboxRow({
   return (
     <div
       {...interactiveProps}
-      className={`flex items-start gap-3 rounded-[16px] border p-3 transition ${
+      // 순서대로 떠오르는 등장. 지연 상한·reduce 대응은 globals.css 의 .app-stagger 가 잡는다.
+      style={{ '--stagger-i': index } as CSSProperties}
+      className={`app-stagger flex items-start gap-3 rounded-[16px] border p-3 transition ${
         unread
           ? 'border-[color:var(--primary-tint)] bg-[color:var(--primary-tint)]'
           : 'border-[color:var(--line)] bg-[color:var(--card)] hover:bg-[color:var(--card-soft)]'

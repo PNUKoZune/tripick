@@ -88,7 +88,7 @@ export function KakaoCallbackView() {
               </>
             ) : (
               <div className="h-2 overflow-hidden rounded-full bg-[color:var(--soft-bg)]">
-                <div className="h-full w-1/2 animate-pulse rounded-full bg-[color:var(--blue-600)]" />
+                <div className="h-full w-1/2 motion-safe:animate-pulse rounded-full bg-[color:var(--blue-600)]" />
               </div>
             )}
           </div>

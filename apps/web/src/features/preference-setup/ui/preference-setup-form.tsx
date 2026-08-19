@@ -444,7 +444,7 @@ export function PreferenceSetupForm() {
         {Array.from({ length: 5 }).map((_, index) => (
           <div
             key={index}
-            className="h-20 animate-pulse rounded-[16px] bg-[color:var(--card-soft)]"
+            className="h-20 app-shimmer rounded-[16px] bg-[color:var(--card-soft)]"
           />
         ))}
       </div>
@@ -806,7 +806,7 @@ export function PreferenceSetupForm() {
                   className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-[12px] bg-[color:var(--card-soft)] text-[13px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--line)] active:scale-[0.99] disabled:text-[color:var(--ink-faint)] lg:max-w-[280px]"
                 >
                   <LuRefreshCw
-                    className={`size-3.5 ${reanalyzePhotosMutation.isPending ? 'animate-spin' : ''}`}
+                    className={`size-3.5 ${reanalyzePhotosMutation.isPending ? 'motion-safe:animate-spin' : ''}`}
                     aria-hidden
                   />
                   {reanalyzePhotosMutation.isPending
@@ -1082,7 +1082,7 @@ function SavedPhotoRow({
           </div>
         ) : state === 'analyzing' ? (
           <p className="flex items-center gap-1.5 text-[13px] font-medium text-[color:var(--ink-faint)]">
-            <LuLoader className="size-3.5 animate-spin" aria-hidden />
+            <LuLoader className="size-3.5 motion-safe:animate-spin" aria-hidden />
             취향을 분석하고 있어요…
           </p>
         ) : state === 'unanalyzed' ? (

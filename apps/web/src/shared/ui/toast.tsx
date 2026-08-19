@@ -42,13 +42,26 @@ type Props = {
   onClick?: () => void;
   /** fixed 컨테이너 위치 override (기본: 화면 하단 중앙) */
   className?: string;
+  /**
+   * 퇴장 중이면 true. 마운트=열림이라 스스로는 사라지는 순간을 알 수 없으므로,
+   * 언마운트를 미뤄 주는 호출부(useExitTransition)가 이 프레임 동안 켜 준다.
+   */
+  closing?: boolean;
 };
 
 /**
  * 화면 하단 중앙에 뜨는 알림 토스트.
  * fixed 컨테이너를 포함하므로 어디서든 조건부 렌더만 하면 된다.
  */
-export function Toast({ title, message, tone = 'neutral', onClose, onClick, className }: Props) {
+export function Toast({
+  title,
+  message,
+  tone = 'neutral',
+  onClose,
+  onClick,
+  className,
+  closing = false,
+}: Props) {
   const palette = toneClass[tone];
   const clickable = Boolean(onClick);
   return (
@@ -71,7 +84,9 @@ export function Toast({ title, message, tone = 'neutral', onClose, onClick, clas
               },
             }
           : {})}
-        className={`pointer-events-auto flex w-full max-w-[398px] items-start gap-3 rounded-[16px] border ${palette.container} px-4 py-3 shadow-[0_12px_24px_rgba(0,0,0,0.12)] ${
+        className={`pointer-events-auto flex w-full max-w-[398px] items-start gap-3 rounded-[16px] border ${
+          closing ? 'app-toast-out' : 'app-toast-in'
+        } ${palette.container} px-4 py-3 shadow-[0_12px_24px_rgba(0,0,0,0.12)] ${
           clickable ? 'cursor-pointer text-left transition active:scale-[0.99]' : ''
         }`}
       >

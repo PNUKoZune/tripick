@@ -495,4 +495,95 @@ nextjs-portal {
       transform: scale(0.6);
     }
   }
+
+  /* 모달 퇴장. 등장(app-panel-in/app-backdrop-in)과 달리 퇴장은 언마운트를 미뤄야
+     보이므로, 호출부가 useExitTransition 으로 `closing` 을 켜 준 동안만 붙는다.
+     forwards 로 끝 상태를 붙들지 않으면 마지막 프레임에서 원위치로 튄다. */
+  .app-backdrop-out {
+    animation: app-fade-out 0.18s ease-in forwards;
+  }
+  .app-panel-out {
+    animation: app-panel-out 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+  }
+  @keyframes app-fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes app-panel-out {
+    to {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+    }
+  }
+
+  /* 토스트 — 아래에서 떠오르고, 닫힐 때 같은 길로 내려간다. */
+  .app-toast-in {
+    animation: app-toast-in 0.28s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+  .app-toast-out {
+    animation: app-toast-out 0.2s ease-in forwards;
+  }
+  @keyframes app-toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(16px) scale(0.96);
+    }
+  }
+  @keyframes app-toast-out {
+    to {
+      opacity: 0;
+      transform: translateY(12px) scale(0.97);
+    }
+  }
+
+  /* 자리표시 블록을 훑고 지나가는 빛. animate-pulse 는 블록 전체가 같이 깜빡여
+     "여러 줄이 한 덩어리"로 보이는데, 쓸리는 하이라이트는 줄마다 위상이 같아도
+     방향이 있어 로딩 중이라는 인상이 더 분명하다. */
+  .app-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .app-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    /* 하이라이트를 흰색으로 두면 다크에서 안 보이므로 잉크색을 옅게 쓴다 —
+       라이트에선 살짝 어두워지는 띠, 다크에선 --ink 가 밝은 값이라 밝아지는 띠가 된다.
+       농도는 color-mix 대신 opacity 로 준다: color-mix 를 쓰면 Lightning CSS 가
+       미지원 브라우저용 폴백으로 "불투명한 --ink 막대"를 한 줄 더 깔아 버린다. */
+    background: linear-gradient(90deg, transparent, var(--ink, #191f28), transparent);
+    opacity: 0.09;
+    animation: app-shimmer 1.4s ease-in-out infinite;
+  }
+  @keyframes app-shimmer {
+    to {
+      transform: translateX(100%);
+    }
+  }
+
+  /* 목록 등장 stagger. 순서는 인라인 `--stagger-i`(0-based)로 주고, 상한을 둬서
+     긴 목록의 꼬리가 몇 초씩 늦게 뜨지 않게 한다. */
+  .app-stagger {
+    opacity: 0;
+    animation: app-stagger-in 0.36s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+    animation-delay: calc(min(var(--stagger-i, 0), 7) * 45ms);
+  }
+  @keyframes app-stagger-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* 숫자 뱃지가 늘어날 때 한 번 튀어오른다. 값이 바뀔 때마다 key 를 갈아
+     keyframe 을 재생시킨다(transition 은 리마운트에서 안 돈다). */
+  .app-badge-pop {
+    animation: app-nav-pop 0.34s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
 }

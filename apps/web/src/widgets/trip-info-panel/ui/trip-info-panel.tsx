@@ -84,7 +84,7 @@ function WeatherCard({ tripId, dayCount }: { tripId: string; dayCount: number })
           {Array.from({ length: Math.max(dayCount, 1) }).map((_, index) => (
             <li
               key={index}
-              className="h-[41px] animate-pulse rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FAFBFC)]"
+              className="h-[41px] app-shimmer rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FAFBFC)]"
             />
           ))}
         </ul>

@@ -222,7 +222,7 @@ function TripProgressContent() {
 function ReplanningPill() {
   return (
     <span className="flex items-center gap-1.5 rounded-full bg-[color:var(--primary-tint)] px-2.5 py-1 text-[11px] font-bold text-[color:var(--primary-deep)]">
-      <span className="size-1.5 animate-pulse rounded-full bg-[color:var(--primary)]" />
+      <span className="size-1.5 motion-safe:animate-pulse rounded-full bg-[color:var(--primary)]" />
       AI 재계획 중
     </span>
   );

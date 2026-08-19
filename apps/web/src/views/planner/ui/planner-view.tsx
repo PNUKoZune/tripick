@@ -956,7 +956,7 @@ function LivePromoBanner() {
     >
       <span className="flex items-center gap-2 text-[13px] font-bold">
         <span className="relative flex size-2">
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-white/70" />
+          <span className="absolute inline-flex size-full motion-safe:animate-ping rounded-full bg-white/70" />
           <span className="relative inline-flex size-2 rounded-full bg-white" />
         </span>
         지금 여행 중이에요

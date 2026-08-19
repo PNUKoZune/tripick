@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { LuLuggage, LuPlus, LuSearch } from 'react-icons/lu';
 import { useQuery } from '@tanstack/react-query';
 import type { TripSummaryStatus, TripSummaryDto } from '@tripick/types';
@@ -166,14 +166,22 @@ function TripsContent() {
           </div>
         ) : (
           <div className="mt-4 space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 xl:grid-cols-3">
-            {visible.map((trip) => (
-              <TripSummaryCard
+            {/* 카드가 순서대로 살짝 늦게 떠오른다. 순서 변수는 인라인 style 로 주고
+                지연 상한은 globals.css 가 잡는다(긴 목록 꼬리가 늦게 뜨지 않게).
+                reduce 에선 .app-stagger 규칙 자체가 매칭되지 않아 즉시 보인다. */}
+            {visible.map((trip, index) => (
+              <div
                 key={trip.id}
-                trip={trip}
-                draftAction={
-                  <DeleteTripButton tripId={trip.id} tripTitle={trip.title} variant="compact" />
-                }
-              />
+                className="app-stagger"
+                style={{ '--stagger-i': index } as CSSProperties}
+              >
+                <TripSummaryCard
+                  trip={trip}
+                  draftAction={
+                    <DeleteTripButton tripId={trip.id} tripTitle={trip.title} variant="compact" />
+                  }
+                />
+              </div>
             ))}
           </div>
         )}
@@ -205,7 +213,7 @@ function HeroCard({ trip }: { trip: TripSummaryDto }) {
       <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-2.5 py-1 text-[12px] font-bold">
         {ongoing ? (
           <span className="relative flex size-2 items-center justify-center">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-white/70" />
+            <span className="absolute inline-flex size-full motion-safe:animate-ping rounded-full bg-white/70" />
             <span className="relative inline-flex size-1.5 rounded-full bg-white" />
           </span>
         ) : null}
@@ -336,12 +344,12 @@ function SkeletonGrid() {
           key={index}
           className="h-full overflow-hidden rounded-[20px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)]"
         >
-          <div className="h-16 animate-pulse bg-[color:var(--line,#EEF1F5)]" />
+          <div className="h-16 app-shimmer bg-[color:var(--line,#EEF1F5)]" />
           <div className="flex flex-col gap-3 p-4">
-            <div className="h-3 w-16 animate-pulse rounded-full bg-[color:var(--line,#EEF1F5)]" />
-            <div className="h-4 w-2/3 animate-pulse rounded-full bg-[color:var(--line,#EEF1F5)]" />
-            <div className="h-3 w-full animate-pulse rounded-full bg-[color:var(--line,#EEF1F5)]" />
-            <div className="mt-1 h-3 w-1/2 animate-pulse rounded-full bg-[color:var(--line,#EEF1F5)]" />
+            <div className="h-3 w-16 app-shimmer rounded-full bg-[color:var(--line,#EEF1F5)]" />
+            <div className="h-4 w-2/3 app-shimmer rounded-full bg-[color:var(--line,#EEF1F5)]" />
+            <div className="h-3 w-full app-shimmer rounded-full bg-[color:var(--line,#EEF1F5)]" />
+            <div className="mt-1 h-3 w-1/2 app-shimmer rounded-full bg-[color:var(--line,#EEF1F5)]" />
           </div>
         </div>
       ))}
