@@ -34,13 +34,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ko">
       <head>
-        <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* 지도 SDK 는 화면에 들어와야 로드되므로 연결만 미리 열어 둔다.
+            Pretendard 는 self-host(`app/pretendard.css` + `public/fonts/pretendard`)라
+            서드파티 preconnect 가 더는 필요 없다. */}
         <link rel="preconnect" href="https://dapi.kakao.com" />
-        <link
-          rel="stylesheet"
-          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
-        />
       </head>
       <body>
         <Providers>{children}</Providers>

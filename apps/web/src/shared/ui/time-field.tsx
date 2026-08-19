@@ -1,16 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
-
-import type { SxProps, Theme } from '@mui/material/styles';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { TimePicker } from '@mui/x-date-pickers/TimePicker';
-import { renderTimeViewClock } from '@mui/x-date-pickers/timeViewRenderers';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { ko } from 'date-fns/locale';
-
-import { useMediaQuery } from '@/shared/lib';
+import { useId, useRef } from 'react';
+import { LuClock3 } from 'react-icons/lu';
 
 type Variant = 'outlined' | 'soft';
 
@@ -23,127 +14,39 @@ type Props = {
 };
 
 /**
- * 페이지 폰트를 그대로 쓰고, 브랜드 컬러를 시계 팝업 선택 색으로 쓰기 위한 최소 테마.
+ * 시각 선택(HH:mm). 네이티브 `<input type="time">` 이라 모바일·웹뷰에서는 OS 시간 피커가
+ * 그대로 뜨고, 값은 로케일과 무관하게 항상 24시간 "HH:mm" 문자열이다.
  *
- * 시계 팝업은 MUI 가 body 로 portal 하므로 `.wvr-scope` 밖에 뜬다 — CSS 변수로는 못 물들이고
- * MUI 팔레트 mode 로만 갈린다. 그래서 아래 sx 의 "인풋"은 토큰으로, "팝업"은 이 mode 로 맞춘다.
- * 값은 wvr 팔레트의 --primary (라이트 #2E6BE6 / 다크 #7CA5FC) 와 같은 계열로 둔다.
+ * 이전에는 MUI X TimePicker(아날로그 시계 팝업)를 썼는데, 그 하나 때문에
+ * `@mui/material` + `@mui/x-date-pickers` + emotion 이 `shared/ui` 배럴을 타고
+ * **모든 라우트**의 첫 로드에 들어갔다(약 440KB). 팝업이 body 로 portal 돼
+ * `.wvr-scope` 토큰이 안 닿는 문제(팔레트 mode 로만 다크 대응)도 같이 사라진다.
  */
-function createPickerTheme(dark: boolean) {
-  return createTheme({
-    palette: {
-      mode: dark ? 'dark' : 'light',
-      primary: { main: dark ? '#7CA5FC' : '#3182F6' },
-    },
-    typography: { fontFamily: 'inherit' },
-  });
-}
-
-function toDate(value: string): Date | null {
-  const [hRaw, mRaw] = value.split(':');
-  const h = Number(hRaw);
-  const m = Number(mRaw);
-  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
-  const date = new Date();
-  date.setHours(h, m, 0, 0);
-  return date;
-}
-
-function toTimeString(date: Date | null): string | null {
-  if (!date || Number.isNaN(date.getTime())) return null;
-  const hh = String(date.getHours()).padStart(2, '0');
-  const mm = String(date.getMinutes()).padStart(2, '0');
-  return `${hh}:${mm}`;
-}
-
-/**
- * 입력 글자색만 페이지 토큰으로 되돌린다. 라이트에선 기존 색(#191F28)과 같은 값이고,
- * 다크(.wvr-scope)에선 --text-primary 가 밝은 값으로 섀도잉돼 글자가 보인다.
- * `-webkit-text-fill-color` 까지 같이 줘야 WebKit 계열에서 검정이 남지 않는다.
- */
-const pickersInputColorSx = {
-  '& .MuiPickersInputBase-input': {
-    color: 'var(--text-primary)',
-    WebkitTextFillColor: 'var(--text-primary)',
-  },
-} as const;
-
-/** 여행 생성 폼: 흰 배경 아웃라인 인풋 */
-const outlinedSx: SxProps<Theme> = {
-  '& .MuiOutlinedInput-root': {
-    height: 48,
-    borderRadius: '14px',
-    backgroundColor: 'var(--card, #fff)',
-    paddingRight: '10px',
-    fontFamily: 'inherit',
-    fontSize: '15px',
-    fontWeight: 500,
-    color: 'var(--ink, #191F28)',
-    '&.Mui-focused': { boxShadow: '0 0 0 2px var(--ring, #E1ECFF)' },
-  },
-  '& .MuiOutlinedInput-input': {
-    height: '100%',
-    padding: '0 4px 0 16px',
-    boxSizing: 'border-box',
-  },
-  '& .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--line, #E5E8EB)' },
-  '&:hover .MuiOutlinedInput-root:not(.Mui-focused) .MuiOutlinedInput-notchedOutline': {
-    borderColor: 'var(--line, #E5E8EB)',
-  },
-  '& .Mui-focused .MuiOutlinedInput-notchedOutline': {
-    borderColor: 'var(--primary, #3182F6)',
-    borderWidth: '1px',
-  },
-  '& .MuiInputAdornment-root': { marginLeft: 0 },
-  '& .MuiIconButton-root': { color: 'var(--ink-faint, #8B95A1)', padding: '6px' },
-  '& .MuiSvgIcon-root': { fontSize: 20 },
-  // MUI X v7 TimePicker 의 입력부는 OutlinedInput 이 아니라 PickersInputBase 다 —
-  // 위 .MuiOutlinedInput-* 선택자가 안 걸려 글자색이 MUI 기본값(rgba(0,0,0,.87))으로 남는다.
-  ...pickersInputColorSx,
-};
-
-/** 취향 설정: soft-bg 박스 안에서 테두리 없이 굵은 큰 글씨 */
-const softSx: SxProps<Theme> = {
-  '& .MuiOutlinedInput-root': {
-    height: 28,
-    paddingRight: 0,
-    fontFamily: 'inherit',
-    fontSize: '20px',
-    fontWeight: 900,
-    lineHeight: '28px',
-    color: 'var(--text-primary)',
-  },
-  '& .MuiOutlinedInput-input': {
-    height: '100%',
-    padding: 0,
-    boxSizing: 'border-box',
-  },
-  '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
-  '&:hover .MuiOutlinedInput-notchedOutline': { border: 'none' },
-  '& .Mui-focused .MuiOutlinedInput-notchedOutline': { border: 'none' },
-  '& .MuiInputAdornment-root': { marginLeft: 0 },
-  '& .MuiIconButton-root': { color: 'var(--text-tertiary)', padding: '4px' },
-  '& .MuiSvgIcon-root': { fontSize: 18 },
-  ...pickersInputColorSx,
-  // soft 변형은 박스 안에 테두리 없이 놓이는 의도 — Pickers 쪽 노치 테두리도 함께 지운다.
-  '& .MuiPickersOutlinedInput-notchedOutline': { border: 'none' },
-};
-
-/** MUI TimePicker(아날로그 TimeClock 팝업)로 시각 선택 (HH:mm). */
 export function TimeField({ label, value, onChange, variant = 'outlined' }: Props) {
   const isSoft = variant === 'soft';
-  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
-  const theme = useMemo(() => createPickerTheme(prefersDark), [prefersDark]);
+  const inputId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // 크롬 데스크탑은 인풋 본문 클릭만으로는 피커가 안 열린다(달력 인디케이터만 열림).
+  // showPicker 는 사용자 제스처 밖이거나 미지원이면 던지므로 조용히 무시한다.
+  function openPicker() {
+    try {
+      inputRef.current?.showPicker();
+    } catch {
+      inputRef.current?.focus();
+    }
+  }
 
   return (
-    <label
+    <div
       className={
         isSoft
           ? 'flex flex-col gap-1 rounded-[16px] bg-[color:var(--soft-bg)] px-4 py-3'
           : 'flex flex-col gap-1'
       }
     >
-      <span
+      <label
+        htmlFor={inputId}
         className={
           isSoft
             ? 'text-[13px] font-bold text-[color:var(--text-tertiary)]'
@@ -151,29 +54,43 @@ export function TimeField({ label, value, onChange, variant = 'outlined' }: Prop
         }
       >
         {label}
-      </span>
-      <ThemeProvider theme={theme}>
-        <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ko}>
-          <TimePicker
-            value={toDate(value)}
-            onChange={(next) => {
-              const parsed = toTimeString(next);
-              if (parsed) onChange(parsed);
-            }}
-            ampm={false}
-            viewRenderers={{
-              hours: renderTimeViewClock,
-              minutes: renderTimeViewClock,
-            }}
-            slotProps={{
-              textField: {
-                fullWidth: true,
-                sx: isSoft ? softSx : outlinedSx,
-              },
-            }}
-          />
-        </LocalizationProvider>
-      </ThemeProvider>
-    </label>
+      </label>
+      <div
+        className={
+          isSoft
+            ? 'flex items-center gap-1'
+            : 'flex h-12 items-center gap-1 rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] pl-4 pr-2 transition focus-within:border-[color:var(--primary,#3182F6)] focus-within:ring-2 focus-within:ring-[color:var(--ring,#E1ECFF)]'
+        }
+      >
+        <input
+          id={inputId}
+          ref={inputRef}
+          type="time"
+          step={60}
+          value={value}
+          onChange={(event) => {
+            // 사용자가 값을 지우는 중이면 빈 문자열이 온다 — 상위 상태는 항상 유효한
+            // HH:mm 만 갖도록 무시한다(입력 도중 일정 계산이 깨지지 않게).
+            if (event.target.value) onChange(event.target.value);
+          }}
+          className={`time-input min-w-0 flex-1 bg-transparent outline-none ${
+            isSoft
+              ? 'text-[20px] font-extrabold leading-7 text-[color:var(--text-primary)]'
+              : 'text-[15px] font-medium text-[color:var(--ink,#191F28)]'
+          }`}
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-hidden
+          onClick={openPicker}
+          className={`flex shrink-0 items-center justify-center rounded-[8px] text-[color:var(--ink-faint,#8B95A1)] transition hover:text-[color:var(--ink-sub,#6B7684)] ${
+            isSoft ? 'size-6' : 'size-8'
+          }`}
+        >
+          <LuClock3 className={isSoft ? 'size-4' : 'size-5'} />
+        </button>
+      </div>
+    </div>
   );
 }

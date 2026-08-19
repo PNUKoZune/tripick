@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import './pretendard.css';
 
 :root {
   color-scheme: light;
@@ -34,6 +35,7 @@ body {
   background: var(--app-bg);
   color: var(--text-primary);
   font-family:
+    'Pretendard Variable',
     'Pretendard',
     'Apple SD Gothic Neo',
     'Noto Sans KR',
@@ -260,6 +262,22 @@ nextjs-portal {
    `.wvr-scope` 와 같은 특이도로는 뒤에 온 쪽이 이기므로 클래스 2개로 특이도를 올린다. */
 .wvr-scope.wvr-overlay {
   background: transparent;
+}
+
+/* 네이티브 시간 입력(TimeField). 시계 아이콘은 우리가 그리므로 브라우저 기본
+   인디케이터는 감추고, 폰트·색은 바깥 컨테이너에서 상속받게 둔다. 다크 대응은
+   조상의 color-scheme 이 상속되면서 OS 시간 피커까지 자동으로 따라온다. */
+.time-input {
+  font-family: inherit;
+}
+
+.time-input::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+/* WebKit 은 시/분 필드에 자체 패딩을 넣어 왼쪽 정렬이 어긋난다. */
+.time-input::-webkit-datetime-edit-fields-wrapper {
+  padding: 0;
 }
 
 .wvr-scope :focus-visible {

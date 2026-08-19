@@ -25,6 +25,17 @@ const nextConfig = {
     NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN ?? '',
     NEXT_PUBLIC_SENTRY_ENVIRONMENT: process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT ?? '',
   },
+  async headers() {
+    return [
+      {
+        // self-host 폰트. 경로에 버전이 박혀 있어(`pretendard-1.3.9`) 내용이 바뀔 일이
+        // 없으므로 1년 immutable 로 못 박는다 — Next 는 public/ 기본이 max-age=0 이라
+        // 방문할 때마다 92개 서브셋에 재검증 요청이 붙는다.
+        source: '/fonts/:path*',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
+      },
+    ];
+  },
   async rewrites() {
     return [
       {
