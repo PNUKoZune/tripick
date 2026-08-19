@@ -1,16 +1,20 @@
-/* react-day-picker v10 토스 톤 오버라이드 */
+/* react-day-picker v10 토스 톤 오버라이드.
+ *
+ * 색은 전부 wvr 토큰 + 기존 hex 폴백으로 쓴다. 이 달력은 `.wvr-scope` 안(새 여행 만들기
+ * 카드)에서 렌더되는데, hex 로 박아 두면 다크에서 카드 배경만 어두워지고 날짜 글자는
+ * 검정으로 남아 통째로 안 보인다. 폴백값이 기존 라이트 값이라 라이트 화면은 그대로다. */
 .rdp-root {
-  --rdp-accent-color: #3182f6;
-  --rdp-accent-background-color: #eaf2ff;
+  --rdp-accent-color: var(--primary, #3182f6);
+  --rdp-accent-background-color: var(--primary-tint, #eaf2ff);
   --rdp-day-height: 40px;
   --rdp-day-width: 40px;
   --rdp-day_button-height: 40px;
   --rdp-day_button-width: 40px;
   --rdp-day_button-border-radius: 12px;
-  --rdp-selected-border: 2px solid #3182f6;
-  --rdp-range_middle-background-color: #eaf2ff;
-  --rdp-range_middle-color: #1b64da;
-  --rdp-today-color: #3182f6;
+  --rdp-selected-border: 2px solid var(--primary, #3182f6);
+  --rdp-range_middle-background-color: var(--primary-tint, #eaf2ff);
+  --rdp-range_middle-color: var(--primary-deep, #1b64da);
+  --rdp-today-color: var(--primary, #3182f6);
   --rdp-weekday-text-transform: none;
   --rdp-nav_button-height: 36px;
   --rdp-nav_button-width: 36px;
@@ -21,29 +25,30 @@
 .rdp-month_caption {
   font-size: 15px;
   font-weight: 700;
-  color: #191f28;
+  color: var(--ink, #191f28);
 }
 
 .rdp-weekday {
   font-size: 12px;
   font-weight: 600;
-  color: #8b95a1;
+  color: var(--ink-faint, #8b95a1);
 }
 
 .rdp-day {
   font-size: 14px;
   font-weight: 500;
-  color: #191f28;
+  color: var(--ink, #191f28);
 }
 
 .rdp-day_button:hover:not([disabled]) {
-  background-color: #f2f4f6;
+  background-color: var(--card-soft, #f2f4f6);
 }
 
 .rdp-range_start .rdp-day_button,
 .rdp-range_end .rdp-day_button {
-  background-color: #3182f6 !important;
-  color: #fff !important;
+  background-color: var(--primary, #3182f6) !important;
+  /* 선택된 날짜 글자색은 --btn-text (다크에서도 파랑 위 대비를 맞춘 값)를 쓴다. */
+  color: var(--btn-text, #fff) !important;
 }
 
 .rdp-range_middle .rdp-day_button {
@@ -52,9 +57,9 @@
 
 .rdp-today:not(.rdp-selected) .rdp-day_button {
   font-weight: 700;
-  color: #3182f6;
+  color: var(--primary, #3182f6);
 }
 
 .rdp-chevron {
-  fill: #6b7684;
+  fill: var(--ink-sub, #6b7684);
 }
