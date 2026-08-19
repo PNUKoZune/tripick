@@ -16,6 +16,7 @@ import {
 } from '@/entities/friend';
 import { getStoredSession, SessionGuard } from '@/entities/session';
 import { queryKeys } from '@/shared/api/query-keys';
+import { Skeleton, SkeletonList } from '@/shared/ui';
 import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
 
 export function FriendsView() {
@@ -40,7 +41,11 @@ function FriendsContent() {
     () => null,
   );
 
-  const { data: friends = [], error } = useQuery({
+  const {
+    data: friends = [],
+    error,
+    isLoading,
+  } = useQuery({
     queryKey: queryKeys.friends.list,
     queryFn: fetchFriends,
     staleTime: 60 * 1000,
@@ -121,7 +126,7 @@ function FriendsContent() {
           </button>
         </div>
         {mutationError ? (
-          <p className="mt-2 text-[12px] font-semibold text-[color:var(--danger)]">
+          <p role="alert" className="mt-2 text-[12px] font-semibold text-[color:var(--danger)]">
             {mutationError}
           </p>
         ) : null}
@@ -139,7 +144,10 @@ function FriendsContent() {
       </div>
 
       {loadError ? (
-        <div className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]">
+        <div
+          role="alert"
+          className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]"
+        >
           {loadError}
         </div>
       ) : null}
@@ -220,7 +228,9 @@ function FriendsContent() {
       ) : null}
 
       <FriendSection title="친구" count={others.length}>
-        {others.length === 0 && !loadError ? (
+        {isLoading ? (
+          <FriendRowsSkeleton />
+        ) : others.length === 0 && !loadError ? (
           <p className="px-4 py-6 text-center text-[13px] text-[color:var(--ink-faint)]">
             친구가 없어요. 핸들(@아이디)로 친구를 추가해보세요.
           </p>
@@ -260,6 +270,23 @@ function FriendsContent() {
       />
       <PageContainer>{content}</PageContainer>
     </AppFrame>
+  );
+}
+
+/** 친구 목록 첫 조회 중 자리표시. 행 구성은 FriendRow(아바타 + 2줄) 와 같은 높이로 맞춘다. */
+function FriendRowsSkeleton() {
+  return (
+    <SkeletonList label="친구 목록 불러오는 중">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div key={index} className="flex items-center gap-3 px-4 py-3">
+          <Skeleton className="size-10 shrink-0" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <Skeleton className="h-3.5 w-24" />
+            <Skeleton className="h-3 w-40 max-w-full" />
+          </div>
+        </div>
+      ))}
+    </SkeletonList>
   );
 }
 

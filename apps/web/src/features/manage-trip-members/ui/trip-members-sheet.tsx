@@ -186,7 +186,10 @@ export function TripMembersSheet({
           </div>
 
           {errorMessage ? (
-            <div className="mt-2 rounded-[12px] border border-[color:var(--danger-border,#FECDD3)] bg-[color:var(--danger-tint,#FFECEE)] px-3 py-2 text-[12px] font-semibold text-[color:var(--danger,#F04452)]">
+            <div
+              role="alert"
+              className="mt-2 rounded-[12px] border border-[color:var(--danger-border,#FECDD3)] bg-[color:var(--danger-tint,#FFECEE)] px-3 py-2 text-[12px] font-semibold text-[color:var(--danger,#F04452)]"
+            >
               {errorMessage}
             </div>
           ) : null}

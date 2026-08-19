@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { DayPicker, type DateRange } from 'react-day-picker';
 import { ko } from 'react-day-picker/locale';
 import { format } from 'date-fns';
@@ -263,8 +263,9 @@ function TripCreateContent({
     <div className="rounded-[22px] border border-[color:var(--line)] bg-[color:var(--card)] px-5 pb-6 pt-1 shadow-[var(--shadow-card)]">
       {/* 01 어디로, 언제 — 기존 3개 필드(여행 제목·지역·기간) 그대로, mega-card 시각만 재스타일 */}
       <Group index="01" label="어디로, 언제">
-        <Field label="여행 제목" hint="예) 경주 1박 2일 · 친구들과 봄나들이">
+        <Field label="여행 제목" hint="예) 경주 1박 2일 · 친구들과 봄나들이" htmlFor="trip-title">
           <input
+            id="trip-title"
             type="text"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
@@ -356,7 +357,7 @@ function TripCreateContent({
               <TimeField label="도착 시각" value={endTime} onChange={setEndTime} />
             </div>
             {timeError ? (
-              <p className="mt-2 text-[12px] font-semibold text-[color:var(--danger)]">
+              <p role="alert" className="mt-2 text-[12px] font-semibold text-[color:var(--danger)]">
                 {timeError}
               </p>
             ) : null}
@@ -408,8 +409,13 @@ function TripCreateContent({
           <PlaceSearchPicker value={mustPlaces} onChange={setMustPlaces} />
         </Field>
 
-        <Field label="이번 여행에 반영할 사항" hint={`선택 · ${notes.length}/${NOTES_MAX}자`}>
+        <Field
+          label="이번 여행에 반영할 사항"
+          hint={`선택 · ${notes.length}/${NOTES_MAX}자`}
+          htmlFor="trip-notes"
+        >
           <textarea
+            id="trip-notes"
             value={notes}
             onChange={(event) => setNotes(event.target.value.slice(0, NOTES_MAX))}
             placeholder={
@@ -425,7 +431,10 @@ function TripCreateContent({
       </Group>
 
       {errorMessage ? (
-        <div className="mt-6 rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]">
+        <div
+          role="alert"
+          className="mt-6 rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]"
+        >
           {errorMessage}
         </div>
       ) : null}
@@ -522,16 +531,32 @@ function TripCreateContent({
 function Field({
   label,
   hint,
+  htmlFor,
   children,
 }: {
   label: string;
   hint?: string;
+  /**
+   * 단일 입력을 감싸는 필드면 그 입력의 id. 주면 제목이 진짜 `<label>` 이 돼 클릭·스크린리더가
+   * 입력과 이어진다. 세그먼트·달력처럼 컨트롤이 여럿인 필드는 생략한다 — label 은 첫 번째
+   * 컨트롤 하나에만 붙어 오히려 오해를 부르므로, 그 경우엔 묶음 이름(role="group")으로 준다.
+   */
+  htmlFor?: string;
   children: React.ReactNode;
 }) {
+  const labelId = useId();
   return (
-    <div>
+    <div {...(htmlFor ? {} : { role: 'group', 'aria-labelledby': labelId })}>
       <div className="mb-2 flex items-baseline justify-between">
-        <span className="text-[14px] font-bold text-[color:var(--ink)]">{label}</span>
+        {htmlFor ? (
+          <label htmlFor={htmlFor} className="text-[14px] font-bold text-[color:var(--ink)]">
+            {label}
+          </label>
+        ) : (
+          <span id={labelId} className="text-[14px] font-bold text-[color:var(--ink)]">
+            {label}
+          </span>
+        )}
         {hint ? <span className="text-[12px] text-[color:var(--ink-faint)]">{hint}</span> : null}
       </div>
       {children}

@@ -36,7 +36,9 @@ function kstToday(): string {
 
 /** 두 YYYY-MM-DD 사이의 일수 차 (toIso - fromIso) */
 function diffDays(fromIso: string, toIso: string): number {
-  return Math.round((Date.parse(`${toIso}T00:00:00Z`) - Date.parse(`${fromIso}T00:00:00Z`)) / 86400000);
+  return Math.round(
+    (Date.parse(`${toIso}T00:00:00Z`) - Date.parse(`${fromIso}T00:00:00Z`)) / 86400000,
+  );
 }
 
 export function TripsView() {
@@ -150,7 +152,10 @@ function TripsContent() {
         </div>
 
         {loadError ? (
-          <div className="mt-4 rounded-[16px] border border-[color:var(--danger-border,#FECDD3)] bg-[color:var(--danger-tint,#FFECEE)] p-4 text-[14px] text-[color:var(--danger,#F04452)]">
+          <div
+            role="alert"
+            className="mt-4 rounded-[16px] border border-[color:var(--danger-border,#FECDD3)] bg-[color:var(--danger-tint,#FFECEE)] p-4 text-[14px] text-[color:var(--danger,#F04452)]"
+          >
             {loadError}
           </div>
         ) : null}

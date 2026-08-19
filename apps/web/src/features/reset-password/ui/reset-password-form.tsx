@@ -64,7 +64,9 @@ export function ResetPasswordForm({ token }: Props) {
       className="space-y-3"
     >
       <label className="block">
-        <span className="mb-1 block text-[13px] font-bold text-[color:var(--ink)]">새 비밀번호</span>
+        <span className="mb-1 block text-[13px] font-bold text-[color:var(--ink)]">
+          새 비밀번호
+        </span>
         <input
           type="password"
           value={password}
@@ -72,10 +74,14 @@ export function ResetPasswordForm({ token }: Props) {
           autoComplete="new-password"
           className="h-12 w-full rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[15px] outline-none focus:border-[color:var(--primary)]"
         />
-        <span className="mt-1 block text-[12px] text-[color:var(--ink-faint)]">8자 이상, 영문+숫자 포함</span>
+        <span className="mt-1 block text-[12px] text-[color:var(--ink-faint)]">
+          8자 이상, 영문+숫자 포함
+        </span>
       </label>
       <label className="block">
-        <span className="mb-1 block text-[13px] font-bold text-[color:var(--ink)]">비밀번호 확인</span>
+        <span className="mb-1 block text-[13px] font-bold text-[color:var(--ink)]">
+          비밀번호 확인
+        </span>
         <input
           type="password"
           value={confirm}
@@ -91,7 +97,9 @@ export function ResetPasswordForm({ token }: Props) {
       </label>
 
       {errorMessage ? (
-        <p className="text-[13px] font-semibold text-[color:var(--danger)]">{errorMessage}</p>
+        <p role="alert" className="text-[13px] font-semibold text-[color:var(--danger)]">
+          {errorMessage}
+        </p>
       ) : null}
 
       <button

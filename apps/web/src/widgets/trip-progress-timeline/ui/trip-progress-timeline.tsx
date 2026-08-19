@@ -71,7 +71,20 @@ export function TripProgressTimeline({ items, selectedItemId, onSelectItem, onSw
             <div
               onClick={() => onSelectItem?.(item)}
               role={onSelectItem ? 'button' : undefined}
-              className={`flex-1 rounded-[14px] border px-4 py-3 transition ${
+              // role="button" 만 주고 끝내면 마우스로만 열리는 버튼이 된다.
+              // 안에 '변경' 버튼이 따로 있어 <button> 으로 감쌀 수 없으므로 키 핸들러로 채운다.
+              tabIndex={onSelectItem ? 0 : undefined}
+              onKeyDown={
+                onSelectItem
+                  ? (event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        onSelectItem(item);
+                      }
+                    }
+                  : undefined
+              }
+              className={`flex-1 rounded-[14px] border px-4 py-3 outline-none transition focus-visible:ring-2 focus-visible:ring-[color:var(--primary)] ${
                 onSelectItem
                   ? 'cursor-pointer hover:border-[color:var(--primary)]/40 hover:shadow-[var(--shadow-card)]'
                   : ''

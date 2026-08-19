@@ -28,6 +28,7 @@ import { acceptTripInvite, rejectTripInvite } from '@/entities/trip-plan';
 import { rejectScheduleChange } from '@/entities/schedule-change';
 import { useInboxInvalidateSubscription } from '@/features/subscribe-inbox-invalidate';
 import { queryKeys } from '@/shared/api/query-keys';
+import { Skeleton, SkeletonList } from '@/shared/ui';
 import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
 
 type Filter = 'all' | 'unread' | 'action';
@@ -102,7 +103,7 @@ function InboxContent() {
   // WebSocket 신호로 새 알림 도착 시 목록을 실시간 갱신한다(브라우저 단독 FCM 공백 보완).
   useInboxInvalidateSubscription();
 
-  const { data, error } = useQuery({
+  const { data, error, isLoading } = useQuery({
     queryKey: queryKeys.inbox.list,
     queryFn: fetchInbox,
     staleTime: 30 * 1000,
@@ -342,12 +343,17 @@ function InboxContent() {
       </div>
 
       {loadError ? (
-        <div className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]">
+        <div
+          role="alert"
+          className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]"
+        >
           {loadError}
         </div>
       ) : null}
 
-      {!loadError && filteredItems.length === 0 ? (
+      {isLoading && !loadError ? <InboxSkeleton /> : null}
+
+      {!isLoading && !loadError && filteredItems.length === 0 ? (
         <div className="rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card-soft)] p-6 text-center">
           <LuInbox className="mx-auto size-6 text-[color:var(--ink-faint)]" aria-hidden />
           <div className="mt-2 text-[14px] font-bold text-[color:var(--ink)]">
@@ -428,6 +434,30 @@ function InboxContent() {
   );
 }
 
+/**
+ * 첫 조회 중 자리표시. 행 높이·간격을 {@link InboxRow} 와 맞춰 데이터가 도착할 때
+ * 목록이 튀지 않게 한다.
+ */
+function InboxSkeleton() {
+  return (
+    <SkeletonList label="알림 불러오는 중" className="space-y-2">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div
+          key={index}
+          className="flex items-start gap-3 rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card)] p-3"
+        >
+          <Skeleton className="size-10 shrink-0" />
+          <div className="min-w-0 flex-1 space-y-2 pt-0.5">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-3.5 w-2/3" />
+            <Skeleton className="h-3 w-full" />
+          </div>
+        </div>
+      ))}
+    </SkeletonList>
+  );
+}
+
 function CategoryChip({
   label,
   Icon,
@@ -479,14 +509,31 @@ function InboxRow({
   const meta = KIND_META[item.kind];
   const unread = !item.readAt;
   const Icon = meta.Icon;
+  // 행 클릭은 "읽음 처리"뿐이고, 그게 되는 건 아직 안 읽은 카테고리 알림뿐이다.
+  // 그 경우에만 클릭·포커스를 열어 준다 — 안내 문구용 행까지 탭 순서에 들어가면 소음이다.
+  // 행 안에 액션 <button> 이 있어 <button> 으로 감쌀 수 없으므로(중첩 금지) role+키 핸들러로 만든다.
+  const interactive = CATEGORY_KINDS.has(item.kind) && unread;
+  const interactiveProps = interactive
+    ? {
+        role: 'button' as const,
+        tabIndex: 0,
+        onClick,
+        onKeyDown: (event: React.KeyboardEvent) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onClick();
+          }
+        },
+      }
+    : {};
   return (
     <div
-      onClick={onClick}
+      {...interactiveProps}
       className={`flex items-start gap-3 rounded-[14px] border p-3 transition ${
         unread
           ? 'border-[color:var(--primary-tint)] bg-[color:var(--primary-tint)]'
           : 'border-[color:var(--line)] bg-[color:var(--card)] hover:bg-[color:var(--card-soft)]'
-      } ${CATEGORY_KINDS.has(item.kind) && unread ? 'cursor-pointer' : ''}`}
+      } ${interactive ? 'cursor-pointer' : ''}`}
     >
       <span
         aria-hidden
@@ -535,7 +582,7 @@ function InboxRow({
                     event.stopPropagation();
                     onAction(action.type);
                   }}
-                  className={`h-9 rounded-[10px] px-3 text-[12px] font-bold transition ${
+                  className={`h-10 rounded-[10px] px-3.5 text-[12px] font-bold transition ${
                     primary
                       ? 'bg-[color:var(--btn-bg)] text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)] disabled:opacity-50'
                       : 'border border-[color:var(--line)] bg-[color:var(--card)] text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]'

@@ -154,7 +154,10 @@ export function FriendMemberPicker({ members, onAdd, onRemove }: Props) {
           </div>
 
           {errorMessage ? (
-            <div className="px-3 py-3 text-[12px] font-semibold text-[color:var(--danger,#F04452)]">
+            <div
+              role="alert"
+              className="px-3 py-3 text-[12px] font-semibold text-[color:var(--danger,#F04452)]"
+            >
               {errorMessage}
             </div>
           ) : null}

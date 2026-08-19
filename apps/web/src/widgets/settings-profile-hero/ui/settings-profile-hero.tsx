@@ -7,9 +7,12 @@ import { formatJoinedSince } from '@/entities/user';
 import { HandleEditor } from '@/features/edit-handle';
 import { NicknameEditor } from '@/features/edit-nickname';
 import { ProfileImageUploader } from '@/features/manage-profile-image';
+import { Skeleton, SkeletonList } from '@/shared/ui';
 
 type Props = {
   me: UserDto | null | undefined;
+  /** 첫 조회 중이면 같은 크기의 자리표시로 그린다 (닉네임 placeholder·칩 pop-in 방지) */
+  loading?: boolean;
   onError?: (error: Error | null) => void;
 };
 
@@ -17,7 +20,7 @@ type Props = {
  * 설정 페이지의 프로필 hero 카드.
  * 그라데이션 배경 + 아바타(업로드) + 닉네임 편집 + 이메일/카카오ID + 가입일/계정 출처 칩.
  */
-export function SettingsProfileHero({ me, onError }: Props) {
+export function SettingsProfileHero({ me, loading = false, onError }: Props) {
   return (
     <div
       className="relative overflow-hidden rounded-[16px] border border-[color:var(--line)] px-4 py-5 lg:px-7 lg:py-7"
@@ -38,35 +41,57 @@ export function SettingsProfileHero({ me, onError }: Props) {
         style={{ background: 'var(--accent)' }}
       />
 
-      <div className="relative flex flex-col items-center gap-4 lg:flex-row lg:items-center lg:gap-6">
-        <ProfileImageUploader me={me} {...(onError ? { onError } : {})} />
+      {loading ? (
+        <HeroSkeleton />
+      ) : (
+        <div className="relative flex flex-col items-center gap-4 lg:flex-row lg:items-center lg:gap-6">
+          <ProfileImageUploader me={me} {...(onError ? { onError } : {})} />
 
-        <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5 lg:items-start lg:gap-2">
-          <NicknameEditor me={me} {...(onError ? { onError } : {})} />
+          <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5 lg:items-start lg:gap-2">
+            <NicknameEditor me={me} {...(onError ? { onError } : {})} />
 
-          <div className="flex flex-col items-center gap-0.5 text-[13px] text-[color:var(--ink-sub)] lg:items-start lg:text-[14px]">
-            <HandleEditor me={me} {...(onError ? { onError } : {})} />
-            {me?.email ? <span className="truncate">{me.email}</span> : null}
-          </div>
+            <div className="flex flex-col items-center gap-0.5 text-[13px] text-[color:var(--ink-sub)] lg:items-start lg:text-[14px]">
+              <HandleEditor me={me} {...(onError ? { onError } : {})} />
+              {me?.email ? <span className="truncate">{me.email}</span> : null}
+            </div>
 
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 lg:justify-start">
-            {me?.createdAt ? (
-              <MetaChip>
-                <LuCalendar className="size-3" aria-hidden />
-                <span>{formatJoinedSince(me.createdAt)}</span>
-              </MetaChip>
-            ) : null}
-            {me?.kakaoId ? (
-              // 카카오 브랜드 색은 라이트·다크와 무관하게 고정(로고 색 규정) — 토큰화 대상 아님.
-              // 투명도를 주면 다크 배경과 섞여 탁한 올리브가 되므로 불투명 노랑을 쓴다.
-              <span className="inline-flex h-7 items-center gap-1 rounded-full bg-[#FEE500] px-2.5 text-[12px] font-semibold text-[#191919]">
-                카카오 연동
-              </span>
-            ) : null}
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 lg:justify-start">
+              {me?.createdAt ? (
+                <MetaChip>
+                  <LuCalendar className="size-3" aria-hidden />
+                  <span>{formatJoinedSince(me.createdAt)}</span>
+                </MetaChip>
+              ) : null}
+              {me?.kakaoId ? (
+                // 카카오 브랜드 색은 라이트·다크와 무관하게 고정(로고 색 규정) — 토큰화 대상 아님.
+                // 투명도를 주면 다크 배경과 섞여 탁한 올리브가 되므로 불투명 노랑을 쓴다.
+                <span className="inline-flex h-7 items-center gap-1 rounded-full bg-[#FEE500] px-2.5 text-[12px] font-semibold text-[#191919]">
+                  카카오 연동
+                </span>
+              ) : null}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
+  );
+}
+
+/** 프로필 hero 자리표시. 아바타·닉네임·핸들/이메일·칩 자리를 실제와 같은 크기로 잡는다. */
+function HeroSkeleton() {
+  return (
+    <SkeletonList
+      label="프로필 불러오는 중"
+      className="relative flex flex-col items-center gap-4 lg:flex-row lg:items-center lg:gap-6"
+    >
+      <Skeleton className="size-20 shrink-0 rounded-full lg:size-24" />
+      <div className="flex min-w-0 flex-1 flex-col items-center gap-2 lg:items-start">
+        <Skeleton className="h-[27px] w-32 lg:h-[30px]" />
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-4 w-44 max-w-full" />
+        <Skeleton className="mt-2 h-7 w-28 rounded-full" />
+      </div>
+    </SkeletonList>
   );
 }
 

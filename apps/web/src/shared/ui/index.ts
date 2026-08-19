@@ -13,3 +13,4 @@ export { TimeField } from './time-field';
 export { ConfirmDialog } from './dialog';
 export { ModalShell } from './modal-shell';
 export { ImageLightbox } from './image-lightbox';
+export { Skeleton, SkeletonList } from './skeleton';

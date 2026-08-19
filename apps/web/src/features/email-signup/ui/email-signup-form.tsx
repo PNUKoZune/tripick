@@ -72,7 +72,9 @@ export function EmailSignupForm({ onSent }: Props) {
       </Field>
 
       {errorMessage ? (
-        <p className="text-[13px] font-semibold text-[color:var(--danger)]">{errorMessage}</p>
+        <p role="alert" className="text-[13px] font-semibold text-[color:var(--danger)]">
+          {errorMessage}
+        </p>
       ) : null}
 
       <button
@@ -80,7 +82,11 @@ export function EmailSignupForm({ onSent }: Props) {
         disabled={!canSubmit}
         className="mt-2 h-12 w-full rounded-[12px] bg-[color:var(--btn-bg)] text-[15px] font-bold text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)] disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)]"
       >
-        {mutation.isPending ? '가입 중…' : retryAfter > 0 ? `${retryAfter}초 후 다시 시도` : '회원가입'}
+        {mutation.isPending
+          ? '가입 중…'
+          : retryAfter > 0
+            ? `${retryAfter}초 후 다시 시도`
+            : '회원가입'}
       </button>
     </form>
   );
@@ -99,7 +105,9 @@ function Field({
     <label className="block">
       <span className="mb-1 block text-[13px] font-bold text-[color:var(--ink)]">{label}</span>
       {children}
-      {hint ? <span className="mt-1 block text-[12px] text-[color:var(--ink-faint)]">{hint}</span> : null}
+      {hint ? (
+        <span className="mt-1 block text-[12px] text-[color:var(--ink-faint)]">{hint}</span>
+      ) : null}
     </label>
   );
 }
