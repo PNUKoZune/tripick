@@ -66,6 +66,7 @@
 - [preference/candidate-pool-dining-ceiling-v1.md](preference/candidate-pool-dining-ceiling-v1.md) — 후보 풀의 식음 상한(하한만 있고 상한이 없어 식음이 풀을 뒤덮었다). 골든셋 `intent` 는 파이프라인에 안 들어간다
 - [preference/popularity-saturation-and-pool-size-v1.md](preference/popularity-saturation-and-pool-size-v1.md) — 인지도가 상위 16 안에서만 포화해 순위를 못 만들던 문제(로그 기울기 0.18→0.12)와 그 뒤 옮겨간 후보 풀 배수 무릎(20→40)
 - [preference/landmark-name-absorption-v1.md](preference/landmark-name-absorption-v1.md) — 부속 시설·상호가 모시설·랜드마크 인지도를 물려받던 통로(앞머리 토큰) 차단, 흡수율 14.5%→6.9%
+- [preference/keyword-ingest-source-v1.md](preference/keyword-ingest-source-v1.md) — 자동 소스가 구조적으로 못 닿는 장소를 이름으로 직접 넣는 `keyword` 적재 소스, `popular` 서브지역 패스
 - [preference/crag-term-weight-tuning-v1.md](preference/crag-term-weight-tuning-v1.md) — CRAG 항목 가중치 튜닝(retrieval 0.24→0.06, 유사도 정규화·죽은 가중 재분배 두 부정 결과)
 - [preference/embedding-server-separation-v1.md](preference/embedding-server-separation-v1.md) — 임베딩 서버 분리
 - [preference/place-catalog-integrity-v1.md](preference/place-catalog-integrity-v1.md) — 장소 카탈로그 정합성 점검(적재 타깃·reseed 키·auto-seed 게이트·해시 churn·커서 단위·숙박·소스 간 중복, 영업시간 역조회 6.7% 배제)

@@ -5,8 +5,9 @@ import type { Coordinates } from '@tripick/types';
  * - `tour`   KTO areaBasedList2 — 지역 전역을 넓게 채우는 기본 카탈로그
  * - `kakao`  KTO 좌표 앵커 주변 카테고리 검색 — 카카오 전용 장소(카페·프랜차이즈) 보강
  * - `popular` 네이버 추천 글 언급 → 카카오 정규화 — 대표 명소·맛집만 뽑는 얕고 정확한 패스
+ * - `keyword` 운영자가 이름을 직접 지정 → 카카오 키워드 검색 — 위 셋이 구조적으로 못 닿는 장소용
  */
-export type IngestSource = 'kakao' | 'tour' | 'popular';
+export type IngestSource = 'kakao' | 'tour' | 'popular' | 'keyword';
 
 /** 적재 파이프라인이 다루는 정규화된 장소. place_embeddings 컬럼과 1:1 대응. */
 export interface IngestPlace {

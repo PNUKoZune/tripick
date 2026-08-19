@@ -7,6 +7,7 @@ import { IngestCursorRepository } from './ingest-cursor.repository';
 import { PlaceEmbeddingRepository } from './place-embedding.repository';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { KtoCallBudget, TourApiService } from './tour-api.service';
+import { KeywordPlaceService } from './keyword-place.service';
 import { PopularPlaceService } from './popular-place.service';
 import { isSeoBusinessName } from './place-name-quality';
 import { isEligibleItineraryCandidate } from './place-eligibility';
@@ -16,15 +17,15 @@ import { SIDO_CODES, placeRegionCodes } from './region-code';
 import type { IngestPlace, IngestRegionResult, IngestSource, IngestSummary } from './ingestion.types';
 
 /**
- * 카탈로그에서 앵커를 뽑을 때 읽는 좌표 상한. 한 시도 최대치(실측 경기 6,524행)를 넉넉히 덮는다
- * — 표본이 지역 전체보다 작으면 앵커가 그 표본 쪽으로 쏠린다. 읽는 건 double 두 개뿐이다.
- */
-/**
  * 앵커 격자 한 칸의 크기를 적재 반경에서 뽑는 계수. 반경 10,000m → 0.1°(위도 ≈11.1km)로,
  * 격자가 0.1° 로 굳어 있던 종전 동작과 같은 값이다.
  */
 const ANCHOR_GRID_DEGREES_PER_METER = 1 / 100000;
 
+/**
+ * 카탈로그에서 앵커를 뽑을 때 읽는 좌표 상한. 한 시도 최대치(실측 경기 6,524행)를 넉넉히 덮는다
+ * — 표본이 지역 전체보다 작으면 앵커가 그 표본 쪽으로 쏠린다. 읽는 건 double 두 개뿐이다.
+ */
 const CATALOG_ANCHOR_SAMPLE = 20000;
 
 /**
@@ -40,6 +41,8 @@ export interface IngestOptions {
   sources?: IngestSource[];
   /** 소스별 시도당 최대 수집 건수. */
   maxPerRegion?: number;
+  /** `keyword` 소스가 적재할 장소명 목록. 이 소스를 쓸 때 필수. */
+  keywords?: string[];
   /**
    * 적재 전 해당 지역의 기존 벡터를 삭제한다.
    * 임베딩 모델 서버를 전환했을 때 place 벡터를 새 공간으로 재생성하기 위해 사용.
@@ -71,6 +74,7 @@ export class PlaceIngestionService {
     private readonly tourApi: TourApiService,
     private readonly kakaoLocal: KakaoLocalService,
     private readonly popularPlaces: PopularPlaceService,
+    private readonly keywordPlaces: KeywordPlaceService,
     private readonly embeddings: TextEmbeddingService,
     private readonly repository: PlaceEmbeddingRepository,
     private readonly cursors: IngestCursorRepository,
@@ -83,6 +87,13 @@ export class PlaceIngestionService {
 
     // 안전장치: 적재 전 임베딩 서버가 실제 벡터를 주는지 확인. 해시 폴백이면 중단.
     await this.assertEmbeddingServerReady(allowHash);
+    // keyword 는 넣을 이름을 안 주면 할 일이 없다. 0건으로 조용히 끝나는 대신 앞에서 막는다.
+    if (sources.includes('keyword') && (options.keywords ?? []).length === 0) {
+      throw new Error(
+        'keyword 소스는 --keywords=이름1,이름2 가 필요합니다 (자동 소스가 못 닿는 장소를 직접 지정하는 경로).',
+      );
+    }
+
     // popular 은 네이버 코퍼스 없이는 전 지역에서 0건이 된다. 조용히 헛도는 대신 앞에서 막는다.
     if (sources.includes('popular') && !this.popularPlaces.isAvailable) {
       throw new Error(
@@ -119,7 +130,17 @@ export class PlaceIngestionService {
     const regions: IngestRegionResult[] = [];
     for (const sido of targets) {
       regions.push(
-        await this.ingestRegion(sido.code, sido.name, sources, maxPerRegion, reseed, allowHash, append, budget),
+        await this.ingestRegion(
+          sido.code,
+          sido.name,
+          sources,
+          maxPerRegion,
+          reseed,
+          allowHash,
+          append,
+          budget,
+          options.keywords ?? [],
+        ),
       );
       if (budget.isExhausted) {
         this.logger.warn(
@@ -220,6 +241,7 @@ export class PlaceIngestionService {
     allowHash: boolean,
     append: boolean,
     budget: KtoCallBudget,
+    keywords: readonly string[],
   ): Promise<IngestRegionResult> {
     const deleted = reseed ? await this.repository.deleteRegion(region) : 0;
     if (deleted > 0) {
@@ -228,8 +250,13 @@ export class PlaceIngestionService {
 
     const collected: IngestPlace[] = [];
 
-    // popular(대표 명소·맛집)을 맨 앞에 둔다. dedupe 가 먼저 온 쪽을 남기므로
-    // 같은 장소가 KTO/카카오에도 있으면 네이버로 확인된 정본 쪽이 살아남는다.
+    // keyword(운영자 지정)를 가장 앞에 둔다. dedupe 가 먼저 온 쪽을 남기므로, 사람이 콕 집어
+    // 넣은 정본이 같은 장소의 다른 소스 행보다 우선한다.
+    if (sources.includes('keyword')) {
+      collected.push(...(await this.keywordPlaces.collect(region, keywords)));
+    }
+
+    // popular(대표 명소·맛집)을 그다음에. 같은 이유로 KTO/카카오보다 앞이다.
     let popularPlaces: IngestPlace[] = [];
     if (sources.includes('popular')) {
       popularPlaces = await this.popularPlaces.collect(region, maxPerRegion);

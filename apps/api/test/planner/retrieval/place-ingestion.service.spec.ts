@@ -342,6 +342,7 @@ function mockDeps() {
       searchAround: jest.fn().mockResolvedValue([kakaoDoc('k-1', 38.2115)]),
     },
     popularPlaces: { isAvailable: true, collect: jest.fn().mockResolvedValue([]) },
+    keywordPlaces: { collect: jest.fn().mockResolvedValue([]) },
     embeddings: {
       embedWithSource: jest
         .fn()
@@ -366,6 +367,7 @@ function build(deps: MockDeps): PlaceIngestionService {
     deps.tourApi as never,
     deps.kakaoLocal as never,
     deps.popularPlaces as never,
+    deps.keywordPlaces as never,
     deps.embeddings as never,
     deps.repository as never,
     deps.cursors as never,
