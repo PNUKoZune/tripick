@@ -254,6 +254,14 @@ nextjs-portal {
   color: var(--ink);
 }
 
+/* 오버레이(모달·시트) 포털 루트용. 스코프(토큰·다크)만 열고 배경은 깔지 않는다 —
+   포털 루트는 `fixed inset-0` 이라 위 배경이 칠해지면 백드롭(bg-black/45) 뒤로 보여야 할
+   화면을 통째로 덮어, 반투명 백드롭이 불투명 판때기가 된다. 글자색은 그대로 상속시킨다.
+   `.wvr-scope` 와 같은 특이도로는 뒤에 온 쪽이 이기므로 클래스 2개로 특이도를 올린다. */
+.wvr-scope.wvr-overlay {
+  background: transparent;
+}
+
 .wvr-scope :focus-visible {
   outline: none;
   box-shadow: 0 0 0 4px var(--ring);

@@ -1,5 +1,7 @@
 'use client';
 
+import { useMemo } from 'react';
+
 import type { SxProps, Theme } from '@mui/material/styles';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -7,6 +9,8 @@ import { TimePicker } from '@mui/x-date-pickers/TimePicker';
 import { renderTimeViewClock } from '@mui/x-date-pickers/timeViewRenderers';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { ko } from 'date-fns/locale';
+
+import { useMediaQuery } from '@/shared/lib';
 
 type Variant = 'outlined' | 'soft';
 
@@ -18,11 +22,22 @@ type Props = {
   variant?: Variant;
 };
 
-/** 페이지 폰트를 그대로 쓰고, 브랜드 컬러(#3182F6)를 시계 팝업 선택 색으로 쓰기 위한 최소 테마 */
-const theme = createTheme({
-  palette: { primary: { main: '#3182F6' } },
-  typography: { fontFamily: 'inherit' },
-});
+/**
+ * 페이지 폰트를 그대로 쓰고, 브랜드 컬러를 시계 팝업 선택 색으로 쓰기 위한 최소 테마.
+ *
+ * 시계 팝업은 MUI 가 body 로 portal 하므로 `.wvr-scope` 밖에 뜬다 — CSS 변수로는 못 물들이고
+ * MUI 팔레트 mode 로만 갈린다. 그래서 아래 sx 의 "인풋"은 토큰으로, "팝업"은 이 mode 로 맞춘다.
+ * 값은 wvr 팔레트의 --primary (라이트 #2E6BE6 / 다크 #7CA5FC) 와 같은 계열로 둔다.
+ */
+function createPickerTheme(dark: boolean) {
+  return createTheme({
+    palette: {
+      mode: dark ? 'dark' : 'light',
+      primary: { main: dark ? '#7CA5FC' : '#3182F6' },
+    },
+    typography: { fontFamily: 'inherit' },
+  });
+}
 
 function toDate(value: string): Date | null {
   const [hRaw, mRaw] = value.split(':');
@@ -58,29 +73,29 @@ const outlinedSx: SxProps<Theme> = {
   '& .MuiOutlinedInput-root': {
     height: 48,
     borderRadius: '14px',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--card, #fff)',
     paddingRight: '10px',
     fontFamily: 'inherit',
     fontSize: '15px',
     fontWeight: 500,
-    color: '#191F28',
-    '&.Mui-focused': { boxShadow: '0 0 0 2px #E1ECFF' },
+    color: 'var(--ink, #191F28)',
+    '&.Mui-focused': { boxShadow: '0 0 0 2px var(--ring, #E1ECFF)' },
   },
   '& .MuiOutlinedInput-input': {
     height: '100%',
     padding: '0 4px 0 16px',
     boxSizing: 'border-box',
   },
-  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#E5E8EB' },
+  '& .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--line, #E5E8EB)' },
   '&:hover .MuiOutlinedInput-root:not(.Mui-focused) .MuiOutlinedInput-notchedOutline': {
-    borderColor: '#E5E8EB',
+    borderColor: 'var(--line, #E5E8EB)',
   },
   '& .Mui-focused .MuiOutlinedInput-notchedOutline': {
-    borderColor: '#3182F6',
+    borderColor: 'var(--primary, #3182F6)',
     borderWidth: '1px',
   },
   '& .MuiInputAdornment-root': { marginLeft: 0 },
-  '& .MuiIconButton-root': { color: '#8B95A1', padding: '6px' },
+  '& .MuiIconButton-root': { color: 'var(--ink-faint, #8B95A1)', padding: '6px' },
   '& .MuiSvgIcon-root': { fontSize: 20 },
   // MUI X v7 TimePicker 의 입력부는 OutlinedInput 이 아니라 PickersInputBase 다 —
   // 위 .MuiOutlinedInput-* 선택자가 안 걸려 글자색이 MUI 기본값(rgba(0,0,0,.87))으로 남는다.
@@ -117,6 +132,8 @@ const softSx: SxProps<Theme> = {
 /** MUI TimePicker(아날로그 TimeClock 팝업)로 시각 선택 (HH:mm). */
 export function TimeField({ label, value, onChange, variant = 'outlined' }: Props) {
   const isSoft = variant === 'soft';
+  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
+  const theme = useMemo(() => createPickerTheme(prefersDark), [prefersDark]);
 
   return (
     <label
@@ -130,7 +147,7 @@ export function TimeField({ label, value, onChange, variant = 'outlined' }: Prop
         className={
           isSoft
             ? 'text-[13px] font-bold text-[color:var(--text-tertiary)]'
-            : 'text-[12px] font-semibold text-[#6B7684]'
+            : 'text-[12px] font-semibold text-[color:var(--ink-sub,#6B7684)]'
         }
       >
         {label}

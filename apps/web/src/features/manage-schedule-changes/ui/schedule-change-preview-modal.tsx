@@ -31,22 +31,27 @@ export function ScheduleChangePreviewModal({ proposalId, tripItems, onClose }: P
     <ModalShell
       label="일정 변경 요청 검토"
       onDismiss={submitting ? undefined : onClose}
-      panelClassName="w-full max-w-[420px] rounded-[20px] bg-white p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
+      themed
+      panelClassName="w-full max-w-[420px] rounded-[20px] bg-[color:var(--card,#fff)] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
     >
-      <h2 className="text-[17px] font-bold text-[#191F28]">일정 변경 요청 검토</h2>
+      <h2 className="text-[17px] font-bold text-[color:var(--ink,#191F28)]">일정 변경 요청 검토</h2>
 
       {isPending ? (
-        <p className="mt-4 text-[14px] text-[#8B95A1]">불러오는 중…</p>
+        <p className="mt-4 text-[14px] text-[color:var(--ink-faint,#8B95A1)]">불러오는 중…</p>
       ) : !proposal ? (
-        <p className="mt-4 text-[14px] text-[#F04452]">요청을 찾을 수 없어요.</p>
+        <p className="mt-4 text-[14px] text-[color:var(--danger,#F04452)]">
+          요청을 찾을 수 없어요.
+        </p>
       ) : (
         <>
-          <p className="mt-1.5 text-[13px] text-[#6B7684]">
-            <span className="font-semibold text-[#191F28]">{proposal.requester.nickname}</span>
+          <p className="mt-1.5 text-[13px] text-[color:var(--ink-sub,#6B7684)]">
+            <span className="font-semibold text-[color:var(--ink,#191F28)]">
+              {proposal.requester.nickname}
+            </span>
             님의 요청 · {proposal.summary}
           </p>
           {resolved ? (
-            <p className="mt-3 rounded-[12px] bg-[#F2F4F6] px-3 py-2 text-[13px] font-semibold text-[#6B7684]">
+            <p className="mt-3 rounded-[12px] bg-[color:var(--card-soft,#F2F4F6)] px-3 py-2 text-[13px] font-semibold text-[color:var(--ink-sub,#6B7684)]">
               이미 처리된 요청이에요.
             </p>
           ) : (
@@ -56,7 +61,7 @@ export function ScheduleChangePreviewModal({ proposalId, tripItems, onClose }: P
           )}
 
           {approve.error || reject.error ? (
-            <p className="mt-3 rounded-[12px] border border-[#FECDD3] bg-[#FFECEE] px-3 py-2 text-[13px] text-[#F04452]">
+            <p className="mt-3 rounded-[12px] border border-[color:var(--danger-border,#FECDD3)] bg-[color:var(--danger-tint,#FFECEE)] px-3 py-2 text-[13px] text-[color:var(--danger,#F04452)]">
               {((approve.error ?? reject.error) as Error).message}
             </p>
           ) : null}
@@ -106,18 +111,26 @@ function ProposalDiff({
     case 'add_item':
       return (
         <DiffBox tone="add" label={`${payload.body.day}일차 추가`}>
-          <div className="text-[14px] font-semibold text-[#191F28]">{payload.body.name}</div>
-          <div className="text-[12px] text-[#6B7684]">{payload.body.scheduledAt} 시작</div>
+          <div className="text-[14px] font-semibold text-[color:var(--ink,#191F28)]">
+            {payload.body.name}
+          </div>
+          <div className="text-[12px] text-[color:var(--ink-sub,#6B7684)]">
+            {payload.body.scheduledAt} 시작
+          </div>
         </DiffBox>
       );
     case 'delete_item': {
       const item = byId.get(payload.itemId);
       return (
         <DiffBox tone="remove" label="삭제">
-          <div className="text-[14px] font-semibold text-[#191F28] line-through">
+          <div className="text-[14px] font-semibold text-[color:var(--ink,#191F28)] line-through">
             {item?.name ?? '(이미 없는 항목)'}
           </div>
-          {item ? <div className="text-[12px] text-[#6B7684]">{item.scheduledAt} 시작</div> : null}
+          {item ? (
+            <div className="text-[12px] text-[color:var(--ink-sub,#6B7684)]">
+              {item.scheduledAt} 시작
+            </div>
+          ) : null}
         </DiffBox>
       );
     }
@@ -126,9 +139,16 @@ function ProposalDiff({
       return (
         <DiffBox tone="change" label="대안 변경">
           <div className="flex items-center gap-2 text-[14px]">
-            <span className="text-[#8B95A1] line-through">{item?.name ?? '기존 장소'}</span>
-            <LuArrowRight className="size-4 shrink-0 text-[#3182F6]" aria-hidden />
-            <span className="font-semibold text-[#191F28]">{payload.body.place.name}</span>
+            <span className="text-[color:var(--ink-faint,#8B95A1)] line-through">
+              {item?.name ?? '기존 장소'}
+            </span>
+            <LuArrowRight
+              className="size-4 shrink-0 text-[color:var(--primary,#3182F6)]"
+              aria-hidden
+            />
+            <span className="font-semibold text-[color:var(--ink,#191F28)]">
+              {payload.body.place.name}
+            </span>
           </div>
         </DiffBox>
       );
@@ -153,10 +173,17 @@ function ProposalDiff({
           <div className="space-y-1">
             {rows.map((row) => (
               <div key={row.label} className="flex items-center gap-2 text-[13px]">
-                <span className="w-8 shrink-0 text-[#8B95A1]">{row.label}</span>
-                <span className="text-[#8B95A1] line-through">{row.before ?? '—'}</span>
-                <LuArrowRight className="size-3.5 shrink-0 text-[#3182F6]" aria-hidden />
-                <span className="font-semibold text-[#191F28]">{row.after}</span>
+                <span className="w-8 shrink-0 text-[color:var(--ink-faint,#8B95A1)]">
+                  {row.label}
+                </span>
+                <span className="text-[color:var(--ink-faint,#8B95A1)] line-through">
+                  {row.before ?? '—'}
+                </span>
+                <LuArrowRight
+                  className="size-3.5 shrink-0 text-[color:var(--primary,#3182F6)]"
+                  aria-hidden
+                />
+                <span className="font-semibold text-[color:var(--ink,#191F28)]">{row.after}</span>
               </div>
             ))}
           </div>
@@ -169,7 +196,7 @@ function ProposalDiff({
       );
       return (
         <DiffBox tone="change" label={`${payload.body.day}일차 순서 변경`}>
-          <ol className="space-y-0.5 text-[13px] text-[#191F28]">
+          <ol className="space-y-0.5 text-[13px] text-[color:var(--ink,#191F28)]">
             {names.map((n) => (
               <li key={n}>{n}</li>
             ))}
@@ -183,14 +210,14 @@ function ProposalDiff({
         targetDays.length > 0 ? `${targetDays.join('·')}일차 AI 재계획` : 'AI 재계획(전체 일정)';
       return (
         <DiffBox tone="change" label={scopeLabel}>
-          <div className="text-[13px] text-[#6B7684]">
+          <div className="text-[13px] text-[color:var(--ink-sub,#6B7684)]">
             {payload.body.note?.trim()
               ? `요청: “${payload.body.note.trim()}”`
               : targetDays.length > 0
                 ? `AI가 ${targetDays.join('·')}일차만 다시 생성해요.`
                 : 'AI가 일정 전체를 다시 생성해요.'}
           </div>
-          <div className="mt-1 text-[12px] text-[#8B95A1]">
+          <div className="mt-1 text-[12px] text-[color:var(--ink-faint,#8B95A1)]">
             승인하면 AI 재계획이 실행되고, 완료 시 일정에 반영돼요.
           </div>
         </DiffBox>
@@ -210,16 +237,16 @@ function DiffBox({
 }) {
   const palette =
     tone === 'add'
-      ? 'border-[#BCE9D6] bg-[#F0FBF6]'
+      ? 'border-[color-mix(in_srgb,var(--ok,#00A86B)_34%,var(--card,#fff))] bg-[color-mix(in_srgb,var(--ok,#00A86B)_10%,var(--card,#fff))]'
       : tone === 'remove'
-        ? 'border-[#FECDD3] bg-[#FFF5F6]'
-        : 'border-[#C7DCFF] bg-[#F5F9FF]';
+        ? 'border-[color:var(--danger-border,#FECDD3)] bg-[color:var(--danger-tint,#FFF5F6)]'
+        : 'border-[color:var(--line-dot,#C7DCFF)] bg-[color:var(--primary-tint,#F5F9FF)]';
   const badge =
     tone === 'add'
-      ? 'bg-[#E5F7EE] text-[#00A86B]'
+      ? 'bg-[color-mix(in_srgb,var(--ok,#00A86B)_14%,var(--card,#fff))] text-[color:var(--ok,#00A86B)]'
       : tone === 'remove'
-        ? 'bg-[#FFECEE] text-[#F04452]'
-        : 'bg-[#EAF2FF] text-[#1B64DA]';
+        ? 'bg-[color:var(--danger-tint,#FFECEE)] text-[color:var(--danger,#F04452)]'
+        : 'bg-[color:var(--primary-tint,#EAF2FF)] text-[color:var(--primary-deep,#1B64DA)]';
   return (
     <div className={`rounded-[14px] border p-3.5 ${palette}`}>
       <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ${badge}`}>

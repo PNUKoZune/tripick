@@ -8,7 +8,8 @@ import { Button, Chip } from '@/shared/ui';
 const toneToBg: Record<PlannerAlternativeDto['categoryTone'], string> = {
   neutral: 'bg-[color:var(--card-soft,#F2F4F6)] text-[color:var(--ink-sub,#6B7684)]',
   primary: 'bg-[color:var(--primary-tint,#EAF2FF)] text-[color:var(--primary-deep,#1B64DA)]',
-  success: 'bg-[#E5F7EE] text-[#00A86B]',
+  success:
+    'bg-[color-mix(in_srgb,var(--ok,#00A86B)_14%,var(--card,#fff))] text-[color:var(--ok,#00A86B)]',
 };
 
 const badgeToneMap: Record<PlannerAlternativeDto['badgeTone'], 'warning' | 'primary' | 'success'> =
@@ -56,7 +57,7 @@ export function AlternativeCard({ alternative, selected, onSelect }: Props) {
                   {alternative.name}
                 </span>
                 {alternative.realPlace ? (
-                  <span className="shrink-0 rounded-full bg-[#E5F7EE] px-1.5 py-0.5 text-[10px] font-bold text-[#00A86B]">
+                  <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--ok,#00A86B)_14%,var(--card,#fff))] px-1.5 py-0.5 text-[10px] font-bold text-[color:var(--ok,#00A86B)]">
                     실제 장소
                   </span>
                 ) : null}
@@ -91,7 +92,7 @@ export function AlternativeCard({ alternative, selected, onSelect }: Props) {
             <div className="flex items-center gap-2 text-[13px] leading-[18px] text-[color:var(--ink-sub,#6B7684)]">
               {alternative.rating !== undefined ? (
                 <>
-                  <span className="text-[#FF8A00]">★</span>
+                  <span className="text-[color:var(--accent-deep,#FF8A00)]">★</span>
                   <span>{alternative.rating.toFixed(1)}</span>
                 </>
               ) : null}

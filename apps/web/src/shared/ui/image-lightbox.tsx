@@ -52,7 +52,7 @@ export function ImageLightbox({ src, label = '이미지 확대 보기', onClose 
           type="button"
           onClick={onClose}
           aria-label="닫기"
-          className="absolute -right-3 -top-3 flex size-9 items-center justify-center rounded-full bg-white text-[color:var(--ink)] shadow-md transition hover:bg-[color:var(--card-soft)]"
+          className="absolute -right-3 -top-3 flex size-9 items-center justify-center rounded-full bg-white text-[color:var(--ink,#191F28)] shadow-md transition hover:bg-[color:var(--card-soft,#F2F4F6)]"
         >
           <FiX className="size-5" aria-hidden />
         </button>

@@ -26,10 +26,7 @@ type Props = {
   onProposed?: (summary: string) => void;
 };
 
-type EditorState =
-  | { mode: 'add' }
-  | { mode: 'edit'; item: PlannerItineraryItemDto }
-  | null;
+type EditorState = { mode: 'add' } | { mode: 'edit'; item: PlannerItineraryItemDto } | null;
 
 export function EditableTimeline({
   tripId,
@@ -115,45 +112,45 @@ export function EditableTimeline({
         </div>
       ) : (
         <>
-        {orderedItems.length >= 2 ? (
-          <p className="mb-2 flex items-center gap-1.5 rounded-[10px] bg-[color:var(--card-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[color:var(--ink-sub)]">
-            <LuGripVertical className="size-3.5 shrink-0 text-[color:var(--ink-faint)]" />
-            왼쪽 손잡이를 잡고 끌어 순서를 바꿀 수 있어요
-          </p>
-        ) : null}
-        <DragDropProvider
-          onDragEnd={(event) => {
-            const next = move(order, event);
-            if (next.join(',') === order.join(',')) return;
-            setOrder(next);
-            reorderItems.mutate(
-              { day, orderedItemIds: next },
-              {
-                // 제안 모드에선 아직 반영 전이므로 낙관적 재배치를 원상복구한다(승인돼야 적용)
-                onSuccess: () => {
-                  if (isProposalMode) setOrder(items.map((i) => i.id));
+          {orderedItems.length >= 2 ? (
+            <p className="mb-2 flex items-center gap-1.5 rounded-[10px] bg-[color:var(--card-soft)] px-2.5 py-1.5 text-[12px] font-medium text-[color:var(--ink-sub)]">
+              <LuGripVertical className="size-3.5 shrink-0 text-[color:var(--ink-faint)]" />
+              왼쪽 손잡이를 잡고 끌어 순서를 바꿀 수 있어요
+            </p>
+          ) : null}
+          <DragDropProvider
+            onDragEnd={(event) => {
+              const next = move(order, event);
+              if (next.join(',') === order.join(',')) return;
+              setOrder(next);
+              reorderItems.mutate(
+                { day, orderedItemIds: next },
+                {
+                  // 제안 모드에선 아직 반영 전이므로 낙관적 재배치를 원상복구한다(승인돼야 적용)
+                  onSuccess: () => {
+                    if (isProposalMode) setOrder(items.map((i) => i.id));
+                  },
+                  onError: () => setOrder(items.map((i) => i.id)),
                 },
-                onError: () => setOrder(items.map((i) => i.id)),
-              },
-            );
-          }}
-        >
-          <div className="space-y-2">
-            {orderedItems.map((item, index) => (
-              <SortableRow
-                key={item.id}
-                item={item}
-                index={index}
-                isLast={index === orderedItems.length - 1}
-                selected={item.id === selectedItemId}
-                onSelect={() => onSelectItem(item)}
-                {...(onSwitchItem ? { onSwitch: () => onSwitchItem(item) } : {})}
-                onEdit={() => setEditor({ mode: 'edit', item })}
-                onDelete={() => setConfirmDelete(item)}
-              />
-            ))}
-          </div>
-        </DragDropProvider>
+              );
+            }}
+          >
+            <div className="space-y-2">
+              {orderedItems.map((item, index) => (
+                <SortableRow
+                  key={item.id}
+                  item={item}
+                  index={index}
+                  isLast={index === orderedItems.length - 1}
+                  selected={item.id === selectedItemId}
+                  onSelect={() => onSelectItem(item)}
+                  {...(onSwitchItem ? { onSwitch: () => onSwitchItem(item) } : {})}
+                  onEdit={() => setEditor({ mode: 'edit', item })}
+                  onDelete={() => setConfirmDelete(item)}
+                />
+              ))}
+            </div>
+          </DragDropProvider>
         </>
       )}
 
@@ -248,6 +245,7 @@ function DeleteConfirm({
     <ModalShell
       label={title}
       onDismiss={pending ? undefined : onCancel}
+      themed
       panelClassName="w-full max-w-[360px] rounded-[20px] bg-[color:var(--card)] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
     >
       <h2 className="text-[17px] font-bold text-[color:var(--ink)]">{title}</h2>

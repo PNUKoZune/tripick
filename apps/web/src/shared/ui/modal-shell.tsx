@@ -51,7 +51,7 @@ export function ModalShell({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-50 flex justify-center ${themed ? 'wvr-scope ' : ''}${
+      className={`fixed inset-0 z-50 flex justify-center ${themed ? 'wvr-scope wvr-overlay ' : ''}${
         align === 'bottom' ? 'items-end p-0 sm:items-center sm:p-5' : 'items-center p-5'
       }`}
       role="dialog"

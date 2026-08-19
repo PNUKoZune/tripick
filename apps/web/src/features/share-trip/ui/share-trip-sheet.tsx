@@ -53,8 +53,7 @@ export function ShareTripSheet({
   });
   const disableMutation = useMutation({
     mutationFn: () => disableTripShare(tripId),
-    onSuccess: () =>
-      queryClient.setQueryData(queryKeys.planner.share(tripId), { token: null }),
+    onSuccess: () => queryClient.setQueryData(queryKeys.planner.share(tripId), { token: null }),
   });
 
   const token = statusQuery.data?.token ?? null;
@@ -105,75 +104,79 @@ export function ShareTripSheet({
   const canShareNative = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
   return (
-    <BottomSheet open={open} onClose={onClose} label="일정 공유">
+    <BottomSheet open={open} onClose={onClose} label="일정 공유" themed>
       <div className="px-5 pb-6 pt-2">
-        <h2 className="text-[18px] font-bold text-[#191F28]">일정 공유</h2>
-        <p className="mt-1 text-[13px] text-[#8B95A1]">
+        <h2 className="text-[18px] font-bold text-[color:var(--ink,#191F28)]">일정 공유</h2>
+        <p className="mt-1 text-[13px] text-[color:var(--ink-faint,#8B95A1)]">
           링크로 공유하거나 이미지·PDF 로 저장할 수 있어요.
         </p>
 
         {/* 링크 공유 (owner 만) */}
         {canShareLink ? (
-        <section className="mt-4 rounded-[16px] border border-[#E5E8EB] p-4">
-          <div className="flex items-center gap-2">
-            <LuLink className="size-4 text-[#3182F6]" />
-            <h3 className="text-[14px] font-bold text-[#191F28]">링크 공유</h3>
-          </div>
+          <section className="mt-4 rounded-[16px] border border-[color:var(--line,#E5E8EB)] p-4">
+            <div className="flex items-center gap-2">
+              <LuLink className="size-4 text-[color:var(--primary,#3182F6)]" />
+              <h3 className="text-[14px] font-bold text-[color:var(--ink,#191F28)]">링크 공유</h3>
+            </div>
 
-          {token ? (
-            <>
-              <div className="mt-3 flex items-center gap-2 rounded-[12px] bg-[#F7F8FA] px-3 py-2.5">
-                <span className="min-w-0 flex-1 truncate text-[13px] text-[#4E5968]">{shareUrl}</span>
-                <button
-                  type="button"
-                  onClick={copyLink}
-                  className="flex h-8 shrink-0 items-center gap-1 rounded-[8px] bg-white px-2.5 text-[12px] font-bold text-[#3182F6] shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
-                >
-                  {copied ? <LuCheck className="size-3.5" /> : <LuCopy className="size-3.5" />}
-                  {copied ? '복사됨' : '복사'}
-                </button>
-              </div>
-              <div className="mt-2 flex items-center gap-2">
-                {canShareNative ? (
-                  <Button variant="primary" size="md" className="flex-1" onClick={nativeShare}>
-                    <span className="flex items-center gap-1.5">
-                      <LuShare2 className="size-4" />
-                      공유하기
-                    </span>
-                  </Button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => disableMutation.mutate()}
-                  disabled={disableMutation.isPending}
-                  className="h-10 rounded-[12px] px-3 text-[13px] font-semibold text-[#F04452] hover:bg-[#FFECEE] disabled:opacity-50"
-                >
-                  공유 중지
-                </button>
-              </div>
-              <p className="mt-2 text-[11px] text-[#B0B8C1]">
-                링크가 있는 누구나 이 일정을 볼 수 있어요.
-              </p>
-            </>
-          ) : (
-            <Button
-              variant="secondary"
-              size="md"
-              className="mt-3 w-full"
-              disabled={enableMutation.isPending || statusQuery.isLoading}
-              onClick={() => enableMutation.mutate()}
-            >
-              {enableMutation.isPending ? '만드는 중…' : '공유 링크 만들기'}
-            </Button>
-          )}
-        </section>
+            {token ? (
+              <>
+                <div className="mt-3 flex items-center gap-2 rounded-[12px] bg-[color:var(--card-soft,#F7F8FA)] px-3 py-2.5">
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-[color:var(--ink-sub,#4E5968)]">
+                    {shareUrl}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={copyLink}
+                    className="flex h-8 shrink-0 items-center gap-1 rounded-[8px] bg-[color:var(--card,#fff)] px-2.5 text-[12px] font-bold text-[color:var(--primary,#3182F6)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
+                  >
+                    {copied ? <LuCheck className="size-3.5" /> : <LuCopy className="size-3.5" />}
+                    {copied ? '복사됨' : '복사'}
+                  </button>
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  {canShareNative ? (
+                    <Button variant="primary" size="md" className="flex-1" onClick={nativeShare}>
+                      <span className="flex items-center gap-1.5">
+                        <LuShare2 className="size-4" />
+                        공유하기
+                      </span>
+                    </Button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => disableMutation.mutate()}
+                    disabled={disableMutation.isPending}
+                    className="h-10 rounded-[12px] px-3 text-[13px] font-semibold text-[color:var(--danger,#F04452)] hover:bg-[color:var(--danger-tint,#FFECEE)] disabled:opacity-50"
+                  >
+                    공유 중지
+                  </button>
+                </div>
+                <p className="mt-2 text-[11px] text-[color:var(--ink-faint,#B0B8C1)]">
+                  링크가 있는 누구나 이 일정을 볼 수 있어요.
+                </p>
+              </>
+            ) : (
+              <Button
+                variant="secondary"
+                size="md"
+                className="mt-3 w-full"
+                disabled={enableMutation.isPending || statusQuery.isLoading}
+                onClick={() => enableMutation.mutate()}
+              >
+                {enableMutation.isPending ? '만드는 중…' : '공유 링크 만들기'}
+              </Button>
+            )}
+          </section>
         ) : null}
 
         {/* 저장 */}
-        <section className="mt-3 rounded-[16px] border border-[#E5E8EB] p-4">
+        <section className="mt-3 rounded-[16px] border border-[color:var(--line,#E5E8EB)] p-4">
           <div className="flex items-center gap-2">
-            <LuDownload className="size-4 text-[#3182F6]" />
-            <h3 className="text-[14px] font-bold text-[#191F28]">이미지 · PDF 저장</h3>
+            <LuDownload className="size-4 text-[color:var(--primary,#3182F6)]" />
+            <h3 className="text-[14px] font-bold text-[color:var(--ink,#191F28)]">
+              이미지 · PDF 저장
+            </h3>
           </div>
           <div className="mt-3 flex items-center gap-2">
             <Button
@@ -202,7 +205,7 @@ export function ShareTripSheet({
             </Button>
           </div>
           {exportError ? (
-            <p className="mt-2 text-[12px] text-[#F04452]">{exportError}</p>
+            <p className="mt-2 text-[12px] text-[color:var(--danger,#F04452)]">{exportError}</p>
           ) : null}
         </section>
       </div>

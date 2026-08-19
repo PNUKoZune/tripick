@@ -24,15 +24,15 @@ export function Button({
     'inline-flex items-center justify-center rounded-[18px] px-5 text-[16px] font-semibold leading-[24px] transition disabled:cursor-not-allowed';
   const variantClass = (() => {
     if (disabled) {
-      return 'bg-[#E5E8EB] text-[#B0B8C1]';
+      return 'bg-[color:var(--line,#E5E8EB)] text-[color:var(--ink-faint,#B0B8C1)]';
     }
     switch (variant) {
       case 'primary':
-        return 'bg-[#3182F6] text-white hover:bg-[#1B64DA]';
+        return 'bg-[color:var(--primary,#3182F6)] text-white hover:bg-[color:var(--primary-deep,#1B64DA)]';
       case 'secondary':
-        return 'bg-white text-[#191F28] border border-[#D6DBE1] hover:bg-[#F2F4F6]';
+        return 'bg-[color:var(--card,#fff)] text-[color:var(--ink,#191F28)] border border-[color:var(--line,#D6DBE1)] hover:bg-[color:var(--card-soft,#F2F4F6)]';
       case 'ghost':
-        return 'bg-transparent text-[#4E5968] hover:bg-[#F2F4F6]';
+        return 'bg-transparent text-[color:var(--ink-sub,#4E5968)] hover:bg-[color:var(--card-soft,#F2F4F6)]';
     }
   })();
   return (

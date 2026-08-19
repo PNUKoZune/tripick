@@ -22,7 +22,12 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#ffffff',
+  // 브라우저·웹뷰 크롬 색. 단일 값으로 두면 화면이 다크로 넘어가도 상단 바만 흰색으로 남는다.
+  // 값은 "광안리의 하루" 팔레트의 --bg (라이트 #F5F7FB / 다크 #0B111E) 와 맞춘다.
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#F5F7FB' },
+    { media: '(prefers-color-scheme: dark)', color: '#0B111E' },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

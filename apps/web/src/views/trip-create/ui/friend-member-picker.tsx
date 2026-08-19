@@ -102,7 +102,7 @@ export function FriendMemberPicker({ members, onAdd, onRemove }: Props) {
           return (
             <span
               key={member.id}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#F2F4F6] pl-2 pr-1 text-[13px] font-semibold text-[#191F28]"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[color:var(--card-soft,#F2F4F6)] pl-2 pr-1 text-[13px] font-semibold text-[color:var(--ink,#191F28)]"
             >
               <FriendAvatar friend={{ color: member.color, initial: member.initial }} size="sm" />
               <span>{member.initial}</span>
@@ -111,7 +111,7 @@ export function FriendMemberPicker({ members, onAdd, onRemove }: Props) {
                   type="button"
                   onClick={() => onRemove(member.id)}
                   aria-label={`${member.initial} 제거`}
-                  className="ml-0.5 flex size-6 items-center justify-center rounded-full text-[#8B95A1] hover:bg-[#E5E8EB] hover:text-[#191F28]"
+                  className="ml-0.5 flex size-6 items-center justify-center rounded-full text-[color:var(--ink-faint,#8B95A1)] hover:bg-[color:var(--line,#E5E8EB)] hover:text-[color:var(--ink,#191F28)]"
                 >
                   ×
                 </button>
@@ -126,8 +126,8 @@ export function FriendMemberPicker({ members, onAdd, onRemove }: Props) {
           aria-expanded={open}
           className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold transition ${
             open
-              ? 'border-[#3182F6] bg-[#EAF2FF] text-[#1B64DA]'
-              : 'border-dashed border-[#D6DBE1] bg-white text-[#6B7684] hover:bg-[#FAFBFC]'
+              ? 'border-[color:var(--primary,#3182F6)] bg-[color:var(--primary-tint,#EAF2FF)] text-[color:var(--primary-deep,#1B64DA)]'
+              : 'border-dashed border-[color:var(--line,#D6DBE1)] bg-[color:var(--card,#fff)] text-[color:var(--ink-sub,#6B7684)] hover:bg-[color:var(--card-soft,#FAFBFC)]'
           }`}
         >
           <span aria-hidden>＋</span>
@@ -137,33 +137,35 @@ export function FriendMemberPicker({ members, onAdd, onRemove }: Props) {
 
       {open ? (
         <div
-          className={`absolute left-0 right-0 z-30 flex flex-col overflow-hidden rounded-[14px] border border-[#E5E8EB] bg-white shadow-[0_12px_28px_rgba(0,0,0,0.08)] ${
+          className={`absolute left-0 right-0 z-30 flex flex-col overflow-hidden rounded-[14px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] shadow-[0_12px_28px_rgba(0,0,0,0.08)] ${
             direction === 'down' ? 'top-[calc(100%+8px)]' : 'bottom-[calc(100%+8px)]'
           }`}
           style={{ maxHeight }}
         >
-          <div className="border-b border-[#E5E8EB] bg-[#F7F8FA] px-3 py-2">
+          <div className="border-b border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#F7F8FA)] px-3 py-2">
             <input
               type="text"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="이름 또는 ID 검색"
               autoFocus
-              className="h-8 w-full bg-transparent text-[13px] font-semibold text-[#191F28] outline-none placeholder:text-[#8B95A1]"
+              className="h-8 w-full bg-transparent text-[13px] font-semibold text-[color:var(--ink,#191F28)] outline-none placeholder:text-[color:var(--ink-faint,#8B95A1)]"
             />
           </div>
 
           {errorMessage ? (
-            <div className="px-3 py-3 text-[12px] font-semibold text-[#F04452]">{errorMessage}</div>
+            <div className="px-3 py-3 text-[12px] font-semibold text-[color:var(--danger,#F04452)]">
+              {errorMessage}
+            </div>
           ) : null}
 
           <div className="min-h-0 flex-1 overflow-y-auto">
             {isPending ? (
-              <div className="px-3 py-4 text-center text-[12px] text-[#8B95A1]">
+              <div className="px-3 py-4 text-center text-[12px] text-[color:var(--ink-faint,#8B95A1)]">
                 친구 목록 불러오는 중…
               </div>
             ) : candidates.length === 0 ? (
-              <div className="px-3 py-4 text-center text-[12px] text-[#8B95A1]">
+              <div className="px-3 py-4 text-center text-[12px] text-[color:var(--ink-faint,#8B95A1)]">
                 추가할 수 있는 친구가 없어요.
                 <div className="mt-1 text-[11px]">먼저 친구 페이지에서 친구를 등록해주세요.</div>
               </div>
@@ -190,21 +192,25 @@ export function FriendMemberPicker({ members, onAdd, onRemove }: Props) {
                       }
                     }}
                     className={`flex w-full items-center gap-3 px-3 py-2 text-left transition ${
-                      selected ? 'bg-[#EAF2FF]' : 'hover:bg-[#F7F8FA]'
+                      selected
+                        ? 'bg-[color:var(--primary-tint,#EAF2FF)]'
+                        : 'hover:bg-[color:var(--card-soft,#F7F8FA)]'
                     }`}
                   >
                     <FriendAvatar friend={friend} size="md" />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[14px] font-bold text-[#191F28]">
+                      <div className="truncate text-[14px] font-bold text-[color:var(--ink,#191F28)]">
                         {friend.nickname}
                       </div>
-                      <div className="truncate text-[12px] text-[#8B95A1]">{friend.handle}</div>
+                      <div className="truncate text-[12px] text-[color:var(--ink-faint,#8B95A1)]">
+                        {friend.handle}
+                      </div>
                     </div>
                     <span
                       className={`flex size-6 items-center justify-center rounded-full border text-[12px] ${
                         selected
-                          ? 'border-[#3182F6] bg-[#3182F6] text-white'
-                          : 'border-[#D6DBE1] text-transparent'
+                          ? 'border-[color:var(--primary,#3182F6)] bg-[color:var(--primary,#3182F6)] text-white'
+                          : 'border-[color:var(--line,#D6DBE1)] text-transparent'
                       }`}
                       aria-hidden
                     >

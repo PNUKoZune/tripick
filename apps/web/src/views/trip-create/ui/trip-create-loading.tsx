@@ -25,15 +25,17 @@ export function TripCreateLoading() {
     <div
       role="status"
       aria-live="polite"
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-7 bg-white px-8"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-7 bg-[color:var(--card,#fff)] px-8"
     >
       <div className="relative flex size-16 items-center justify-center">
-        <span className="absolute inset-0 animate-spin rounded-full border-[3px] border-[#E5E8EB] border-t-[#3182F6]" />
-        <LuPlane className="size-6 text-[#3182F6]" />
+        <span className="absolute inset-0 animate-spin rounded-full border-[3px] border-[color:var(--line,#E5E8EB)] border-t-[color:var(--primary,#3182F6)]" />
+        <LuPlane className="size-6 text-[color:var(--primary,#3182F6)]" />
       </div>
       <div className="text-center">
-        <p className="text-[17px] font-bold text-[#191F28]">여행을 만들고 있어요</p>
-        <p className="mt-2 text-[14px] text-[#6B7684]">{MESSAGES[index]}</p>
+        <p className="text-[17px] font-bold text-[color:var(--ink,#191F28)]">
+          여행을 만들고 있어요
+        </p>
+        <p className="mt-2 text-[14px] text-[color:var(--ink-sub,#6B7684)]">{MESSAGES[index]}</p>
       </div>
     </div>
   );
