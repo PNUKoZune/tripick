@@ -132,7 +132,7 @@ export class UsersService {
       const handle =
         attempt < HANDLE_ATTEMPTS - 1
           ? await this.generateUniqueHandle(base)
-          : `${slugifyHandle(base)}${randomBytes(4).toString('hex')}`;
+          : randomizedHandle(slugifyHandle(base));
       try {
         return await this.repo.save(
           this.repo.create({
@@ -218,16 +218,34 @@ export class UsersService {
   }
 
 
-  /** base 를 슬러그화하고 충돌 시 숫자 suffix 를 붙여 유니크 핸들 생성. */
+  /**
+   * base 를 슬러그화하고 충돌 시 숫자 suffix 를 붙여 유니크 핸들 생성.
+   *
+   * 이름에서 root 를 못 뽑으면(한글 닉네임 등) 순번 경쟁 대신 랜덤 핸들로 바로 간다.
+   * 공용 root 로 순번을 돌리면 그 이름의 가입자가 늘어날수록 앞 순번을 전부 조회해서 지나가야
+   * 하고(가입 1건당 최대 50번의 순차 DB 조회), 핸들 자체도 user, user1 … 로 식별값이 못 된다.
+   */
   private async generateUniqueHandle(base: string): Promise<string> {
     const root = slugifyHandle(base);
+    if (!root) return this.generateRandomHandle();
     for (let i = 0; i < 50; i++) {
       const candidate = i === 0 ? root : `${root}${i}`;
       const taken = await this.repo.findOneBy({ handle: candidate });
       if (!taken) return candidate;
     }
     // 극단적 충돌 — 랜덤 suffix 로 마무리
-    return `${root}${randomBytes(3).toString('hex')}`;
+    return randomizedHandle(root);
+  }
+
+  /** root 없는 이름용 랜덤 핸들. 충돌 확률이 낮아 몇 번만 확인하고 넘어간다. */
+  private async generateRandomHandle(): Promise<string> {
+    for (let i = 0; i < 5; i++) {
+      const candidate = randomizedHandle('');
+      const taken = await this.repo.findOneBy({ handle: candidate });
+      if (!taken) return candidate;
+    }
+    // 5번 연속 부딪히는 건 사실상 불가능 — 그래도 왔다면 갈래를 크게 늘려 끝낸다.
+    return `user${randomBytes(6).toString('hex')}`;
   }
 
   async updateNotificationPreferences(
@@ -399,21 +417,37 @@ function extForMime(mime: string): string {
   return 'bin';
 }
 
-const HANDLE_REGEX = /^[a-z0-9_]{3,20}$/;
+const HANDLE_MAX_LENGTH = 20;
+const HANDLE_REGEX = new RegExp(`^[a-z0-9_]{3,${HANDLE_MAX_LENGTH}}$`);
 
 /** 이메일의 @ 앞부분(local-part)을 소문자로. 이메일이 없으면 빈 문자열. */
 function localPart(email?: string | null): string {
   return (email ?? '').split('@')[0]?.trim().toLowerCase() ?? '';
 }
 
-/** 임의 문자열 → 핸들 슬러그. 영숫자/언더스코어만 남기고 3~20자로 맞춘다. 비면 'user'. */
+/**
+ * 임의 문자열 → 핸들 슬러그. 영숫자/언더스코어만 남기고 3~20자로 맞춘다.
+ * 남는 글자가 없으면(한글 등 비-ASCII 이름) **빈 문자열**을 돌려준다 — 여기서 'user' 같은
+ * 공용 root 를 만들어 주면 그 이름의 모든 신규 가입자가 user, user1, user2 … 순번을 다툰다.
+ * 이름에서 root 를 못 뽑았다는 사실은 호출부가 알아야 랜덤 핸들로 흩을 수 있다.
+ */
 function slugifyHandle(base: string): string {
   const slug = base
     .toLowerCase()
     .replace(/[^a-z0-9_]+/g, '')
-    .slice(0, 20);
+    .slice(0, HANDLE_MAX_LENGTH);
   if (slug.length >= 3) return slug;
-  if (slug.length === 0) return 'user'; // 한글 등 비-ASCII 닉네임 → user, user1 …
+  if (slug.length === 0) return '';
   return slug.padEnd(3, '0'); // 1~2자 → ab0, a00
+}
 
+/**
+ * 자동 생성 핸들에 랜덤 접미사를 붙인다. root 가 비면 'user' 를 쓰되 순번이 아니라 랜덤이라
+ * 서로 부딪히지 않는다(6자 hex = 1,600만 갈래).
+ * 사용자가 직접 지정하는 핸들과 같은 20자 상한을 지키도록 root 를 먼저 자른다.
+ */
+function randomizedHandle(root: string): string {
+  const suffix = randomBytes(3).toString('hex'); // 6자
+  const stem = (root || 'user').slice(0, HANDLE_MAX_LENGTH - suffix.length);
+  return `${stem}${suffix}`;
 }

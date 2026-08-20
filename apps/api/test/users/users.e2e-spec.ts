@@ -24,6 +24,7 @@ describe('Users (e2e)', () => {
   let withdrawals: Repository<WithdrawalReasonEntity>;
   let refreshTokens: Repository<RefreshTokenEntity>;
   let emailTokens: Repository<EmailTokenEntity>;
+  let service: UsersService;
   // 스토리지 미설정 상태를 흉내내 업로드 503 경로를 검증한다.
   const storage = {
     isReady: jest.fn().mockReturnValue(false),
@@ -55,6 +56,7 @@ describe('Users (e2e)', () => {
     withdrawals = app.get(getRepositoryToken(WithdrawalReasonEntity));
     refreshTokens = app.get(getRepositoryToken(RefreshTokenEntity));
     emailTokens = app.get(getRepositoryToken(EmailTokenEntity));
+    service = app.get(UsersService);
   });
 
   afterAll(async () => {
@@ -330,6 +332,31 @@ describe('Users (e2e)', () => {
       expect(await fcmTokens.findBy({ userId: uid })).toHaveLength(0);
       expect(await refreshTokens.findBy({ userId: uid })).toHaveLength(0);
       expect(await emailTokens.findBy({ userId: uid })).toHaveLength(0);
+    });
+  });
+
+  describe('핸들 자동 생성', () => {
+    it('한글 닉네임 가입자끼리 핸들이 겹치지 않는다 (user, user1 … 순번 아님)', async () => {
+      const a = await service.findOrCreateByKakao({ id: 'kakao-han-1', nickname: '여행자' });
+      const b = await service.findOrCreateByKakao({ id: 'kakao-han-2', nickname: '여행자' });
+
+      expect(a.handle).not.toBe(b.handle);
+      // 공용 root 를 순번으로 다투던 옛 동작('user', 'user1')이 돌아오면 여기서 걸린다.
+      expect(a.handle).toMatch(/^user[0-9a-f]{6}$/);
+      expect(b.handle).toMatch(/^user[0-9a-f]{6}$/);
+    });
+
+    it('ASCII 가 있는 이름은 그대로 root 로 쓴다', async () => {
+      const user = await service.findOrCreateByKakao({ id: 'kakao-ascii-1', nickname: 'Voyager' });
+      expect(user.handle).toBe('voyager');
+    });
+
+    it('자동 생성 핸들도 사용자가 지정할 수 있는 형식(3~20자)을 지킨다', async () => {
+      const created = await service.createEmailUser({
+        email: 'handle-shape@tripick.test',
+        nickname: '한글이름',
+      });
+      expect(created?.handle).toMatch(/^[a-z0-9_]{3,20}$/);
     });
   });
 });
