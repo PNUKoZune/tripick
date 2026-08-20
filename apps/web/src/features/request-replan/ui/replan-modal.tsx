@@ -135,7 +135,9 @@ export function ReplanModal({
     <BottomSheet open={open} onClose={onClose} label="AI 재계획" themed>
       {/* @MX:NOTE: 목업의 사유 칩·"지금 일정" 비교 블록은 새 폼 상태를 도입하므로
           의도적으로 제외한다(Out of Scope — spec.md §D, REQ-WVR-051). */}
-      <div className="wvr-scope px-5 pb-6 pt-2">
+      {/* 스코프는 BottomSheet(themed) 포털 루트가 이미 열어 뒀다. 여기서 다시 붙이면
+          `.wvr-scope{background:var(--bg)}` 가 시트 패널의 --card 를 페이지 배경색으로 덮는다. */}
+      <div className="px-5 pb-6 pt-2">
         <div className="flex items-center gap-2">
           <span className="flex size-8 items-center justify-center rounded-full bg-[color:var(--primary-tint)] text-[color:var(--primary)]">
             <LuSparkles className="size-4" />

@@ -251,17 +251,31 @@ nextjs-portal {
   }
 }
 
-.wvr-scope {
-  background: var(--bg);
-  color: var(--ink);
-}
+/* 스코프 기본 면. `@layer base` 에 둬야 하는 이유 — 이 파일의 규칙은 레이어 밖이라
+   Tailwind 유틸리티(@layer utilities)를 무조건 이긴다. 그러면 `wvr-scope bg-[…var(--card)]`
+   처럼 스코프를 열면서 면 색을 따로 지정한 요소가 전부 --bg 로 덮여, 카드·모달 패널이
+   페이지 배경색으로 칠해진다. base 로 내리면 유틸리티가 이기고, 면을 안 정한 요소는
+   그대로 --bg 를 받는다. */
+@layer base {
+  .wvr-scope {
+    background: var(--bg);
+    color: var(--ink);
 
-/* 오버레이(모달·시트) 포털 루트용. 스코프(토큰·다크)만 열고 배경은 깔지 않는다 —
-   포털 루트는 `fixed inset-0` 이라 위 배경이 칠해지면 백드롭(bg-black/45) 뒤로 보여야 할
-   화면을 통째로 덮어, 반투명 백드롭이 불투명 판때기가 된다. 글자색은 그대로 상속시킨다.
-   `.wvr-scope` 와 같은 특이도로는 뒤에 온 쪽이 이기므로 클래스 2개로 특이도를 올린다. */
-.wvr-scope.wvr-overlay {
-  background: transparent;
+    /* 스크롤바도 스코프 색을 따라가게. color-scheme 만으로는 브라우저 기본 중성 회색
+       (다크 트랙 #2c2c2c)이라 남색 계열 카드 위에서 이물감이 생긴다. 트랙을 비워
+       아래 면 색이 그대로 비치게 하고 엄지만 선 색으로 그린다. scrollbar-color 는
+       상속되므로 스코프 안 모든 스크롤 영역이 따라온다(scrollbar-width 는 상속되지 않아
+       스코프 루트에만 걸리므로 손대지 않는다). */
+    scrollbar-color: var(--line-dot) transparent;
+  }
+
+  /* 오버레이(모달·시트) 포털 루트용. 스코프(토큰·다크)만 열고 배경은 깔지 않는다 —
+     포털 루트는 `fixed inset-0` 이라 위 배경이 칠해지면 백드롭(bg-black/45) 뒤로 보여야 할
+     화면을 통째로 덮어, 반투명 백드롭이 불투명 판때기가 된다. 글자색은 그대로 상속시킨다.
+     `.wvr-scope` 와 같은 특이도로는 뒤에 온 쪽이 이기므로 클래스 2개로 특이도를 올린다. */
+  .wvr-scope.wvr-overlay {
+    background: transparent;
+  }
 }
 
 /* 네이티브 시간 입력(TimeField). 시계 아이콘은 우리가 그리므로 브라우저 기본
