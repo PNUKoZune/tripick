@@ -110,7 +110,7 @@ function ConfirmDialog({
           type="button"
           onClick={onConfirm}
           disabled={pending}
-          className="h-11 flex-1 rounded-[12px] bg-[color:var(--danger,#F04452)] text-[14px] font-bold text-[color:var(--btn-text,#FFFFFF)] hover:brightness-95 disabled:opacity-50"
+          className="h-11 flex-1 rounded-[12px] bg-[color:var(--danger-deep,#D33241)] text-[14px] font-bold text-[color:var(--danger-on,#FFFFFF)] hover:brightness-95 disabled:opacity-50"
         >
           {pending ? '삭제 중…' : '삭제하기'}
         </button>

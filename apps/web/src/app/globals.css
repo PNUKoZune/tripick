@@ -151,6 +151,11 @@ nextjs-portal {
   --danger: #f04452;
   --danger-tint: #ffecee;
   --danger-border: #fecdd3;
+  /* 빨강으로 꽉 채운 면(삭제 버튼·알림 배지) 전용 짝. --danger 를 그대로 깔면
+     흰 글자가 3.7:1 로 WCAG AA(4.5:1) 미달이라, 면만 한 단계 눌러 흰 글자를
+     4.9:1 로 올린다. 테두리·틴트 위 빨간 글자는 --danger 그대로 쓴다. */
+  --danger-deep: #d33241;
+  --danger-on: #ffffff;
   --ok: #3b7a57;
 
   /* 하루의 빛 — 4-stop 타임라인 색 (시그니처) */
@@ -226,6 +231,11 @@ nextjs-portal {
     --danger: #ff6b76;
     --danger-tint: #3a1519;
     --danger-border: #5c2229;
+    /* 다크는 면 색을 그대로 두고 글자를 뒤집는다 — 어두운 바탕에서 빨강을 더 눌러
+       버리면 버튼이 죽어 보이고, 흰 글자로는 2.8:1 밖에 안 나온다. 어두운 잉크를
+       얹으면 같은 빨강으로 6.6:1. */
+    --danger-deep: #ff6b76;
+    --danger-on: #2b0b0f;
     --ok: #4caf7d;
 
     --t-morning: #8fbcff;

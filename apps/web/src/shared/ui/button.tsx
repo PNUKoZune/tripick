@@ -23,7 +23,10 @@ const VARIANT_CLASS: Record<Variant, string> = {
     'border border-[color:var(--line,#D6DBE1)] bg-[color:var(--card,#fff)] text-[color:var(--ink,#191F28)] hover:bg-[color:var(--card-soft,#F2F4F6)]',
   ghost:
     'bg-[color:var(--card-soft,#F2F4F6)] text-[color:var(--ink-sub,#4E5968)] hover:bg-[color:var(--line,#E5E8EB)]',
-  danger: 'bg-[color:var(--danger,#F04452)] text-white hover:brightness-95',
+  // 면은 --danger 가 아니라 --danger-deep. 흰 글자를 --danger 위에 얹으면 3.7:1 로
+  // WCAG AA 미달이라 채움 전용 짝(--danger-deep / --danger-on)을 따로 둔다.
+  danger:
+    'bg-[color:var(--danger-deep,#D33241)] text-[color:var(--danger-on,#fff)] hover:brightness-95',
   // 카카오 브랜드 색은 고정값 — 다크에서도 버튼 자체가 브랜드 자산이라 토큰화하지 않는다.
   kakao: 'bg-[#FEE500] text-[#191919] hover:brightness-95',
 };

@@ -267,7 +267,7 @@ function DeleteConfirm({
           type="button"
           onClick={onConfirm}
           disabled={pending}
-          className="h-11 flex-1 rounded-[12px] bg-[color:var(--danger)] text-[14px] font-bold text-[color:var(--btn-text)] hover:brightness-95 disabled:opacity-50"
+          className="h-11 flex-1 rounded-[12px] bg-[color:var(--danger-deep)] text-[14px] font-bold text-[color:var(--danger-on)] hover:brightness-95 disabled:opacity-50"
         >
           {pending ? '처리 중…' : proposalMode ? '삭제 요청' : '삭제'}
         </button>

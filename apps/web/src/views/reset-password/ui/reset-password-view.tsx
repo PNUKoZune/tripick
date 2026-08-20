@@ -28,7 +28,7 @@ export function ResetPasswordView() {
             </p>
             <Link
               href="/forgot-password"
-              className="mt-3 inline-flex h-10 items-center rounded-[12px] bg-[color:var(--danger)] px-4 text-[13px] font-bold text-[color:var(--btn-text)]"
+              className="mt-3 inline-flex h-10 items-center rounded-[12px] bg-[color:var(--danger-deep)] px-4 text-[13px] font-bold text-[color:var(--danger-on)]"
             >
               다시 요청하기
             </Link>

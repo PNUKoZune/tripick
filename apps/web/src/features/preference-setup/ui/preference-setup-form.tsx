@@ -1364,7 +1364,7 @@ function StanceButton({
   const label = like ? '선호' : '불호';
   const activeClass = like
     ? 'bg-[color:var(--primary)] text-white'
-    : 'bg-[color:var(--danger)] text-white';
+    : 'bg-[color:var(--danger-deep)] text-[color:var(--danger-on)]';
   return (
     <button
       type="button"
