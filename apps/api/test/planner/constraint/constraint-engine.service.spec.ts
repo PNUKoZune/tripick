@@ -91,6 +91,70 @@ describe('ConstraintEngine', () => {
     expect(result.issues.join('\n')).toContain('기상/취침 시간 범위 밖');
   });
 
+  it('구간 이동시간이 상한을 넘으면 위반으로 잡는다', async () => {
+    // 지역을 이탈한 후보가 들어오면 "예약한 여유 ≥ 실제 ETA" 는 성립해도 하루가 통째로
+    // 이동으로 사라진다(실측: 경주 여행에 단양 '경주식당', 457분).
+    routeHelper.getEta.mockResolvedValue({ durationSec: 457 * 60, distanceM: 152_000 });
+
+    const result = await engine.validate(
+      [
+        item({ id: 'a', name: '경주 서출지', scheduledAt: kst('2026-07-10', '09:00'), durationMin: 90 }),
+        item({ id: 'b', name: '경주식당', order: 2, scheduledAt: kst('2026-07-10', '18:07'), durationMin: 80 }),
+      ],
+      { wakeTime: '07:30', sleepTime: '23:00', transportMode: 'transit' },
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.issues.join('\n')).toContain('이동 시간 과다');
+  });
+
+  describe('tripStartDate 를 주면 일차 활동 구간을 절대 시각으로 본다', () => {
+    it('날짜가 하루 밀린 항목을 잡는다', async () => {
+      // 시각만 보는 검사는 이걸 통과시킨다 — 07:30 은 기상 시각이라 "범위 안"이다.
+      const result = await engine.validate(
+        [item({ name: '첨성대', day: 1, scheduledAt: kst('2026-07-11', '07:30'), durationMin: 90 })],
+        {
+          wakeTime: '07:30',
+          sleepTime: '23:00',
+          transportMode: 'transit',
+          tripStartDate: '2026-07-10',
+        },
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.issues.join('\n')).toContain('1일차 활동 구간 밖');
+    });
+
+    it('취침이 자정을 넘는 여행의 자정 이후 일정은 정상으로 본다', async () => {
+      // 날짜만 비교하면 이걸 전부 위반으로 잡아 재생성이 죽는다.
+      const result = await engine.validate(
+        [item({ name: '심야 포차', day: 1, scheduledAt: kst('2026-07-11', '00:00'), durationMin: 60 })],
+        {
+          wakeTime: '08:00',
+          sleepTime: '01:00',
+          transportMode: 'transit',
+          tripStartDate: '2026-07-10',
+        },
+      );
+
+      expect(result.valid).toBe(true);
+    });
+
+    it('2일차 항목은 시작일 + 1일 구간으로 본다', async () => {
+      const result = await engine.validate(
+        [item({ name: '해운대', day: 2, scheduledAt: kst('2026-07-11', '10:00'), durationMin: 90 })],
+        {
+          wakeTime: '08:00',
+          sleepTime: '22:00',
+          transportMode: 'transit',
+          tripStartDate: '2026-07-10',
+        },
+      );
+
+      expect(result.valid).toBe(true);
+    });
+  });
+
   describe('자정을 넘는 취침 시간 (기상 08:00 / 취침 01:00)', () => {
     const nightOwl = { wakeTime: '08:00', sleepTime: '01:00', transportMode: 'transit' } as const;
 

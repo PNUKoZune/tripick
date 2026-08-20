@@ -1,4 +1,4 @@
-import { timeToMinutes } from '@tripick/utils';
+import { haversineMeters, timeToMinutes } from '@tripick/utils';
 import type { CandidatePlace } from '../retrieval/types';
 import { ESTIMATED_TRAVEL_MINUTES, defaultVisitDuration } from './itinerary-density';
 
@@ -34,6 +34,16 @@ const ROLE_CATEGORY: Record<SlotRole, string> = {
 };
 
 const DINING_CATEGORIES: ReadonlySet<string> = new Set(['restaurant', 'cafe']);
+
+/**
+ * 역할 후보를 근접 창 밖(풀 전체)에서 찾을 때 허용하는 그 일차 기점으로부터의 최대 거리(m).
+ *
+ * 창 안에 식사 후보가 없으면 풀 전체를 훑는데, 이 상한이 없으면 체인 반대쪽 끝(다른 시군구)의
+ * 음식점을 끌어와 그 일차 동선이 통째로 벌어진다. 50km 는 대중교통 실효속도(20km/h)로 약
+ * 150분이라 `ConstraintEngine` 의 구간 이동 상한(180분) 안쪽에 들어온다 — 두 값이 어긋나면
+ * 여기서 고른 후보를 저쪽이 위반으로 떨궈 재생성만 반복한다.
+ */
+const MAX_ROLE_DETOUR_M = 50_000;
 
 /**
  * 하루 슬롯의 역할을 정한다.
@@ -98,7 +108,8 @@ export interface FillDaySlotsParams {
    * 역할에 맞는 후보를 찾을 풀 앞쪽 범위(미사용 기준 개수). 미지정이면 풀 전체.
    *
    * 근접 체인 순서로 들어온 풀에서 이걸 안 걸면, 하루의 식사 자리를 체인 반대쪽 끝에 있는
-   * 음식점이 채워 그 일차 동선이 통째로 벌어진다. 창 안에 역할 후보가 없을 때만 전체를 훑는다.
+   * 음식점이 채워 그 일차 동선이 통째로 벌어진다. 창 안에 역할 후보가 없을 때만 전체를 훑고,
+   * 그때도 `MAX_ROLE_DETOUR_M` 안쪽만 받는다.
    */
   searchWindow?: number;
   /** 앞에서부터 이미 정해진 후보(AI 가 고른 항목). 남은 슬롯만 역할로 채운다. */
@@ -123,6 +134,11 @@ export function fillDaySlots(params: FillDaySlotsParams): CandidatePlace[] {
     used.add(candidate.id);
   });
 
+  // 그 일차의 지리적 기점 — 근접 체인에서 아직 안 쓴 첫 후보가 곧 하루의 출발점이다.
+  const dayOrigin = pool.find((candidate) => !used.has(candidate.id))?.coordinates;
+  const withinDetour = (candidate: CandidatePlace): boolean =>
+    !dayOrigin || haversineMeters(dayOrigin, candidate.coordinates) <= MAX_ROLE_DETOUR_M;
+
   const take = (match: (candidate: CandidatePlace) => boolean, window?: number): CandidatePlace | undefined => {
     let scanned = 0;
     for (const candidate of pool) {
@@ -144,15 +160,20 @@ export function fillDaySlots(params: FillDaySlotsParams): CandidatePlace[] {
     if (role === 'attraction') continue;
     const category = ROLE_CATEGORY[role];
     const matches = (candidate: CandidatePlace) => candidate.category === category;
-    slots[index] = take(matches, searchWindow) ?? take(matches);
+    // 창 안에 없으면 풀 전체를 훑되, 하루 동선을 벌리는 거리까지 가지는 않는다.
+    slots[index] =
+      take(matches, searchWindow) ??
+      take((candidate) => matches(candidate) && withinDetour(candidate));
   }
 
   // 2) 나머지 슬롯은 볼거리 우선, 없으면 남은 아무 후보로 채운다.
   for (let index = 0; index < itemCount; index += 1) {
     if (slots[index]) continue;
+    const sightseeing = (candidate: CandidatePlace) => !DINING_CATEGORIES.has(candidate.category);
     slots[index] =
-      take((candidate) => !DINING_CATEGORIES.has(candidate.category), searchWindow) ??
-      take((candidate) => !DINING_CATEGORIES.has(candidate.category)) ??
+      take(sightseeing, searchWindow) ??
+      take((candidate) => sightseeing(candidate) && withinDetour(candidate)) ??
+      take(withinDetour) ??
       take(() => true);
   }
 

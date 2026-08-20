@@ -6,7 +6,12 @@ import { DestinationAnchorService } from './destination-anchor.service';
 import { KakaoLocalService } from './kakao-local.service';
 import { NaverSearchService, NEUTRAL_POPULARITY } from './naver-search.service';
 import { PlaceEmbeddingRepository, toKstDateString } from './place-embedding.repository';
-import { destinationRegionFilter } from './region-code';
+import {
+  destinationRegionFilter,
+  matchesRegionFilter,
+  placeRegionCodes,
+  type RegionFilter,
+} from './region-code';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { isEligibleItineraryCandidate } from './place-eligibility';
 import type {
@@ -133,9 +138,11 @@ export class PlaceRetrievalService {
 
     let ranked = this.evaluator.rank(rawCandidates, context);
     if (!this.isStrongEnough(ranked, limit)) {
-      const kakao = this.filterEligibleCandidates(
-        await this.kakaoLocal.search(context, limit * 2),
-        'kakao',
+      // 카카오 키워드 폴백은 좌표를 못 주면(앵커·현재 위치 없는 평범한 행정구역 목적지)
+      // **전국이 사정권**이라 타지역 동명 장소가 섞인다. 지역 하드 게이트를 여기서 건다.
+      const kakao = this.filterOutOfRegion(
+        this.filterEligibleCandidates(await this.kakaoLocal.search(context, limit * 2), 'kakao'),
+        regionFilter,
       );
       if (kakao.length > 0) {
         sources.push('kakao');
@@ -420,6 +427,45 @@ export class PlaceRetrievalService {
     if (candidates.length < Math.min(4, targetCount)) return false;
     const top = candidates.slice(0, targetCount);
     return this.averageConfidence(top) >= this.targetConfidence();
+  }
+
+  /**
+   * 목적지 지역이 확정된 검색에서 **다른 지역 후보를 아예 뺀다.**
+   *
+   * CRAG `localityScore` 는 지역 불일치를 0.32 로 감점만 하고 탈락시키지 않는다. 풀이 얇으면
+   * 그대로 살아남아 일정에 박히는데, 그 피해가 순위 문제가 아니다 — 실측에서 경주 여행에
+   * 단양의 '경주식당'(직선 152km)이 들어가 이동시간 457분으로 하루를 통째로 삼켰다.
+   *
+   * 두 가지를 지킨다.
+   *   1. **지역을 못 읽는 후보는 남긴다.** 데이터 없음을 '다른 지역'으로 읽으면 안 된다
+   *      (`localityScore` 가 판정 불가를 중립값으로 두는 것과 같은 원칙).
+   *   2. **한 건도 안 맞으면 게이트를 포기한다.** `destinationRegionFilter` 는 임의 문자열에서도
+   *      시군구 코드를 만들어 내므로('발리' → '발리'), 그대로 두면 전부 탈락해 후보가 0 이 된다.
+   */
+  private filterOutOfRegion(
+    candidates: RawPlaceCandidate[],
+    region: RegionFilter,
+  ): RawPlaceCandidate[] {
+    if (!region.sido && !region.sigungu) return candidates;
+
+    const kept = candidates.filter((candidate) => {
+      const { regionCode, sigunguCode } = placeRegionCodes(
+        candidate.destinationRegion ?? null,
+        null,
+        candidate.address ?? null,
+      );
+      if (!regionCode && !sigunguCode) return true;
+      return matchesRegionFilter(region, regionCode, sigunguCode);
+    });
+
+    if (kept.length === 0) return candidates;
+    const dropped = candidates.length - kept.length;
+    if (dropped > 0) {
+      this.logger.debug(
+        `지역 이탈 후보 ${dropped}건 제외 (기대=${region.sido ?? region.sigungu})`,
+      );
+    }
+    return kept;
   }
 
   private filterEligibleCandidates(

@@ -42,6 +42,76 @@ describe('PlaceRetrievalService candidate eligibility', () => {
   });
 });
 
+describe('PlaceRetrievalService 지역 하드 게이트', () => {
+  /** 카카오 폴백을 태우기 위해 pgvector 를 비운다(풀이 얇아야 폴백이 돈다). */
+  function buildWithKakao(kakaoResults: RawPlaceCandidate[]) {
+    const evaluator = {
+      rank: jest.fn((places: RawPlaceCandidate[]) => places.map(ranked)),
+      selectTopDiverse: jest.fn((places: CandidatePlace[], limit: number) => places.slice(0, limit)),
+      weights: jest.fn(() => DEFAULT_TERM_WEIGHTS),
+    };
+    const kakaoSearch = jest.fn().mockResolvedValue(kakaoResults);
+    const service = new PlaceRetrievalService(
+      config({ PLACE_RETRIEVAL_AUTO_SEED: 'false' }),
+      { embed: jest.fn().mockResolvedValue([1, 0]) } as any,
+      { searchByEmbedding: jest.fn().mockResolvedValue([]), countRegionCandidates: jest.fn() } as any,
+      { search: kakaoSearch } as any,
+      evaluator as any,
+      { getPopularityIndex: jest.fn().mockResolvedValue(disabledPopularityIndex()) } as any,
+      { resolve: jest.fn().mockResolvedValue(null) } as any,
+    );
+    return { service, kakaoSearch };
+  }
+
+  it('다른 지역 후보를 후보 풀에서 뺀다', async () => {
+    // 카카오 키워드 폴백은 좌표를 안 주면 전국이 사정권 — '경주 맛집' 이 단양의 '경주식당'을
+    // 물어온다. CRAG 감점(0.32)만으로는 풀이 얇을 때 그대로 살아남아 이동 457분을 만든다.
+    const { service } = buildWithKakao([
+      regionalCandidate('near-1', '황리단길', '경상북도 경주시 포석로 1080'),
+      regionalCandidate('far-1', '경주식당', '충청북도 단양군 단양읍 도전6길 14'),
+    ]);
+
+    const result = await service.retrieve({ userId: 'u1', destination: '경주', limit: 4 });
+
+    const names = result.places.map((place) => place.name);
+    expect(names).toContain('황리단길');
+    expect(names).not.toContain('경주식당');
+  });
+
+  it('지역을 못 읽는 후보는 남긴다 (데이터 없음 ≠ 다른 지역)', async () => {
+    const { service } = buildWithKakao([
+      regionalCandidate('near-1', '황리단길', '경상북도 경주시 포석로 1080'),
+      regionless('unknown-1', '이름만 있는 곳'),
+    ]);
+
+    const result = await service.retrieve({ userId: 'u1', destination: '경주', limit: 4 });
+
+    expect(result.places.map((place) => place.name)).toContain('이름만 있는 곳');
+  });
+
+  it('한 건도 안 맞으면 게이트를 포기한다', async () => {
+    // destinationRegionFilter 는 임의 문자열에서도 시군구 코드를 만든다('발리' → '발리').
+    // 그대로 두면 전부 탈락해 후보가 0 이 된다.
+    const { service } = buildWithKakao([
+      regionalCandidate('a', '발리 어딘가', '경상북도 경주시 포석로 1080'),
+    ]);
+
+    const result = await service.retrieve({ userId: 'u1', destination: '발리', limit: 4 });
+
+    expect(result.places.map((place) => place.name)).toContain('발리 어딘가');
+  });
+});
+
+function regionalCandidate(id: string, name: string, address: string): RawPlaceCandidate {
+  return { ...candidate(id, name, '여행 > 관광지'), address };
+}
+
+/** 주소·지역 라벨이 둘 다 없는 후보 — 지역을 판정할 수 없는 행. */
+function regionless(id: string, name: string): RawPlaceCandidate {
+  const { destinationRegion: _omit, ...rest } = candidate(id, name, '여행 > 관광지');
+  return { ...rest, address: '' };
+}
+
 describe('PlaceRetrievalService anchor scope', () => {
   const anchor = {
     coordinates: { lat: 35.1532, lng: 129.119 },

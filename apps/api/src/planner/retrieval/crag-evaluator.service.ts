@@ -8,7 +8,12 @@ import {
   type ReplanTrigger,
 } from '@tripick/types';
 import { inferPlaceTags, tasteTagsToKeywords } from './place-seeds';
-import { destinationRegionFilter, placeRegionCodes, type RegionFilter } from './region-code';
+import {
+  destinationRegionFilter,
+  matchesRegionFilter,
+  placeRegionCodes,
+  type RegionFilter,
+} from './region-code';
 import { collapseNearDuplicates } from './near-duplicate';
 import { NEUTRAL_POPULARITY } from './naver-search.service';
 import { isClosedAt } from './opening-hours.parser';
@@ -552,7 +557,7 @@ export class CragEvaluatorService {
     // 지역 라벨이 없는 행(폴백 시드)은 판정 불가 — 데이터 없음을 '다른 지역'으로 읽으면 안 된다.
     if (!regionCode && !sigunguCode) return CragEvaluatorService.NEUTRAL_LOCALITY;
 
-    if (CragEvaluatorService.matchesRegion(expected, regionCode, sigunguCode)) return 0.92;
+    if (matchesRegionFilter(expected, regionCode, sigunguCode)) return 0.92;
     penalties.push('destination-mismatch');
     return 0.32;
   }
@@ -593,16 +598,6 @@ export class CragEvaluatorService {
     return this.readWeight('CRAG_ANCHOR_EDGE_SCORE', DEFAULT_ANCHOR_EDGE_SCORE);
   }
 
-  private static matchesRegion(
-    expected: RegionFilter,
-    regionCode: string | null,
-    sigunguCode: string | null,
-  ): boolean {
-    if (expected.sido) return regionCode === expected.sido;
-    if (expected.sigungu) return sigunguCode === expected.sigungu;
-    return false;
-  }
-
   /**
    * 목적지 코드로 후보를 가를 수 있는지. **한 후보도 안 맞으면 판정을 포기한다.**
    *
@@ -619,7 +614,7 @@ export class CragEvaluatorService {
         null,
         candidate.address ?? null,
       );
-      return CragEvaluatorService.matchesRegion(expected, regionCode, sigunguCode);
+      return matchesRegionFilter(expected, regionCode, sigunguCode);
     });
   }
 

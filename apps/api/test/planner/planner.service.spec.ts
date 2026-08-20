@@ -26,6 +26,23 @@ describe('PlannerService hard constraints', () => {
     );
   });
 
+  it('개장 시각으로 미룬 항목이 그 일차 날짜에 남는다 (전날로 새지 않는다)', async () => {
+    // 기본 기상 08:30 + 10:00 개장. 예전 구현은 시간만 setUTCHours 로 바꿔서, KST 09:00 이전
+    // 시각은 UTC 날짜가 하루 전이라 결과가 통째로 전날 10:00 이 됐다. 검증이 전부 시각 기준이라
+    // 아무 데서도 안 걸렸고, 도착 알림만 엉뚱한 날 떴다.
+    const harness = createHarness(undefined, {
+      trip: { wakeTime: '08:30' },
+      openingHours: '10:00-22:00',
+    });
+    harness.constraintEngine.validate.mockImplementation(
+      async (items: ItineraryItemDto[]) => ({ valid: true, issues: [], items }),
+    );
+
+    const items = await harness.service.generateItinerary(TRIP.id);
+
+    expect(items[0]!.scheduledAt).toBe(new Date('2026-07-10T10:00:00+09:00').toISOString());
+  });
+
   it('rebuilds an invalid AI draft with deterministic CRAG fallback before saving', async () => {
     const harness = createHarness();
     // 1회차(AI 초안)는 제약 위반, 이후(폴백 초안)는 통과하도록 구성한다.
@@ -120,11 +137,18 @@ const TRIP = {
   notes: '카페 위주',
 };
 
-function createHarness(pace?: 'relaxed' | 'balanced' | 'packed') {
-  const candidate = place('place-1', '광안리 카페', 'cafe');
+function createHarness(
+  pace?: 'relaxed' | 'balanced' | 'packed',
+  overrides: { trip?: Record<string, unknown>; openingHours?: string } = {},
+) {
+  const trip = { ...TRIP, ...overrides.trip };
+  const candidate = {
+    ...place('place-1', '광안리 카페', 'cafe'),
+    ...(overrides.openingHours ? { openingHours: overrides.openingHours } : {}),
+  };
   const tripsRepo = {
-    findOneBy: jest.fn().mockResolvedValue({ ...TRIP }),
-    save: jest.fn().mockResolvedValue({ ...TRIP, status: 'confirmed' }),
+    findOneBy: jest.fn().mockResolvedValue({ ...trip }),
+    save: jest.fn().mockResolvedValue({ ...trip, status: 'confirmed' }),
   };
   // trip_days 없음 → 모든 날 = trip.destination(단일 지역) 경로를 탄다
   const tripDaysRepo = {

@@ -81,7 +81,7 @@ describe('fillDaySlots', () => {
     expect(picks.every((place) => place.category === 'attraction')).toBe(true);
   });
 
-  it('근접 창 밖에 있어도 식사 후보는 끌어온다 — 끼니가 빠지는 쪽이 더 나쁘다', () => {
+  it('근접 창 밖에 있어도 가까우면 식사 후보를 끌어온다 — 끼니가 빠지는 쪽이 더 나쁘다', () => {
     // 앞쪽(근접 체인 머리)은 전부 관광지, 음식점은 체인 반대쪽 끝에 있다.
     const pool = [...attractions(20), place('r0', 'restaurant')];
 
@@ -94,6 +94,22 @@ describe('fillDaySlots', () => {
     });
 
     expect(picks.map((place) => place.id)).toContain('r0');
+  });
+
+  it('풀 전체를 훑을 때도 하루 동선을 벌리는 거리까지는 안 간다', () => {
+    // 근접 창 밖 폴백에 거리 상한이 없으면 다른 시군구의 음식점을 끌어와, ConstraintEngine
+    // 구간 이동 상한(180분)에 걸려 재생성만 반복하게 된다.
+    const faraway = { ...place('r-far', 'restaurant'), coordinates: { lat: 36.98, lng: 128.37 } };
+    const picks = fillDaySlots({
+      pool: [...attractions(20), faraway],
+      used: new Set(),
+      startTime: '09:00',
+      itemCount: 4,
+      searchWindow: 8,
+    });
+
+    expect(picks.map((item) => item.id)).not.toContain('r-far');
+    expect(picks).toHaveLength(4);
   });
 
   it('AI 가 채운 자리는 그대로 두고 남은 자리만 역할로 메운다', () => {
