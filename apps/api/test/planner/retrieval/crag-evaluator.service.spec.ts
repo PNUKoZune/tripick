@@ -361,6 +361,43 @@ describe('CragEvaluatorService', () => {
       expect(selected).toHaveLength(6);
     });
 
+    it('식음 하한을 음식점이 다 가져가지 못한다 (카페 자리를 따로 센다)', () => {
+      // 예전엔 식음(restaurant+cafe)을 한 덩어리로 2개만 보장해서, 음식점 2개로 하한이
+      // 채워지면 카페는 영원히 안 들어왔다 — 일정에 카페가 한 번도 없던 원인.
+      const candidates = [
+        ...Array.from({ length: 6 }, (_, i) => candidate(`a${i}`, 'attraction', 0.9 - i * 0.01)),
+        ...Array.from({ length: 4 }, (_, i) => candidate(`r${i}`, 'restaurant', 0.5 - i * 0.01)),
+        candidate('c0', 'cafe', 0.3),
+      ];
+
+      const selected = service.selectTopDiverse(candidates, 8);
+
+      expect(selected.filter((c) => c.category === 'cafe')).toHaveLength(1);
+      expect(selected.filter((c) => c.category === 'restaurant').length).toBeGreaterThanOrEqual(2);
+      expect(selected[0]!.id).toBe('a0');
+    });
+
+    it('일차 수만큼 끼니·카페 자리를 확보한다 (상한보다 하한이 우선)', () => {
+      // 3일 여행이면 끼니만 6번이다. 상한(0.375)이 그보다 작으면 하한을 따른다.
+      const candidates = [
+        ...Array.from({ length: 20 }, (_, i) => candidate(`a${i}`, 'attraction', 0.9 - i * 0.01)),
+        ...Array.from({ length: 8 }, (_, i) => candidate(`r${i}`, 'restaurant', 0.4 - i * 0.01)),
+        ...Array.from({ length: 4 }, (_, i) => candidate(`c${i}`, 'cafe', 0.3 - i * 0.01)),
+      ];
+
+      const selected = service.selectTopDiverse(candidates, 20, {
+        restaurant: 6,
+        cafe: 3,
+        attraction: 2,
+      });
+
+      expect(selected).toHaveLength(20);
+      expect(selected.filter((c) => c.category === 'restaurant')).toHaveLength(6);
+      expect(selected.filter((c) => c.category === 'cafe')).toHaveLength(3);
+      // 하한을 채우느라 상위 점수를 갈아엎지는 않는다.
+      expect(selected[0]!.id).toBe('a0');
+    });
+
     it('한 종류만 있으면 있는 것만 돌려준다 (억지로 못 채운다)', () => {
       const candidates = Array.from({ length: 4 }, (_, i) =>
         candidate(`a${i}`, 'attraction', 0.9 - i * 0.01),

@@ -13,7 +13,13 @@ import { collapseNearDuplicates } from './near-duplicate';
 import { NEUTRAL_POPULARITY } from './naver-search.service';
 import { isClosedAt } from './opening-hours.parser';
 import { DEFAULT_RETRIEVAL_WEIGHT, termWeights, type TermWeights } from './retrieval-rank';
-import type { CandidatePlace, CragScore, RawPlaceCandidate, RetrievalContext } from './types';
+import type {
+  CandidatePlace,
+  CragScore,
+  PoolCategoryQuota,
+  RawPlaceCandidate,
+  RetrievalContext,
+} from './types';
 
 /**
  * mood·environment 태그의 실내 여부. 비(날씨) 재계획에서 실내 후보를 우대할 때 쓴다.
@@ -72,6 +78,8 @@ const INDOOR_TAGS = new Set<string>([
 const DEFAULT_MAX_DINING_RATIO = 0.375;
 const DINING_CATEGORIES: ReadonlySet<string> = new Set(['restaurant', 'cafe']);
 const ATTRACTION_CATEGORIES: ReadonlySet<string> = new Set(['attraction']);
+
+const DEFAULT_POOL_QUOTA: PoolCategoryQuota = { restaurant: 2, cafe: 1, attraction: 2 };
 
 /** 트리거 없음(최초 생성) 및 트리거별 선호 신호가 없을 때 쓰는 중립 점수. */
 const NEUTRAL_TRIGGER_SCORE = 0.64;
@@ -203,9 +211,6 @@ export class CragEvaluatorService {
     return Number.isFinite(value) ? value : fallback;
   }
 
-  /** 후보 풀이 반드시 담아야 하는 종류별 최소 수. 일정에 식사 슬롯과 볼거리가 둘 다 필요하다. */
-  private static readonly POOL_MIN_PER_KIND = 2;
-
   /** 지역 판정 불가(목적지·후보 어느 쪽이든) 시 쓰는 중립값. */
   private static readonly NEUTRAL_LOCALITY = 0.62;
 
@@ -223,30 +228,74 @@ export class CragEvaluatorService {
    * 16개 후보를 받아 식사 슬롯과 관광 슬롯을 채우므로, 순서보다 구성이 중요하다. 그래서 머리는
    * 점수 순 그대로 두고, 부족한 종류만 꼬리 자리를 내주고 채운다.
    */
-  selectTopDiverse(candidates: CandidatePlace[], limit: number): CandidatePlace[] {
+  selectTopDiverse(
+    candidates: CandidatePlace[],
+    limit: number,
+    quota: PoolCategoryQuota = DEFAULT_POOL_QUOTA,
+  ): CandidatePlace[] {
     const selected = candidates.slice(0, limit);
     if (selected.length < limit) return selected;
 
-    for (const kind of [DINING_CATEGORIES, ATTRACTION_CATEGORIES]) {
-      const have = selected.filter((candidate) => kind.has(candidate.category)).length;
-      const missing = CragEvaluatorService.POOL_MIN_PER_KIND - have;
+    const minimums = this.resolveMinimums(quota, limit);
+    this.ensureCategoryMinimums(selected, candidates, minimums);
+    this.capDiningShare(selected, candidates, minimums);
+    return selected;
+  }
+
+  /**
+   * 하한을 확정한다. 합이 풀 크기를 넘으면 비율대로 눌러 담되 각 종류에 최소 1자리는 남긴다
+   * (실사용 조합에서는 넘칠 일이 없고, 짧은 여행·작은 limit 의 안전장치다).
+   */
+  private resolveMinimums(quota: PoolCategoryQuota, limit: number): Map<string, number> {
+    const raw: Array<[string, number]> = [
+      ['restaurant', Math.max(0, Math.floor(quota.restaurant))],
+      ['cafe', Math.max(0, Math.floor(quota.cafe))],
+      ['attraction', Math.max(0, Math.floor(quota.attraction))],
+    ];
+    const total = raw.reduce((sum, [, value]) => sum + value, 0);
+    if (total <= limit) return new Map(raw);
+
+    const scale = limit / total;
+    return new Map(
+      raw.map(([category, value]) => [
+        category,
+        value > 0 ? Math.max(1, Math.floor(value * scale)) : 0,
+      ]),
+    );
+  }
+
+  /**
+   * 종류별 하한을 채운다. **희소한 종류부터** 채우는 것이 핵심 — 카탈로그가 관광지 27,436 :
+   * 음식점 15,854 : 카페 2,591 이라, 카페를 뒤로 미루면 내줄 자리가 남지 않는다.
+   */
+  private ensureCategoryMinimums(
+    selected: CandidatePlace[],
+    candidates: CandidatePlace[],
+    minimums: Map<string, number>,
+  ): void {
+    const chosen = new Set(selected.map((candidate) => candidate.id));
+
+    for (const category of ['cafe', 'restaurant', 'attraction']) {
+      const missing = (minimums.get(category) ?? 0) - this.countCategory(selected, category);
       if (missing <= 0) continue;
 
-      const chosen = new Set(selected.map((candidate) => candidate.id));
       const fills = candidates
-        .filter((candidate) => kind.has(candidate.category) && !chosen.has(candidate.id))
+        .filter((candidate) => candidate.category === category && !chosen.has(candidate.id))
         .slice(0, missing);
 
-      // 내줄 자리는 **과잉 종류의 꼬리**부터 — 최소 보유량을 지키는 종류를 깎으면 안 된다.
+      // 내줄 자리는 **과잉 종류의 꼬리**부터 — 하한을 지키고 있는 종류를 깎으면 안 된다.
       for (const fill of fills) {
-        const dropIndex = this.lastReplaceableIndex(selected, kind);
+        const dropIndex = this.lastSurplusIndex(selected, category, minimums);
         if (dropIndex < 0) break;
+        chosen.delete(selected[dropIndex]!.id);
         selected.splice(dropIndex, 1, fill);
+        chosen.add(fill.id);
       }
     }
+  }
 
-    this.capDiningShare(selected, candidates);
-    return selected;
+  private countCategory(selected: CandidatePlace[], category: string): number {
+    return selected.filter((candidate) => candidate.category === category).length;
   }
 
   /**
@@ -261,14 +310,19 @@ export class CragEvaluatorService {
    *   2. **머리가 아니라 꼬리를 깎는다.** 넘치는 만큼 식음 꼬리를 관광 상위로 바꿀 뿐,
    *      점수 순서 자체는 건드리지 않는다.
    */
-  private capDiningShare(selected: CandidatePlace[], candidates: CandidatePlace[]): void {
+  private capDiningShare(
+    selected: CandidatePlace[],
+    candidates: CandidatePlace[],
+    minimums: Map<string, number>,
+  ): void {
     const ratio = this.maxDiningRatio();
     if (!(ratio < 1)) return;
 
-    const cap = Math.max(
-      CragEvaluatorService.POOL_MIN_PER_KIND,
-      Math.floor(selected.length * ratio),
-    );
+    // **하한이 상한을 이긴다.** 상한 비율은 검색 지표(골든셋 정답에 식당이 거의 없다)에서 나온
+    // 값이고, 하한은 일정이 실제로 필요로 하는 끼니 수다. 둘이 부딪히면 일정 쪽을 따른다 —
+    // 3일 여행은 끼니만 6번이라 0.375 상한(풀 22 기준 8자리)이 카페 자리를 먼저 잡아먹는다.
+    const diningFloor = (minimums.get('restaurant') ?? 0) + (minimums.get('cafe') ?? 0);
+    const cap = Math.max(diningFloor, Math.floor(selected.length * ratio));
     const chosen = new Set(selected.map((candidate) => candidate.id));
     const fills = candidates.filter(
       (candidate) => ATTRACTION_CATEGORIES.has(candidate.category) && !chosen.has(candidate.id),
@@ -277,7 +331,8 @@ export class CragEvaluatorService {
     let fillIndex = 0;
     let dining = selected.filter((candidate) => DINING_CATEGORIES.has(candidate.category)).length;
     while (dining > cap && fillIndex < fills.length) {
-      const dropIndex = this.lastIndexOfKind(selected, DINING_CATEGORIES);
+      // 깎는 자리도 하한을 본다 — 그냥 마지막 식음을 빼면 방금 채운 카페 한 자리가 먼저 날아간다.
+      const dropIndex = this.lastSurplusIndex(selected, 'attraction', minimums);
       if (dropIndex < 0) break;
       selected.splice(dropIndex, 1, fills[fillIndex]!);
       fillIndex += 1;
@@ -291,33 +346,19 @@ export class CragEvaluatorService {
     return Math.max(0, Math.min(1, value));
   }
 
-  /** 뒤에서부터 찾은 그 종류의 마지막 자리 (`findLastIndex` 는 이 tsconfig 의 lib 밖). */
-  private lastIndexOfKind(
-    selected: CandidatePlace[],
-    kind: ReadonlySet<string>,
-  ): number {
-    for (let i = selected.length - 1; i >= 0; i -= 1) {
-      if (kind.has(selected[i]!.category)) return i;
-    }
-    return -1;
-  }
-
   /**
-   * 교체해 내줄 수 있는 마지막 자리. 채우려는 종류가 아니고, 그 종류를 빼도 최소 보유량이
-   * 깨지지 않는 후보 중 가장 뒤에 있는 것.
+   * 교체해 내줄 수 있는 마지막 자리 (`findLastIndex` 는 이 tsconfig 의 lib 밖).
+   * 채우려는 종류가 아니고, 빼도 **자기 종류의 하한**이 깨지지 않는 후보 중 가장 뒤에 있는 것.
    */
-  private lastReplaceableIndex(
+  private lastSurplusIndex(
     selected: CandidatePlace[],
-    filling: ReadonlySet<string>,
+    filling: string,
+    minimums: Map<string, number>,
   ): number {
     for (let i = selected.length - 1; i >= 0; i -= 1) {
-      const candidate = selected[i]!;
-      if (filling.has(candidate.category)) continue;
-      const kind = DINING_CATEGORIES.has(candidate.category)
-        ? DINING_CATEGORIES
-        : ATTRACTION_CATEGORIES;
-      const have = selected.filter((item) => kind.has(item.category)).length;
-      if (have <= CragEvaluatorService.POOL_MIN_PER_KIND) continue;
+      const category = selected[i]!.category;
+      if (category === filling) continue;
+      if (this.countCategory(selected, category) <= (minimums.get(category) ?? 0)) continue;
       return i;
     }
     return -1;

@@ -11,6 +11,7 @@ import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { isEligibleItineraryCandidate } from './place-eligibility';
 import type {
   CandidatePlace,
+  PoolCategoryQuota,
   DestinationAnchor,
   RawPlaceCandidate,
   RetrievalContext,
@@ -44,6 +45,9 @@ const DEFAULT_RADIUS_STEPS_M = [2000, 5000, 10000] as const;
 /** 앵커 반경이 "충분하다"고 볼 최소 종류별 후보 수. 일정에 식사와 볼거리가 둘 다 필요하다. */
 const MIN_KIND_COUNT = 4;
 
+/** 호출자가 종류별 하한을 안 줄 때 쓰는 하루치 기본값 (끼니 2 · 카페 1 · 볼거리 2). */
+const DEFAULT_CATEGORY_QUOTA: PoolCategoryQuota = { restaurant: 2, cafe: 1, attraction: 2 };
+
 @Injectable()
 export class PlaceRetrievalService {
   private readonly logger = new Logger(PlaceRetrievalService.name);
@@ -70,6 +74,8 @@ export class PlaceRetrievalService {
     const regionFilter = anchor?.region ?? destinationRegionFilter(inputContext.destination);
     const context: RetrievalContext = { ...inputContext, popularityIndex, regionFilter };
     const limit = context.limit ?? 16;
+    // 종류별 하한. 플래너가 안 주면 하루치 기본값으로 본다.
+    const quota = context.categoryQuota ?? DEFAULT_CATEGORY_QUOTA;
     const queryText = this.buildQueryText(context);
     const sources: RetrievalSource[] = [];
     const rawCandidates: RawPlaceCandidate[] = [];
@@ -102,6 +108,7 @@ export class PlaceRetrievalService {
         poolSize,
         limit,
         visitWindow,
+        quota,
         preferenceVector,
       );
       // 확정된 반경을 컨텍스트에 실어 카카오 폴백이 같은 범위를 보게 한다.
@@ -163,7 +170,7 @@ export class PlaceRetrievalService {
       popularityWeight * Math.max(0, NEUTRAL_POPULARITY - candidate.crag.popularity);
     const accepted = ranked.filter((candidate) => gateConfidence(candidate) >= minimumConfidence);
     const finalPool = accepted.length >= Math.min(4, limit) ? accepted : ranked;
-    const places = this.evaluator.selectTopDiverse(finalPool, limit);
+    const places = this.evaluator.selectTopDiverse(finalPool, limit, quota);
     const averageConfidence = this.averageConfidence(places);
     const rejectedCount = Math.max(0, ranked.length - accepted.length);
 
@@ -200,6 +207,7 @@ export class PlaceRetrievalService {
     poolSize: number,
     limit: number,
     visitWindow: VisitWindow,
+    quota: PoolCategoryQuota,
     preferenceVector?: number[],
   ): Promise<{ candidates: RawPlaceCandidate[]; radiusM: number }> {
     const steps = this.radiusStepsM();
@@ -218,7 +226,7 @@ export class PlaceRetrievalService {
     let candidates: RawPlaceCandidate[] = [];
     for (const step of steps) {
       candidates = await search(step);
-      if (this.isAnchorPoolSufficient(candidates, limit)) {
+      if (this.isAnchorPoolSufficient(candidates, limit, quota)) {
         this.logger.log(
           `앵커 "${anchor.label}" 반경 ${step / 1000}km 후보 ${candidates.length}건으로 확정`,
         );
@@ -256,12 +264,20 @@ export class PlaceRetrievalService {
    * 하루치 식사 슬롯도 못 채운다. 그래서 종류별 하한을 함께 본다. 전체 개수는 최종 선택
    * 수(limit)의 2배를 요구한다 — 그 정도는 돼야 인지도·취향 재정렬이 손댈 여지가 생긴다.
    */
-  private isAnchorPoolSufficient(candidates: RawPlaceCandidate[], limit: number): boolean {
+  private isAnchorPoolSufficient(
+    candidates: RawPlaceCandidate[],
+    limit: number,
+    quota: PoolCategoryQuota,
+  ): boolean {
     if (candidates.length < limit * 2) return false;
     const dining = candidates.filter((candidate) =>
       DINING_CATEGORIES.has(candidate.category),
     ).length;
-    return dining >= MIN_KIND_COUNT && candidates.length - dining >= MIN_KIND_COUNT;
+    if (dining < MIN_KIND_COUNT || candidates.length - dining < MIN_KIND_COUNT) return false;
+    // 카페를 따로 세는 이유 — 카탈로그 비중이 관광지·음식점의 1/6 이라, 식음을 한 덩어리로
+    // 세면 음식점만으로 하한이 채워져 카페 0건인 반경에서 멈춘다.
+    if (quota.cafe <= 0) return true;
+    return candidates.filter((candidate) => candidate.category === 'cafe').length >= 1;
   }
 
   /**

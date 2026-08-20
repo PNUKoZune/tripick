@@ -89,6 +89,20 @@ describe('PlaceRetrievalService anchor scope', () => {
     expect(result.places.map((place) => place.id)).toContain('near-0');
   });
 
+  it('개수가 충분해도 카페가 0건이면 반경을 넓힌다', async () => {
+    // 카탈로그가 관광지 27,436 : 음식점 15,854 : 카페 2,591 이라, 식음을 한 덩어리로 세면
+    // 음식점만으로 하한이 채워져 카페 0건인 반경에서 멈춘다 — 일정에 카페가 안 들어오던 원인.
+    const searchByEmbedding = jest
+      .fn()
+      .mockResolvedValueOnce(poolWithoutCafe(12, 5))
+      .mockResolvedValueOnce(pool(12, 5));
+    const { service } = buildService({ anchor, searchByEmbedding });
+
+    await service.retrieve({ userId: 'u1', destination: '광안리', limit: 4 });
+
+    expect(searchByEmbedding.mock.calls.map(([, scope]) => scope.radiusM)).toEqual([2000, 5000]);
+  });
+
   it('앵커가 있으면 서울 좌표 폴백 시드를 섞지 않는다', async () => {
     // getSeedCandidates 는 전용 카탈로그가 없는 목적지에 DEFAULT_SEEDS(서울 도심 좌표의
     // 가짜 장소 6개)를 준다. 부산 일정에 그게 박히면 동선이 통째로 깨진다.
@@ -110,10 +124,22 @@ describe('PlaceRetrievalService anchor scope', () => {
   });
 });
 
-/** 총 `total` 건 중 `dining` 건이 식당인 후보 풀. */
+/**
+ * 총 `total` 건 중 `dining` 건이 식음인 후보 풀. 식음의 마지막 한 건은 카페다 —
+ * 반경 판정이 카페를 따로 세므로(카탈로그 비중이 1/6 이라 음식점만으로 채워지면 안 된다)
+ * 픽스처도 음식점만으로 이뤄지면 실제와 다른 상황을 재현하게 된다.
+ */
 function pool(total: number, dining: number, prefix = 'p'): RawPlaceCandidate[] {
   return Array.from({ length: total }, (_, index) => ({
     ...candidate(`${prefix}-${index}`, `장소${index}`, '여행 > 관광지'),
+    category: index < dining ? (index === dining - 1 ? 'cafe' : 'restaurant') : 'attraction',
+  }));
+}
+
+/** 식음이 전부 음식점인 후보 풀 (카페 0건). */
+function poolWithoutCafe(total: number, dining: number): RawPlaceCandidate[] {
+  return pool(total, dining).map((place, index) => ({
+    ...place,
     category: index < dining ? 'restaurant' : 'attraction',
   }));
 }
