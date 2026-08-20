@@ -77,7 +77,7 @@ export class UsersService {
   async findOrCreateByKakao(profile: KakaoProfile): Promise<UserEntity> {
     // 1순위: 이미 카카오 ID 로 가입한 사용자
     const byKakao = await this.repo.findOneBy({ kakaoId: profile.id });
-    if (byKakao) return byKakao;
+    if (byKakao) return this.fillMissingFromKakao(byKakao, profile);
 
     // 2순위: 같은 이메일로 이메일 가입한 사용자가 있으면 자동 merge — 카카오 연동 추가
     if (profile.email) {
@@ -112,6 +112,39 @@ export class UsersService {
   }
 
   /**
+   * 재로그인 때 **비어 있는 칸만** 카카오 프로필로 메운다.
+   *
+   * 동의항목은 나중에 켜질 수 있다(이메일 동의를 뒤늦게 추가하거나, 사용자가 선택 동의를
+   * 나중에 수락하거나). 가입 시점에 못 받은 값은 계정 생성 경로가 다시 안 돌아서 영영 빈 칸으로
+   * 남는데, 이메일이 없으면 이메일 가입 계정과의 자동 merge 경로를 못 탄다.
+   *
+   * **이미 값이 있는 칸은 건드리지 않는다.** 닉네임·프로필 이미지는 사용자가 설정에서 바꿀 수
+   * 있는 값이라, 카카오 값으로 맞추면 로그인할 때마다 사용자가 정한 이름이 되돌아간다.
+   */
+  private async fillMissingFromKakao(user: UserEntity, profile: KakaoProfile): Promise<UserEntity> {
+    let changed = false;
+    if (!user.email && profile.email) {
+      user.email = profile.email.toLowerCase();
+      // 카카오가 확인해 준 주소 — 이메일 인증 메일을 다시 받게 할 이유가 없다.
+      if (!user.emailVerifiedAt) user.emailVerifiedAt = new Date();
+      changed = true;
+    }
+    if (!user.profileImageUrl && profile.profileImageUrl) {
+      user.profileImageUrl = profile.profileImageUrl;
+      changed = true;
+    }
+    if (!changed) return user;
+    // 이미 그 주소로 이메일 가입한 계정이 따로 있으면 유니크 제약에 걸린다 — 로그인을 막을 만한
+    // 일이 아니므로(계정 병합은 사용자 동의가 필요한 별개 문제) 채우기만 포기하고 통과시킨다.
+    try {
+      return await this.repo.save(user);
+    } catch (error) {
+      if (isUniqueViolation(error, 'email')) return await this.repo.findOneByOrFail({ id: user.id });
+      throw error;
+    }
+  }
+
+  /**
    * 신규 이메일 가입. **비밀번호는 저장하지 않는다** — 인증 전 대기 비밀번호는 그 신청이
    * 만든 인증 토큰(`EmailTokenEntity.pendingPasswordHash`)이 들고 있다가 링크를 누를 때
    * 승격된다. 계정에 대기 칸을 두면 같은 이메일로 들어온 여러 신청이 그 칸을 두고 다툰다.
@@ -132,7 +165,7 @@ export class UsersService {
       const handle =
         attempt < HANDLE_ATTEMPTS - 1
           ? await this.generateUniqueHandle(base)
-          : `${slugifyHandle(base)}${randomBytes(4).toString('hex')}`;
+          : randomizedHandle(slugifyHandle(base));
       try {
         return await this.repo.save(
           this.repo.create({
@@ -218,16 +251,34 @@ export class UsersService {
   }
 
 
-  /** base 를 슬러그화하고 충돌 시 숫자 suffix 를 붙여 유니크 핸들 생성. */
+  /**
+   * base 를 슬러그화하고 충돌 시 숫자 suffix 를 붙여 유니크 핸들 생성.
+   *
+   * 이름에서 root 를 못 뽑으면(한글 닉네임 등) 순번 경쟁 대신 랜덤 핸들로 바로 간다.
+   * 공용 root 로 순번을 돌리면 그 이름의 가입자가 늘어날수록 앞 순번을 전부 조회해서 지나가야
+   * 하고(가입 1건당 최대 50번의 순차 DB 조회), 핸들 자체도 user, user1 … 로 식별값이 못 된다.
+   */
   private async generateUniqueHandle(base: string): Promise<string> {
     const root = slugifyHandle(base);
+    if (!root) return this.generateRandomHandle();
     for (let i = 0; i < 50; i++) {
       const candidate = i === 0 ? root : `${root}${i}`;
       const taken = await this.repo.findOneBy({ handle: candidate });
       if (!taken) return candidate;
     }
     // 극단적 충돌 — 랜덤 suffix 로 마무리
-    return `${root}${randomBytes(3).toString('hex')}`;
+    return randomizedHandle(root);
+  }
+
+  /** root 없는 이름용 랜덤 핸들. 충돌 확률이 낮아 몇 번만 확인하고 넘어간다. */
+  private async generateRandomHandle(): Promise<string> {
+    for (let i = 0; i < 5; i++) {
+      const candidate = randomizedHandle('');
+      const taken = await this.repo.findOneBy({ handle: candidate });
+      if (!taken) return candidate;
+    }
+    // 5번 연속 부딪히는 건 사실상 불가능 — 그래도 왔다면 갈래를 크게 늘려 끝낸다.
+    return `user${randomBytes(6).toString('hex')}`;
   }
 
   async updateNotificationPreferences(
@@ -399,21 +450,37 @@ function extForMime(mime: string): string {
   return 'bin';
 }
 
-const HANDLE_REGEX = /^[a-z0-9_]{3,20}$/;
+const HANDLE_MAX_LENGTH = 20;
+const HANDLE_REGEX = new RegExp(`^[a-z0-9_]{3,${HANDLE_MAX_LENGTH}}$`);
 
 /** 이메일의 @ 앞부분(local-part)을 소문자로. 이메일이 없으면 빈 문자열. */
 function localPart(email?: string | null): string {
   return (email ?? '').split('@')[0]?.trim().toLowerCase() ?? '';
 }
 
-/** 임의 문자열 → 핸들 슬러그. 영숫자/언더스코어만 남기고 3~20자로 맞춘다. 비면 'user'. */
+/**
+ * 임의 문자열 → 핸들 슬러그. 영숫자/언더스코어만 남기고 3~20자로 맞춘다.
+ * 남는 글자가 없으면(한글 등 비-ASCII 이름) **빈 문자열**을 돌려준다 — 여기서 'user' 같은
+ * 공용 root 를 만들어 주면 그 이름의 모든 신규 가입자가 user, user1, user2 … 순번을 다툰다.
+ * 이름에서 root 를 못 뽑았다는 사실은 호출부가 알아야 랜덤 핸들로 흩을 수 있다.
+ */
 function slugifyHandle(base: string): string {
   const slug = base
     .toLowerCase()
     .replace(/[^a-z0-9_]+/g, '')
-    .slice(0, 20);
+    .slice(0, HANDLE_MAX_LENGTH);
   if (slug.length >= 3) return slug;
-  if (slug.length === 0) return 'user'; // 한글 등 비-ASCII 닉네임 → user, user1 …
+  if (slug.length === 0) return '';
   return slug.padEnd(3, '0'); // 1~2자 → ab0, a00
+}
 
+/**
+ * 자동 생성 핸들에 랜덤 접미사를 붙인다. root 가 비면 'user' 를 쓰되 순번이 아니라 랜덤이라
+ * 서로 부딪히지 않는다(6자 hex = 1,600만 갈래).
+ * 사용자가 직접 지정하는 핸들과 같은 20자 상한을 지키도록 root 를 먼저 자른다.
+ */
+function randomizedHandle(root: string): string {
+  const suffix = randomBytes(3).toString('hex'); // 6자
+  const stem = (root || 'user').slice(0, HANDLE_MAX_LENGTH - suffix.length);
+  return `${stem}${suffix}`;
 }
