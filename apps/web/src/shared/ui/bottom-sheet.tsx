@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 
 import { useBodyScrollLock } from '@/shared/lib/use-body-scroll-lock';
+import { usePrefersReducedMotion } from '@/shared/lib/use-prefers-reduced-motion';
 import { useDismissOnEscape } from '@/shared/lib/use-dismiss-on-escape';
 import { useFocusTrap } from '@/shared/lib/use-focus-trap';
 
@@ -36,6 +37,9 @@ const EASE_IN = 'cubic-bezier(0.4, 0, 1, 1)';
 export function BottomSheet({ open, onClose, children, label, topSlot, themed = false }: Props) {
   const [phase, setPhase] = useState<Phase>('closed');
   const [isDesktop, setIsDesktop] = useState(false);
+  // 아래 transition 은 인라인 style 이라 `@media (prefers-reduced-motion)` 을 못 탄다.
+  // 0ms 로 접어 슬라이드·페이드를 없애되, phase 기계와 언마운트 타이밍은 그대로 둔다.
+  const reducedMotion = usePrefersReducedMotion();
   const closeTimer = useRef<number | null>(null);
   const openRafs = useRef<number[]>([]);
   // 시트 패널은 phase 가 closed 를 벗어나야 마운트되므로, 트랩도 그때 켜야 ref 를 잡는다
@@ -98,6 +102,8 @@ export function BottomSheet({ open, onClose, children, label, topSlot, themed = 
 
   const isVisible = phase === 'open';
   const easing = phase === 'closing' ? EASE_IN : EASE_OUT;
+  const backdropMs = reducedMotion ? 0 : DURATION_MS;
+  const panelMs = reducedMotion ? 0 : phase === 'closing' ? DURATION_MS : SHEET_OPEN_MS;
 
   // themed 면 토큰 색으로, 아니면 기존 라이트 고정색으로 크롬을 그린다 (비-themed 시트는 바이트 동일).
   const panelBg = themed ? 'bg-[color:var(--card,#fff)]' : 'bg-white';
@@ -109,7 +115,7 @@ export function BottomSheet({ open, onClose, children, label, topSlot, themed = 
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-40 ${themed ? 'wvr-scope' : ''}`}
+      className={`fixed inset-0 z-40 ${themed ? 'wvr-scope wvr-overlay' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label={label}
@@ -123,7 +129,7 @@ export function BottomSheet({ open, onClose, children, label, topSlot, themed = 
         className="absolute inset-0 bg-black/45"
         style={{
           opacity: isVisible ? 1 : 0,
-          transition: `opacity ${DURATION_MS}ms ${easing}`,
+          transition: `opacity ${backdropMs}ms ${easing}`,
         }}
       />
       <div
@@ -136,14 +142,14 @@ export function BottomSheet({ open, onClose, children, label, topSlot, themed = 
             ? {
                 opacity: isVisible ? 1 : 0,
                 transform: isVisible ? 'scale(1)' : 'scale(0.96)',
-                transition: `opacity ${DURATION_MS}ms ${easing}, transform ${DURATION_MS}ms ${easing}`,
+                transition: `opacity ${backdropMs}ms ${easing}, transform ${backdropMs}ms ${easing}`,
                 willChange: 'opacity, transform',
                 alignItems: 'center',
               }
             : {
                 transform: isVisible ? 'translate3d(0, 0, 0)' : 'translate3d(0, 100%, 0)',
                 // 올라올 때(opening/open)만 길게, 닫힐 때는 기존 속도 유지
-                transition: `transform ${phase === 'closing' ? DURATION_MS : SHEET_OPEN_MS}ms ${easing}`,
+                transition: `transform ${panelMs}ms ${easing}`,
                 willChange: 'transform',
                 alignItems: 'flex-end',
               }
@@ -152,7 +158,7 @@ export function BottomSheet({ open, onClose, children, label, topSlot, themed = 
         <div
           ref={panelRef}
           tabIndex={-1}
-          className={`relative flex max-h-full w-full max-w-[480px] flex-col overflow-hidden rounded-t-[24px] ${panelBg} shadow-[0_-16px_40px_rgba(15,23,42,0.18)] outline-none lg:max-w-[560px] lg:rounded-[24px] lg:shadow-[0_24px_60px_rgba(15,23,42,0.22)]`}
+          className={`relative flex max-h-full w-full max-w-[480px] flex-col overflow-hidden rounded-t-[20px] ${panelBg} shadow-[0_-16px_40px_rgba(15,23,42,0.18)] outline-none lg:max-w-[560px] lg:rounded-[20px] lg:shadow-[0_24px_60px_rgba(15,23,42,0.22)]`}
         >
           <button
             type="button"
@@ -179,12 +185,7 @@ export function BottomSheet({ open, onClose, children, label, topSlot, themed = 
 function CloseIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M6 6l12 12M18 6L6 18"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
+      <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }

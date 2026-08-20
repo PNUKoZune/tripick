@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { FiAlertTriangle, FiArrowLeft } from 'react-icons/fi';
+import { LuChevronLeft, LuTriangleAlert } from 'react-icons/lu';
 
 import {
   WITHDRAWAL_CONFIRM_PHRASE,
@@ -9,7 +9,7 @@ import {
   type WithdrawUserDto,
   type WithdrawalReasonCode,
 } from '@/entities/user';
-import { ModalShell } from '@/shared/ui';
+import { Button, ModalShell } from '@/shared/ui';
 
 type Props = {
   pending: boolean;
@@ -200,12 +200,12 @@ function ConfirmStep({
         disabled={pending}
         className="mb-3 flex shrink-0 items-center gap-1 text-[13px] font-semibold text-[color:var(--ink-sub,#6B7684)] disabled:opacity-50"
       >
-        <FiArrowLeft className="size-4" aria-hidden />
+        <LuChevronLeft className="size-4" aria-hidden />
         이전
       </button>
 
       <h2 className="flex shrink-0 items-center gap-2 text-[18px] font-bold text-[color:var(--danger,#F04452)]">
-        <FiAlertTriangle className="size-5" aria-hidden />
+        <LuTriangleAlert className="size-5" aria-hidden />
         탈퇴하면 되돌릴 수 없어요
       </h2>
 
@@ -232,8 +232,9 @@ function ConfirmStep({
         htmlFor="withdrawal-confirmation"
         className="mt-4 block shrink-0 text-[13px] font-bold text-[color:var(--ink,#191F28)]"
       >
-        계속하려면 <span className="text-[color:var(--danger,#F04452)]">{WITHDRAWAL_CONFIRM_PHRASE}</span>
-        를 입력해주세요
+        계속하려면{' '}
+        <span className="text-[color:var(--danger,#F04452)]">{WITHDRAWAL_CONFIRM_PHRASE}</span>를
+        입력해주세요
       </label>
       <input
         id="withdrawal-confirmation"
@@ -245,17 +246,21 @@ function ConfirmStep({
         className="mt-2 h-12 w-full shrink-0 rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#FFFFFF)] px-4 text-[15px] text-[color:var(--ink,#191F28)] outline-none placeholder:text-[color:var(--ink-faint,#8B95A1)] focus:border-[color:var(--danger,#F04452)] disabled:opacity-50"
       />
       {error ? (
-        <p className="mt-2 text-[13px] leading-[20px] text-[color:var(--danger,#F04452)]">{error}</p>
+        <p className="mt-2 text-[13px] leading-[20px] text-[color:var(--danger,#F04452)]">
+          {error}
+        </p>
       ) : null}
 
-      <button
-        type="button"
-        onClick={onSubmit}
+      <Button
+        variant="danger"
+        size="md"
+        fullWidth
+        className="mt-4 shrink-0"
         disabled={!matched || pending}
-        className="mt-4 h-12 w-full shrink-0 rounded-[12px] bg-[color:var(--danger,#F04452)] text-[15px] font-bold text-[color:var(--btn-text,#FFFFFF)] hover:brightness-95 disabled:opacity-40"
+        onClick={onSubmit}
       >
         {pending ? '탈퇴 처리 중…' : '영구 탈퇴하기'}
-      </button>
+      </Button>
     </>
   );
 }

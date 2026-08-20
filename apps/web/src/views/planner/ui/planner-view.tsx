@@ -3,15 +3,20 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { IconType } from 'react-icons';
 import {
-  FiChevronLeft,
-  FiChevronRight,
-  FiChevronsLeft,
-  FiChevronsRight,
-  FiUserPlus,
-  FiX,
-} from 'react-icons/fi';
-import { LuShare2, LuSparkles } from 'react-icons/lu';
+  LuChevronLeft,
+  LuChevronRight,
+  LuChevronsLeft,
+  LuChevronsRight,
+  LuCloudSun,
+  LuFootprints,
+  LuMapPin,
+  LuShare2,
+  LuSparkles,
+  LuUserPlus,
+  LuX,
+} from 'react-icons/lu';
 import { useQuery } from '@tanstack/react-query';
 import type {
   PlannerItineraryItemDto,
@@ -46,11 +51,7 @@ import { queryKeys } from '@/shared/api/query-keys';
 import { useMediaQuery } from '@/shared/lib';
 import { readJson, writeJson } from '@/shared/lib/storage';
 import { Chip, Toast } from '@/shared/ui';
-import {
-  AppBottomNavigation,
-  AppDesktopNavigation,
-  useNavSlideClass,
-} from '@/shared/ui/app-frame';
+import { AppBottomNavigation, AppDesktopNavigation, useNavSlideClass } from '@/shared/ui/app-frame';
 
 const TAB_ORDER: PlannerTab[] = ['schedule', 'map', 'info', 'coordination'];
 import { AlternativeSheet } from '@/widgets/alternative-sheet';
@@ -76,7 +77,13 @@ const TRIP_STATUS_LABEL: Record<PlannerTripDto['progress']['status'], string> = 
  * @MX:REASON: fan_in — 모바일 셸 + 데스크탑 사이드바 두 진입점에서 공유하는 결과 화면의
  * 시그니처 요약 컴포넌트.
  */
-function TripLightSummaryCard({ trip, compact = false }: { trip: PlannerTripDto; compact?: boolean }) {
+function TripLightSummaryCard({
+  trip,
+  compact = false,
+}: {
+  trip: PlannerTripDto;
+  compact?: boolean;
+}) {
   const tags = [
     ...trip.meta.tasteTags.food,
     ...trip.meta.tasteTags.mood,
@@ -86,7 +93,7 @@ function TripLightSummaryCard({ trip, compact = false }: { trip: PlannerTripDto;
 
   return (
     <section
-      className={`wvr-scope rounded-[22px] border border-[color:var(--line)] bg-[color:var(--card)] shadow-[var(--shadow-card)] ${
+      className={`wvr-scope rounded-[20px] border border-[color:var(--line)] bg-[color:var(--card)] shadow-[var(--shadow-card)] ${
         compact ? 'p-4' : 'mb-3 p-5'
       }`}
       aria-label="여행 요약"
@@ -126,7 +133,12 @@ function TripLightSummaryCard({ trip, compact = false }: { trip: PlannerTripDto;
             <span
               key={token}
               className="absolute top-1/2 size-[9px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2"
-              style={{ left, background: `var(${token})`, borderColor: 'var(--card)', boxShadow: '0 0 0 1px var(--line)' }}
+              style={{
+                left,
+                background: `var(${token})`,
+                borderColor: 'var(--card)',
+                boxShadow: '0 0 0 1px var(--line)',
+              }}
             />
           ))}
         </div>
@@ -180,23 +192,26 @@ function TripLightSummaryCard({ trip, compact = false }: { trip: PlannerTripDto;
  * 배너는 "권유"만 한다 — 닫으면 아무 잡도 안 돌고 일정만 본다(CLAUDE.md: 추천만, 재계획은 수동).
  * 'manual' 은 배너로 노출되지 않으므로(사용자가 직접 버튼을 누른 경우) 매핑에서 제외.
  */
-const REPLAN_BANNER_COPY: Record<Exclude<ReplanTrigger, 'manual'>, {
-  emoji: string;
-  title: string;
-  body: string;
-}> = {
+const REPLAN_BANNER_COPY: Record<
+  Exclude<ReplanTrigger, 'manual'>,
+  {
+    Icon: IconType;
+    title: string;
+    body: string;
+  }
+> = {
   weather: {
-    emoji: '⛅',
+    Icon: LuCloudSun,
     title: '이 날 날씨 변화가 예상돼요',
     body: '실내·대체 장소 위주로 일정을 다시 짜볼까요?',
   },
   crowd: {
-    emoji: '🚶',
+    Icon: LuFootprints,
     title: '이 날 혼잡이 예상돼요',
     body: '덜 붐비는 장소로 일정을 다시 짜볼까요?',
   },
   deviation: {
-    emoji: '📍',
+    Icon: LuMapPin,
     title: '일정 장소에 도착하지 못한 것 같아요',
     body: '지금 위치에 맞춰 일정을 다시 짜볼까요?',
   },
@@ -479,7 +494,10 @@ function PlannerContent({
 
         <div className="relative px-4 pb-8 pt-3">
           {loadError ? (
-            <div className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]">
+            <div
+              role="alert"
+              className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]"
+            >
               {loadError}
             </div>
           ) : null}
@@ -563,7 +581,7 @@ function PlannerContent({
                   href="/trips"
                   className="flex h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] pl-2 pr-3 text-[13px] font-semibold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink)]"
                 >
-                  <FiChevronLeft className="size-4" aria-hidden />
+                  <LuChevronLeft className="size-4" aria-hidden />
                   <span>내 여행</span>
                 </Link>
                 <div className="min-w-0">
@@ -590,7 +608,7 @@ function PlannerContent({
                     className="flex items-center gap-2 rounded-full px-2 py-1 transition hover:bg-[color:var(--card-soft)]"
                   >
                     <MemberAvatars members={trip.members} />
-                    <FiUserPlus className="size-4 text-[color:var(--ink-faint)]" aria-hidden />
+                    <LuUserPlus className="size-4 text-[color:var(--ink-faint)]" aria-hidden />
                   </button>
                 ) : null}
                 {trip ? (
@@ -610,7 +628,7 @@ function PlannerContent({
                   <button
                     type="button"
                     onClick={() => openReplan('manual')}
-                    className="inline-flex h-10 items-center justify-center rounded-[14px] bg-[color:var(--btn-bg)] px-4 text-[14px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)]"
+                    className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[color:var(--btn-bg)] px-4 text-[14px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)]"
                   >
                     <span className="flex items-center gap-1.5">
                       <LuSparkles className="size-4" aria-hidden />
@@ -634,110 +652,114 @@ function PlannerContent({
             {/* 좌측: 일정 패널 (2xl 미만에서는 정보·조율 탭도 이곳에서 전환) */}
             {sidebarVisible ? (
               <aside className="flex h-[calc(100dvh-120px)] min-h-0 flex-col overflow-hidden rounded-[20px] border border-[color:var(--line)] bg-[color:var(--card)] shadow-[var(--shadow-card)]">
-              <div className="border-b border-[color:var(--line)] px-5 py-4">
-                {trip ? <TripLightSummaryCard trip={trip} compact /> : null}
-                <div className="mt-3 flex items-center justify-between">
-                  <h2 className="text-[18px] font-bold leading-[26px] text-[color:var(--ink)]">
-                    {activeSidePanel === 'schedule'
-                      ? '일정'
-                      : activeSidePanel === 'info'
-                        ? '여행 정보'
-                        : '취향 조율'}
-                  </h2>
-                  <div className="flex items-center gap-2">
-                    {activeSidePanel === 'schedule' ? (
-                      <span className="text-[12px] font-semibold text-[color:var(--ink-faint)]">
-                        {itemsForDay.length}개
-                      </span>
-                    ) : null}
-                    {/* 2xl 미만: 접어서 지도 넓히기 */}
-                    <button
-                      type="button"
-                      onClick={() => setSidebarCollapsed(true)}
-                      aria-label="패널 접기"
-                      title="패널 접기"
-                      className="flex size-7 items-center justify-center rounded-[8px] text-[color:var(--ink-faint)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink-sub)] 2xl:hidden"
-                    >
-                      <FiChevronsLeft className="size-4" />
-                    </button>
-                  </div>
-                </div>
-                {/* 2xl 미만: 우측 정보/조율 컬럼이 없으므로 좌측에서 탭으로 전환 */}
-                {trip ? (
-                  <div className="mt-3 flex gap-1 rounded-[12px] bg-[color:var(--card-soft)] p-1 2xl:hidden">
-                    {(
-                      [
-                        { key: 'schedule', label: '일정' },
-                        { key: 'info', label: '정보' },
-                        { key: 'coordination', label: '조율' },
-                      ] as const
-                    ).map((item) => (
+                <div className="border-b border-[color:var(--line)] px-5 py-4">
+                  {trip ? <TripLightSummaryCard trip={trip} compact /> : null}
+                  <div className="mt-3 flex items-center justify-between">
+                    <h2 className="text-[18px] font-bold leading-[26px] text-[color:var(--ink)]">
+                      {activeSidePanel === 'schedule'
+                        ? '일정'
+                        : activeSidePanel === 'info'
+                          ? '여행 정보'
+                          : '취향 조율'}
+                    </h2>
+                    <div className="flex items-center gap-2">
+                      {activeSidePanel === 'schedule' ? (
+                        <span className="text-[12px] font-semibold text-[color:var(--ink-faint)]">
+                          {itemsForDay.length}개
+                        </span>
+                      ) : null}
+                      {/* 2xl 미만: 접어서 지도 넓히기 */}
                       <button
-                        key={item.key}
                         type="button"
-                        onClick={() => setSidePanel(item.key)}
-                        className={`h-8 flex-1 rounded-[8px] text-[13px] font-semibold transition ${
-                          activeSidePanel === item.key
-                            ? 'bg-[color:var(--card)] text-[color:var(--ink)] shadow-[0_1px_3px_rgba(24,33,54,0.08)]'
-                            : 'text-[color:var(--ink-faint)] hover:text-[color:var(--ink-sub)]'
-                        }`}
+                        onClick={() => setSidebarCollapsed(true)}
+                        aria-label="패널 접기"
+                        title="패널 접기"
+                        className="flex size-7 items-center justify-center rounded-[8px] text-[color:var(--ink-faint)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink-sub)] 2xl:hidden"
                       >
-                        {item.label}
+                        <LuChevronsLeft className="size-4" />
                       </button>
-                    ))}
-                  </div>
-                ) : null}
-                {activeSidePanel === 'schedule' ? (
-                  <>
-                    <p className="mt-3 text-[13px] leading-[20px] text-[color:var(--ink-sub)]">
-                      일정을 클릭하면 지도가 이동하고, 변경 아이콘으로 대안을 볼 수 있어요.
-                    </p>
-                    {trip ? (
-                      <div className="mt-3">
-                        <DaySelector days={trip.days} value={day} onChange={setDay} />
-                      </div>
-                    ) : null}
-                  </>
-                ) : null}
-              </div>
-              <div className="flex-1 overflow-y-auto px-5 py-4">
-                {/* key={activeSidePanel} 로 패널 전환 시에만 등장 모션을 재생한다 */}
-                <div key={activeSidePanel} className="app-tab-in">
-                  {loadError ? (
-                    <div className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]">
-                      {loadError}
                     </div>
-                  ) : !selectedTripId || !trip ? (
-                    <PlannerEmptyState loading={isResolvingTrip} />
-                  ) : activeSidePanel === 'info' ? (
-                    <TripInfoPanel trip={trip} />
-                  ) : activeSidePanel === 'coordination' ? (
-                    <TripCoordinationPanel tripId={trip.id} />
-                  ) : (
+                  </div>
+                  {/* 2xl 미만: 우측 정보/조율 컬럼이 없으므로 좌측에서 탭으로 전환 */}
+                  {trip ? (
+                    <div className="mt-3 flex gap-1 rounded-[12px] bg-[color:var(--card-soft)] p-1 2xl:hidden">
+                      {(
+                        [
+                          { key: 'schedule', label: '일정' },
+                          { key: 'info', label: '정보' },
+                          { key: 'coordination', label: '조율' },
+                        ] as const
+                      ).map((item) => (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => setSidePanel(item.key)}
+                          className={`h-8 flex-1 rounded-[8px] text-[13px] font-semibold transition ${
+                            activeSidePanel === item.key
+                              ? 'bg-[color:var(--card)] text-[color:var(--ink)] shadow-[0_1px_3px_rgba(24,33,54,0.08)]'
+                              : 'text-[color:var(--ink-faint)] hover:text-[color:var(--ink-sub)]'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {activeSidePanel === 'schedule' ? (
                     <>
-                      <PendingProposalsPanel
-                        tripId={trip.id}
-                        isOwner={isOwner}
-                        onOpenProposal={setPreviewProposalId}
-                      />
-                      <EditableTimeline
-                        tripId={trip.id}
-                        day={day}
-                        items={itemsForDay}
-                        selectedItemId={focusedItemId}
-                        onSelectItem={(item) => setFocusedItemId(item.id)}
-                        onSwitchItem={setOpenItem}
-                        isOwner={isOwner}
-                        onProposed={handleProposed}
-                      />
+                      <p className="mt-3 text-[13px] leading-[20px] text-[color:var(--ink-sub)]">
+                        일정을 클릭하면 지도가 이동하고, 변경 아이콘으로 대안을 볼 수 있어요.
+                      </p>
+                      {trip ? (
+                        <div className="mt-3">
+                          <DaySelector days={trip.days} value={day} onChange={setDay} />
+                        </div>
+                      ) : null}
                     </>
-                  )}
+                  ) : null}
                 </div>
-              </div>
-              <div className="border-t border-[color:var(--line)] bg-[color:var(--card-soft)] px-5 py-3 text-[12px] text-[color:var(--ink-sub)]">
-                일정을 클릭하면 지도에서 초점이 맞춰지고, 변경 아이콘을 누르면 대안 시트가 열립니다.
-              </div>
-            </aside>
+                <div className="flex-1 overflow-y-auto px-5 py-4">
+                  {/* key={activeSidePanel} 로 패널 전환 시에만 등장 모션을 재생한다 */}
+                  <div key={activeSidePanel} className="app-tab-in">
+                    {loadError ? (
+                      <div
+                        role="alert"
+                        className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]"
+                      >
+                        {loadError}
+                      </div>
+                    ) : !selectedTripId || !trip ? (
+                      <PlannerEmptyState loading={isResolvingTrip} />
+                    ) : activeSidePanel === 'info' ? (
+                      <TripInfoPanel trip={trip} />
+                    ) : activeSidePanel === 'coordination' ? (
+                      <TripCoordinationPanel tripId={trip.id} />
+                    ) : (
+                      <>
+                        <PendingProposalsPanel
+                          tripId={trip.id}
+                          isOwner={isOwner}
+                          onOpenProposal={setPreviewProposalId}
+                        />
+                        <EditableTimeline
+                          tripId={trip.id}
+                          day={day}
+                          items={itemsForDay}
+                          selectedItemId={focusedItemId}
+                          onSelectItem={(item) => setFocusedItemId(item.id)}
+                          onSwitchItem={setOpenItem}
+                          isOwner={isOwner}
+                          onProposed={handleProposed}
+                        />
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="border-t border-[color:var(--line)] bg-[color:var(--card-soft)] px-5 py-3 text-[12px] text-[color:var(--ink-sub)]">
+                  일정을 클릭하면 지도에서 초점이 맞춰지고, 변경 아이콘을 누르면 대안 시트가
+                  열립니다.
+                </div>
+              </aside>
             ) : null}
 
             {/* 중앙: 큰 지도 */}
@@ -749,9 +771,9 @@ function PlannerContent({
                   onClick={() => setSidebarCollapsed(false)}
                   aria-label="일정 패널 펼치기"
                   title="일정 패널 펼치기"
-                  className="absolute left-0 top-1/2 z-20 flex -translate-y-1/2 items-center rounded-r-[14px] border border-l-0 border-[color:var(--line)] bg-[color:var(--card)] py-4 pl-1 pr-1.5 text-[color:var(--ink-sub)] shadow-[0_4px_12px_rgba(15,23,42,0.1)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink)]"
+                  className="absolute left-0 top-1/2 z-20 flex -translate-y-1/2 items-center rounded-r-[12px] border border-l-0 border-[color:var(--line)] bg-[color:var(--card)] py-4 pl-1 pr-1.5 text-[color:var(--ink-sub)] shadow-[0_4px_12px_rgba(15,23,42,0.1)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink)]"
                 >
-                  <FiChevronsRight className="size-5" />
+                  <LuChevronsRight className="size-5" />
                 </button>
               ) : null}
               {trip ? (
@@ -835,7 +857,8 @@ function PlannerContent({
               ? {
                   tone: 'primary',
                   title: '이미 재계획이 진행 중이에요',
-                  message: '지금 요청은 진행 중인 재계획에 합쳐졌어요. 완료된 뒤 다시 요청해 주세요.',
+                  message:
+                    '지금 요청은 진행 중인 재계획에 합쳐졌어요. 완료된 뒤 다시 요청해 주세요.',
                 }
               : {
                   tone: 'success',
@@ -862,9 +885,15 @@ function PlannerContent({
       {alertBanner && alertBanner !== 'manual' && trip ? (
         <div className="fixed left-1/2 top-3 z-40 w-[calc(100%-24px)] max-w-[420px] -translate-x-1/2">
           <div className="flex items-start gap-3 rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] p-3.5 shadow-[var(--shadow-btn)]">
-            <span className="text-[20px] leading-none" aria-hidden>
-              {REPLAN_BANNER_COPY[alertBanner].emoji}
-            </span>
+            {(() => {
+              const BannerIcon = REPLAN_BANNER_COPY[alertBanner].Icon;
+              return (
+                <BannerIcon
+                  className="mt-0.5 size-5 shrink-0 text-[color:var(--primary)]"
+                  aria-hidden
+                />
+              );
+            })()}
             <div className="min-w-0 flex-1">
               <p className="text-[14px] font-bold text-[color:var(--ink)]">
                 {REPLAN_BANNER_COPY[alertBanner].title}
@@ -900,7 +929,7 @@ function PlannerContent({
               onClick={dismissAlertBanner}
               className="-mr-1 -mt-1 flex size-7 shrink-0 items-center justify-center rounded-full text-[color:var(--ink-faint)] hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink)]"
             >
-              <FiX className="size-4" aria-hidden />
+              <LuX className="size-4" aria-hidden />
             </button>
           </div>
         </div>
@@ -927,14 +956,14 @@ function LivePromoBanner() {
     >
       <span className="flex items-center gap-2 text-[13px] font-bold">
         <span className="relative flex size-2">
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-white/70" />
+          <span className="absolute inline-flex size-full motion-safe:animate-ping rounded-full bg-white/70" />
           <span className="relative inline-flex size-2 rounded-full bg-white" />
         </span>
         지금 여행 중이에요
       </span>
       <span className="flex items-center gap-0.5 text-[12px] font-semibold">
         실시간 화면 보기
-        <FiChevronRight className="size-3.5" aria-hidden />
+        <LuChevronRight className="size-3.5" aria-hidden />
       </span>
     </Link>
   );
@@ -952,7 +981,9 @@ function PlannerEmptyState({ loading }: { loading: boolean }) {
   return (
     <div className="rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-4 py-5">
       <div className="text-[12px] font-bold text-[color:var(--primary)]">내 여행</div>
-      <h2 className="mt-1 text-[18px] font-bold text-[color:var(--ink)]">여행을 먼저 만들어주세요</h2>
+      <h2 className="mt-1 text-[18px] font-bold text-[color:var(--ink)]">
+        여행을 먼저 만들어주세요
+      </h2>
       <p className="mt-1 text-[13px] leading-5 text-[color:var(--ink-sub)]">
         일정·지도·취향 조율은 여행 단위로 저장됩니다.
       </p>

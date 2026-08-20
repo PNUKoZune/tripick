@@ -27,7 +27,7 @@ export function SegmentToggle({ items, value, onChange, columns = 2 }: Props) {
             key={item.value}
             type="button"
             onClick={() => onChange(item.value)}
-            className={`flex h-12 items-center justify-center gap-2 rounded-[14px] border text-[15px] font-semibold transition ${
+            className={`flex h-12 items-center justify-center gap-2 rounded-[12px] border text-[15px] font-semibold transition ${
               active
                 ? 'border-[color:var(--primary,#3182F6)] bg-[color:var(--primary-tint,#EAF2FF)] text-[color:var(--primary-deep,#1B64DA)]'
                 : 'border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#FFFFFF)] text-[color:var(--ink-sub,#6B7684)] hover:bg-[color:var(--card-soft,#F2F4F6)]'

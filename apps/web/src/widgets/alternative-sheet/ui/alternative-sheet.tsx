@@ -138,7 +138,7 @@ export function AlternativeSheet({
         {readyData ? (
           <>
             <div className="flex items-start gap-3">
-              <div className="flex size-9 items-center justify-center rounded-[10px] bg-[color:var(--danger-tint,#FFECEE)] text-[18px] font-bold text-[color:var(--danger,#F04452)]">
+              <div className="flex size-9 items-center justify-center rounded-[12px] bg-[color:var(--danger-tint,#FFECEE)] text-[18px] font-bold text-[color:var(--danger,#F04452)]">
                 !
               </div>
               <div className="flex-1">
@@ -421,15 +421,15 @@ export function AlternativeSheet({
 
 function SkeletonMap() {
   return (
-    <div className="absolute inset-0 animate-pulse bg-gradient-to-b from-[color:var(--card-soft,#EEF2F4)] to-[color:var(--line,#E5E8EB)]" />
+    <div className="absolute inset-0 motion-safe:animate-pulse bg-gradient-to-b from-[color:var(--card-soft,#EEF2F4)] to-[color:var(--line,#E5E8EB)]" />
   );
 }
 
 function SkeletonBody() {
   return (
-    <div className="animate-pulse space-y-4">
+    <div className="motion-safe:animate-pulse space-y-4">
       <div className="flex items-start gap-3">
-        <div className="size-9 rounded-[10px] bg-[color:var(--card-soft,#F2F4F6)]" />
+        <div className="size-9 rounded-[12px] bg-[color:var(--card-soft,#F2F4F6)]" />
         <div className="flex-1 space-y-2">
           <div className="h-5 w-2/3 rounded bg-[color:var(--card-soft,#F2F4F6)]" />
           <div className="h-4 w-1/2 rounded bg-[color:var(--card-soft,#F2F4F6)]" />

@@ -17,6 +17,7 @@ import { TourApiService } from './retrieval/tour-api.service';
 import { TatsCnctrRateService } from './retrieval/tats-cnctr-rate.service';
 import { PlaceIngestionService } from './retrieval/place-ingestion.service';
 import { PopularPlaceService } from './retrieval/popular-place.service';
+import { KeywordPlaceService } from './retrieval/keyword-place.service';
 import { EmbeddingModule } from '../embedding/embedding.module';
 import { ItineraryModule } from '../itinerary/itinerary.module';
 import { PreferencesModule } from '../preferences/preferences.module';
@@ -47,6 +48,7 @@ import { TripDayEntity } from '../trips/trip-day.entity';
     TourApiService,
     TatsCnctrRateService,
     PopularPlaceService,
+    KeywordPlaceService,
     PlaceIngestionService,
   ],
   exports: [

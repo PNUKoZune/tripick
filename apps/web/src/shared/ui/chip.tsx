@@ -9,8 +9,10 @@ const toneClass: Record<Tone, string> = {
     'bg-[color:var(--card,#fff)] text-[color:var(--ink-sub,#6B7684)] border-[color:var(--line,#E5E8EB)]',
   primary:
     'bg-[color:var(--blue-50,#EAF2FF)] text-[color:var(--blue-700,#1B64DA)] border-[color:var(--blue-100,#C7DCFF)]',
-  success: 'bg-[#E5F7EE] text-[color:var(--ok,#00A86B)] border-[#BCE9D6]',
-  warning: 'bg-[#FFF4E5] text-[#FF8A00] border-[#FFE0BD]',
+  success:
+    'bg-[color-mix(in_srgb,var(--ok,#00A86B)_14%,var(--card,#fff))] text-[color:var(--ok,#00A86B)] border-[color-mix(in_srgb,var(--ok,#00A86B)_34%,var(--card,#fff))]',
+  warning:
+    'bg-[color:var(--accent-tint,#FFF4E5)] text-[color:var(--accent-deep,#FF8A00)] border-[color-mix(in_srgb,var(--accent,#FF9B70)_34%,var(--card,#fff))]',
   error:
     'bg-[color:var(--danger-tint,#FFECEE)] text-[color:var(--danger,#F04452)] border-[color:var(--danger-border,#FECDD3)]',
 };

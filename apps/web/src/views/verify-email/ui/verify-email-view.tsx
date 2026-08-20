@@ -27,7 +27,7 @@ export function VerifyEmailView() {
     <AppFrame showNav={false} themed>
       <div className="mx-auto flex min-h-dvh w-full max-w-[440px] flex-col justify-center px-5">
         <div className="text-center">
-          <div className="text-[13px] font-black text-[color:var(--primary)]">TriPick</div>
+          <div className="text-[13px] font-extrabold text-[color:var(--primary)]">TriPick</div>
           <h1 className="mt-3 text-[24px] font-bold text-[color:var(--ink)]">이메일 인증</h1>
         </div>
 
@@ -81,7 +81,7 @@ function Block({
       {cta ? (
         <Link
           href={cta.href}
-          className="mt-3 inline-flex h-10 items-center rounded-[10px] bg-[color:var(--btn-bg)] px-4 text-[13px] font-bold text-[color:var(--btn-text)]"
+          className="mt-3 inline-flex h-10 items-center rounded-[12px] bg-[color:var(--btn-bg)] px-4 text-[13px] font-bold text-[color:var(--btn-text)]"
         >
           {cta.label}
         </Link>

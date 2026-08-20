@@ -27,7 +27,11 @@ export function SettingsView() {
 }
 
 function SettingsContent() {
-  const { data: me, error } = useQuery({
+  const {
+    data: me,
+    error,
+    isLoading,
+  } = useQuery({
     queryKey: queryKeys.user.me,
     queryFn: fetchMe,
     staleTime: 60 * 1000,
@@ -45,7 +49,10 @@ function SettingsContent() {
       <PageHeader title="설정" label="설정" description="계정·알림·앱 정보를 관리합니다." />
       <PageContainer>
         {loadError ? (
-          <div className="mb-4 rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-3 text-[13px] font-semibold text-[color:var(--danger)]">
+          <div
+            role="alert"
+            className="mb-4 rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-3 text-[13px] font-semibold text-[color:var(--danger)]"
+          >
             {loadError}
           </div>
         ) : null}
@@ -58,7 +65,7 @@ function SettingsContent() {
                 다른 멤버와 친구에게 보이는 정보예요.
               </p>
             </div>
-            <SettingsProfileHero me={me} onError={setError('profile')} />
+            <SettingsProfileHero me={me} loading={isLoading} onError={setError('profile')} />
           </section>
 
           <Section
@@ -92,7 +99,10 @@ function SettingsContent() {
           </Section>
 
           {mutationError ? (
-            <div className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] font-semibold text-[color:var(--danger)]">
+            <div
+              role="alert"
+              className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] font-semibold text-[color:var(--danger)]"
+            >
               {mutationError}
             </div>
           ) : null}
@@ -132,7 +142,7 @@ function LinkRow({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
-      className="flex h-12 items-center justify-between rounded-[10px] px-3 text-[14px] font-semibold text-[color:var(--ink)] hover:bg-[color:var(--card-soft)]"
+      className="flex h-12 items-center justify-between rounded-[12px] px-3 text-[14px] font-semibold text-[color:var(--ink)] hover:bg-[color:var(--card-soft)]"
     >
       <span>{label}</span>
       <LuChevronRight className="size-4 text-[color:var(--ink-faint)]" aria-hidden />
@@ -142,7 +152,7 @@ function LinkRow({ href, label }: { href: string; label: string }) {
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex h-12 items-center justify-between rounded-[10px] px-3 text-[14px]">
+    <div className="flex h-12 items-center justify-between rounded-[12px] px-3 text-[14px]">
       <span className="font-semibold text-[color:var(--ink-sub)]">{label}</span>
       <span className="font-semibold text-[color:var(--ink)]">{value}</span>
     </div>

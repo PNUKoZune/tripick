@@ -185,7 +185,7 @@ export function AppBottomNavigation({ className = '' }: { className?: string }) 
   return (
     <nav
       aria-label="하단 탭"
-      className={`fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 rounded-t-[24px] border-t border-[color:var(--line-strong)] bg-[color:var(--app-surface)]/85 px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_28px_-14px_rgba(25,31,40,0.16)] backdrop-blur-xl ${className}`}
+      className={`fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 rounded-t-[20px] border-t border-[color:var(--line-strong)] bg-[color:var(--app-surface)]/85 px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_28px_-14px_rgba(25,31,40,0.16)] backdrop-blur-xl ${className}`}
     >
       <div className="grid h-[62px] grid-cols-5 items-stretch">
         {NAV_ITEMS.map((item) => {
@@ -196,7 +196,7 @@ export function AppBottomNavigation({ className = '' }: { className?: string }) 
               key={item.href}
               href={item.href}
               aria-current={active ? 'page' : undefined}
-              className={`group flex h-full flex-col items-center justify-center gap-[3px] text-[11px] font-black leading-4 transition-colors active:scale-[0.96] ${
+              className={`group flex h-full flex-col items-center justify-center gap-[3px] text-[11px] font-bold leading-4 transition-colors active:scale-[0.96] ${
                 active
                   ? 'text-[color:var(--blue-600)]'
                   : 'text-[color:var(--text-tertiary)] hover:text-[color:var(--text-secondary)]'
@@ -238,10 +238,13 @@ function NavBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
     <span
+      // 값이 바뀌면 remount 시켜 pop keyframe 을 다시 재생한다 — transition 은 숫자 텍스트
+      // 교체를 감지하지 못하고, keyframe 은 마운트 때만 도는 성질을 그대로 쓴다.
+      key={count}
       aria-label={`읽지 않은 알림 ${count}개`}
       // 10px 은 폰트 메트릭(ascent 10 / descent 2)이 마침 대칭이라 leading-none 만으로 정중앙이다.
       // num-badge 를 붙이면 padding 만큼 0.5px 내려간다 — 실측값이라 사이즈 바꾸면 다시 재야 한다.
-      className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[color:var(--danger,#F04452)] px-1 text-[10px] font-bold leading-none text-white"
+      className="app-badge-pop absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[color:var(--danger-deep,#D33241)] px-1 text-[10px] font-bold leading-none text-[color:var(--danger-on,#FFFFFF)]"
     >
       {count > 9 ? '9+' : count}
     </span>
@@ -255,7 +258,10 @@ export function AppDesktopNavigation() {
   return (
     <aside className="hidden py-8 lg:block">
       <div className="sticky top-8">
-        <Link href="/" className="text-[24px] font-black leading-8 text-[color:var(--blue-600)]">
+        <Link
+          href="/"
+          className="text-[24px] font-extrabold leading-8 text-[color:var(--blue-600)]"
+        >
           Tripick
         </Link>
         <nav aria-label="데스크탑 내비게이션" className="mt-8 space-y-1">
@@ -267,7 +273,7 @@ export function AppDesktopNavigation() {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
-                className={`flex h-12 items-center gap-3 rounded-[16px] px-4 text-[15px] font-black transition-colors ${
+                className={`flex h-12 items-center gap-3 rounded-[16px] px-4 text-[15px] font-bold transition-colors ${
                   active
                     ? 'bg-[color:var(--app-surface)] text-[color:var(--blue-600)]'
                     : 'text-[color:var(--text-secondary)] hover:bg-[color:var(--app-surface)]/70 hover:text-[color:var(--text-primary)]'
@@ -277,8 +283,9 @@ export function AppDesktopNavigation() {
                 <span>{item.label}</span>
                 {badge > 0 ? (
                   <span
+                    key={badge}
                     aria-label={`읽지 않은 알림 ${badge}개`}
-                    className="num-badge ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[color:var(--danger,#F04452)] px-1.5 text-[11px] font-bold text-white"
+                    className="num-badge app-badge-pop ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[color:var(--danger-deep,#D33241)] px-1.5 text-[11px] font-bold text-[color:var(--danger-on,#FFFFFF)]"
                   >
                     {badge > 99 ? '99+' : badge}
                   </span>
@@ -302,62 +309,6 @@ function isNavItemActive(pathname: string, href: (typeof NAV_ITEMS)[number]['hre
 function NavIcon({ name, active }: { name: NavIconName; active: boolean }) {
   const Icon = active ? NAV_ICONS[name].filled : NAV_ICONS[name].outline;
   return <Icon aria-hidden="true" className="size-[23px]" />;
-}
-
-export function PrimaryButton({
-  children,
-  disabled,
-  onClick,
-  type = 'button',
-  tone = 'blue',
-}: {
-  children: ReactNode;
-  disabled?: boolean;
-  onClick?: () => void;
-  type?: 'button' | 'submit';
-  tone?: 'blue' | 'dark' | 'kakao';
-}) {
-  const toneClass = {
-    blue: 'bg-[color:var(--blue-600)] text-white',
-    dark: 'bg-[color:var(--text-primary)] text-white',
-    kakao: 'bg-[#FEE500] text-[#191919]',
-  }[tone];
-
-  return (
-    <button
-      type={type}
-      disabled={disabled}
-      onClick={onClick}
-      className={`h-14 w-full rounded-[16px] px-5 text-[16px] font-black leading-6 transition active:scale-[0.99] ${
-        disabled ? 'bg-[color:var(--pressed-bg)] text-[color:var(--text-tertiary)]' : toneClass
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-export function SecondaryButton({
-  children,
-  disabled,
-  onClick,
-  type = 'button',
-}: {
-  children: ReactNode;
-  disabled?: boolean;
-  onClick?: () => void;
-  type?: 'button' | 'submit';
-}) {
-  return (
-    <button
-      type={type}
-      disabled={disabled}
-      onClick={onClick}
-      className="h-12 w-full rounded-[16px] bg-[color:var(--soft-bg)] px-4 text-[15px] font-black text-[color:var(--text-secondary)] transition active:scale-[0.99] disabled:text-[color:var(--text-tertiary)]"
-    >
-      {children}
-    </button>
-  );
 }
 
 export function InlineNotice({

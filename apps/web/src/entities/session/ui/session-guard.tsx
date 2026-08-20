@@ -40,11 +40,22 @@ export function GuestGuard({
 function GuardPlaceholder() {
   // wvr-scope 로 배경·글자가 팔레트(다크 포함)를 따라간다 — 라이트 고정이면
   // 다크 화면 사이에서 흰 화면이 번쩍인다. 첫 로드에만 보이는 화면이라 스코프 무해.
+  //
+  // 글자만 있으면 "멈춘 빈 화면"으로 읽힌다. 스피너를 같이 둬서 진행 중임을 보이게 하되,
+  // reduced-motion 에서는 회전 없이 링만 남도록 motion-safe 로 건다.
   return (
-    <div className="wvr-scope flex min-h-dvh items-center justify-center">
-      <div className="text-[13px] font-semibold text-[color:var(--ink-faint)]">
+    <div
+      role="status"
+      aria-live="polite"
+      className="wvr-scope flex min-h-dvh flex-col items-center justify-center gap-3"
+    >
+      <span
+        aria-hidden
+        className="size-7 rounded-full border-2 border-[color:var(--line)] border-t-[color:var(--primary)] motion-safe:animate-spin"
+      />
+      <span className="text-[13px] font-semibold text-[color:var(--ink-faint)]">
         잠시만 기다려 주세요…
-      </div>
+      </span>
     </div>
   );
 }

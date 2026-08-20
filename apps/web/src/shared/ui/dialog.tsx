@@ -2,6 +2,9 @@
 
 import type { ReactNode } from 'react';
 
+import { useExitTransition } from '@/shared/lib/use-exit-transition';
+
+import { Button } from './button';
 import { ModalShell } from './modal-shell';
 
 type Props = {
@@ -15,6 +18,9 @@ type Props = {
   onConfirm: () => void;
   onCancel: () => void;
 };
+
+/** 퇴장 애니메이션 길이 — globals.css 의 `app-panel-out`/`app-backdrop-out` 과 같아야 한다. */
+const EXIT_MS = 180;
 
 /**
  * 화면 중앙에 뜨는 확인 다이얼로그. 오버레이 클릭·ESC 로 취소된다.
@@ -30,35 +36,37 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: Props) {
-  if (!open) return null;
+  // 훅은 조기 반환보다 위에 있어야 한다 — open 이 false 로 떨어져도 퇴장 프레임 동안은
+  // 계속 렌더되므로, 여기서 마운트 유지 기간을 정한다.
+  const { mounted, closing } = useExitTransition(open, EXIT_MS);
+  if (!mounted) return null;
 
   return (
     <ModalShell
       label={title}
       onDismiss={onCancel}
-      panelClassName="w-full max-w-[360px] rounded-[20px] bg-white p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
+      closing={closing}
+      themed
+      panelClassName="w-full max-w-[360px] rounded-[20px] bg-[color:var(--card,#fff)] p-5 shadow-[0_24px_60px_rgba(15,23,42,0.22)]"
     >
-      <h2 className="text-[17px] font-bold leading-6 text-[#191F28]">{title}</h2>
+      <h2 className="text-[17px] font-bold leading-6 text-[color:var(--ink,#191F28)]">{title}</h2>
       {description ? (
-        <p className="mt-2 text-[14px] leading-[21px] text-[#4E5968]">{description}</p>
+        <p className="mt-2 text-[14px] leading-[21px] text-[color:var(--ink-sub,#4E5968)]">
+          {description}
+        </p>
       ) : null}
       <div className="mt-5 flex gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="h-12 flex-1 rounded-[14px] bg-[color:var(--soft-bg)] text-[15px] font-bold text-[#4E5968] transition active:scale-[0.99]"
-        >
+        <Button variant="ghost" size="md" className="flex-1" onClick={onCancel}>
           {cancelLabel}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant={danger ? 'danger' : 'primary'}
+          size="md"
+          className="flex-1"
           onClick={onConfirm}
-          className={`h-12 flex-1 rounded-[14px] text-[15px] font-bold text-white transition active:scale-[0.99] ${
-            danger ? 'bg-[#F04452]' : 'bg-[color:var(--blue-600)]'
-          }`}
         >
           {confirmLabel}
-        </button>
+        </Button>
       </div>
     </ModalShell>
   );

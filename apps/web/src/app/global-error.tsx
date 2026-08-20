@@ -30,7 +30,7 @@ export default function GlobalError({
           <button
             type="button"
             onClick={reset}
-            className="mt-2 inline-flex h-14 items-center justify-center rounded-[18px] bg-[#3182F6] px-5 text-[16px] font-semibold leading-[24px] text-white transition hover:bg-[#1B64DA]"
+            className="mt-2 inline-flex h-14 items-center justify-center rounded-[16px] bg-[#3182F6] px-5 text-[16px] font-semibold leading-[24px] text-white transition hover:bg-[#1B64DA]"
           >
             다시 시도
           </button>
