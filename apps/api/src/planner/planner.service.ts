@@ -14,6 +14,7 @@ import {
   minimumItemsPerDay,
   targetItemsPerDay,
 } from './helpers/itinerary-density';
+import { fillDaySlots } from './helpers/day-slot-planner';
 import { ARRIVAL_RADIUS_M } from '../arrival-alert/arrival-alert.constants';
 import { ConstraintEngine, type ValidationResult } from './constraint/constraint.engine';
 import { PlannerAgentService } from './agent/planner-agent.service';
@@ -41,7 +42,16 @@ import type {
   ReplanTrigger,
   TasteTagDto,
 } from '@tripick/types';
-import type { CandidatePlace, RetrievalContext } from './retrieval/types';
+import type { CandidatePlace, PoolCategoryQuota, RetrievalContext } from './retrieval/types';
+
+/**
+ * 일차 수에 맞춘 후보 풀 종류별 하한. 하루에 필요한 건 끼니 2 + 휴식(카페) 1 이고, 볼거리는
+ * 카탈로그에 넘쳐 나므로 하한을 크게 잡을 이유가 없다(상한 쪽이 이미 볼거리를 밀어 준다).
+ */
+function dayCategoryQuota(dayCount: number): PoolCategoryQuota {
+  const days = Math.max(1, dayCount);
+  return { restaurant: days * 2, cafe: days, attraction: 2 };
+}
 
 const PACE_HINT: Record<ReplanPace, string> = {
   relaxed: '여유로운 일정(하루 일정 수를 줄이고 이동·대기 부담 최소화)',
@@ -274,6 +284,9 @@ export class PlannerService {
         ...sharedRetrieval,
         destination: trip.destination,
         limit: Math.max(totalTargetItems + 4, 12),
+        // 다시 짜는 일차 수만큼 끼니·휴식 자리를 요구한다. 이게 없으면 풀에 식음이 2개만
+        // 보장되고 그 2개도 거의 항상 음식점이라, 3일 여행에 카페가 한 번도 안 들어온다.
+        categoryQuota: dayCategoryQuota(planDays.length),
       });
       candidates = [...mustCandidates, ...this.excludeKeptPlaces(retrieval.places, untouchedItems)];
       traceLabel = `${trip.destination} sources=${retrieval.trace.sources.join('+') || 'none'} avg=${retrieval.trace.averageConfidence.toFixed(2)}`;
@@ -302,7 +315,7 @@ export class PlannerService {
     // 후보 수·day 검증(1..dayCount)과도 어긋나지 않는다. 실제 날짜는 dayDates 로 함께 넘긴다 —
     // 시작·종료일 두 값은 [1,3] 같은 비연속 범위를 표현하지 못해 dayCount 와 어긋났다.
     const agentPlan = perDayMode
-      ? this.buildPerDayDeterministicPlan(poolsByDay!, itemsPerDay, planDays, anchorByDay)
+      ? this.buildPerDayDeterministicPlan(poolsByDay!, itemsPerDay, planDays, anchorByDay, wakeTime)
       : this.remapPlanDays(
           await this.plannerAgent.plan({
             destination: trip.destination,
@@ -358,6 +371,7 @@ export class PlannerService {
               itemsPerDay,
               planDays,
               anchorByDay,
+              wakeTime,
             ),
             mustCandidates,
             planDays,
@@ -750,20 +764,36 @@ export class PlannerService {
     );
   }
 
+  /**
+   * 근접 정렬된 후보를 일차별로 나눠 배치한다.
+   *
+   * 예전엔 `candidates.slice(offset, offset + dayTarget)` 로 앞에서부터 잘라 담았다. 그런데
+   * 풀의 식음 후보는 `selectTopDiverse` 가 **꼬리 자리에 채워 넣기** 때문에 이 슬라이스에
+   * 한 번도 걸리지 않았다 — 하루가 통째로 관광지로 채워지던 경로다. 이제 하루의 슬롯 역할
+   * (점심·저녁 음식점 / 오후 카페)을 먼저 채우고 나머지를 볼거리로 메운다.
+   *
+   * `searchWindow` 로 역할 후보 탐색을 근접 체인의 앞쪽으로 제한해 `orderByProximity` 가
+   * 만든 지리적 군집을 유지한다 — 창 안에 없을 때만 풀 전체를 훑는다.
+   */
   private buildDeterministicPlan(
     candidates: CandidatePlace[],
     context: DraftBuildContext,
   ): PlannedCandidate[] {
     const planned: PlannedCandidate[] = [];
-    // 일차마다 담을 개수가 다를 수 있어(앵커된 오늘은 남은 시간만큼) 오프셋을 누적한다.
-    let offset = 0;
+    const used = new Set<string>();
     context.planDays.forEach((day) => {
       const dayTarget = this.dayItemTarget(context.anchorByDay, day, context.itemsPerDay);
-      const dayCandidates = candidates.slice(offset, offset + dayTarget);
-      offset += dayTarget;
+      const startTime = this.dayStartTime(context.anchorByDay, day, context.wakeTime);
+      const dayCandidates = fillDaySlots({
+        pool: candidates,
+        used,
+        startTime,
+        itemCount: dayTarget,
+        searchWindow: dayTarget * 2,
+      });
       const durations = distributeFallbackDurations(
         dayCandidates.map((candidate) => candidate.category),
-        this.dayStartTime(context.anchorByDay, day, context.wakeTime),
+        startTime,
         context.sleepTime,
       );
       dayCandidates.forEach((candidate, index) => {
@@ -772,7 +802,7 @@ export class PlannerService {
           day,
           order: index + 1,
           durationMin: durations[index] ?? defaultVisitDuration(candidate.category),
-          memo: 'CRAG 후보 순위 기반 배치',
+          memo: '식사·휴식 슬롯 기반 배치',
           aiGenerated: false,
         });
       });
@@ -821,6 +851,8 @@ export class PlannerService {
         ...sharedRetrieval,
         destination: region,
         limit: perRegionLimit,
+        // 일자별 풀은 그 하루만 채우므로 하루치 하한이면 된다.
+        categoryQuota: dayCategoryQuota(1),
         // 그 일차 하루가 곧 방문 구간이다. 날짜를 모르면 여행 전체 구간(sharedRetrieval)을 쓴다.
         ...(date ? { visitWindow: { from: date, to: date } } : {}),
       });
@@ -866,17 +898,28 @@ export class PlannerService {
     itemsPerDay: number,
     planDays: number[],
     anchorByDay: Map<number, DayAnchor>,
+    wakeTime: string,
   ): PlannedCandidate[] {
     const planned: PlannedCandidate[] = [];
+    // 일차별 풀은 지역이 겹치면 같은 후보를 담을 수 있다. 소비한 id 를 공유해 중복 배치를 막는다.
+    const used = new Set<string>();
     poolsByDay.forEach((pool, dayIndex) => {
       const day = planDays[dayIndex] ?? dayIndex + 1;
-      pool.slice(0, this.dayItemTarget(anchorByDay, day, itemsPerDay)).forEach((candidate, index) => {
+      const startTime = this.dayStartTime(anchorByDay, day, wakeTime);
+      // 여기서도 `pool.slice(0, dayTarget)` 을 쓰면 안 된다 — 풀 크기가 `itemsPerDay + 3` 이라
+      // 꼬리에 채워진 식음 후보가 정확히 잘려 나가는 자리에 있다.
+      fillDaySlots({
+        pool,
+        used,
+        startTime,
+        itemCount: this.dayItemTarget(anchorByDay, day, itemsPerDay),
+      }).forEach((candidate, index) => {
         planned.push({
           candidate,
           day,
           order: index + 1,
           durationMin: defaultVisitDuration(candidate.category),
-          memo: '일자별 지역 후보 순위 기반 배치',
+          memo: '일자별 지역 후보 · 식사·휴식 슬롯 기반 배치',
           aiGenerated: false,
         });
       });

@@ -145,6 +145,24 @@ describe('PlannerAgentService', () => {
     ]);
   });
 
+  it('결정적 폴백도 식사 슬롯을 먼저 채운다', async () => {
+    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'false' }));
+    const plan = await service.plan({
+      ...baseOptions(),
+      itemsPerDay: 3,
+      dayItemTargets: [3],
+      candidates: [
+        candidate('att-1', '해운대해수욕장', 'attraction'),
+        candidate('att-2', '청사포', 'attraction'),
+        candidate('att-3', '마린시티', 'attraction'),
+        candidate('food-1', '기장 해산물 식당', 'restaurant'),
+      ],
+    });
+
+    // 점수 순으로 자르면 관광지 3개로 끝난다 — 식사 자리를 코드가 먼저 잡아야 한다.
+    expect(plan.map((item) => item.candidate.id)).toContain('food-1');
+  });
+
   it('falls back to deterministic CRAG order when the LLM is disabled', async () => {
     const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'false' }));
     const plan = await service.plan(baseOptions());

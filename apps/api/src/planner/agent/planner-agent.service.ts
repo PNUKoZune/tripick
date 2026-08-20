@@ -7,6 +7,7 @@ import {
   defaultVisitDuration,
   distributeFallbackDurations,
 } from '../helpers/itinerary-density';
+import { fillDaySlots } from '../helpers/day-slot-planner';
 
 export interface PlannerAgentOptions {
   destination: string;
@@ -257,17 +258,28 @@ export class PlannerAgentService {
     return planned.sort((a, b) => a.day - b.day || a.order - b.order);
   }
 
+  /**
+   * LLM 없이 하루를 채운다. 예전엔 후보를 점수 순으로 `slice` 하기만 해서 상위가 관광지로
+   * 가득한 풀에서는 식음 후보가 꼬리에 남아 한 번도 안 뽑혔다 — 끼니 없는 하루가 나오던 경로다.
+   * 이제 `fillDaySlots` 가 식사·휴식 슬롯을 먼저 채우고 나머지를 볼거리로 메운다.
+   */
   private buildFallbackPlan(options: PlannerAgentOptions): PlannedCandidate[] {
     const planned: PlannedCandidate[] = [];
-    let offset = 0;
+    // 일차 간 중복 배치를 막기 위해 소비한 후보 id 를 일차끼리 공유한다.
+    const used = new Set<string>();
     for (let day = 1; day <= options.dayCount; day += 1) {
-      // 일차마다 담을 개수가 다를 수 있으므로(오늘은 남은 시간만큼) 오프셋을 누적한다.
       const dayTarget = this.dayItemTarget(options, day - 1);
-      const dayCandidates = options.candidates.slice(offset, offset + dayTarget);
-      offset += dayTarget;
+      const startTime = this.dayStartTime(options, day - 1);
+      const dayCandidates = fillDaySlots({
+        pool: options.candidates,
+        used,
+        startTime,
+        itemCount: dayTarget,
+        searchWindow: dayTarget * 2,
+      });
       const durations = distributeFallbackDurations(
         dayCandidates.map((candidate) => candidate.category),
-        this.dayStartTime(options, day - 1),
+        startTime,
         options.sleepTime,
       );
       dayCandidates.forEach((candidate, index) => {
@@ -276,7 +288,7 @@ export class PlannerAgentService {
           day,
           order: index + 1,
           durationMin: durations[index] ?? defaultVisitDuration(candidate.category),
-          memo: 'AI planner fallback: CRAG 후보 순위 기반 배치',
+          memo: 'AI planner fallback: 식사·휴식 슬롯 기반 배치',
           aiGenerated: false,
         });
       });
