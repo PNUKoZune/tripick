@@ -335,6 +335,35 @@ describe('Users (e2e)', () => {
     });
   });
 
+  describe('카카오 재로그인 보정', () => {
+    it('가입 때 못 받은 이메일을 재로그인에서 채운다', async () => {
+      const created = await service.findOrCreateByKakao({ id: 'kakao-fill-1', nickname: '여행자' });
+      expect(created.email).toBeFalsy();
+
+      const relogin = await service.findOrCreateByKakao({
+        id: 'kakao-fill-1',
+        nickname: '여행자',
+        email: 'Filled@Tripick.test',
+      });
+
+      expect(relogin.id).toBe(created.id); // 새 계정이 생기면 안 된다
+      expect(relogin.email).toBe('filled@tripick.test');
+      expect(relogin.emailVerifiedAt).toBeTruthy();
+    });
+
+    it('사용자가 정한 닉네임은 카카오 값으로 되돌리지 않는다', async () => {
+      const created = await service.findOrCreateByKakao({ id: 'kakao-fill-2', nickname: '여행자' });
+      await service.update(created.id, { nickname: '내가 정한 이름' });
+
+      const relogin = await service.findOrCreateByKakao({
+        id: 'kakao-fill-2',
+        nickname: '카카오닉',
+      });
+
+      expect(relogin.nickname).toBe('내가 정한 이름');
+    });
+  });
+
   describe('핸들 자동 생성', () => {
     it('한글 닉네임 가입자끼리 핸들이 겹치지 않는다 (user, user1 … 순번 아님)', async () => {
       const a = await service.findOrCreateByKakao({ id: 'kakao-han-1', nickname: '여행자' });

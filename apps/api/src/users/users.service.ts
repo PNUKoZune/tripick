@@ -77,7 +77,7 @@ export class UsersService {
   async findOrCreateByKakao(profile: KakaoProfile): Promise<UserEntity> {
     // 1순위: 이미 카카오 ID 로 가입한 사용자
     const byKakao = await this.repo.findOneBy({ kakaoId: profile.id });
-    if (byKakao) return byKakao;
+    if (byKakao) return this.fillMissingFromKakao(byKakao, profile);
 
     // 2순위: 같은 이메일로 이메일 가입한 사용자가 있으면 자동 merge — 카카오 연동 추가
     if (profile.email) {
@@ -109,6 +109,39 @@ export class UsersService {
       user.emailVerifiedAt = new Date();
     }
     return this.repo.save(user);
+  }
+
+  /**
+   * 재로그인 때 **비어 있는 칸만** 카카오 프로필로 메운다.
+   *
+   * 동의항목은 나중에 켜질 수 있다(이메일 동의를 뒤늦게 추가하거나, 사용자가 선택 동의를
+   * 나중에 수락하거나). 가입 시점에 못 받은 값은 계정 생성 경로가 다시 안 돌아서 영영 빈 칸으로
+   * 남는데, 이메일이 없으면 이메일 가입 계정과의 자동 merge 경로를 못 탄다.
+   *
+   * **이미 값이 있는 칸은 건드리지 않는다.** 닉네임·프로필 이미지는 사용자가 설정에서 바꿀 수
+   * 있는 값이라, 카카오 값으로 맞추면 로그인할 때마다 사용자가 정한 이름이 되돌아간다.
+   */
+  private async fillMissingFromKakao(user: UserEntity, profile: KakaoProfile): Promise<UserEntity> {
+    let changed = false;
+    if (!user.email && profile.email) {
+      user.email = profile.email.toLowerCase();
+      // 카카오가 확인해 준 주소 — 이메일 인증 메일을 다시 받게 할 이유가 없다.
+      if (!user.emailVerifiedAt) user.emailVerifiedAt = new Date();
+      changed = true;
+    }
+    if (!user.profileImageUrl && profile.profileImageUrl) {
+      user.profileImageUrl = profile.profileImageUrl;
+      changed = true;
+    }
+    if (!changed) return user;
+    // 이미 그 주소로 이메일 가입한 계정이 따로 있으면 유니크 제약에 걸린다 — 로그인을 막을 만한
+    // 일이 아니므로(계정 병합은 사용자 동의가 필요한 별개 문제) 채우기만 포기하고 통과시킨다.
+    try {
+      return await this.repo.save(user);
+    } catch (error) {
+      if (isUniqueViolation(error, 'email')) return await this.repo.findOneByOrFail({ id: user.id });
+      throw error;
+    }
   }
 
   /**

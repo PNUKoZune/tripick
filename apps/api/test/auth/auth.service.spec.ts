@@ -551,6 +551,19 @@ describe('AuthService — logout & kakao status', () => {
     expect(first.state).not.toBe(second.state);
     expect(new URL(first.authorizeUrl).searchParams.get('state')).toBe(first.state);
   });
+
+  // scope 를 안 실으면 콘솔 기본 동의항목만 내려온다 — 닉네임이 빠지면 사용자 이름이 전부
+  // 폴백('여행자')이 되고, 이메일이 빠지면 이메일 계정과 자동 merge 를 못 탄다.
+  it('requests the nickname and email consent scopes', () => {
+    const { service } = createHarness({
+      KAKAO_REST_API_KEY: 'key',
+      KAKAO_CALLBACK_URL: 'http://localhost:4000/api/v1/auth/kakao/callback',
+    });
+
+    const scope = new URL(service.startKakaoAuth().authorizeUrl).searchParams.get('scope');
+
+    expect(scope?.split(',')).toEqual(['profile_nickname', 'account_email']);
+  });
 });
 
 describe('AuthService — password reset & verify', () => {
