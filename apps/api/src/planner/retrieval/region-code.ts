@@ -268,6 +268,22 @@ export interface RegionFilter {
  * 시도가 안 잡히는 목적지('경주')는 시군구 코드로 본다.
  * 둘 다 없으면(자유 입력·해외 등) 지역 필터 없이 전역 검색.
  */
+/**
+ * 후보의 지역 코드가 목적지 필터와 맞는지. 시도가 잡힌 목적지는 시도로, 아니면 시군구로 본다.
+ *
+ * 랭킹(감점)과 하드 게이트(제외)가 **같은 판정을 써야** 한다 — 규칙이 두 벌이면 점수는
+ * 깎였는데 게이트는 통과하는(또는 그 반대인) 후보가 생긴다.
+ */
+export function matchesRegionFilter(
+  expected: RegionFilter,
+  regionCode: string | null,
+  sigunguCode: string | null,
+): boolean {
+  if (expected.sido) return regionCode === expected.sido;
+  if (expected.sigungu) return sigunguCode === expected.sigungu;
+  return false;
+}
+
 export function destinationRegionFilter(destination: string): RegionFilter {
   const tokens = destination.trim().split(/\s+/).filter(Boolean);
   for (const token of tokens) {

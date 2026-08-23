@@ -110,8 +110,9 @@ docker push <ns>/tripick-llm:<tag>
 
 ### 타임아웃 주의
 
-`LLM_PLANNER_TIMEOUT_MS` 기본값은 `12000`(12초)이다. 로컬 LLM 서빙 환경에서 이미 부족한 값이며,
-RunPod 콜드스타트가 겹치면 무조건 타임아웃된다. 프로덕션은 **90000 이상**으로 설정한다.
+`LLM_PLANNER_TIMEOUT_MS` 기본값은 `90000`(90초)이다. 예전 기본값 `12000` 은 로컬 LLM 서빙에
+이미 부족했고(후보 16개 JSON 생성에 15~40초) RunPod 콜드스타트가 겹치면 무조건 타임아웃돼,
+LLM 이 살아 있어도 매번 결정적 폴백으로 떨어졌다. 더 느린 스택이면 더 올린다.
 
 ### 실측 (RTX PRO 4000 Blackwell 24GB, secure $0.57/hr, EU-RO-1)
 
@@ -301,7 +302,7 @@ CLAUDE.md 아키텍처에 "Redis Adapter / Pub-Sub Sync" 가 명시되어 있으
 | `RESEND_API_KEY` | (비움) | Resend API 키 |
 | `LLM_BASE_URL` | `http://localhost:8080/v1` | RunPod chat 엔드포인트 |
 | `LLM_EMBEDDING_BASE_URL` | `http://localhost:8081/v1` | RunPod 임베딩 엔드포인트 |
-| `LLM_PLANNER_TIMEOUT_MS` | `12000` | **`90000` 이상** |
+| `LLM_PLANNER_TIMEOUT_MS` | `90000` | **`90000` 이상** |
 | `PLACE_RETRIEVAL_AUTO_SEED` | `true` | **`false`** (seed 가 실제 카카오 결과를 가림) |
 | `KAKAO_CALLBACK_URL` | `http://localhost:4000/...` | Railway API 도메인 |
 | `WEB_APP_URL` | `http://localhost:3000` | Vercel 도메인 |

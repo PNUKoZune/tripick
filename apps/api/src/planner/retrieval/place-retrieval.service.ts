@@ -6,11 +6,17 @@ import { DestinationAnchorService } from './destination-anchor.service';
 import { KakaoLocalService } from './kakao-local.service';
 import { NaverSearchService, NEUTRAL_POPULARITY } from './naver-search.service';
 import { PlaceEmbeddingRepository, toKstDateString } from './place-embedding.repository';
-import { destinationRegionFilter } from './region-code';
+import {
+  destinationRegionFilter,
+  matchesRegionFilter,
+  placeRegionCodes,
+  type RegionFilter,
+} from './region-code';
 import { TextEmbeddingService } from '../../embedding/text-embedding.service';
 import { isEligibleItineraryCandidate } from './place-eligibility';
 import type {
   CandidatePlace,
+  PoolCategoryQuota,
   DestinationAnchor,
   RawPlaceCandidate,
   RetrievalContext,
@@ -44,6 +50,9 @@ const DEFAULT_RADIUS_STEPS_M = [2000, 5000, 10000] as const;
 /** 앵커 반경이 "충분하다"고 볼 최소 종류별 후보 수. 일정에 식사와 볼거리가 둘 다 필요하다. */
 const MIN_KIND_COUNT = 4;
 
+/** 호출자가 종류별 하한을 안 줄 때 쓰는 하루치 기본값 (끼니 2 · 카페 1 · 볼거리 2). */
+const DEFAULT_CATEGORY_QUOTA: PoolCategoryQuota = { restaurant: 2, cafe: 1, attraction: 2 };
+
 @Injectable()
 export class PlaceRetrievalService {
   private readonly logger = new Logger(PlaceRetrievalService.name);
@@ -70,6 +79,8 @@ export class PlaceRetrievalService {
     const regionFilter = anchor?.region ?? destinationRegionFilter(inputContext.destination);
     const context: RetrievalContext = { ...inputContext, popularityIndex, regionFilter };
     const limit = context.limit ?? 16;
+    // 종류별 하한. 플래너가 안 주면 하루치 기본값으로 본다.
+    const quota = context.categoryQuota ?? DEFAULT_CATEGORY_QUOTA;
     const queryText = this.buildQueryText(context);
     const sources: RetrievalSource[] = [];
     const rawCandidates: RawPlaceCandidate[] = [];
@@ -102,6 +113,7 @@ export class PlaceRetrievalService {
         poolSize,
         limit,
         visitWindow,
+        quota,
         preferenceVector,
       );
       // 확정된 반경을 컨텍스트에 실어 카카오 폴백이 같은 범위를 보게 한다.
@@ -126,9 +138,11 @@ export class PlaceRetrievalService {
 
     let ranked = this.evaluator.rank(rawCandidates, context);
     if (!this.isStrongEnough(ranked, limit)) {
-      const kakao = this.filterEligibleCandidates(
-        await this.kakaoLocal.search(context, limit * 2),
-        'kakao',
+      // 카카오 키워드 폴백은 좌표를 못 주면(앵커·현재 위치 없는 평범한 행정구역 목적지)
+      // **전국이 사정권**이라 타지역 동명 장소가 섞인다. 지역 하드 게이트를 여기서 건다.
+      const kakao = this.filterOutOfRegion(
+        this.filterEligibleCandidates(await this.kakaoLocal.search(context, limit * 2), 'kakao'),
+        regionFilter,
       );
       if (kakao.length > 0) {
         sources.push('kakao');
@@ -163,7 +177,7 @@ export class PlaceRetrievalService {
       popularityWeight * Math.max(0, NEUTRAL_POPULARITY - candidate.crag.popularity);
     const accepted = ranked.filter((candidate) => gateConfidence(candidate) >= minimumConfidence);
     const finalPool = accepted.length >= Math.min(4, limit) ? accepted : ranked;
-    const places = this.evaluator.selectTopDiverse(finalPool, limit);
+    const places = this.evaluator.selectTopDiverse(finalPool, limit, quota);
     const averageConfidence = this.averageConfidence(places);
     const rejectedCount = Math.max(0, ranked.length - accepted.length);
 
@@ -200,6 +214,7 @@ export class PlaceRetrievalService {
     poolSize: number,
     limit: number,
     visitWindow: VisitWindow,
+    quota: PoolCategoryQuota,
     preferenceVector?: number[],
   ): Promise<{ candidates: RawPlaceCandidate[]; radiusM: number }> {
     const steps = this.radiusStepsM();
@@ -218,7 +233,7 @@ export class PlaceRetrievalService {
     let candidates: RawPlaceCandidate[] = [];
     for (const step of steps) {
       candidates = await search(step);
-      if (this.isAnchorPoolSufficient(candidates, limit)) {
+      if (this.isAnchorPoolSufficient(candidates, limit, quota)) {
         this.logger.log(
           `앵커 "${anchor.label}" 반경 ${step / 1000}km 후보 ${candidates.length}건으로 확정`,
         );
@@ -256,12 +271,20 @@ export class PlaceRetrievalService {
    * 하루치 식사 슬롯도 못 채운다. 그래서 종류별 하한을 함께 본다. 전체 개수는 최종 선택
    * 수(limit)의 2배를 요구한다 — 그 정도는 돼야 인지도·취향 재정렬이 손댈 여지가 생긴다.
    */
-  private isAnchorPoolSufficient(candidates: RawPlaceCandidate[], limit: number): boolean {
+  private isAnchorPoolSufficient(
+    candidates: RawPlaceCandidate[],
+    limit: number,
+    quota: PoolCategoryQuota,
+  ): boolean {
     if (candidates.length < limit * 2) return false;
     const dining = candidates.filter((candidate) =>
       DINING_CATEGORIES.has(candidate.category),
     ).length;
-    return dining >= MIN_KIND_COUNT && candidates.length - dining >= MIN_KIND_COUNT;
+    if (dining < MIN_KIND_COUNT || candidates.length - dining < MIN_KIND_COUNT) return false;
+    // 카페를 따로 세는 이유 — 카탈로그 비중이 관광지·음식점의 1/6 이라, 식음을 한 덩어리로
+    // 세면 음식점만으로 하한이 채워져 카페 0건인 반경에서 멈춘다.
+    if (quota.cafe <= 0) return true;
+    return candidates.filter((candidate) => candidate.category === 'cafe').length >= 1;
   }
 
   /**
@@ -404,6 +427,45 @@ export class PlaceRetrievalService {
     if (candidates.length < Math.min(4, targetCount)) return false;
     const top = candidates.slice(0, targetCount);
     return this.averageConfidence(top) >= this.targetConfidence();
+  }
+
+  /**
+   * 목적지 지역이 확정된 검색에서 **다른 지역 후보를 아예 뺀다.**
+   *
+   * CRAG `localityScore` 는 지역 불일치를 0.32 로 감점만 하고 탈락시키지 않는다. 풀이 얇으면
+   * 그대로 살아남아 일정에 박히는데, 그 피해가 순위 문제가 아니다 — 실측에서 경주 여행에
+   * 단양의 '경주식당'(직선 152km)이 들어가 이동시간 457분으로 하루를 통째로 삼켰다.
+   *
+   * 두 가지를 지킨다.
+   *   1. **지역을 못 읽는 후보는 남긴다.** 데이터 없음을 '다른 지역'으로 읽으면 안 된다
+   *      (`localityScore` 가 판정 불가를 중립값으로 두는 것과 같은 원칙).
+   *   2. **한 건도 안 맞으면 게이트를 포기한다.** `destinationRegionFilter` 는 임의 문자열에서도
+   *      시군구 코드를 만들어 내므로('발리' → '발리'), 그대로 두면 전부 탈락해 후보가 0 이 된다.
+   */
+  private filterOutOfRegion(
+    candidates: RawPlaceCandidate[],
+    region: RegionFilter,
+  ): RawPlaceCandidate[] {
+    if (!region.sido && !region.sigungu) return candidates;
+
+    const kept = candidates.filter((candidate) => {
+      const { regionCode, sigunguCode } = placeRegionCodes(
+        candidate.destinationRegion ?? null,
+        null,
+        candidate.address ?? null,
+      );
+      if (!regionCode && !sigunguCode) return true;
+      return matchesRegionFilter(region, regionCode, sigunguCode);
+    });
+
+    if (kept.length === 0) return candidates;
+    const dropped = candidates.length - kept.length;
+    if (dropped > 0) {
+      this.logger.debug(
+        `지역 이탈 후보 ${dropped}건 제외 (기대=${region.sido ?? region.sigungu})`,
+      );
+    }
+    return kept;
   }
 
   private filterEligibleCandidates(

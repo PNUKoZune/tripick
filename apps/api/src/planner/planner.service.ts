@@ -14,6 +14,7 @@ import {
   minimumItemsPerDay,
   targetItemsPerDay,
 } from './helpers/itinerary-density';
+import { fillDaySlots } from './helpers/day-slot-planner';
 import { ARRIVAL_RADIUS_M } from '../arrival-alert/arrival-alert.constants';
 import { ConstraintEngine, type ValidationResult } from './constraint/constraint.engine';
 import { PlannerAgentService } from './agent/planner-agent.service';
@@ -41,7 +42,16 @@ import type {
   ReplanTrigger,
   TasteTagDto,
 } from '@tripick/types';
-import type { CandidatePlace, RetrievalContext } from './retrieval/types';
+import type { CandidatePlace, PoolCategoryQuota, RetrievalContext } from './retrieval/types';
+
+/**
+ * 일차 수에 맞춘 후보 풀 종류별 하한. 하루에 필요한 건 끼니 2 + 휴식(카페) 1 이고, 볼거리는
+ * 카탈로그에 넘쳐 나므로 하한을 크게 잡을 이유가 없다(상한 쪽이 이미 볼거리를 밀어 준다).
+ */
+function dayCategoryQuota(dayCount: number): PoolCategoryQuota {
+  const days = Math.max(1, dayCount);
+  return { restaurant: days * 2, cafe: days, attraction: 2 };
+}
 
 const PACE_HINT: Record<ReplanPace, string> = {
   relaxed: '여유로운 일정(하루 일정 수를 줄이고 이동·대기 부담 최소화)',
@@ -73,10 +83,10 @@ const TRIGGER_MEMO_NOTE: Record<ReplanTrigger, string> = {
 const REPLAN_START_LEAD_MIN = 10;
 
 /**
- * 앵커된 일차 항목의 최소 체류시간(분). 남은 시간에 맞춰 체류를 줄이되 이보다 짧게는 쓰지 않고
- * 항목을 뺀다 — 15분짜리 관광지 방문은 일정이라기보다 노이즈다.
+ * 하루 끝까지 이만큼도 안 남았으면 그 항목부터 뺀다(분). 15분짜리 관광지 방문은 일정이라기보다
+ * 노이즈다. 앵커된 일차는 이 값까지 체류를 줄여서라도 담고, 보통 일차는 줄이지 않고 뺀다.
  */
-const MIN_ANCHORED_VISIT_MIN = 45;
+const MIN_FITTING_VISIT_MIN = 45;
 
 /**
  * 오늘 일차의 재계획 앵커.
@@ -105,6 +115,15 @@ interface GenerateOptions {
   mustIncludePlaces?: ReplanRequestDto['mustIncludePlaces'];
   /** 구조화 재계획 옵션 (강도·회피·동선·예산) */
   preferences?: ReplanRequestDto['preferences'];
+}
+
+/** 초안 한 회차의 판정 결과. 하드 제약 위반과 "다 못 담음"을 나눠 들고 있다. */
+interface DraftAttempt {
+  validation: ValidationResult;
+  /** 배치안 대비 하루 끝에 걸려 잘려 나간 항목 수. */
+  shortfall: number;
+  /** 그대로 저장해도 되는 안인지 (제약 통과 + 잘려 나간 항목 없음). */
+  accepted: boolean;
 }
 
 interface DraftBuildContext {
@@ -274,6 +293,9 @@ export class PlannerService {
         ...sharedRetrieval,
         destination: trip.destination,
         limit: Math.max(totalTargetItems + 4, 12),
+        // 다시 짜는 일차 수만큼 끼니·휴식 자리를 요구한다. 이게 없으면 풀에 식음이 2개만
+        // 보장되고 그 2개도 거의 항상 음식점이라, 3일 여행에 카페가 한 번도 안 들어온다.
+        categoryQuota: dayCategoryQuota(planDays.length),
       });
       candidates = [...mustCandidates, ...this.excludeKeptPlaces(retrieval.places, untouchedItems)];
       traceLabel = `${trip.destination} sources=${retrieval.trace.sources.join('+') || 'none'} avg=${retrieval.trace.averageConfidence.toFixed(2)}`;
@@ -302,7 +324,7 @@ export class PlannerService {
     // 후보 수·day 검증(1..dayCount)과도 어긋나지 않는다. 실제 날짜는 dayDates 로 함께 넘긴다 —
     // 시작·종료일 두 값은 [1,3] 같은 비연속 범위를 표현하지 못해 dayCount 와 어긋났다.
     const agentPlan = perDayMode
-      ? this.buildPerDayDeterministicPlan(poolsByDay!, itemsPerDay, planDays, anchorByDay)
+      ? this.buildPerDayDeterministicPlan(poolsByDay!, itemsPerDay, planDays, anchorByDay, wakeTime)
       : this.remapPlanDays(
           await this.plannerAgent.plan({
             destination: trip.destination,
@@ -341,8 +363,7 @@ export class PlannerService {
     };
     // LLM 이 필수 포함 장소를 누락했으면 강제로 주입한다(시드+프롬프트는 best-effort 라 보장 안 됨).
     const guaranteedPlan = this.enforceMustInclude(agentPlan, mustCandidates, planDays, perDayMode);
-    const aiDraft = await this.buildDraft(guaranteedPlan, draftContext);
-    const aiValidation = await this.validateDraft(aiDraft, draftContext);
+    const aiAttempt = await this.evaluateDraft(guaranteedPlan, draftContext);
     // 검증 실패 시 근접 후보 우선 재정렬 기반 결정적 재생성. 모드에 맞는 배치 생성기를 넘긴다.
     const rebuildAttempts = perDayMode
       ? Math.min(3, Math.max(1, ...poolsByDay!.map((pool) => pool.length)))
@@ -358,6 +379,7 @@ export class PlannerService {
               itemsPerDay,
               planDays,
               anchorByDay,
+              wakeTime,
             ),
             mustCandidates,
             planDays,
@@ -372,9 +394,9 @@ export class PlannerService {
             mustCandidates,
             planDays,
           );
-    const finalItems = aiValidation.valid
-      ? aiValidation.items
-      : await this.rebuildValidDraft(planFactory, draftContext, aiValidation, rebuildAttempts);
+    const finalItems = aiAttempt.accepted
+      ? aiAttempt.validation.items
+      : await this.rebuildValidDraft(planFactory, draftContext, aiAttempt, rebuildAttempts);
 
     // memo 는 사용자가 직접 남기는 메모 공간이므로 생성 단계의 AI 추론(취향·confidence·
     // 날씨 힌트)을 저장하지 않는다. 새 일정의 memo 는 비어 있는 채로 시작한다.
@@ -632,10 +654,14 @@ export class PlannerService {
         .sort((a, b) => a.order - b.order)
         .slice(0, this.dayItemTarget(anchorByDay, day, itemsPerDay));
       let currentAt = this.makeDateTime(this.offsetDate(trip.startDate, day - 1), startTime);
-      // 앵커된 일차는 취침까지 남은 시간이 짧아 체류시간을 줄이거나 뒤 항목을 버려야 한다.
-      // 그대로 넘기면 ScheduleConstraint 가 항목을 취침 직전으로 당겨 "지금" 보다 이른 시각에
-      // 일정이 박히고, 이동시간 위반으로 검증까지 실패한다.
-      const dayEndAt = anchorByDay.has(day) ? this.dayEndAt(context, day) : null;
+      const anchored = anchorByDay.has(day);
+      // 하루의 끝(취침)은 **앵커 유무와 무관하게** 경계다.
+      //
+      // 예전엔 앵커된 일차에만 걸었다. 보통 일차는 체류+이동을 무한정 누적할 수 있어 자정을
+      // 넘겼고, 그러면 ScheduleConstraint 가 **시각만** 활동 구간 안으로 되돌려 날짜가 하루
+      // 밀린 항목이 남았다(실측: day1 항목이 D+1 07:30 에 저장돼 day2 첫 항목과 충돌). 검증은
+      // 전부 시각 기준이라 이걸 잡지 못했다 — 넘치면 시각을 옮길 게 아니라 항목을 줄여야 한다.
+      const dayEndAt = this.dayEndAt(context, day);
 
       for (let order = 0; order < dayPlan.length; order += 1) {
         const planned = dayPlan[order]!;
@@ -646,7 +672,7 @@ export class PlannerService {
         // "지금 그 장소에 이미 도착해 있다" 를 가정하게 된다.
         const from =
           sameDayPrevious?.coordinates ??
-          (dayEndAt && order === 0 ? options.currentLocation : undefined);
+          (anchored && order === 0 ? options.currentLocation : undefined);
         const travelTimeMin = from
           ? await this.estimateTravelTime(from, seed.coordinates, trip.transportMode)
           : 0;
@@ -654,12 +680,17 @@ export class PlannerService {
         currentAt = new Date(currentAt.getTime() + travelTimeMin * 60000);
         currentAt = this.alignToOpeningHours(currentAt, seed.openingHours);
 
+        const remainMin = Math.floor((dayEndAt - currentAt.getTime()) / 60_000);
+        // 45분도 안 남으면 이 항목부터는 그 날 안에 넣을 수 없다.
+        if (remainMin < MIN_FITTING_VISIT_MIN) break;
         let durationMin = planned.durationMin;
-        if (dayEndAt) {
-          const remainMin = Math.floor((dayEndAt - currentAt.getTime()) / 60_000);
-          // 45분도 안 남으면 이 항목부터는 오늘 안에 넣을 수 없다.
-          if (remainMin < MIN_ANCHORED_VISIT_MIN) break;
-          durationMin = Math.max(MIN_ANCHORED_VISIT_MIN, Math.min(durationMin, remainMin));
+        if (durationMin > remainMin) {
+          // 앵커된 일차는 체류를 줄여서라도 담는다 — "지금 이후"라 남은 시간이 짧은 게 정상이다.
+          // 보통 일차는 줄이지 않고 **뺀다**: 줄여서 끼워 넣으면 동선이 나쁜 배치안도
+          // "하루에 다 들어갔다"가 되어 근접 재정렬 재시도 신호가 사라진다(흩어진 하루가
+          // 45분짜리 방문으로 눌린 채 저장된다).
+          if (!anchored) break;
+          durationMin = remainMin;
         }
 
         const item: CreateItineraryItemDto = {
@@ -717,53 +748,116 @@ export class PlannerService {
       wakeTime: context.wakeTime,
       sleepTime: context.sleepTime,
       transportMode: context.trip.transportMode,
+      // 각 항목이 그 일차의 활동 구간(절대 시각)에 드는지까지 보게 한다. 시각만 보던 시절엔
+      // 날짜가 하루 밀린 항목이 조용히 저장돼 도착 알림이 엉뚱한 날 떴다.
+      tripStartDate: context.trip.startDate,
     });
+  }
+
+  /**
+   * 배치안을 실제 일정으로 만들고 판정한다.
+   *
+   * 하드 제약과 **"하루에 다 못 담았다"(shortfall)를 나눠 본다.** `buildDraft` 가 하루 끝을
+   * 넘기지 않게 항목을 잘라내므로, 동선이 나쁜 배치안도 짧아진 채로는 제약을 통과한다 —
+   * 그것만 보면 근접 재정렬 재시도가 아예 안 돌아 흩어진 하루가 그대로 저장된다.
+   * 그래서 잘려 나간 개수를 따로 세어 재시도의 신호로 쓴다.
+   */
+  private async evaluateDraft(
+    plan: PlannedCandidate[],
+    context: DraftBuildContext,
+  ): Promise<DraftAttempt> {
+    const items = await this.buildDraft(plan, context);
+    const validation = await this.validateDraft(items, context);
+    const shortfall = Math.max(0, this.plannedItemCount(plan, context) - items.length);
+    return { validation, shortfall, accepted: validation.valid && shortfall === 0 };
+  }
+
+  /** 배치안이 담으려 한 항목 수(일차별 상한 적용 후) — `buildDraft` 의 slice 와 같은 기준. */
+  private plannedItemCount(plan: PlannedCandidate[], context: DraftBuildContext): number {
+    return context.planDays.reduce((sum, day) => {
+      const dayTarget = this.dayItemTarget(context.anchorByDay, day, context.itemsPerDay);
+      const dayPlanned = plan.filter((item) => item.day === day).length;
+      return sum + Math.min(dayPlanned, dayTarget);
+    }, 0);
   }
 
   private async rebuildValidDraft(
     makePlan: (attempt: number) => PlannedCandidate[],
     context: DraftBuildContext,
-    failedAiValidation: ValidationResult,
+    failedAiAttempt: DraftAttempt,
     attempts: number,
   ): Promise<ItineraryItemDto[]> {
     this.logger.warn(
-      `AI planner itinerary for trip ${context.trip.id} violated hard constraints: ${failedAiValidation.issues.join('; ')}`,
+      `AI planner itinerary for trip ${context.trip.id} rejected: ${this.describeAttempt(failedAiAttempt)}`,
     );
 
-    let lastValidation = failedAiValidation;
+    // 제약은 통과했지만 항목이 줄어든 초안 중 가장 덜 줄어든 것. 회차를 다 써도 완전한 안을
+    // 못 찾으면 이걸 쓴다 — 짧아진 하루가 여행 생성 실패(503)보다는 낫다.
+    let best = failedAiAttempt.validation.valid ? failedAiAttempt : null;
+    let last = failedAiAttempt;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       // 근접 재정렬로 필수 장소가 상위 slice 밖으로 밀릴 수 있어 결정적 폴백에서도 강제 주입한다.
-      const fallbackPlan = makePlan(attempt);
-      const fallbackDraft = await this.buildDraft(fallbackPlan, context);
-      const fallbackValidation = await this.validateDraft(fallbackDraft, context);
-      if (fallbackValidation.valid) {
+      const candidate = await this.evaluateDraft(makePlan(attempt), context);
+      if (candidate.accepted) {
         this.logger.log(
           `Recovered valid itinerary for trip ${context.trip.id} with deterministic CRAG fallback attempt ${attempt + 1}`,
         );
-        return fallbackValidation.items;
+        return candidate.validation.items;
       }
-      lastValidation = fallbackValidation;
+      if (candidate.validation.valid && (!best || candidate.shortfall < best.shortfall)) {
+        best = candidate;
+      }
+      last = candidate;
+    }
+
+    if (best) {
+      this.logger.warn(
+        `Trip ${context.trip.id}: 하루에 다 담지 못해 항목 ${best.shortfall}개를 줄여 저장합니다.`,
+      );
+      return best.validation.items;
     }
 
     throw new BadRequestException(
-      `Generated itinerary violates hard constraints: ${lastValidation.issues.join('; ')}`,
+      `Generated itinerary violates hard constraints: ${last.validation.issues.join('; ')}`,
     );
   }
 
+  private describeAttempt(attempt: DraftAttempt): string {
+    const parts = [...attempt.validation.issues];
+    if (attempt.shortfall > 0) parts.push(`하루에 안 들어간 항목 ${attempt.shortfall}개`);
+    return parts.join('; ');
+  }
+
+  /**
+   * 근접 정렬된 후보를 일차별로 나눠 배치한다.
+   *
+   * 예전엔 `candidates.slice(offset, offset + dayTarget)` 로 앞에서부터 잘라 담았다. 그런데
+   * 풀의 식음 후보는 `selectTopDiverse` 가 **꼬리 자리에 채워 넣기** 때문에 이 슬라이스에
+   * 한 번도 걸리지 않았다 — 하루가 통째로 관광지로 채워지던 경로다. 이제 하루의 슬롯 역할
+   * (점심·저녁 음식점 / 오후 카페)을 먼저 채우고 나머지를 볼거리로 메운다.
+   *
+   * `searchWindow` 로 역할 후보 탐색을 근접 체인의 앞쪽으로 제한해 `orderByProximity` 가
+   * 만든 지리적 군집을 유지한다 — 창 안에 없을 때만 풀 전체를 훑는다.
+   */
   private buildDeterministicPlan(
     candidates: CandidatePlace[],
     context: DraftBuildContext,
   ): PlannedCandidate[] {
     const planned: PlannedCandidate[] = [];
-    // 일차마다 담을 개수가 다를 수 있어(앵커된 오늘은 남은 시간만큼) 오프셋을 누적한다.
-    let offset = 0;
+    const used = new Set<string>();
     context.planDays.forEach((day) => {
       const dayTarget = this.dayItemTarget(context.anchorByDay, day, context.itemsPerDay);
-      const dayCandidates = candidates.slice(offset, offset + dayTarget);
-      offset += dayTarget;
+      const startTime = this.dayStartTime(context.anchorByDay, day, context.wakeTime);
+      const dayCandidates = fillDaySlots({
+        pool: candidates,
+        used,
+        startTime,
+        itemCount: dayTarget,
+        searchWindow: dayTarget * 2,
+      });
       const durations = distributeFallbackDurations(
         dayCandidates.map((candidate) => candidate.category),
-        this.dayStartTime(context.anchorByDay, day, context.wakeTime),
+        startTime,
         context.sleepTime,
       );
       dayCandidates.forEach((candidate, index) => {
@@ -772,7 +866,7 @@ export class PlannerService {
           day,
           order: index + 1,
           durationMin: durations[index] ?? defaultVisitDuration(candidate.category),
-          memo: 'CRAG 후보 순위 기반 배치',
+          memo: '식사·휴식 슬롯 기반 배치',
           aiGenerated: false,
         });
       });
@@ -821,6 +915,8 @@ export class PlannerService {
         ...sharedRetrieval,
         destination: region,
         limit: perRegionLimit,
+        // 일자별 풀은 그 하루만 채우므로 하루치 하한이면 된다.
+        categoryQuota: dayCategoryQuota(1),
         // 그 일차 하루가 곧 방문 구간이다. 날짜를 모르면 여행 전체 구간(sharedRetrieval)을 쓴다.
         ...(date ? { visitWindow: { from: date, to: date } } : {}),
       });
@@ -866,17 +962,28 @@ export class PlannerService {
     itemsPerDay: number,
     planDays: number[],
     anchorByDay: Map<number, DayAnchor>,
+    wakeTime: string,
   ): PlannedCandidate[] {
     const planned: PlannedCandidate[] = [];
+    // 일차별 풀은 지역이 겹치면 같은 후보를 담을 수 있다. 소비한 id 를 공유해 중복 배치를 막는다.
+    const used = new Set<string>();
     poolsByDay.forEach((pool, dayIndex) => {
       const day = planDays[dayIndex] ?? dayIndex + 1;
-      pool.slice(0, this.dayItemTarget(anchorByDay, day, itemsPerDay)).forEach((candidate, index) => {
+      const startTime = this.dayStartTime(anchorByDay, day, wakeTime);
+      // 여기서도 `pool.slice(0, dayTarget)` 을 쓰면 안 된다 — 풀 크기가 `itemsPerDay + 3` 이라
+      // 꼬리에 채워진 식음 후보가 정확히 잘려 나가는 자리에 있다.
+      fillDaySlots({
+        pool,
+        used,
+        startTime,
+        itemCount: this.dayItemTarget(anchorByDay, day, itemsPerDay),
+      }).forEach((candidate, index) => {
         planned.push({
           candidate,
           day,
           order: index + 1,
           durationMin: defaultVisitDuration(candidate.category),
-          memo: '일자별 지역 후보 순위 기반 배치',
+          memo: '일자별 지역 후보 · 식사·휴식 슬롯 기반 배치',
           aiGenerated: false,
         });
       });
@@ -1066,21 +1173,24 @@ export class PlannerService {
     return new Date(`${dateText}T${timeText}:00+09:00`);
   }
 
+  /**
+   * 개장 전 도착이면 개장 시각으로 미룬다.
+   *
+   * ⚠️ 날짜는 그 시각의 **KST 날짜**로 다시 만든다. 예전엔 `setUTCHours(개장시 - 9, …)` 로
+   * 시간만 바꿨는데, KST 09:00 이전 시각은 UTC 날짜가 하루 전이라 결과가 통째로 전날로 갔다
+   * (기본 기상 08:30 + 09:00 개장 → 08-21 08:30 이 08-20 09:00 이 됨). 검증이 전부 시각
+   * 기준이라 이 하루 밀림은 아무 데서도 안 걸렸다.
+   */
   private alignToOpeningHours(date: Date, openingHours?: string): Date {
     if (!openingHours) return date;
     const match = openingHours.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
     if (!match) return date;
 
     const [, startHour, startMinute] = match;
-    const currentKstMinutes = ((date.getUTCHours() * 60 + date.getUTCMinutes()) + 9 * 60) % (24 * 60);
     const openingMinutes = Number(startHour) * 60 + Number(startMinute);
-    if (currentKstMinutes >= openingMinutes) {
-      return date;
-    }
+    if (getKstMinutes(date) >= openingMinutes) return date;
 
-    const adjusted = new Date(date);
-    adjusted.setUTCHours(Number(startHour) - 9, Number(startMinute), 0, 0);
-    return adjusted;
+    return this.makeDateTime(toKstIsoDate(date), `${startHour}:${startMinute}`);
   }
 
   /**

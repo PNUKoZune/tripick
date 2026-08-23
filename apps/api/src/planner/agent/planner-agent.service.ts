@@ -7,6 +7,7 @@ import {
   defaultVisitDuration,
   distributeFallbackDurations,
 } from '../helpers/itinerary-density';
+import { fillDaySlots } from '../helpers/day-slot-planner';
 
 export interface PlannerAgentOptions {
   destination: string;
@@ -75,13 +76,22 @@ export class PlannerAgentService {
     try {
       const response = await this.callPlannerModel(options);
       const parsed = this.parseModelPlan(response, options);
-      if (parsed.length < Math.min(options.candidates.length, this.totalTargetItems(options))) {
-        this.logger.warn('AI planner returned too few valid items, using deterministic fallback');
+      // 예전엔 "목표 개수를 전부 채우지 못하면 통째로 폐기" 였다. 중복 슬롯 하나만 있어도
+      // AI 결과가 전량 버려져 결정적 폴백으로 떨어졌고, 프롬프트를 고쳐도 일정에 반영될 길이
+      // 없었다. 이제는 유효한 선택만 살리고 빈 슬롯만 슬롯 규칙으로 메운다.
+      if (parsed.length === 0) {
+        this.logger.warn('AI planner returned no valid items, using deterministic fallback');
         return fallback;
       }
 
-      this.logger.log(`AI planner generated ${parsed.length} itinerary selections`);
-      return parsed;
+      const completed = this.completePlan(parsed, options);
+      this.logger.log(
+        `AI planner generated ${parsed.length} itinerary selections` +
+          (completed.length > parsed.length
+            ? ` (+${completed.length - parsed.length} slot fills)`
+            : ''),
+      );
+      return completed;
     } catch (error) {
       this.logger.warn(
         `AI planner unavailable, using deterministic fallback: ${error instanceof Error ? error.message : String(error)}`,
@@ -94,7 +104,9 @@ export class PlannerAgentService {
     const baseUrl = this.config.get<string>('LLM_BASE_URL', 'http://localhost:8080/v1');
     const apiKey = this.config.get<string>('LLM_API_KEY', 'local');
     const model = this.config.get<string>('LLM_MODEL', 'gemma-4');
-    const timeout = this.readNumber('LLM_PLANNER_TIMEOUT_MS', 12000);
+    // 기본값이 12초이던 시절엔 로컬·RunPod 어느 쪽도 완주하지 못해 사실상 항상 결정적
+    // 폴백으로 떨어졌다(실측: 후보 16개 JSON 생성에 15~40초, 콜드스타트면 그 이상).
+    const timeout = this.readNumber('LLM_PLANNER_TIMEOUT_MS', 90000);
 
     const res = await axios.post<{
       choices: Array<{ message: { content: string } }>;
@@ -257,17 +269,28 @@ export class PlannerAgentService {
     return planned.sort((a, b) => a.day - b.day || a.order - b.order);
   }
 
+  /**
+   * LLM 없이 하루를 채운다. 예전엔 후보를 점수 순으로 `slice` 하기만 해서 상위가 관광지로
+   * 가득한 풀에서는 식음 후보가 꼬리에 남아 한 번도 안 뽑혔다 — 끼니 없는 하루가 나오던 경로다.
+   * 이제 `fillDaySlots` 가 식사·휴식 슬롯을 먼저 채우고 나머지를 볼거리로 메운다.
+   */
   private buildFallbackPlan(options: PlannerAgentOptions): PlannedCandidate[] {
     const planned: PlannedCandidate[] = [];
-    let offset = 0;
+    // 일차 간 중복 배치를 막기 위해 소비한 후보 id 를 일차끼리 공유한다.
+    const used = new Set<string>();
     for (let day = 1; day <= options.dayCount; day += 1) {
-      // 일차마다 담을 개수가 다를 수 있으므로(오늘은 남은 시간만큼) 오프셋을 누적한다.
       const dayTarget = this.dayItemTarget(options, day - 1);
-      const dayCandidates = options.candidates.slice(offset, offset + dayTarget);
-      offset += dayTarget;
+      const startTime = this.dayStartTime(options, day - 1);
+      const dayCandidates = fillDaySlots({
+        pool: options.candidates,
+        used,
+        startTime,
+        itemCount: dayTarget,
+        searchWindow: dayTarget * 2,
+      });
       const durations = distributeFallbackDurations(
         dayCandidates.map((candidate) => candidate.category),
-        this.dayStartTime(options, day - 1),
+        startTime,
         options.sleepTime,
       );
       dayCandidates.forEach((candidate, index) => {
@@ -276,12 +299,67 @@ export class PlannerAgentService {
           day,
           order: index + 1,
           durationMin: durations[index] ?? defaultVisitDuration(candidate.category),
-          memo: 'AI planner fallback: CRAG 후보 순위 기반 배치',
+          memo: 'AI planner fallback: 식사·휴식 슬롯 기반 배치',
           aiGenerated: false,
         });
       });
     }
     return planned;
+  }
+
+  /**
+   * AI 가 채우지 못한 슬롯만 결정적으로 메운다.
+   *
+   * AI 선택은 일차별로 앞에서부터 order 를 다시 매겨 붙이고, 남는 자리는 그 시각의 슬롯 역할
+   * (점심·저녁 음식점 / 오후 카페 / 나머지 볼거리)에 맞는 후보로 채운다. 목표를 이미 채운
+   * 일차는 AI 결과를 그대로 둔다.
+   */
+  private completePlan(
+    parsed: PlannedCandidate[],
+    options: PlannerAgentOptions,
+  ): PlannedCandidate[] {
+    const used = new Set(parsed.map((item) => item.candidate.id));
+    const completed: PlannedCandidate[] = [];
+
+    for (let day = 1; day <= options.dayCount; day += 1) {
+      const dayTarget = this.dayItemTarget(options, day - 1);
+      const startTime = this.dayStartTime(options, day - 1);
+      const aiPicks = parsed
+        .filter((item) => item.day === day)
+        .sort((a, b) => a.order - b.order)
+        .slice(0, dayTarget);
+
+      if (aiPicks.length >= dayTarget) {
+        aiPicks.forEach((item, index) => completed.push({ ...item, order: index + 1 }));
+        continue;
+      }
+
+      const dayCandidates = fillDaySlots({
+        pool: options.candidates,
+        used,
+        startTime,
+        itemCount: dayTarget,
+        searchWindow: dayTarget * 2,
+        preassigned: aiPicks.map((item) => item.candidate),
+      });
+      dayCandidates.forEach((candidate, index) => {
+        const aiPick = aiPicks[index];
+        completed.push(
+          aiPick
+            ? { ...aiPick, order: index + 1 }
+            : {
+                candidate,
+                day,
+                order: index + 1,
+                durationMin: defaultVisitDuration(candidate.category),
+                memo: 'AI 미배치 슬롯 — 식사·휴식 슬롯 규칙으로 보완',
+                aiGenerated: false,
+              },
+        );
+      });
+    }
+
+    return completed.sort((a, b) => a.day - b.day || a.order - b.order);
   }
 
   /** prompt day(0-based index)의 계획 시작 시각. 지정이 없으면 기상 시각. */

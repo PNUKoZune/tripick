@@ -62,15 +62,17 @@ function isHaeundae(coordinates: { lat: number; lng: number }): boolean {
 }
 
 describe('PlannerService 재시도 근접 후보 우선', () => {
-  it('흩어진 후보로 AI 초안이 이동시간 제약을 깨면 근접 후보를 이어 붙여 복구한다', async () => {
+  it('흩어진 후보로 AI 초안이 하루에 안 들어가면 근접 후보를 이어 붙여 복구한다', async () => {
     const harness = build();
 
     const result = await harness.service.generateItinerary(TRIP.id);
 
-    // AI 초안 검증(실패) → 결정적 재생성 검증(통과). 재시도 경로를 실제로 탔다는 증거.
+    // AI 초안(권역 번갈아)은 이동에 시간을 다 써 하루 끝에 걸리고 뒤 항목이 잘려 나간다.
+    // 잘려 나간 개수가 재시도 신호다 — 잘린 채로도 하드 제약은 통과하므로, 이걸 안 세면
+    // 흩어진 하루가 그대로 저장된다.
     expect(harness.validate.mock.calls.length).toBeGreaterThanOrEqual(2);
-    await expect(harness.validate.mock.results[0]!.value).resolves.toMatchObject({ valid: false });
-    expect(result.length).toBeGreaterThan(0);
+    const aiDraft = (await harness.validate.mock.results[0]!.value) as { items: unknown[] };
+    expect(aiDraft.items.length).toBeLessThan(result.length);
     expect(harness.itineraryService.replaceTripItems).toHaveBeenCalledTimes(1);
   });
 
@@ -143,15 +145,27 @@ describe('PlannerService 재시도 근접 후보 우선', () => {
     ]);
   });
 
-  it('세 회차 모두 제약을 못 맞추면 여전히 저장하지 않고 실패시킨다', async () => {
-    // 취침까지 두 시간뿐인 활동 구간 + 권역 간 이동 — 어떤 순서로도 5곳이 안 들어간다.
-    const harness = build({ trip: { wakeTime: '20:00', sleepTime: '22:00' } });
+  it('세 회차 모두 하드 제약을 못 맞추면 여전히 저장하지 않고 실패시킨다', async () => {
+    const harness = build({ stubValidation: 'alwaysFail' });
 
     await expect(harness.service.generateItinerary(TRIP.id)).rejects.toThrow(
       /hard constraints/,
     );
     expect(harness.itineraryService.replaceTripItems).not.toHaveBeenCalled();
     expect(harness.tripsRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('하루가 짧아 다 못 담으면 줄여서라도 저장한다', async () => {
+    // 취침까지 두 시간뿐인 활동 구간 — 어떤 순서로도 5곳이 안 들어간다. 재시도를 아무리 해도
+    // 늘어나지 않으므로, 예전처럼 실패시키면 사용자는 몇 번을 눌러도 여행을 못 만든다.
+    // 하드 제약을 어긴 게 아니라 시간이 없는 것이니 짧아진 하루를 저장한다.
+    const harness = build({ trip: { wakeTime: '20:00', sleepTime: '22:00' } });
+
+    const result = await harness.service.generateItinerary(TRIP.id);
+
+    expect(result.length).toBeGreaterThan(0);
+    expect(result.length).toBeLessThan(5);
+    expect(harness.itineraryService.replaceTripItems).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -198,9 +212,10 @@ interface BuildOptions {
   /**
    * 제약 검증을 실제 엔진 대신 stub 으로 바꾼다. `failThenPass` 는 AI 초안만 실패시켜
    * 재시도 경로를 강제한다 — 앵커된 일차는 buildDraft 가 체류시간을 남은 시간에 맞춰 깎아
-   * 실제 엔진으로는 초안이 거의 항상 통과하기 때문이다.
+   * 실제 엔진으로는 초안이 거의 항상 통과하기 때문이다. `alwaysFail` 은 회차를 다 써도
+   * 하드 제약을 못 맞추는 상황(= 저장하면 안 되는 상황)을 만든다.
    */
-  stubValidation?: 'failThenPass';
+  stubValidation?: 'failThenPass' | 'alwaysFail';
 }
 
 function build(options: BuildOptions = {}) {
@@ -266,17 +281,23 @@ function build(options: BuildOptions = {}) {
 
   const scheduleConstraint = new ScheduleConstraint();
   const constraintEngine = new ConstraintEngine(routeHelper as any, scheduleConstraint);
+  const spyValidate = () => jest.spyOn(constraintEngine, 'validate');
   const validate =
     options.stubValidation === 'failThenPass'
-      ? jest
-          .spyOn(constraintEngine, 'validate')
+      ? spyValidate()
           .mockResolvedValueOnce({ valid: false, issues: ['AI route gap'], items: [] })
           .mockImplementation(async (items: ItineraryItemDto[]) => ({
             valid: true,
             issues: [],
             items,
           }))
-      : jest.spyOn(constraintEngine, 'validate');
+      : options.stubValidation === 'alwaysFail'
+        ? spyValidate().mockResolvedValue({
+            valid: false,
+            issues: ['이동 시간 부족'],
+            items: [],
+          })
+        : spyValidate();
 
   const service = new PlannerService(
     tripsRepo as any,

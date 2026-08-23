@@ -3,6 +3,21 @@ import type { RegionFilter } from './region-code';
 
 export type RetrievalSource = 'pgvector' | 'kakao' | 'seed';
 
+/**
+ * 후보 풀이 종류별로 반드시 담아야 하는 최소 수.
+ *
+ * 예전엔 식음(restaurant+cafe)을 한 덩어리로 묶어 "2개"만 보장했다. 카탈로그 비중이
+ * 음식점 15,854 대 카페 2,591(해운대 반경 5km 는 119 대 31)이라 그 2자리는 거의 항상
+ * 음식점이 가져갔고, **카페 하한은 어디에도 없었다** — 일정에 카페가 한 번도 안 들어오던 원인.
+ *
+ * 값은 호출자(플래너)가 일차 수만큼 곱해서 넘긴다. 하루에 필요한 건 끼니 2 + 휴식 1 이다.
+ */
+export interface PoolCategoryQuota {
+  restaurant: number;
+  cafe: number;
+  attraction: number;
+}
+
 /** 후보를 방문할 날짜 구간 (KST 기준 'YYYY-MM-DD', 양끝 포함). */
 export interface VisitWindow {
   from: string;
@@ -107,6 +122,14 @@ export interface RetrievalContext {
    * 카카오 폴백은 이걸 검색 중심으로 쓴다.
    */
   anchor?: AnchoredScope;
+  /**
+   * 이 검색이 채워야 할 종류별 최소 후보 수. 플래너가 "일차 수 × 하루에 필요한 슬롯" 으로
+   * 계산해 넘긴다. 생략하면 하루치 기본값(끼니 2 · 카페 1 · 볼거리 2).
+   *
+   * 검색 단독으로는 알 수 없는 값이라 컨텍스트로 받는다 — limit 만 보고 역산하면 부분 재계획
+   * (1일차만)과 5일 여행이 같은 하한을 쓰게 된다.
+   */
+  categoryQuota?: PoolCategoryQuota;
   /**
    * 목적지에서 해석한 정본 지역 코드 (place-retrieval 이 앞단에서 주입).
    *

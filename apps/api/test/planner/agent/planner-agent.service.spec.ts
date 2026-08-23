@@ -145,6 +145,52 @@ describe('PlannerAgentService', () => {
     ]);
   });
 
+  it('AI 가 슬롯을 덜 채우면 나머지만 메운다 (전량 폐기하지 않는다)', async () => {
+    // 예전엔 목표 개수를 못 채우면 AI 결과를 통째로 버렸다. 중복 슬롯 하나만 있어도
+    // 결정적 폴백으로 떨어져, 프롬프트를 고쳐도 일정에 반영될 길이 없었다.
+    mockedAxios.post.mockResolvedValueOnce({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                items: [{ candidateId: 'busan-cafe', day: 1, order: 1, durationMin: 60, memo: '카페' }],
+              }),
+            },
+          },
+        ],
+      },
+    });
+
+    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
+    const plan = await service.plan(baseOptions());
+
+    expect(plan).toHaveLength(2);
+    expect(plan[0]!.candidate.id).toBe('busan-cafe');
+    expect(plan[0]!.aiGenerated).toBe(true);
+    // 빈 자리는 그 시각의 슬롯 역할(점심 음식점)로 채운다.
+    expect(plan[1]!.candidate.id).toBe('busan-food');
+    expect(plan[1]!.aiGenerated).toBe(false);
+  });
+
+  it('결정적 폴백도 식사 슬롯을 먼저 채운다', async () => {
+    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'false' }));
+    const plan = await service.plan({
+      ...baseOptions(),
+      itemsPerDay: 3,
+      dayItemTargets: [3],
+      candidates: [
+        candidate('att-1', '해운대해수욕장', 'attraction'),
+        candidate('att-2', '청사포', 'attraction'),
+        candidate('att-3', '마린시티', 'attraction'),
+        candidate('food-1', '기장 해산물 식당', 'restaurant'),
+      ],
+    });
+
+    // 점수 순으로 자르면 관광지 3개로 끝난다 — 식사 자리를 코드가 먼저 잡아야 한다.
+    expect(plan.map((item) => item.candidate.id)).toContain('food-1');
+  });
+
   it('falls back to deterministic CRAG order when the LLM is disabled', async () => {
     const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'false' }));
     const plan = await service.plan(baseOptions());
