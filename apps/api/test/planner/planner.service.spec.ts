@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import { PlannerService } from '../../src/planner/planner.service';
 import type { CandidatePlace } from '../../src/planner/retrieval/types';
 import type { ItineraryItemDto } from '@tripick/types';
@@ -139,7 +139,12 @@ const TRIP = {
 
 function createHarness(
   pace?: 'relaxed' | 'balanced' | 'packed',
-  overrides: { trip?: Record<string, unknown>; openingHours?: string } = {},
+  overrides: {
+    trip?: Record<string, unknown>;
+    openingHours?: string;
+    /** 검색이 돌려줄 후보 풀. 생략하면 종전대로 1건(얇은 풀). */
+    pool?: CandidatePlace[];
+  } = {},
 ) {
   const trip = { ...TRIP, ...overrides.trip };
   const candidate = {
@@ -176,17 +181,18 @@ function createHarness(
     }),
     getPreferenceVector: jest.fn().mockResolvedValue(null),
   };
+  const pool = overrides.pool ?? [candidate];
   const plannerAgent = {
-    plan: jest.fn().mockResolvedValue([
-      {
-        candidate,
+    plan: jest.fn().mockResolvedValue(
+      pool.map((item, index) => ({
+        candidate: item,
         day: 1,
-        order: 1,
+        order: index + 1,
         durationMin: 60,
         memo: 'LLM이 고른 카페',
         aiGenerated: true,
-      },
-    ]),
+      })),
+    ),
   };
   const weatherHelper = {
     getForecast: jest.fn().mockResolvedValue(new Map()),
@@ -200,7 +206,7 @@ function createHarness(
   };
   const placeRetrieval = {
     retrieve: jest.fn().mockResolvedValue({
-      places: [candidate],
+      places: pool,
       trace: { sources: ['fixture'], averageConfidence: 0.91 },
     }),
   };
@@ -478,6 +484,75 @@ function savedItem(id: string, day: number, name: string, scheduledAt: string) {
     scheduledAt: new Date(scheduledAt),
     durationMin: 90,
   };
+}
+
+/**
+ * 얇은 후보 풀은 **조용히** 짧은 일정이 된다 — 적게 담은 하루는 이동·영업시간·활동 구간 어느
+ * 제약도 어기지 않아 검증이 valid 를 돌려주고 그대로 저장된다. `shortfall` 은 "배치안 대비
+ * 잘려 나간 수"라 애초에 배치안이 짧으면 0 이어서 그 경로로도 안 잡혔다.
+ */
+describe('PlannerService 항목 부족 경고', () => {
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it('목표를 못 채우면 일차별 수치와 풀 크기를 남긴다', async () => {
+    const harness = createHarness(); // 풀 1건, 하루 목표 5개
+    harness.constraintEngine.validate.mockImplementation(
+      async (items: ItineraryItemDto[]) => ({ valid: true, issues: [], items }),
+    );
+
+    await harness.service.generateItinerary(TRIP.id);
+
+    expect(shortfallWarning(warn)).toContain('1일차 1/5');
+    expect(shortfallWarning(warn)).toContain('후보 풀 1건');
+  });
+
+  it('통째로 빈 일차는 따로 짚는다', async () => {
+    const harness = createHarness(undefined, {
+      trip: { endDate: '2026-07-11' }, // 2일 여행인데 풀은 1건
+    });
+    harness.constraintEngine.validate.mockImplementation(
+      async (items: ItineraryItemDto[]) => ({ valid: true, issues: [], items }),
+    );
+
+    await harness.service.generateItinerary(TRIP.id);
+
+    expect(shortfallWarning(warn)).toContain('2일차 0/5');
+    expect(shortfallWarning(warn)).toContain('빈 일차: 2');
+  });
+
+  it('목표를 채우면 조용하다', async () => {
+    const harness = createHarness(undefined, {
+      pool: [
+        place('p-1', '광안리 카페', 'cafe'),
+        place('p-2', '해운대 식당', 'restaurant'),
+        place('p-3', '감천문화마을', 'attraction'),
+        place('p-4', '자갈치시장', 'attraction'),
+        place('p-5', '태종대', 'attraction'),
+      ],
+    });
+    harness.constraintEngine.validate.mockImplementation(
+      async (items: ItineraryItemDto[]) => ({ valid: true, issues: [], items }),
+    );
+
+    await harness.service.generateItinerary(TRIP.id);
+
+    expect(shortfallWarning(warn)).toBeUndefined();
+  });
+});
+
+/** 부족 경고만 골라낸다 — 같은 로거로 재시도 경고도 나오므로 메시지로 가른다. */
+function shortfallWarning(warn: jest.SpyInstance): string | undefined {
+  return warn.mock.calls
+    .map((call) => String(call[0]))
+    .find((message) => message.includes('일정이 목표보다 짧습니다'));
 }
 
 function place(id: string, name: string, category: string): CandidatePlace {

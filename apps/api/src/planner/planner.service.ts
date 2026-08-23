@@ -397,6 +397,7 @@ export class PlannerService {
     const finalItems = aiAttempt.accepted
       ? aiAttempt.validation.items
       : await this.rebuildValidDraft(planFactory, draftContext, aiAttempt, rebuildAttempts);
+    this.warnDayShortfall(finalItems, draftContext, candidates.length);
 
     // memo 는 사용자가 직접 남기는 메모 공간이므로 생성 단계의 AI 추론(취향·confidence·
     // 날씨 힌트)을 저장하지 않는다. 새 일정의 memo 는 비어 있는 채로 시작한다.
@@ -819,6 +820,43 @@ export class PlannerService {
 
     throw new BadRequestException(
       `Generated itinerary violates hard constraints: ${last.validation.issues.join('; ')}`,
+    );
+  }
+
+  /**
+   * 일차별 목표를 못 채운 일정을 경고로 남긴다.
+   *
+   * 왜 — 여기까지 온 일정은 **제약을 다 통과한 정상 응답**이다. 적게 담은 하루는 아무 제약도
+   * 어기지 않으므로(이동·영업시간·활동 구간 전부 통과), 후보 풀이 얇아 3일차가 통째로 비어도
+   * 검증은 valid 를 돌려주고 그대로 저장됐다. `shortfall` 은 "배치안 대비 잘려 나간 수"라
+   * 애초에 배치안이 짧으면 0 이다 — 그래서 그 경로로도 안 잡힌다.
+   *
+   * 풀 크기를 함께 찍는 이유는 원인이 둘이기 때문이다 — 후보가 모자랐거나(풀 < 목표),
+   * 후보는 있는데 하루에 안 들어갔거나(동선·영업시간). 두 숫자를 나란히 봐야 갈린다.
+   *
+   * 던지지 않는다 — 짧은 일정도 사용자에겐 쓸모가 있고, 카탈로그가 얇은 목적지는 재시도해도
+   * 늘지 않아 실패로 바꾸면 그 목적지는 영구히 일정을 못 만든다.
+   */
+  private warnDayShortfall(
+    items: ItineraryItemDto[],
+    context: DraftBuildContext,
+    poolSize: number,
+  ): void {
+    const short = context.planDays
+      .map((day) => ({
+        day,
+        target: this.dayItemTarget(context.anchorByDay, day, context.itemsPerDay),
+        actual: items.filter((item) => item.day === day).length,
+      }))
+      .filter(({ target, actual }) => actual < target);
+    if (short.length === 0) return;
+
+    const empty = short.filter(({ actual }) => actual === 0).map(({ day }) => day);
+    this.logger.warn(
+      `Trip ${context.trip.id} ("${context.trip.destination}") 일정이 목표보다 짧습니다 — ` +
+        short.map(({ day, actual, target }) => `${day}일차 ${actual}/${target}`).join(', ') +
+        ` (후보 풀 ${poolSize}건)` +
+        (empty.length > 0 ? ` · 빈 일차: ${empty.join(', ')}` : ''),
     );
   }
 
