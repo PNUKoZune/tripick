@@ -1,6 +1,7 @@
 import { haversineMeters, timeToMinutes } from '@tripick/utils';
 import type { CandidatePlace } from '../retrieval/types';
 import { ESTIMATED_TRAVEL_MINUTES, defaultVisitDuration } from './itinerary-density';
+import { placeExposure } from './weather-exposure';
 
 /**
  * 하루 한 자리(슬롯)가 맡는 역할. 후보를 고를 때 이 역할의 category 를 먼저 찾는다.
@@ -114,6 +115,12 @@ export interface FillDaySlotsParams {
   searchWindow?: number;
   /** 앞에서부터 이미 정해진 후보(AI 가 고른 항목). 남은 슬롯만 역할로 채운다. */
   preassigned?: CandidatePlace[];
+  /**
+   * 이 일차 활동 구간에 비 예보가 있으면 true. 볼거리 슬롯이 실내 장소를 먼저 집는다.
+   *
+   * 식사·카페 슬롯에는 영향이 없다 — 어차피 지붕 아래고, 끼니를 날씨로 미루면 그게 더 나쁘다.
+   */
+  preferIndoor?: boolean;
 }
 
 /**
@@ -123,7 +130,7 @@ export interface FillDaySlotsParams {
  * 관광지로 가득한 풀에서 식음 후보는 언제나 꼬리에 남아 한 번도 안 뽑힌다.
  */
 export function fillDaySlots(params: FillDaySlotsParams): CandidatePlace[] {
-  const { pool, used, startTime, itemCount, searchWindow, preassigned = [] } = params;
+  const { pool, used, startTime, itemCount, searchWindow, preassigned = [], preferIndoor = false } = params;
   if (itemCount <= 0) return [];
 
   const roles = daySlotRoles(startTime, itemCount);
@@ -170,7 +177,21 @@ export function fillDaySlots(params: FillDaySlotsParams): CandidatePlace[] {
   for (let index = 0; index < itemCount; index += 1) {
     if (slots[index]) continue;
     const sightseeing = (candidate: CandidatePlace) => !DINING_CATEGORIES.has(candidate.category);
+    // 비 오는 날은 실내 → 판정 불가 → 야외 순으로 본다. **창 안에서만** 고른다 —
+    // 소프트 선호 하나 때문에 풀 전체를 훑으면 하루 동선이 벌어져, 비를 피하려다 이동시간
+    // 상한에 걸린다. 창 안에 실내가 없으면 아래 기존 경로로 그대로 떨어진다(후보를 안 버린다).
+    const dry = preferIndoor
+      ? (take(
+          (candidate) => sightseeing(candidate) && placeExposure(candidate) === 'indoor',
+          searchWindow,
+        ) ??
+        take(
+          (candidate) => sightseeing(candidate) && placeExposure(candidate) !== 'outdoor',
+          searchWindow,
+        ))
+      : undefined;
     slots[index] =
+      dry ??
       take(sightseeing, searchWindow) ??
       take((candidate) => sightseeing(candidate) && withinDetour(candidate)) ??
       take(withinDetour) ??

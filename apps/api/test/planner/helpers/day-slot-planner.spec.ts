@@ -134,6 +134,113 @@ function attractions(count: number): CandidatePlace[] {
   return Array.from({ length: count }, (_, index) => place(`a${index}`, 'attraction'));
 }
 
+/**
+ * 우천 배려가 LLM 프롬프트 문장 하나로만 존재하던 시절엔, LLM 이 죽는 순간(타임아웃·미기동)
+ * 비 오는 날에도 해수욕장이 그대로 배치됐다. 결정적 경로가 같은 정보를 읽어야 한다.
+ */
+describe('fillDaySlots 우천 배려', () => {
+  it('비 오는 날은 볼거리 자리에 실내를 먼저 집는다', () => {
+    const pool = [
+      named('해운대해수욕장', 'attraction'),
+      named('국립부산과학관', 'attraction'),
+      named('기장 식당', 'restaurant'),
+    ];
+
+    const dry = fillDaySlots({ pool, used: new Set(), startTime: '09:00', itemCount: 1 });
+    const wet = fillDaySlots({
+      pool,
+      used: new Set(),
+      startTime: '09:00',
+      itemCount: 1,
+      preferIndoor: true,
+    });
+
+    expect(dry[0]!.name).toBe('해운대해수욕장');
+    expect(wet[0]!.name).toBe('국립부산과학관');
+  });
+
+  /** 소프트 선호다 — 실내가 없다고 하루를 비우면 안 된다. */
+  it('창 안에 실내가 없으면 야외를 그대로 쓴다 (후보를 버리지 않는다)', () => {
+    const pool = [named('해운대해수욕장', 'attraction'), named('광안리해변', 'attraction')];
+
+    const wet = fillDaySlots({
+      pool,
+      used: new Set(),
+      startTime: '09:00',
+      itemCount: 2,
+      preferIndoor: true,
+    });
+
+    expect(wet).toHaveLength(2);
+  });
+
+  it('판정 불가(unknown)는 야외보다 먼저 온다 — 모르는 걸 야외로 몰지 않는다', () => {
+    const pool = [named('해운대해수욕장', 'attraction'), named('불국사', 'attraction')];
+
+    const wet = fillDaySlots({
+      pool,
+      used: new Set(),
+      startTime: '09:00',
+      itemCount: 1,
+      preferIndoor: true,
+    });
+
+    expect(wet[0]!.name).toBe('불국사');
+  });
+
+  it('식사 슬롯은 날씨와 무관하다 — 끼니를 비 때문에 미루면 그게 더 나쁘다', () => {
+    const pool = [
+      named('국립부산과학관', 'attraction'),
+      named('기장 식당', 'restaurant'),
+      named('광안리 카페', 'cafe'),
+      named('해운대해수욕장', 'attraction'),
+    ];
+
+    const wet = fillDaySlots({
+      pool,
+      used: new Set(),
+      startTime: '09:00',
+      itemCount: 4,
+      preferIndoor: true,
+    });
+
+    expect(wet.map((candidate) => candidate.category)).toEqual([
+      'attraction',
+      'restaurant',
+      'cafe',
+      'attraction',
+    ]);
+  });
+
+  /**
+   * 실내 선호로 근접 창을 넓히면 비를 피하려다 하루 동선이 벌어져 이동시간 상한에 걸린다.
+   * 창 밖의 실내보다 창 안의 야외가 낫다.
+   */
+  it('실내를 찾겠다고 근접 창 밖까지 훑지 않는다', () => {
+    const pool = [
+      named('해운대해수욕장', 'attraction'),
+      named('광안리해변', 'attraction'),
+      named('국립부산과학관', 'attraction'), // 창(2) 밖
+    ];
+
+    const wet = fillDaySlots({
+      pool,
+      used: new Set(),
+      startTime: '09:00',
+      itemCount: 1,
+      searchWindow: 2,
+      preferIndoor: true,
+    });
+
+    expect(wet[0]!.name).toBe('해운대해수욕장');
+  });
+});
+
+/** 이름으로 우천 노출도가 갈리는 후보. 좌표는 모두 같아 거리 상한은 개입하지 않는다. */
+function named(name: string, category: string): CandidatePlace {
+  return { ...place(name, category), name };
+}
+
 function place(id: string, category: string): CandidatePlace {
   return {
     id,

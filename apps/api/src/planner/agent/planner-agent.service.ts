@@ -6,6 +6,7 @@ import type { CandidatePlace } from '../retrieval/types';
 import {
   defaultVisitDuration,
   distributeFallbackDurations,
+  maxVisitDuration,
 } from '../helpers/itinerary-density';
 import { fillDaySlots } from '../helpers/day-slot-planner';
 
@@ -40,6 +41,14 @@ export interface PlannerAgentOptions {
   trigger?: ReplanTrigger;
   notes?: string | null;
   weatherHint: string;
+  /**
+   * 활동 구간에 비 예보가 걸린 day 인덱스(0-based, `dayDates` 와 같은 인덱스).
+   *
+   * `weatherHint` 와 중복이 아니다 — 힌트는 LLM 이 읽는 문장이고 이건 결정적 폴백이 읽는
+   * 구조화 값이다. 폴백은 프롬프트를 안 거치므로 이게 없으면 LLM 이 죽는 순간(타임아웃·미기동)
+   * 우천 배려가 통째로 사라진다.
+   */
+  rainyDayIndexes?: number[];
 }
 
 export interface PlannedCandidate {
@@ -169,7 +178,7 @@ export class PlannerAgentService {
         'day 의 실제 날짜는 trip.days 를 따른다. 날짜가 연속이 아닐 수 있으므로 day 간 간격을 이어진 하루로 가정하지 않는다.',
         `order must be between 1 and ${options.itemsPerDay}.`,
         `일정 강도별 기본 ${options.minimumItemsPerDay}개는 최소 기준이지 상한이 아니다. 활동 시간이 길어 계산된 하루 목표 ${options.itemsPerDay}개를 가능한 모두 사용한다.`,
-        'durationMin must be 45-150.',
+        `durationMin 절대 상한: attraction ${maxVisitDuration('attraction')} · restaurant ${maxVisitDuration('restaurant')} · cafe ${maxVisitDuration('cafe')} (하한 45). 넘기면 서버가 잘라내 하루 합계가 목표에 못 미친다 — 권장 범위는 durationGuide 를 따르고, 시간이 남으면 체류를 늘리지 말고 항목을 늘린다.`,
         'Prefer high confidence candidates, but category balance beats small confidence differences.',
         '카페는 하루 최대 1개만 배치한다. 후보가 부족할 때만 예외로 2개까지 허용하고 memo에 이유를 쓴다.',
         '같은 category를 연속 배치하지 않는다. 특히 cafe-cafe, restaurant-restaurant 연속 배치는 피한다.',
@@ -287,6 +296,7 @@ export class PlannerAgentService {
         startTime,
         itemCount: dayTarget,
         searchWindow: dayTarget * 2,
+        preferIndoor: this.isRainyDay(options, day - 1),
       });
       const durations = distributeFallbackDurations(
         dayCandidates.map((candidate) => candidate.category),
@@ -341,6 +351,7 @@ export class PlannerAgentService {
         itemCount: dayTarget,
         searchWindow: dayTarget * 2,
         preassigned: aiPicks.map((item) => item.candidate),
+        preferIndoor: this.isRainyDay(options, day - 1),
       });
       dayCandidates.forEach((candidate, index) => {
         const aiPick = aiPicks[index];
@@ -381,10 +392,17 @@ export class PlannerAgentService {
     return total;
   }
 
+  /** 이 day 인덱스(0-based)의 활동 구간에 비 예보가 걸렸는지. */
+  private isRainyDay(options: PlannerAgentOptions, dayIndex: number): boolean {
+    return options.rainyDayIndexes?.includes(dayIndex) ?? false;
+  }
+
   private normalizeDuration(value: unknown, category: string): number {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return defaultVisitDuration(category);
-    return Math.max(45, Math.min(150, Math.round(parsed)));
+    // 상한은 카테고리별이다. 전역 150 으로 자르면 "체류 합계를 활동 시간의 75-85% 로 채우라"는
+    // 프롬프트 지시가 가장 늘리기 쉬운 카페·음식점을 부풀리는 데 그대로 쓰인다.
+    return Math.max(45, Math.min(maxVisitDuration(category), Math.round(parsed)));
   }
 
   private normalizeMemo(value: unknown): string {

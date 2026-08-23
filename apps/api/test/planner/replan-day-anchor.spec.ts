@@ -143,7 +143,6 @@ function build(opts: {
     weatherHelper as any,
     routeHelper as any,
     placeRetrieval as any,
-    scheduleConstraint as any,
     constraintEngine as any,
   );
   return { service, itineraryService, plannerAgent, placeRetrieval };

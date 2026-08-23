@@ -199,7 +199,94 @@ describe('PlannerAgentService', () => {
     expect(plan.map((item) => item.candidate.id)).toEqual(['busan-cafe', 'busan-food']);
     expect(plan.every((item) => item.aiGenerated === false)).toBe(true);
   });
+
+  /**
+   * 예전엔 카테고리와 무관하게 45-150 으로만 잘랐다. 프롬프트가 "체류 합계를 활동 시간의
+   * 75-85% 로 채우라"고 밀기 때문에 모델은 가장 늘리기 쉬운 카페·음식점을 부풀렸고,
+   * 그 결과가 그대로 통과했다.
+   */
+  it('카테고리별 상한으로 AI 체류시간을 자른다', async () => {
+    mockedAxios.post.mockResolvedValueOnce({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                items: [
+                  { candidateId: 'busan-cafe', day: 1, order: 1, durationMin: 180, memo: '카페' },
+                  { candidateId: 'busan-food', day: 1, order: 2, durationMin: 150, memo: '식당' },
+                ],
+              }),
+            },
+          },
+        ],
+      },
+    });
+
+    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
+    const plan = await service.plan(baseOptions());
+
+    expect(plan[0]!.durationMin).toBe(90); // cafe
+    expect(plan[1]!.durationMin).toBe(120); // restaurant
+  });
+
+  it('상한을 프롬프트에도 실어 모델이 잘릴 값을 계획하지 않게 한다', async () => {
+    mockedAxios.post.mockResolvedValueOnce({
+      data: { choices: [{ message: { content: JSON.stringify({ items: [] }) } }] },
+    });
+
+    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
+    await service.plan(baseOptions());
+
+    const body = mockedAxios.post.mock.calls[0]![1] as {
+      messages: Array<{ content: string }>;
+    };
+    const prompt = body.messages[1]!.content;
+    expect(prompt).toContain('durationMin 절대 상한');
+    expect(prompt).toContain('cafe 90');
+  });
+
+  /**
+   * 우천 배려가 프롬프트 문장으로만 있으면 LLM 이 죽는 순간 통째로 사라진다. 폴백은 프롬프트를
+   * 안 거치므로 구조화된 일차 목록을 따로 받아야 한다.
+   */
+  it('LLM 이 꺼져 있어도 비 오는 일차는 실내를 먼저 집는다', async () => {
+    const service = new PlannerAgentService(fakeConfig({}));
+    const options = {
+      ...baseOptions(),
+      itemsPerDay: 1,
+      minimumItemsPerDay: 1,
+      candidates: [
+        candidate('beach', '해운대해수욕장', 'attraction'),
+        candidate('museum', '국립부산과학관', 'attraction'),
+      ],
+      rainyDayIndexes: [0],
+    };
+
+    const plan = await service.plan(options);
+
+    expect(plan[0]!.candidate.id).toBe('museum');
+  });
+
+  it('비 예보가 없으면 종전 순위 그대로', async () => {
+    const service = new PlannerAgentService(fakeConfig({}));
+    const options = {
+      ...baseOptions(),
+      itemsPerDay: 1,
+      minimumItemsPerDay: 1,
+      candidates: [
+        candidate('beach', '해운대해수욕장', 'attraction'),
+        candidate('museum', '국립부산과학관', 'attraction'),
+      ],
+    };
+
+    const plan = await service.plan(options);
+
+    expect(plan[0]!.candidate.id).toBe('beach');
+  });
 });
+
+
 
 function fakeConfig(values: Record<string, string>) {
   return {

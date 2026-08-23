@@ -188,6 +188,7 @@ export class PlaceRetrievalService {
     this.logger.log(
       `CRAG retrieval for "${context.destination}" ${scope} sources=${sources.join('+') || 'none'} avg=${averageConfidence.toFixed(2)} selected=${places.length} naver=${popularityIndex.docCount}docs/${popularCount}matched`,
     );
+    this.warnThinPool(context.destination, places, limit, quota, scope, sources);
 
     return {
       places,
@@ -442,6 +443,47 @@ export class PlaceRetrievalService {
    *   2. **한 건도 안 맞으면 게이트를 포기한다.** `destinationRegionFilter` 는 임의 문자열에서도
    *      시군구 코드를 만들어 내므로('발리' → '발리'), 그대로 두면 전부 탈락해 후보가 0 이 된다.
    */
+  /**
+   * 요청한 만큼 못 채운 풀을 경고로 남긴다.
+   *
+   * 왜 — 얇은 풀은 **조용히** 짧은 일정이 된다. 플래너는 풀에 있는 만큼만 배치하고, 그 결과가
+   * 하루 목표에 못 미쳐도 제약 검증은 통과한다(적게 담은 하루는 아무 제약도 안 어긴다).
+   * 그래서 "3일 여행인데 3일차가 비어 있음"이 성공 응답으로 나갔다. 정상 로그의 `selected=`
+   * 만으로는 그게 정상인지 부족인지 구분이 안 돼서, 요청치·종류별 하한과 나란히 찍는다.
+   *
+   * 던지지 않는 이유 — 짧은 일정이라도 사용자에겐 쓸모가 있고, 카탈로그가 얇은 지역은
+   * 재시도해도 늘지 않아 던지면 그 목적지는 영구히 일정을 못 만든다. 운영이 볼 신호만 남긴다.
+   */
+  private warnThinPool(
+    destination: string,
+    places: CandidatePlace[],
+    limit: number,
+    quota: PoolCategoryQuota,
+    scope: string,
+    sources: string[],
+  ): void {
+    const counts = {
+      restaurant: places.filter((place) => place.category === 'restaurant').length,
+      cafe: places.filter((place) => place.category === 'cafe').length,
+      attraction: places.filter((place) => place.category !== 'restaurant' && place.category !== 'cafe').length,
+    };
+    const unmet = (['restaurant', 'cafe', 'attraction'] as const)
+      .filter((kind) => counts[kind] < quota[kind])
+      .map((kind) => `${kind} ${counts[kind]}/${quota[kind]}`);
+    if (places.length >= limit && unmet.length === 0) return;
+
+    // 시드는 카탈로그가 아니라 코드에 박힌 표본이다. 얇은 풀은 늘 시드로 메워지므로, 그걸
+    // 안 적으면 "9/12건"이 실제보다 건강해 보인다 — 그 9건 중 6건이 카탈로그 밖일 수 있다.
+    const padded = sources.includes('seed');
+    this.logger.warn(
+      `후보 풀 부족 "${destination}" ${scope} — ${places.length}/${limit}건` +
+        ` (음식점 ${counts.restaurant} · 카페 ${counts.cafe} · 볼거리 ${counts.attraction})` +
+        (padded ? ' · 시드 표본으로 메움(카탈로그 후보 부족)' : '') +
+        (unmet.length > 0 ? ` · 종류별 하한 미달: ${unmet.join(', ')}` : '') +
+        '. 일정이 목표보다 짧게 나올 수 있습니다.',
+    );
+  }
+
   private filterOutOfRegion(
     candidates: RawPlaceCandidate[],
     region: RegionFilter,

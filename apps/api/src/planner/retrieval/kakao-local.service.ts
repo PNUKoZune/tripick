@@ -352,6 +352,10 @@ export class KakaoLocalService {
 
   /** group code 를 우선 신뢰하고, 없으면 category_name 문자열로 추정한다. */
   private categoryFromKakao(groupCode: string | undefined, categoryName: string): string {
+    // 제과·베이커리만 group code 보다 앞에서 가른다. 카카오는 이걸 FD6(음식점 > 간식)에 두는데,
+    // KTO 는 같은 곳을 FD030100(제과)으로 줘서 카페로 적재된다 — 그대로 두면 한 빵집이 소스마다
+    // 다른 카테고리가 되고, 근접 중복 병합이 카테고리 일치를 요구해 한 날에 둘 다 남는다.
+    if (categoryName.includes('제과') || categoryName.includes('베이커리')) return 'cafe';
     if (groupCode && CATEGORY_GROUP_TO_CATEGORY[groupCode]) {
       return CATEGORY_GROUP_TO_CATEGORY[groupCode];
     }

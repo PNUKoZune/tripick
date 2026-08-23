@@ -6,7 +6,6 @@ import type { ItineraryItemEntity } from '../itinerary/itinerary-item.entity';
 import { PreferencesService } from '../preferences/preferences.service';
 import { WeatherHelper } from './helpers/weather.helper';
 import { RouteHelper } from './helpers/route.helper';
-import { ScheduleConstraint } from './helpers/schedule.constraint';
 import {
   defaultVisitDuration,
   distributeFallbackDurations,
@@ -15,6 +14,7 @@ import {
   targetItemsPerDay,
 } from './helpers/itinerary-density';
 import { fillDaySlots } from './helpers/day-slot-planner';
+import { rainyDates } from './helpers/weather-exposure';
 import { ARRIVAL_RADIUS_M } from '../arrival-alert/arrival-alert.constants';
 import { ConstraintEngine, type ValidationResult } from './constraint/constraint.engine';
 import { PlannerAgentService } from './agent/planner-agent.service';
@@ -39,8 +39,6 @@ import type {
   ReplanBudget,
   ReplanPace,
   ReplanRequestDto,
-  ReplanTrigger,
-  TasteTagDto,
 } from '@tripick/types';
 import type { CandidatePlace, PoolCategoryQuota, RetrievalContext } from './retrieval/types';
 
@@ -63,17 +61,6 @@ const BUDGET_HINT: Record<ReplanBudget, string> = {
   thrifty: '가성비 위주(무료·저렴한 장소 선호)',
   normal: '보통 예산',
   premium: '프리미엄(고급 맛집·명소 선호)',
-};
-
-/**
- * 트리거별 memo 꼬리말. `Record<ReplanTrigger, …>` 라 ReplanTrigger 에 값이 늘면 여기서
- * 컴파일 에러로 잡힌다 — if 체인 시절엔 새 트리거의 memo 가 조용히 빈 채로 나갔다.
- */
-const TRIGGER_MEMO_NOTE: Record<ReplanTrigger, string> = {
-  manual: '수동 재계획 요청 반영',
-  deviation: '이탈 상황에서 복귀 쉬운 순서로 재배치',
-  weather: '날씨 이벤트를 고려해 실내/대체 가능 장소 우선',
-  crowd: '혼잡 예상을 고려해 붐비지 않는 대체 장소·시간대 우선',
 };
 
 /**
@@ -136,9 +123,9 @@ interface DraftBuildContext {
   anchorByDay: Map<number, DayAnchor>;
   wakeTime: string;
   sleepTime: string;
-  tasteTags: TasteTagDto | undefined;
   options: GenerateOptions;
-  weatherHint: string;
+  /** 활동 구간에 비 예보가 걸린 일차(1-based). 볼거리 슬롯이 실내를 먼저 집는다. */
+  rainyDays: ReadonlySet<number>;
 }
 
 @Injectable()
@@ -156,7 +143,6 @@ export class PlannerService {
     private readonly weatherHelper: WeatherHelper,
     private readonly routeHelper: RouteHelper,
     private readonly placeRetrieval: PlaceRetrievalService,
-    private readonly scheduleConstraint: ScheduleConstraint,
     private readonly constraintEngine: ConstraintEngine,
   ) {}
 
@@ -312,9 +298,13 @@ export class PlannerService {
       ? await this.weatherHelper.getExtendedForecast(firstCandidate.coordinates.lat, firstCandidate.coordinates.lng)
       : new Map();
     // 예보맵 키는 기상청 포맷(YYYYMMDD)이라 하이픈을 뗀다. 대상 일차 예보만 힌트에 싣는다.
-    const weatherHint = this.weatherHelper.buildWeatherHint(
-      forecast,
-      planDates.map((date) => date.replace(/-/g, '')),
+    const forecastDates = planDates.map((date) => date.replace(/-/g, ''));
+    const weatherHint = this.weatherHelper.buildWeatherHint(forecast, forecastDates);
+    // 힌트는 LLM 만 읽는 문장이다. 결정적 배치 경로(LLM 실패·제약 재생성·일자별 지역)는 그
+    // 문장을 못 읽으므로, 같은 예보에서 **구조화된 일차 집합**을 따로 뽑아 넘긴다.
+    const rainy = rainyDates(forecast, forecastDates, wakeTime, sleepTime);
+    const rainyDays = new Set(
+      planDays.filter((_, index) => rainy.has(forecastDates[index]!)),
     );
     // 단일 지역: AI 플래너가 하루 리듬·카테고리 균형을 맞춘다.
     // 일자별 지역: 각 일차를 그 날 지역 후보로만 채워야 하므로 지역-스코프 결정적 배치를 쓴다
@@ -324,7 +314,7 @@ export class PlannerService {
     // 후보 수·day 검증(1..dayCount)과도 어긋나지 않는다. 실제 날짜는 dayDates 로 함께 넘긴다 —
     // 시작·종료일 두 값은 [1,3] 같은 비연속 범위를 표현하지 못해 dayCount 와 어긋났다.
     const agentPlan = perDayMode
-      ? this.buildPerDayDeterministicPlan(poolsByDay!, itemsPerDay, planDays, anchorByDay, wakeTime)
+      ? this.buildPerDayDeterministicPlan(poolsByDay!, itemsPerDay, planDays, anchorByDay, wakeTime, rainyDays)
       : this.remapPlanDays(
           await this.plannerAgent.plan({
             destination: trip.destination,
@@ -343,6 +333,11 @@ export class PlannerService {
             candidates,
             notes: combinedNotes,
             weatherHint,
+            // 결정적 폴백(LLM 실패)도 같은 비 정보를 쓰게 한다 — 프롬프트에만 실으면
+            // 폴백이 도는 순간 우천 배려가 통째로 사라진다.
+            rainyDayIndexes: planDays
+              .map((day, index) => (rainyDays.has(day) ? index : -1))
+              .filter((index) => index >= 0),
             ...(tasteTags !== undefined ? { tasteTags } : {}),
             ...(options.trigger !== undefined ? { trigger: options.trigger } : {}),
           }),
@@ -357,9 +352,8 @@ export class PlannerService {
       anchorByDay,
       wakeTime,
       sleepTime,
-      tasteTags,
       options,
-      weatherHint,
+      rainyDays,
     };
     // LLM 이 필수 포함 장소를 누락했으면 강제로 주입한다(시드+프롬프트는 best-effort 라 보장 안 됨).
     const guaranteedPlan = this.enforceMustInclude(agentPlan, mustCandidates, planDays, perDayMode);
@@ -380,6 +374,7 @@ export class PlannerService {
               planDays,
               anchorByDay,
               wakeTime,
+              rainyDays,
             ),
             mustCandidates,
             planDays,
@@ -397,6 +392,7 @@ export class PlannerService {
     const finalItems = aiAttempt.accepted
       ? aiAttempt.validation.items
       : await this.rebuildValidDraft(planFactory, draftContext, aiAttempt, rebuildAttempts);
+    this.warnDayShortfall(finalItems, draftContext, candidates.length);
 
     // memo 는 사용자가 직접 남기는 메모 공간이므로 생성 단계의 AI 추론(취향·confidence·
     // 날씨 힌트)을 저장하지 않는다. 새 일정의 memo 는 비어 있는 채로 시작한다.
@@ -643,7 +639,7 @@ export class PlannerService {
     plan: PlannedCandidate[],
     context: DraftBuildContext,
   ): Promise<ItineraryItemDto[]> {
-    const { trip, planDays, itemsPerDay, anchorByDay, wakeTime, tasteTags, options, weatherHint } =
+    const { trip, planDays, itemsPerDay, anchorByDay, wakeTime, options } =
       context;
     const created: CreateItineraryItemDto[] = [];
 
@@ -703,7 +699,6 @@ export class PlannerService {
           coordinates: seed.coordinates,
           scheduledAt: currentAt.toISOString(),
           durationMin,
-          memo: this.buildMemo(seed, tasteTags, trip, options, planned.memo, planned.aiGenerated),
         };
         if (seed.kakaoPlaceId) item.kakaoPlaceId = seed.kakaoPlaceId;
         if (seed.openingHours) item.openingHours = seed.openingHours;
@@ -732,19 +727,21 @@ export class PlannerService {
       ...(item.phoneNumber ? { phoneNumber: item.phoneNumber } : {}),
       ...(item.kakaoPlaceId ? { kakaoPlaceId: item.kakaoPlaceId } : {}),
       ...(item.imageUrl ? { imageUrl: item.imageUrl } : {}),
-      memo: `${item.memo ?? ''}${item.memo ? ' · ' : ''}${weatherHint}`,
     }));
   }
 
+  /**
+   * 초안을 하드 제약으로 판정한다.
+   *
+   * 여기서 `ScheduleConstraint` 를 직접 부르지 않는다 — `ConstraintEngine.validate` 가 같은
+   * 경계를 스스로 적용하고 그 결과(`items`)를 돌려주므로, 앞에서 한 번 더 부르면 멱등 연산을
+   * 중복 실행할 뿐이고 "여기서도 시각을 손본다"는 오해만 남는다.
+   */
   private async validateDraft(
     draft: ItineraryItemDto[],
     context: DraftBuildContext,
   ): Promise<ValidationResult> {
-    const bounded = this.scheduleConstraint.apply(draft, {
-      wakeTime: context.wakeTime,
-      sleepTime: context.sleepTime,
-    });
-    return this.constraintEngine.validate(bounded, {
+    return this.constraintEngine.validate(draft, {
       wakeTime: context.wakeTime,
       sleepTime: context.sleepTime,
       transportMode: context.trip.transportMode,
@@ -822,6 +819,43 @@ export class PlannerService {
     );
   }
 
+  /**
+   * 일차별 목표를 못 채운 일정을 경고로 남긴다.
+   *
+   * 왜 — 여기까지 온 일정은 **제약을 다 통과한 정상 응답**이다. 적게 담은 하루는 아무 제약도
+   * 어기지 않으므로(이동·영업시간·활동 구간 전부 통과), 후보 풀이 얇아 3일차가 통째로 비어도
+   * 검증은 valid 를 돌려주고 그대로 저장됐다. `shortfall` 은 "배치안 대비 잘려 나간 수"라
+   * 애초에 배치안이 짧으면 0 이다 — 그래서 그 경로로도 안 잡힌다.
+   *
+   * 풀 크기를 함께 찍는 이유는 원인이 둘이기 때문이다 — 후보가 모자랐거나(풀 < 목표),
+   * 후보는 있는데 하루에 안 들어갔거나(동선·영업시간). 두 숫자를 나란히 봐야 갈린다.
+   *
+   * 던지지 않는다 — 짧은 일정도 사용자에겐 쓸모가 있고, 카탈로그가 얇은 목적지는 재시도해도
+   * 늘지 않아 실패로 바꾸면 그 목적지는 영구히 일정을 못 만든다.
+   */
+  private warnDayShortfall(
+    items: ItineraryItemDto[],
+    context: DraftBuildContext,
+    poolSize: number,
+  ): void {
+    const short = context.planDays
+      .map((day) => ({
+        day,
+        target: this.dayItemTarget(context.anchorByDay, day, context.itemsPerDay),
+        actual: items.filter((item) => item.day === day).length,
+      }))
+      .filter(({ target, actual }) => actual < target);
+    if (short.length === 0) return;
+
+    const empty = short.filter(({ actual }) => actual === 0).map(({ day }) => day);
+    this.logger.warn(
+      `Trip ${context.trip.id} ("${context.trip.destination}") 일정이 목표보다 짧습니다 — ` +
+        short.map(({ day, actual, target }) => `${day}일차 ${actual}/${target}`).join(', ') +
+        ` (후보 풀 ${poolSize}건)` +
+        (empty.length > 0 ? ` · 빈 일차: ${empty.join(', ')}` : ''),
+    );
+  }
+
   private describeAttempt(attempt: DraftAttempt): string {
     const parts = [...attempt.validation.issues];
     if (attempt.shortfall > 0) parts.push(`하루에 안 들어간 항목 ${attempt.shortfall}개`);
@@ -854,6 +888,7 @@ export class PlannerService {
         startTime,
         itemCount: dayTarget,
         searchWindow: dayTarget * 2,
+        preferIndoor: context.rainyDays.has(day),
       });
       const durations = distributeFallbackDurations(
         dayCandidates.map((candidate) => candidate.category),
@@ -963,6 +998,7 @@ export class PlannerService {
     planDays: number[],
     anchorByDay: Map<number, DayAnchor>,
     wakeTime: string,
+    rainyDays: ReadonlySet<number>,
   ): PlannedCandidate[] {
     const planned: PlannedCandidate[] = [];
     // 일차별 풀은 지역이 겹치면 같은 후보를 담을 수 있다. 소비한 id 를 공유해 중복 배치를 막는다.
@@ -977,6 +1013,7 @@ export class PlannerService {
         used,
         startTime,
         itemCount: this.dayItemTarget(anchorByDay, day, itemsPerDay),
+        preferIndoor: rainyDays.has(day),
       }).forEach((candidate, index) => {
         planned.push({
           candidate,
@@ -1129,32 +1166,6 @@ export class PlannerService {
   }): string {
     if (item.kakaoPlaceId) return `kakao:${item.kakaoPlaceId}`;
     return `name:${item.name.trim()}@${item.coordinates.lat.toFixed(4)},${item.coordinates.lng.toFixed(4)}`;
-  }
-
-  private buildMemo(
-    place: CandidatePlace,
-    tasteTags: TasteTagDto | undefined,
-    trip: TripEntity,
-    options: GenerateOptions,
-    agentMemo: string,
-    aiGenerated: boolean,
-  ): string {
-    const keywords = [
-      ...(tasteTags?.food ?? []),
-      ...(tasteTags?.mood ?? []),
-      ...(tasteTags?.environment ?? []),
-    ].filter((tag) => place.tags.includes(tag));
-
-    const base = keywords.length > 0
-      ? `선호 태그(${keywords.join(', ')}) 기준 추천`
-      : `${trip.destination} 대표 동선에 맞춘 추천`;
-    const cragEvidence = `CRAG ${place.source} confidence ${Math.round(place.confidence * 100)}%; ${place.reason}`;
-    const agentEvidence = aiGenerated
-      ? `AI planner 생성: ${agentMemo}`
-      : `AI planner fallback: ${agentMemo}`;
-
-    const triggerNote = options.trigger ? TRIGGER_MEMO_NOTE[options.trigger] : undefined;
-    return [base, agentEvidence, cragEvidence, ...(triggerNote ? [triggerNote] : [])].join('; ');
   }
 
   private toItemType(category: string): ItineraryItemDto['type'] {

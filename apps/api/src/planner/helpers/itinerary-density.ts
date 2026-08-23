@@ -19,6 +19,25 @@ export const ESTIMATED_TRAVEL_MINUTES = 30;
 const MIN_VISIT_MINUTES = 45;
 const MAX_VISIT_MINUTES = 150;
 
+/**
+ * 카테고리별 체류시간 상한. 전역 150분 하나뿐이던 걸 가른다.
+ *
+ * 왜 — 폴백은 남는 시간을 상한까지 밀어 넣어 하루를 채운다(§distributeFallbackDurations).
+ * 활동 구간이 길면 관광지가 150 에 먼저 닿고, 그다음 음식점·카페까지 차례로 150 이 된다.
+ * 실측: 기상 07:00·취침 23:00(16시간) 하루 4개면 카페가 **150분(2시간 반)** 으로 나온다.
+ * 끼니 2시간 반·카페 2시간 반짜리 일정은 그 자체로 비현실적이고, 그 시간이 볼거리에서
+ * 빠져나간 시간이다.
+ *
+ * 상한을 낮추면 긴 하루를 체류시간만으로는 다 못 채우는데, 그게 맞다 — 남는 시간의 정답은
+ * "카페에 두 시간 반 앉아 있기"가 아니라 **항목을 늘리는 것**이고 그건 `targetItemsPerDay`
+ * 가 이미 한다(최대 7개).
+ */
+export function maxVisitDuration(category: string): number {
+  if (category === 'cafe') return 90;
+  if (category === 'restaurant') return 120;
+  return MAX_VISIT_MINUTES;
+}
+
 export function minimumItemsPerDay(pace?: ReplanPace): number {
   return MIN_ITEMS_PER_DAY[pace ?? 'balanced'];
 }
@@ -71,9 +90,13 @@ export function distributeFallbackDurations(
   if (categories.length === 0) return [];
 
   const window = getAwakeWindow(wakeTime, sleepTime);
+  const maxima = categories.map(maxVisitDuration);
+  // 상한 합계를 목표 상한으로 쓴다 — 전역 150×n 으로 잡으면 카테고리 상한 때문에 절대 못 닿는
+  // 목표가 서고, 아래 루프가 매번 헛돌다 changed=false 로 빠져나간다.
+  const reachableTotal = maxima.reduce((sum, max) => sum + max, 0);
   const targetTotal = Math.max(
     MIN_VISIT_MINUTES * categories.length,
-    Math.min(MAX_VISIT_MINUTES * categories.length, Math.round(window.lengthMinutes * 0.8)),
+    Math.min(reachableTotal, Math.round(window.lengthMinutes * 0.8)),
   );
   const durations = categories.map(defaultVisitDuration);
   let delta = targetTotal - durations.reduce((sum, duration) => sum + duration, 0);
@@ -88,7 +111,7 @@ export function distributeFallbackDurations(
     const order = delta > 0 ? growOrder : shrinkOrder;
     let changed = false;
     for (const index of order) {
-      if (delta > 0 && durations[index]! < MAX_VISIT_MINUTES) {
+      if (delta > 0 && durations[index]! < maxima[index]!) {
         durations[index]! += 1;
         delta -= 1;
         changed = true;

@@ -1,5 +1,6 @@
 /// <reference types="jest" />
 
+import { Logger } from '@nestjs/common';
 import { PlaceRetrievalService } from '../../../src/planner/retrieval/place-retrieval.service';
 import { DEFAULT_TERM_WEIGHTS } from '../../../src/planner/retrieval/retrieval-rank';
 import type { CandidatePlace, RawPlaceCandidate } from '../../../src/planner/retrieval/types';
@@ -199,6 +200,69 @@ describe('PlaceRetrievalService anchor scope', () => {
  * 반경 판정이 카페를 따로 세므로(카탈로그 비중이 1/6 이라 음식점만으로 채워지면 안 된다)
  * 픽스처도 음식점만으로 이뤄지면 실제와 다른 상황을 재현하게 된다.
  */
+/**
+ * 얇은 풀은 조용히 짧은 일정이 된다 — 정상 로그의 `selected=` 만으로는 그게 정상인지 부족인지
+ * 구분이 안 됐다. 요청치·종류별 하한과 나란히 찍어 운영이 원인을 가를 수 있게 한다.
+ */
+describe('PlaceRetrievalService 얇은 풀 경고', () => {
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it('요청한 수를 못 채우면 요청치와 종류별 구성을 남긴다', async () => {
+    // 시드 표본이 없는 목적지 — '부산' 같은 시드 지역은 얇은 풀이 시드로 메워져 경고가 안 뜬다.
+    const searchByEmbedding = jest.fn().mockResolvedValueOnce(pool(3, 2)).mockResolvedValue([]);
+    const { service } = buildService({ anchor: null, searchByEmbedding });
+
+    await service.retrieve({ userId: 'u1', destination: '울릉도', limit: 12 });
+
+    expect(thinPoolWarning(warn)).toContain('9/12건');
+    // 얇은 풀은 시드 표본으로 메워진다 — 그 사실이 같이 남아야 9건을 건강한 풀로 오독하지 않는다.
+    expect(thinPoolWarning(warn)).toContain('시드 표본으로 메움');
+  });
+
+  it('개수가 차도 종류별 하한을 못 맞추면 그 종류를 짚는다', async () => {
+    // 카페 0건 — 개수(6)는 limit 을 채우지만 하루 카페 자리가 안 나온다.
+    const searchByEmbedding = jest.fn().mockResolvedValue(poolWithoutCafe(6, 2));
+    const { service } = buildService({ anchor: null, searchByEmbedding });
+
+    await service.retrieve({
+      userId: 'u1',
+      destination: '부산',
+      limit: 6,
+      categoryQuota: { restaurant: 2, cafe: 1, attraction: 2 },
+    });
+
+    expect(thinPoolWarning(warn)).toContain('cafe 0/1');
+  });
+
+  it('요청치와 하한을 다 채우면 조용하다', async () => {
+    const searchByEmbedding = jest.fn().mockResolvedValue(pool(6, 2));
+    const { service } = buildService({ anchor: null, searchByEmbedding });
+
+    await service.retrieve({
+      userId: 'u1',
+      destination: '부산',
+      limit: 6,
+      categoryQuota: { restaurant: 1, cafe: 1, attraction: 2 },
+    });
+
+    expect(thinPoolWarning(warn)).toBeUndefined();
+  });
+});
+
+function thinPoolWarning(warn: jest.SpyInstance): string | undefined {
+  return warn.mock.calls
+    .map((call) => String(call[0]))
+    .find((message) => message.includes('후보 풀 부족'));
+}
+
 function pool(total: number, dining: number, prefix = 'p'): RawPlaceCandidate[] {
   return Array.from({ length: total }, (_, index) => ({
     ...candidate(`${prefix}-${index}`, `장소${index}`, '여행 > 관광지'),
