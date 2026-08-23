@@ -317,6 +317,33 @@ describe('CragEvaluatorService', () => {
       expect(selected).toHaveLength(6);
     });
 
+    it('식음이 풀을 뒤덮으면 상한만큼 관광지로 바꾼다', () => {
+      // 카카오 조밀 적재의 실제 모양 — 식음이 점수 상위를 쓸어 가고 관광지는 뒤로 밀린다.
+      const candidates = [
+        ...Array.from({ length: 14 }, (_, i) => candidate(`r${i}`, 'restaurant', 0.9 - i * 0.01)),
+        ...Array.from({ length: 16 }, (_, i) => candidate(`a${i}`, 'attraction', 0.7 - i * 0.01)),
+      ];
+
+      const selected = service.selectTopDiverse(candidates, 16);
+
+      expect(selected).toHaveLength(16);
+      // 상한 0.375 → 16칸 중 식음은 6칸까지.
+      expect(selected.filter((c) => c.category === 'restaurant')).toHaveLength(6);
+      // 바꿔 넣는 건 점수 높은 관광지부터고, 머리의 식음 순서는 그대로 둔다.
+      expect(selected.slice(0, 6).map((c) => c.id)).toEqual(['r0', 'r1', 'r2', 'r3', 'r4', 'r5']);
+      expect(selected).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'a0' })]));
+    });
+
+    it('바꿔 넣을 관광지가 없으면 상한을 포기하고 후보를 버리지 않는다', () => {
+      const candidates = Array.from({ length: 8 }, (_, i) =>
+        candidate(`r${i}`, 'restaurant', 0.9 - i * 0.01),
+      );
+
+      const selected = service.selectTopDiverse(candidates, 6);
+
+      expect(selected.map((c) => c.id)).toEqual(['r0', 'r1', 'r2', 'r3', 'r4', 'r5']);
+    });
+
     it('점수만으로 뽑으면 없을 종류를 최소 보유량만큼 채운다', () => {
       const candidates = [
         ...Array.from({ length: 6 }, (_, i) => candidate(`a${i}`, 'attraction', 0.9 - i * 0.01)),
@@ -332,6 +359,43 @@ describe('CragEvaluatorService', () => {
       // 내주는 자리는 꼬리부터 — 최상위는 그대로.
       expect(selected[0]!.id).toBe('a0');
       expect(selected).toHaveLength(6);
+    });
+
+    it('식음 하한을 음식점이 다 가져가지 못한다 (카페 자리를 따로 센다)', () => {
+      // 예전엔 식음(restaurant+cafe)을 한 덩어리로 2개만 보장해서, 음식점 2개로 하한이
+      // 채워지면 카페는 영원히 안 들어왔다 — 일정에 카페가 한 번도 없던 원인.
+      const candidates = [
+        ...Array.from({ length: 6 }, (_, i) => candidate(`a${i}`, 'attraction', 0.9 - i * 0.01)),
+        ...Array.from({ length: 4 }, (_, i) => candidate(`r${i}`, 'restaurant', 0.5 - i * 0.01)),
+        candidate('c0', 'cafe', 0.3),
+      ];
+
+      const selected = service.selectTopDiverse(candidates, 8);
+
+      expect(selected.filter((c) => c.category === 'cafe')).toHaveLength(1);
+      expect(selected.filter((c) => c.category === 'restaurant').length).toBeGreaterThanOrEqual(2);
+      expect(selected[0]!.id).toBe('a0');
+    });
+
+    it('일차 수만큼 끼니·카페 자리를 확보한다 (상한보다 하한이 우선)', () => {
+      // 3일 여행이면 끼니만 6번이다. 상한(0.375)이 그보다 작으면 하한을 따른다.
+      const candidates = [
+        ...Array.from({ length: 20 }, (_, i) => candidate(`a${i}`, 'attraction', 0.9 - i * 0.01)),
+        ...Array.from({ length: 8 }, (_, i) => candidate(`r${i}`, 'restaurant', 0.4 - i * 0.01)),
+        ...Array.from({ length: 4 }, (_, i) => candidate(`c${i}`, 'cafe', 0.3 - i * 0.01)),
+      ];
+
+      const selected = service.selectTopDiverse(candidates, 20, {
+        restaurant: 6,
+        cafe: 3,
+        attraction: 2,
+      });
+
+      expect(selected).toHaveLength(20);
+      expect(selected.filter((c) => c.category === 'restaurant')).toHaveLength(6);
+      expect(selected.filter((c) => c.category === 'cafe')).toHaveLength(3);
+      // 하한을 채우느라 상위 점수를 갈아엎지는 않는다.
+      expect(selected[0]!.id).toBe('a0');
     });
 
     it('한 종류만 있으면 있는 것만 돌려준다 (억지로 못 채운다)', () => {
@@ -525,6 +589,131 @@ describe('CragEvaluatorService', () => {
         expect(candidate.crag.locality).toBe(0.62);
         expect(candidate.crag.penalties).not.toContain('destination-mismatch');
       }
+    });
+  });
+
+  describe('앵커 목적지의 locality — 거리 기반', () => {
+    const anchored = (radiusM: number): RetrievalContext => ({
+      userId: 'u1',
+      destination: '광안리',
+      regionFilter: { sido: '부산', sigungu: '수영' },
+      anchor: {
+        coordinates: { lat: 35.1532, lng: 129.119 },
+        label: '광안리해수욕장',
+        region: { sido: '부산', sigungu: '수영' },
+        radiusM,
+      },
+    });
+    const at = (id: string, lat: number, lng: number): RawPlaceCandidate => ({
+      id,
+      name: id,
+      category: 'attraction',
+      address: '부산 수영구',
+      coordinates: { lat, lng },
+      source: 'pgvector',
+      similarity: 0.5,
+      tags: ['city'],
+    });
+
+    it('앵커에 가까울수록 높다 — 지역 코드로는 반경 안이 전부 같은 시도라 못 가른다', () => {
+      const ranked = service.rank(
+        [at('far', 35.1532 + 1.8 / 111, 129.119), at('near', 35.1532, 129.119)],
+        anchored(2000),
+      );
+      const near = ranked.find((c) => c.id === 'near')!;
+      const far = ranked.find((c) => c.id === 'far')!;
+      expect(near.crag.locality).toBeGreaterThan(far.crag.locality);
+      expect(near.crag.locality).toBeCloseTo(0.95, 2);
+    });
+
+    it('반경으로 정규화한다 — 고정 밴드면 2km 앵커 안에서 변별이 안 된다', () => {
+      // 같은 1km 라도 2km 앵커에선 경계 근처, 10km 앵커에선 중심 근처여야 한다.
+      const point = at('p', 35.1532 + 1 / 111, 129.119);
+      const tight = service.rank([point], anchored(2000))[0]!;
+      const wide = service.rank([point], anchored(10000))[0]!;
+      expect(wide.crag.locality).toBeGreaterThan(tight.crag.locality);
+    });
+
+    it('반경 밖(시도 전역 덧댐)은 하한으로 눌러 가까운 후보 뒤에 세운다', () => {
+      const ranked = service.rank([at('outside', 35.1532 + 20 / 111, 129.119)], anchored(2000));
+      // 순위만 낮추고 탈락시키지는 않는다 — 인지도 감점과 같은 원칙.
+      expect(ranked[0]!.crag.locality).toBeGreaterThan(0);
+      expect(ranked[0]!.crag.locality).toBeLessThanOrEqual(0.3);
+    });
+  });
+
+  describe('인지도 판정 가능성', () => {
+    const index = (mentionedNames: string[]) => ({
+      docCount: 600,
+      mentions: (name: string) => (mentionedNames.includes(name) ? 3 : 0),
+      score: (name: string) => (mentionedNames.includes(name) ? 0.9 : 0.15),
+    });
+    // 이름은 자리수를 맞춰야 한다 — '장소9' 가 '장소99' 에 포함돼 근접 중복으로 접힌다.
+    const nameOf = (i: number) => `장소${String(i).padStart(3, '0')}`;
+    const pool = (count: number): RawPlaceCandidate[] =>
+      Array.from({ length: count }, (_, i) => ({
+        id: `p${i}`,
+        name: nameOf(i),
+        category: 'attraction',
+        address: '대구 중구',
+        coordinates: { lat: 35.87 + i / 200, lng: 128.6 },
+        source: 'pgvector' as const,
+        similarity: 0.5,
+        tags: ['city'],
+      }));
+
+    it('코퍼스가 그 지역을 못 담으면 전 후보 중립 — 언급 0 은 마이너가 아니라 정보 없음', () => {
+      // 대구 실측이 400건 중 5건(1.3%). 그 상태의 감점은 신호가 아니라 노이즈다.
+      const ranked = service.rank(pool(100), {
+        userId: 'u1',
+        destination: '대구',
+        popularityIndex: index([nameOf(0)]) as never,
+      });
+      for (const candidate of ranked) {
+        expect(candidate.crag.popularity).toBe(0.5);
+        expect(candidate.crag.penalties).not.toContain('naver-unmentioned');
+      }
+    });
+
+    it('코퍼스가 담아냈으면 감점을 그대로 살린다 — 항을 끄는 게 목적이 아니다', () => {
+      const mentioned = Array.from({ length: 20 }, (_, i) => nameOf(i));
+      const ranked = service.rank(pool(100), {
+        userId: 'u1',
+        destination: '속초',
+        popularityIndex: index(mentioned) as never,
+      });
+      expect(ranked.find((c) => c.name === nameOf(0))!.crag.popularity).toBe(0.9);
+      expect(ranked.find((c) => c.name === nameOf(99))!.crag.popularity).toBe(0.15);
+    });
+  });
+
+  describe('취향 판정 가능성 (폴백 태그뿐이면 중립)', () => {
+    const ctx = (): RetrievalContext => ({
+      userId: 'u1',
+      destination: '속초',
+      tasteTags: { food: ['seafood'], mood: ['adventure'], environment: ['mountain', 'nature'], confidence: 0.85 },
+    });
+    const at = (id: string, name: string, tags: string[]): RawPlaceCandidate => ({
+      id, name, category: 'attraction', address: '강원특별자치도 속초시',
+      coordinates: { lat: 38.2 + id.length / 1000, lng: 128.6 },
+      source: 'pgvector', similarity: 0.5, tags,
+    });
+
+    it('사전이 못 읽은 후보(폴백 태그뿐)는 감점하지 않는다', () => {
+      // 실측: 신흥사·영금정이 인지도 1.00 인데 태그 매칭 0 → taste 0.54 로 17~19위까지 밀렸다.
+      // 사전의 빈틈은 "취향에 안 맞다"가 아니라 "모른다"다.
+      const [fallbackOnly, matched] = service.rank(
+        [at('a', '신흥사', ['cultural']), at('b', '설악산', ['mountain', 'nature'])],
+        ctx(),
+      );
+      const only = [fallbackOnly, matched].find((c) => c!.name === '신흥사')!;
+      expect(only.crag.taste).toBeCloseTo(0.56, 2);
+    });
+
+    it('실질 태그가 있으면 그대로 판정한다 — 항을 끄는 게 목적이 아니다', () => {
+      const ranked = service.rank([at('c', '설악산', ['mountain', 'nature'])], ctx());
+      // 4개 중 2개 매칭 → 중립(0.56)보다 확실히 높아야 한다.
+      expect(ranked[0]!.crag.taste).toBeGreaterThan(0.7);
     });
   });
 });

@@ -3,6 +3,7 @@
 import {
   distributeFallbackDurations,
   itemsFittingRemaining,
+  maxVisitDuration,
   minimumItemsPerDay,
   targetItemsPerDay,
 } from '../../../src/planner/helpers/itinerary-density';
@@ -46,5 +47,38 @@ describe('itinerary density', () => {
     expect(durations).toHaveLength(5);
     expect(durations.reduce((sum, duration) => sum + duration, 0)).toBe(624);
     expect(durations.every((duration) => duration >= 45 && duration <= 150)).toBe(true);
+  });
+
+  /**
+   * 상한이 전역 150 하나뿐이던 시절엔 활동 구간이 길수록 카페·음식점까지 차례로 150 이 됐다.
+   * 끼니 2시간 반·카페 2시간 반은 그 자체로 비현실적이고, 그만큼 볼거리에서 빠진 시간이다.
+   */
+  it('활동 구간이 길어도 카페·음식점은 자기 상한을 넘지 않는다', () => {
+    const categories = ['attraction', 'restaurant', 'cafe', 'attraction'];
+    const durations = distributeFallbackDurations(categories, '07:00', '23:00');
+
+    expect(durations).toEqual([150, 120, 90, 150]);
+  });
+
+  it('상한 합계보다 목표가 크면 거기서 멈춘다 (채우려고 헛돌지 않는다)', () => {
+    const categories = ['restaurant', 'cafe'];
+    // 16시간의 80% 는 768분이지만 두 항목의 상한 합계는 210분뿐이다.
+    const durations = distributeFallbackDurations(categories, '07:00', '23:00');
+
+    expect(durations).toEqual([120, 90]);
+  });
+
+  it('짧은 하루에서는 상한에 닿지 않아 종전대로 비례 배분된다', () => {
+    const durations = distributeFallbackDurations(['attraction', 'restaurant', 'cafe'], '13:00', '19:00');
+
+    expect(durations.reduce((sum, duration) => sum + duration, 0)).toBe(288);
+    expect(durations.every((duration) => duration >= 45)).toBe(true);
+  });
+
+  it('상한은 카테고리별이다', () => {
+    expect(maxVisitDuration('cafe')).toBe(90);
+    expect(maxVisitDuration('restaurant')).toBe(120);
+    expect(maxVisitDuration('attraction')).toBe(150);
+    expect(maxVisitDuration('park')).toBe(150);
   });
 });

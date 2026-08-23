@@ -28,9 +28,9 @@ export function TripCoordinationPanel({ tripId }: Props) {
   if (isPending || !data) {
     return (
       <div className="space-y-3">
-        <div className="h-16 animate-pulse rounded-[16px] bg-[color:var(--card-soft,#F2F4F6)]" />
-        <div className="h-40 animate-pulse rounded-[16px] bg-[color:var(--card-soft,#F2F4F6)]" />
-        <div className="h-32 animate-pulse rounded-[16px] bg-[color:var(--card-soft,#F2F4F6)]" />
+        <div className="h-16 app-shimmer rounded-[16px] bg-[color:var(--card-soft,#F2F4F6)]" />
+        <div className="h-40 app-shimmer rounded-[16px] bg-[color:var(--card-soft,#F2F4F6)]" />
+        <div className="h-32 app-shimmer rounded-[16px] bg-[color:var(--card-soft,#F2F4F6)]" />
       </div>
     );
   }

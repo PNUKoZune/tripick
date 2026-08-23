@@ -1,7 +1,13 @@
 'use client';
 
-import { FiChevronRight } from 'react-icons/fi';
-import { LuClock3, LuExternalLink, LuGripVertical, LuPencil, LuTrash2 } from 'react-icons/lu';
+import {
+  LuChevronRight,
+  LuClock3,
+  LuExternalLink,
+  LuGripVertical,
+  LuPencil,
+  LuTrash2,
+} from 'react-icons/lu';
 import type { PlannerItineraryItemDto } from '@tripick/types';
 
 import { ChangeScheduleButton, Chip } from '@/shared/ui';
@@ -95,6 +101,8 @@ export function ItineraryItemCard({
             aria-label="드래그해서 순서 변경"
             title="드래그해서 순서 변경"
             style={{ touchAction: 'none' }}
+            /* 15px 은 스케일 밖 값이 아니라 카드(16)의 1px 테두리 안쪽 반경 — 핸들이
+               카드 왼쪽 모서리에 딱 맞물리려면 테두리 두께만큼 작아야 한다. */
             className="flex w-8 shrink-0 cursor-grab items-center justify-center rounded-l-[15px] border-r border-[color:var(--line)] bg-[color:var(--card-soft)] text-[color:var(--ink-faint)] transition hover:bg-[color:var(--primary-tint)] hover:text-[color:var(--primary)] active:cursor-grabbing"
           >
             <LuGripVertical className="size-4" />
@@ -118,7 +126,7 @@ export function ItineraryItemCard({
             {onSwitch ? (
               <span className="h-8" />
             ) : (
-              <FiChevronRight aria-hidden className="size-4 text-[color:var(--ink-faint)]" />
+              <LuChevronRight aria-hidden className="size-4 text-[color:var(--ink-faint)]" />
             )}
           </div>
           <div

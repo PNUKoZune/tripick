@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { FiChevronLeft, FiPlus } from 'react-icons/fi';
-import { LuShare2 } from 'react-icons/lu';
+import { LuChevronLeft, LuPlus, LuShare2 } from 'react-icons/lu';
 import type { PlannerMemberDto } from '@tripick/types';
 
 import { MemberAvatars } from '@/entities/member';
@@ -30,7 +29,7 @@ export function PlannerHeader({
           aria-label={`${backLabel} 으로 돌아가기`}
           className="flex size-9 shrink-0 items-center justify-center rounded-full text-[color:var(--ink)] hover:bg-[color:var(--card-soft)]"
         >
-          <FiChevronLeft className="size-5" />
+          <LuChevronLeft className="size-5" />
         </Link>
         <h1 className="truncate text-[18px] font-bold leading-[26px] text-[color:var(--ink)]">{title}</h1>
       </div>
@@ -53,7 +52,7 @@ export function PlannerHeader({
           className="-mx-2 flex items-center gap-2 rounded-full px-2 py-1 transition hover:bg-[color:var(--card-soft)]"
         >
             <MemberAvatars members={members} />
-            <FiPlus className="size-4 text-[color:var(--ink-faint)]" aria-hidden />
+            <LuPlus className="size-4 text-[color:var(--ink-faint)]" aria-hidden />
           </button>
         ) : (
           <MemberAvatars members={members} />

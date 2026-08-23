@@ -25,6 +25,12 @@ type Props = {
    * 기본 false — panelClassName·children 이 아직 토큰화 안 된 모달은 라이트 고정 유지.
    */
   themed?: boolean;
+  /**
+   * 퇴장 중이면 true. 마운트=열림이라 셸 스스로는 닫히는 순간을 모르므로,
+   * 언마운트를 미뤄 주는 호출부(useExitTransition)가 이 프레임 동안 켜 준다.
+   * 넘기지 않으면 기존대로 등장 모션만 있고 퇴장은 즉시다.
+   */
+  closing?: boolean;
   children: ReactNode;
 };
 
@@ -38,6 +44,7 @@ export function ModalShell({
   align = 'center',
   panelClassName = '',
   themed = false,
+  closing = false,
   children,
 }: Props) {
   const panelRef = useFocusTrap<HTMLDivElement>();
@@ -51,7 +58,7 @@ export function ModalShell({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-50 flex justify-center ${themed ? 'wvr-scope ' : ''}${
+      className={`fixed inset-0 z-50 flex justify-center ${themed ? 'wvr-scope wvr-overlay ' : ''}${
         align === 'bottom' ? 'items-end p-0 sm:items-center sm:p-5' : 'items-center p-5'
       }`}
       role="dialog"
@@ -65,14 +72,16 @@ export function ModalShell({
         aria-hidden
         onClick={onDismiss}
         disabled={!onDismiss}
-        className="app-backdrop-in absolute inset-0 bg-black/45"
+        className={`absolute inset-0 bg-black/45 ${
+          closing ? 'app-backdrop-out' : 'app-backdrop-in'
+        }`}
       />
-      {/* 등장 모션만 있고 퇴장은 즉시 — 열림이 마운트라 언마운트를 지연할 곳이 없다.
-          transform 은 애니메이션 종료 후 해제되므로 내부 fixed 요소를 가두지 않는다 */}
+      {/* transform 은 애니메이션 종료 후 해제되므로 내부 fixed 요소를 가두지 않는다.
+          퇴장은 호출부가 `closing` 을 켜 줄 때만 돈다(안 켜면 즉시 사라짐). */}
       <div
         ref={panelRef}
         tabIndex={-1}
-        className={`app-panel-in relative outline-none ${panelClassName}`}
+        className={`relative outline-none ${closing ? 'app-panel-out' : 'app-panel-in'} ${panelClassName}`}
       >
         {children}
       </div>

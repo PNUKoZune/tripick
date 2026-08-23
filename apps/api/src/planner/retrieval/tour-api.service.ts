@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { OPENING_HOURS_FIELD, parseOpeningHours } from './opening-hours.parser';
-import { isTravelCourseArticle } from './place-name-quality';
+import { isRetailBranchOutlet, isTravelCourseArticle } from './place-name-quality';
 import { isPlausibleKoreanCoordinate } from './place-eligibility';
 import { SAME_PLACE_RADIUS_M } from './near-duplicate';
 import { parseSigungu } from './place-seeds';
@@ -37,6 +37,12 @@ interface TourAreaItem {
   cat1?: string;
   cat2?: string;
   cat3?: string;
+  /** 분류체계 대분류 (음식은 'FD'). cat1~3 을 대체하는 신 체계 */
+  lclsSystm1?: string;
+  /** 분류체계 중분류 (FD01 한식 / FD02 외국식 / FD03 간이음식 / FD04 주점 / FD05 카페·찻집) */
+  lclsSystm2?: string;
+  /** 분류체계 소분류 (FD030100 제과 등) */
+  lclsSystm3?: string;
 }
 
 interface TourAreaResponse {
@@ -44,6 +50,21 @@ interface TourAreaResponse {
     body?: {
       totalCount?: number;
       items?: '' | { item?: TourAreaItem | TourAreaItem[] };
+    };
+  };
+}
+
+/** searchFestival2 응답 아이템. 목록 API 중 유일하게 행사 기간을 준다. */
+interface TourFestivalItem {
+  contentid: string | number;
+  eventstartdate?: string | number;
+  eventenddate?: string | number;
+}
+
+interface TourFestivalResponse {
+  response?: {
+    body?: {
+      items?: '' | { item?: TourFestivalItem | TourFestivalItem[] };
     };
   };
 }
@@ -97,6 +118,38 @@ const EXCLUDED_CONTENT_TYPES = new Set(['32']);
 /** 여행코스. 실제 코스명과 큐레이션 기사가 섞여 오므로 이름 모양으로 한 번 더 가른다. */
 export const TRAVEL_COURSE_CONTENT_TYPE = '25';
 
+/**
+ * 쇼핑. 전통시장(여행지)과 체인 매장·건물 입점 점포(여행지 아님)가 섞여 오므로
+ * 여행코스와 같은 방식으로 이름·주소 모양을 한 번 더 본다.
+ */
+export const SHOPPING_CONTENT_TYPE = '38';
+
+/**
+ * 축제공연행사. **장소가 아니라 기간이 있는 이벤트**라 행사 기간을 함께 싣는다.
+ * 기간이 없으면 이미 끝난 행사가 상시 장소처럼 후보에 남는다.
+ */
+export const FESTIVAL_CONTENT_TYPE = '15';
+
+/**
+ * searchFestival2 의 `eventStartDate` 하한. **시작일 기준 필터**라 값이 오늘에 가까우면
+ * "오래전 시작해 아직 진행 중인 장기 행사"가 통째로 빠진다. 과거로 충분히 밀어 전량을 받는다
+ * (부산 실측: 19000101·20200101 둘 다 71건으로 동일 — 하한을 낮춰도 손해가 없다).
+ */
+const FESTIVAL_SEARCH_FROM = '19000101';
+
+/** 시도당 축제 페이지 상한. 실측 최다가 서울 191건(2페이지)이라 여유가 크다. */
+const FESTIVAL_MAX_PAGES = 10;
+
+/** 시도당 음식 분류 페이지 상한. 전국 카페가 3,075건이라 한 시도가 10페이지(1,000건)를 넘지 않는다. */
+const FOOD_CLASS_MAX_PAGES = 10;
+
+/** KTO 날짜(YYYYMMDD) → 'YYYY-MM-DD'. 형식이 어긋나면 undefined 로 두어 상시 장소로 남긴다. */
+function toIsoDate(value: string | number | undefined): string | undefined {
+  const raw = String(value ?? '').trim();
+  if (!/^\d{8}$/.test(raw)) return undefined;
+  return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+}
+
 /** contentTypeId → 한글 유형명 (임베딩 텍스트 강화용). */
 const CONTENT_TYPE_NAME: Record<string, string> = {
   '12': '관광지',
@@ -107,6 +160,75 @@ const CONTENT_TYPE_NAME: Record<string, string> = {
   '38': '쇼핑',
   '39': '음식점',
 };
+
+/** 음식점 contentTypeId. 이것만 분류체계 중분류로 한 번 더 가른다. */
+export const FOOD_CONTENT_TYPE = '39';
+
+/** areaBasedList2 의 음식 분류 필터. 둘 다 주면 KTO 가 AND 로 좁힌다. */
+export interface FoodClassFilter {
+  lclsSystm2?: string;
+  lclsSystm3?: string;
+}
+
+/**
+ * 음식(FD) 중분류 → 내부 category. contentTypeId 39 가 카페·찻집까지 한 덩어리라
+ * KTO 에서 온 카페가 전부 restaurant 로 적재됐다 — 카페 후보는 카카오 소스에만 있었고,
+ * 일정의 카페 자리가 만성적으로 비는 원인이었다(전국 13,498건 중 FD05 가 3,075건).
+ *
+ * 소분류(lclsSystm3)가 아니라 **중분류**로 가르는 이유 — 소분류는 한식만 관광식당·모범음식점
+ * 둘뿐이라 끼니/휴식 구분에 아무 정보도 더하지 않고, 표를 KTO 개편마다 따라다녀야 한다.
+ * 예외는 제과 하나뿐이라 그것만 소분류로 집는다.
+ */
+const FOOD_CLASS_CATEGORY: Record<string, string> = {
+  FD01: 'restaurant', // 한식
+  FD02: 'restaurant', // 외국식
+  FD03: 'restaurant', // 간이음식 (제과만 아래에서 예외)
+  FD04: 'restaurant', // 주점 — 전국 7건뿐이라 따로 다루지 않는다
+  FD05: 'cafe', // 카페/찻집
+};
+
+/**
+ * 간이음식(FD03) 중 제과. 앉아 쉬는 자리라 끼니보다 오후 휴식 슬롯에 맞다 —
+ * 카페로 두면 최악이 "빵집에서 쉼", 음식점으로 두면 최악이 "빵집에서 저녁". 전자가 낫다.
+ */
+const BAKERY_FOOD_CLASS = 'FD030100';
+
+/** 카페로 분류된 KTO 음식 행의 categoryDetail. 임베딩 텍스트가 '음식점'이라고 말하던 걸 바로잡는다. */
+const FOOD_CLASS_NAME: Record<string, string> = {
+  FD05: '카페',
+  [BAKERY_FOOD_CLASS]: '제과',
+};
+
+/**
+ * KTO 음식 행의 category·categoryDetail 을 분류체계로 정한다.
+ *
+ * 분류체계가 비어 있으면 기존 동작(restaurant/'음식점')으로 떨어진다. 구 `cat3` 폴백은 두지
+ * 않았다 — 표본 600건 전부 lclsSystm2 가 채워져 있어(빈값 0) 쓰이지 않을 경로다.
+ *
+ * restaurant 로 남는 행의 categoryDetail 을 '음식점' 그대로 두는 것도 의도다. 라벨이 임베딩
+ * 텍스트에 들어가므로 바꾸면 해시가 달라져 멀쩡한 12,000여 행이 통째로 재임베딩된다.
+ */
+export function classifyTourFood(item: {
+  lclsSystm2?: string;
+  lclsSystm3?: string;
+}): { category: string; categoryDetail: string } {
+  const mid = String(item.lclsSystm2 ?? '').trim().toUpperCase();
+  const leaf = String(item.lclsSystm3 ?? '').trim().toUpperCase();
+  if (leaf === BAKERY_FOOD_CLASS) {
+    return { category: 'cafe', categoryDetail: FOOD_CLASS_NAME[BAKERY_FOOD_CLASS]! };
+  }
+  const category = FOOD_CLASS_CATEGORY[mid] ?? 'restaurant';
+  return { category, categoryDetail: FOOD_CLASS_NAME[mid] ?? CONTENT_TYPE_NAME[FOOD_CONTENT_TYPE]! };
+}
+
+/**
+ * 카페로 재분류해야 할 음식 분류. 이미 적재된 행을 고치는 backfill CLI 가 이 필터로
+ * "카페인 contentId" 만 KTO 에 물어본다 — 전체를 다시 읽으면 일일 예산(900콜)으로는 며칠이 걸린다.
+ */
+export const CAFE_FOOD_CLASSES: ReadonlyArray<FoodClassFilter & { categoryDetail: string }> = [
+  { lclsSystm2: 'FD05', categoryDetail: FOOD_CLASS_NAME.FD05! },
+  { lclsSystm3: BAKERY_FOOD_CLASS, categoryDetail: FOOD_CLASS_NAME[BAKERY_FOOD_CLASS]! },
+];
 
 function toArray<T>(item: T | T[] | undefined): T[] {
   if (!item) return [];
@@ -128,6 +250,22 @@ export class KtoQuotaExceededError extends Error {
  *    LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR
  * 둘 다 axios 가 던지지 않으므로(HTTP 200) 본문을 직접 봐야 한다.
  */
+/**
+ * HTTP 429 = 호출량 초과. **본문 검사(`detectKtoQuota`)로는 안 잡힌다** — 그건 KTO 가 200 에
+ * 실어 보내는 초과 메시지를 보는 것이고, 429 는 axios 가 던져서 일반 catch 로 빠진다.
+ *
+ * 그래서 실측에서 이렇게 됐다: 전량 적재를 하루에 세 번 돌린 뒤 백필을 실행했더니 서울 8페이지째부터
+ * 전부 429 였는데, 지역마다 실패 경고만 찍고 16개 시도를 끝까지 돌고 **"적재 완료: 신규 0 / 갱신 0"**
+ * 으로 끝났다. "할 일이 없었다"와 "전부 실패했다"가 같은 보고로 나온 것이다.
+ */
+function isRateLimited(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { response?: { status?: number } }).response?.status === 429
+  );
+}
+
 export function detectKtoQuota(data: unknown): boolean {
   if (typeof data === 'string') {
     return (
@@ -269,6 +407,7 @@ export class TourApiService {
         }
       }
 
+      await this.attachEventPeriods(apiKey, lDongRegnCd, region, pending, budget);
       quotaExceeded = await this.attachOpeningHours(apiKey, pending, budget);
     } catch (error) {
       // 호출량 초과는 남은 페이지·영업시간 조회를 멈추고 지금까지 모은 것만 반환한다.
@@ -281,6 +420,98 @@ export class TourApiService {
     }
 
     return { places: collected, nextOffset: ended ? 0 : consumed, quotaExceeded };
+  }
+
+  /**
+   * 수집한 축제공연행사(15) 행에 행사 기간을 채운다.
+   *
+   * 목록 API(areaBasedList2)는 `eventstartdate`/`eventenddate` 를 **주지 않는다** — 응답 필드를
+   * 열어 확인했다. detailIntro2 로 받으면 건당 1콜이라 전국 1,200여 건에 그만큼이 들지만,
+   * `searchFestival2` 는 같은 값을 **목록으로** 준다(시도당 1~2콜). 부산 71건 = areaBasedList2 의
+   * 축제 총수와 정확히 일치해 커버리지 손실도 없다.
+   *
+   * 기간을 못 받은 행은 NULL 로 남아 상시 장소처럼 다뤄진다 — 기간을 모르는 걸 "끝났다"로
+   * 읽어 후보에서 빼는 것보다, 그대로 두고 다음 적재에서 채우는 쪽이 덜 틀린다.
+   */
+  private async attachEventPeriods(
+    apiKey: string,
+    lDongRegnCd: string,
+    region: string,
+    pending: Array<{ place: IngestPlace; contentTypeId: string }>,
+    budget?: KtoCallBudget,
+  ): Promise<void> {
+    const festivals = pending.filter(
+      ({ place, contentTypeId }) => contentTypeId === FESTIVAL_CONTENT_TYPE && place.tourismApiId,
+    );
+    if (festivals.length === 0) return;
+
+    const periods = await this.fetchFestivalPeriods(apiKey, lDongRegnCd, budget);
+    if (periods.size === 0) {
+      this.logger.warn(
+        `[${region}] 축제 ${festivals.length}건의 기간을 못 받았습니다 — 기간 없는 상시 장소로 적재됩니다.`,
+      );
+      return;
+    }
+
+    let filled = 0;
+    for (const { place } of festivals) {
+      const period = periods.get(place.tourismApiId!);
+      if (!period) continue;
+      place.eventStartDate = period.start;
+      place.eventEndDate = period.end;
+      filled += 1;
+    }
+    this.logger.log(`[${region}] 축제 기간 ${filled}/${festivals.length}건 채움`);
+  }
+
+  /** 시도의 축제 contentId → 행사 기간. searchFestival2 는 목록으로 기간을 준다. */
+  private async fetchFestivalPeriods(
+    apiKey: string,
+    lDongRegnCd: string,
+    budget?: KtoCallBudget,
+  ): Promise<Map<string, { start: string; end: string }>> {
+    const periods = new Map<string, { start: string; end: string }>();
+    const numOfRows = 100;
+
+    for (let page = 1; page <= FESTIVAL_MAX_PAGES; page += 1) {
+      if (budget && !budget.consume()) break;
+      try {
+        const res = await axios.get<TourFestivalResponse>(`${this.BASE}/searchFestival2`, {
+          params: {
+            serviceKey: apiKey,
+            numOfRows,
+            pageNo: page,
+            MobileOS: 'ETC',
+            MobileApp: 'TriPick',
+            _type: 'json',
+            arrange: 'O',
+            lDongRegnCd,
+            // 시작일 하한. 오래전에 시작해 아직 진행 중인 행사까지 포함하려면 충분히 과거여야 한다.
+            eventStartDate: FESTIVAL_SEARCH_FROM,
+          },
+          timeout: 15000,
+        });
+        if (detectKtoQuota(res.data)) {
+          budget?.markExhausted();
+          break;
+        }
+        const items = res.data.response?.body?.items;
+        const rows = toArray(items && typeof items !== 'string' ? items.item : undefined);
+        for (const row of rows) {
+          const id = String(row.contentid ?? '').trim();
+          const start = toIsoDate(row.eventstartdate);
+          const end = toIsoDate(row.eventenddate);
+          if (id && start && end) periods.set(id, { start, end });
+        }
+        if (rows.length < numOfRows) break;
+      } catch (error) {
+        this.logger.warn(
+          `KTO searchFestival2 실패 (lDongRegnCd=${lDongRegnCd}, page=${page}): ${error instanceof Error ? error.message : String(error)}`,
+        );
+        break;
+      }
+    }
+    return periods;
   }
 
   /**
@@ -511,6 +742,7 @@ export class TourApiService {
     numOfRows: number,
     budget?: KtoCallBudget,
     contentTypeId?: string,
+    classFilter?: FoodClassFilter,
   ): Promise<TourAreaItem[]> {
     if (budget && !budget.consume()) throw new KtoQuotaExceededError('areaBasedList2');
     try {
@@ -525,6 +757,8 @@ export class TourApiService {
           arrange: 'O', // 대표이미지 있는 순 정렬
           lDongRegnCd, // 폐기 예정인 areaCode 대체 (법정동 시도 코드)
           ...(contentTypeId ? { contentTypeId } : {}),
+          ...(classFilter?.lclsSystm2 ? { lclsSystm2: classFilter.lclsSystm2 } : {}),
+          ...(classFilter?.lclsSystm3 ? { lclsSystm3: classFilter.lclsSystm3 } : {}),
         },
         timeout: 10000,
       });
@@ -536,11 +770,52 @@ export class TourApiService {
       return toArray(items && typeof items !== 'string' ? items.item : undefined);
     } catch (error) {
       if (error instanceof KtoQuotaExceededError) throw error; // 초과는 상위로 전파해 수집 중단
+      // HTTP 429 도 초과다 — 예산을 소진 처리하고 상위로 던져 남은 지역까지 헛돌지 않게 한다.
+      if (isRateLimited(error)) {
+        budget?.markExhausted();
+        throw new KtoQuotaExceededError('areaBasedList2 (HTTP 429)');
+      }
       this.logger.warn(
         `KTO areaBasedList2 실패 (lDongRegnCd=${lDongRegnCd}, page=${pageNo}): ${error instanceof Error ? error.message : String(error)}`,
       );
       return [];
     }
+  }
+
+  /**
+   * 한 시도에서 특정 음식 분류에 속하는 contentId 를 전부 모은다. 카테고리 backfill 전용이라
+   * 장소를 만들지 않고 id 만 돌려준다 — 고칠 대상은 이미 적재돼 있고, 필요한 건 "어느 행이
+   * 카페인가" 뿐이다.
+   *
+   * 전국 한 번이 아니라 **시도별**로 도는 이유 — 한 목록이 작을수록 페이지 경계가 흔들릴 여지가
+   * 적다. 시도별 카페는 평균 180건이라 대개 2페이지로 끝나고, 전체를 돌아도 KTO 호출은 40여 번이다.
+   */
+  async fetchFoodClassContentIds(
+    lDongRegnCd: string,
+    classFilter: FoodClassFilter,
+    budget?: KtoCallBudget,
+  ): Promise<string[]> {
+    const apiKey = this.apiKey();
+    if (!apiKey) return [];
+    const ids = new Set<string>();
+    const batchSize = 100; // KTO numOfRows 상한
+    for (let page = 1; page <= FOOD_CLASS_MAX_PAGES; page += 1) {
+      const rows = await this.fetchPage(
+        apiKey,
+        lDongRegnCd,
+        page,
+        batchSize,
+        budget,
+        FOOD_CONTENT_TYPE,
+        classFilter,
+      );
+      for (const row of rows) {
+        const id = String(row.contentid ?? '').trim();
+        if (id) ids.add(id);
+      }
+      if (rows.length < batchSize) break;
+    }
+    return [...ids];
   }
 
   private toIngestPlace(row: TourAreaItem, region: string): IngestPlace | null {
@@ -564,13 +839,22 @@ export class TourApiService {
     if (contentTypeId === TRAVEL_COURSE_CONTENT_TYPE && isTravelCourseArticle(name, address)) {
       return null;
     }
+
+    // 쇼핑(38)에는 전통시장('경주 중앙시장')과 체인 매장·건물 입점 점포('다이소 부산서면점',
+    // '구찌 롯데백화점 부산본점')가 섞여 온다. 후자는 방문할 여행지가 아니고, 좌표가 건물 좌표라
+    // 반경 검색에서 한 건물의 매장들이 후보를 통째로 먹는다.
+    if (contentTypeId === SHOPPING_CONTENT_TYPE && isRetailBranchOutlet(name, address)) {
+      return null;
+    }
     const sigungu = parseSigungu(address);
-    const categoryDetail = CONTENT_TYPE_NAME[contentTypeId];
+    // 음식(39)만 분류체계 중분류로 한 번 더 가른다 — 카페·찻집이 restaurant 로 뭉뚱그려지던 자리.
+    const food = contentTypeId === FOOD_CONTENT_TYPE ? classifyTourFood(row) : null;
+    const categoryDetail = food ? food.categoryDetail : CONTENT_TYPE_NAME[contentTypeId];
 
     return {
       tourismApiId: String(row.contentid),
       name,
-      category,
+      category: food ? food.category : category,
       ...(categoryDetail ? { categoryDetail } : {}),
       address,
       coordinates: { lat, lng },

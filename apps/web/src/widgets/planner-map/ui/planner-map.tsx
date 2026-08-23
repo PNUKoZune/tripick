@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { FiMapPin, FiNavigation, FiSearch, FiX } from 'react-icons/fi';
+import { LuMapPin, LuNavigation, LuSearch, LuX } from 'react-icons/lu';
 import type { PlannerMapCenterDto, PlannerMapMarkerDto } from '@tripick/types';
 
 import {
@@ -318,7 +318,7 @@ export function PlannerMap({
               최소치로 잡아 줄어들지 않고, 옆 길찾기 버튼이 지도 밖으로 밀려 잘린다. */}
           <div className="pointer-events-auto relative min-w-0 flex-1">
             <div className="flex h-9 items-center rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 shadow-[0_4px_12px_rgba(15,23,42,0.06)]">
-              <FiSearch aria-hidden className="mr-2 size-4 shrink-0 text-[color:var(--ink-faint)]" />
+              <LuSearch aria-hidden className="mr-2 size-4 shrink-0 text-[color:var(--ink-faint)]" />
               <input
                 type="text"
                 value={searchQuery}
@@ -339,12 +339,12 @@ export function PlannerMap({
                   aria-label="검색 지우기"
                   className="ml-1 flex shrink-0 items-center text-[color:var(--ink-faint)] hover:text-[color:var(--ink-sub)]"
                 >
-                  <FiX className="size-4" />
+                  <LuX className="size-4" />
                 </button>
               ) : null}
             </div>
             {searchOpen && searchResults.length > 0 ? (
-              <div className="absolute left-0 right-0 top-[calc(100%+4px)] max-h-64 overflow-y-auto rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card)] py-1 shadow-[0_12px_28px_rgba(0,0,0,0.12)]">
+              <div className="absolute left-0 right-0 top-[calc(100%+4px)] max-h-64 overflow-y-auto rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] py-1 shadow-[0_12px_28px_rgba(0,0,0,0.12)]">
                 {searchResults.map((place, index) => (
                   <button
                     key={`${place.place_name}-${index}`}
@@ -374,20 +374,20 @@ export function PlannerMap({
             title={directionsTarget ? `${directionsTarget.name} 길찾기` : '길찾기 대상이 없어요'}
             className="pointer-events-auto flex h-9 shrink-0 items-center gap-1.5 rounded-[16px] bg-[color:var(--btn-bg)] px-3 text-[13px] font-semibold text-[color:var(--btn-text)] shadow-[0_4px_12px_rgba(49,130,246,0.24)] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <FiNavigation className="size-4" />
+            <LuNavigation className="size-4" />
             길찾기
           </button>
           </div>
           {onPickSearchPlace && selectedPlace && !searchOpen ? (
-            <div className="pointer-events-auto mt-2 flex items-center justify-between gap-2 rounded-[14px] border border-[color:var(--line)] bg-[color:var(--primary-tint)] px-3 py-2 shadow-[0_4px_12px_rgba(49,130,246,0.14)]">
+            <div className="pointer-events-auto mt-2 flex items-center justify-between gap-2 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--primary-tint)] px-3 py-2 shadow-[0_4px_12px_rgba(49,130,246,0.14)]">
               <span className="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-[color:var(--primary-deep)]">
-                <FiMapPin aria-hidden className="size-3.5 shrink-0" />
+                <LuMapPin aria-hidden className="size-3.5 shrink-0" />
                 <span className="truncate">{selectedPlace.name}</span>
               </span>
               <button
                 type="button"
                 onClick={() => onPickSearchPlace(selectedPlace)}
-                className="shrink-0 rounded-[10px] bg-[color:var(--btn-bg)] px-2.5 py-1.5 text-[12px] font-bold text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)]"
+                className="shrink-0 rounded-[12px] bg-[color:var(--btn-bg)] px-2.5 py-1.5 text-[12px] font-bold text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)]"
               >
                 {pickPlaceLabel}
               </button>

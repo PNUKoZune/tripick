@@ -7,6 +7,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { loginWithEmail } from '@/entities/session/api/auth-api';
 import { useRetryCountdown } from '@/shared/lib';
+import { Button } from '@/shared/ui';
 
 type Props = {
   /** 로그인 성공 후 이동할 경로. default: '/' */
@@ -66,19 +67,24 @@ export function EmailLoginForm({ next = '/' }: Props) {
       </label>
 
       {errorMessage ? (
-        <p className="text-[13px] font-semibold text-[color:var(--danger)]">{errorMessage}</p>
+        <p role="alert" className="text-[13px] font-semibold text-[color:var(--danger)]">
+          {errorMessage}
+        </p>
       ) : null}
 
-      <button
-        type="submit"
-        disabled={!canSubmit}
-        className="mt-2 h-12 w-full rounded-[12px] bg-[color:var(--btn-bg)] text-[15px] font-bold text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)] disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)]"
-      >
-        {mutation.isPending ? '로그인 중…' : retryAfter > 0 ? `${retryAfter}초 후 다시 시도` : '로그인'}
-      </button>
+      <Button type="submit" size="md" fullWidth className="mt-2" disabled={!canSubmit}>
+        {mutation.isPending
+          ? '로그인 중…'
+          : retryAfter > 0
+            ? `${retryAfter}초 후 다시 시도`
+            : '로그인'}
+      </Button>
 
       <div className="flex items-center justify-between pt-1 text-[13px]">
-        <Link href="/forgot-password" className="font-semibold text-[color:var(--ink-sub)] hover:text-[color:var(--primary)]">
+        <Link
+          href="/forgot-password"
+          className="font-semibold text-[color:var(--ink-sub)] hover:text-[color:var(--primary)]"
+        >
           비밀번호를 잊으셨나요?
         </Link>
         <Link href="/signup" className="font-semibold text-[color:var(--primary)] hover:underline">

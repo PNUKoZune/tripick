@@ -22,20 +22,22 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#ffffff',
+  // 브라우저·웹뷰 크롬 색. 단일 값으로 두면 화면이 다크로 넘어가도 상단 바만 흰색으로 남는다.
+  // 값은 "광안리의 하루" 팔레트의 --bg (라이트 #F5F7FB / 다크 #0B111E) 와 맞춘다.
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#F5F7FB' },
+    { media: '(prefers-color-scheme: dark)', color: '#0B111E' },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko">
       <head>
-        <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* 지도 SDK 는 화면에 들어와야 로드되므로 연결만 미리 열어 둔다.
+            Pretendard 는 self-host(`app/pretendard.css` + `public/fonts/pretendard`)라
+            서드파티 preconnect 가 더는 필요 없다. */}
         <link rel="preconnect" href="https://dapi.kakao.com" />
-        <link
-          rel="stylesheet"
-          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
-        />
       </head>
       <body>
         <Providers>{children}</Providers>

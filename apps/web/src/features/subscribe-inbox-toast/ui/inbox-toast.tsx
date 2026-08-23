@@ -13,7 +13,7 @@ import { useInboxToastSubscription } from '../model/use-inbox-toast-subscription
  */
 export function InboxToast() {
   const router = useRouter();
-  const { toast, dismiss } = useInboxToastSubscription();
+  const { toast, closing, dismiss } = useInboxToastSubscription();
 
   if (!toast) return null;
 
@@ -21,6 +21,7 @@ export function InboxToast() {
     <Toast
       tone={toast.tone}
       title={toast.title}
+      closing={closing}
       {...(toast.message ? { message: toast.message } : {})}
       onClose={dismiss}
       {...(toast.href

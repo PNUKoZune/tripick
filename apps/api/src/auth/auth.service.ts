@@ -60,6 +60,16 @@ export interface TokenContext {
   ipAddress?: string;
 }
 
+/**
+ * 카카오 로그인 동의항목. **카카오 개발자 콘솔에서 활성화한 항목만** 실을 수 있다 —
+ * 콘솔에 없는 항목을 scope 로 보내면 로그인이 KOE205 로 아예 막힌다.
+ *
+ * 명시하지 않으면 콘솔 기본 동의항목만 내려오는데, 닉네임이 빠지면 사용자 이름이 전부
+ * 폴백('여행자')으로, 핸들도 이름에서 root 를 못 뽑아 랜덤값으로 찍힌다. 이메일이 빠지면
+ * 같은 사람이 이메일로 가입했을 때 `findOrCreateByKakao` 의 자동 merge 를 못 타 계정이 갈린다.
+ */
+const KAKAO_SCOPES = ['profile_nickname', 'account_email'] as const;
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -252,6 +262,7 @@ export class AuthService {
       client_id: clientId,
       redirect_uri: redirectUri,
       response_type: 'code',
+      scope: KAKAO_SCOPES.join(','),
       state,
     });
     return {

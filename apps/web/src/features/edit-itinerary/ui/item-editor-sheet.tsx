@@ -81,11 +81,17 @@ export function ItemEditorSheet({
   }, [open, mode, item]);
 
   // 추가 모드에서는 실제 존재하는 장소(좌표 포함)를 골라야 제출할 수 있다
-  const placePicked = mode === 'edit' || (values.name.trim().length > 0 && values.lat !== undefined);
+  const placePicked =
+    mode === 'edit' || (values.name.trim().length > 0 && values.lat !== undefined);
   const canSubmit = placePicked && /^\d{2}:\d{2}$/.test(values.scheduledAt);
 
   return (
-    <BottomSheet open={open} onClose={onClose} label={mode === 'add' ? '일정 추가' : '일정 수정'}>
+    <BottomSheet
+      open={open}
+      onClose={onClose}
+      label={mode === 'add' ? '일정 추가' : '일정 수정'}
+      themed
+    >
       <div className="px-5 pb-6 pt-2">
         <h2 className="text-[18px] font-bold text-[color:var(--ink)]">
           {mode === 'add' ? '일정 추가' : '일정 수정'}
@@ -256,7 +262,9 @@ function PlaceSearchField({
             {picked.name}
           </span>
           {picked.address ? (
-            <span className="block truncate text-[12px] text-[color:var(--ink-sub)]">{picked.address}</span>
+            <span className="block truncate text-[12px] text-[color:var(--ink-sub)]">
+              {picked.address}
+            </span>
           ) : null}
         </span>
         <button
@@ -304,7 +312,9 @@ function PlaceSearchField({
               }}
               className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-[color:var(--card-soft)]"
             >
-              <span className="text-[14px] font-semibold text-[color:var(--ink)]">{place.place_name}</span>
+              <span className="text-[14px] font-semibold text-[color:var(--ink)]">
+                {place.place_name}
+              </span>
               <span className="text-[12px] text-[color:var(--ink-faint)]">
                 {place.road_address_name || place.address_name}
               </span>
@@ -319,7 +329,9 @@ function PlaceSearchField({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[13px] font-semibold text-[color:var(--ink-sub)]">{label}</span>
+      <span className="mb-1.5 block text-[13px] font-semibold text-[color:var(--ink-sub)]">
+        {label}
+      </span>
       {children}
     </label>
   );

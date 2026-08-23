@@ -1,14 +1,21 @@
-import { initializeApp, getApp, getApps } from 'firebase/app';
-import {
-  getMessaging,
-  getToken,
-  isSupported,
-  onMessage,
-  type MessagePayload,
-} from 'firebase/messaging';
+import type { MessagePayload } from 'firebase/messaging';
 
 import { isNativeShell } from '@/shared/rn-bridge/native-refresh-token';
 import { firebaseConfig, isWebPushConfigured, serviceWorkerUrl, vapidKey } from './config';
+
+/**
+ * firebase SDK(app+messaging, 약 130KB)는 여기서만 쓰는데 정적 import 면 `<WebPush />` 가
+ * providers 에 상시 마운트돼 있어 **모든 라우트** 첫 로드에 실린다. 실제로 필요한 건
+ * 웹 푸시가 켜진 브라우저뿐이고 RN 웹뷰·env 미설정·미지원 브라우저는 아래 값싼 가드에서
+ * 그대로 빠지므로, 그 가드를 통과한 뒤에 동적으로 받는다. 모듈 캐시는 번들러가 쥔다.
+ */
+async function loadFirebase() {
+  const [app, messaging] = await Promise.all([
+    import('firebase/app'),
+    import('firebase/messaging'),
+  ]);
+  return { ...app, ...messaging };
+}
 
 /**
  * 웹 푸시 지원·활성 조건. 하나라도 어긋나면 조용히 건너뛴다.
@@ -21,14 +28,16 @@ async function canUseWebPush(): Promise<boolean> {
   if (!isWebPushConfigured()) return false;
   if (!('serviceWorker' in navigator) || !('Notification' in window)) return false;
   try {
+    const { isSupported } = await loadFirebase();
     return await isSupported();
   } catch {
     return false;
   }
 }
 
-function ensureApp() {
-  return getApps().length ? getApp() : initializeApp(firebaseConfig);
+async function ensureMessaging() {
+  const { getApp, getApps, getMessaging, initializeApp } = await loadFirebase();
+  return getMessaging(getApps().length ? getApp() : initializeApp(firebaseConfig));
 }
 
 /**
@@ -50,7 +59,8 @@ export async function requestWebPushToken(): Promise<string | null> {
     // getToken 은 PushManager 구독을 위해 active 워커를 요구한다. register 직후엔 아직
     // installing 상태일 수 있어(→ 'no active Service Worker'), activated 될 때까지 기다린다.
     await waitForActivation(registration);
-    const messaging = getMessaging(ensureApp());
+    const { getToken } = await loadFirebase();
+    const messaging = await ensureMessaging();
     const token = await getToken(messaging, {
       vapidKey,
       serviceWorkerRegistration: registration,
@@ -88,7 +98,8 @@ export async function onForegroundPush(
 ): Promise<() => void> {
   if (!(await canUseWebPush())) return () => {};
   try {
-    const messaging = getMessaging(ensureApp());
+    const { onMessage } = await loadFirebase();
+    const messaging = await ensureMessaging();
     return onMessage(messaging, handler);
   } catch {
     return () => {};

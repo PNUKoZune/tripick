@@ -2,11 +2,13 @@
  * 장소 카탈로그(place_embeddings)에서 **장소가 아닌 행**을 걷어내는 일회성 정리 CLI.
  *
  * 대상 부류 (판별 근거는 place-name-quality.ts·place-eligibility.ts·near-duplicate.ts 주석):
- *   seo      검색 노출용 문구를 상호로 등록한 SEO 상호 — '경주맛집'·'다솥맛집'·'기차여행'
- *   course   KTO 여행코스 중 장소가 아니라 큐레이션 **기사**인 행
- *   coords   국내 좌표 범위를 벗어난 placeholder 좌표 행
- *   lodging  숙박(category=accommodation) — v1 은 숙소를 일정 항목으로 다루지 않는다
- *   dup      이름+좌표가 같은 소스 간 중복 행 (한 장소당 정보가 가장 많은 하나만 남긴다)
+ *   seo        검색 노출용 문구를 상호로 등록한 SEO 상호 — '경주맛집'·'다솥맛집'·'기차여행'
+ *   course     KTO 여행코스 중 장소가 아니라 큐레이션 **기사**인 행
+ *   coords     국내 좌표 범위를 벗어난 placeholder 좌표 행
+ *   lodging    숙박(category=accommodation) — v1 은 숙소를 일정 항목으로 다루지 않는다
+ *   retail     KTO 쇼핑 중 체인 매장·건물 입점 점포 (전통시장은 남긴다)
+ *   dup        이름+좌표가 같은 소스 간 중복 행 (한 장소당 정보가 가장 많은 하나만 남긴다)
+ *   ineligible 위 부류에 안 잡히면서 검색 게이트가 이미 거부하는 나머지 (의료 시설·행정구역명)
  *
  * 왜 마이그레이션이 아닌가 — 삭제는 스키마가 아니라 데이터 청소이고, 같은 행은 적재를 다시
  * 돌리면 되살아난다. 재발 차단은 적재·검색 게이트(place-name-quality)가 정본이고 이 스크립트는
@@ -20,32 +22,54 @@
  *
  * 옵션:
  *   --apply         실제로 삭제한다 (기본은 dry-run)
- *   --only=a,b      대상 부류 선택 (seo, course, coords, lodging, dup / 기본 전부)
+ *   --only=a,b      대상 부류 선택 (seo, course, coords, lodging, retail, dup, ineligible / 기본 전부)
  *   --samples=30    보고할 표본 수 (기본 30)
  *
- * course 판정은 KTO 에 "이 시도의 여행코스 목록"을 되물어(areaBasedList2 contentTypeId=25)
- * 확정 집합을 만든 뒤 이름 모양을 본다. 이름만 보면 실제 코스명·명소가 함께 죽기 때문이다.
- * KTO 키가 없으면 course 단계는 건너뛴다(seo 는 키 없이 동작).
+ * course·retail 판정은 KTO 에 "이 시도의 그 유형 목록"을 되물어(areaBasedList2 contentTypeId)
+ * 확정 집합을 만든 뒤 이름·주소 모양을 본다. 모양만 보면 실제 코스명·명소·전통시장이 함께 죽기
+ * 때문이다. KTO 키가 없으면 두 단계를 건너뛴다(나머지는 키 없이 동작).
  */
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { DataSource } from 'typeorm';
 import { PlaceIngestionModule } from '../planner/retrieval/place-ingestion.module';
 import {
+  isRetailBranchOutlet,
   isSeoBusinessName,
   isTravelCourseArticle,
 } from '../planner/retrieval/place-name-quality';
-import { TRAVEL_COURSE_CONTENT_TYPE, TourApiService } from '../planner/retrieval/tour-api.service';
-import { isPlausibleKoreanCoordinate } from '../planner/retrieval/place-eligibility';
+import {
+  KtoQuotaExceededError,
+  SHOPPING_CONTENT_TYPE,
+  TRAVEL_COURSE_CONTENT_TYPE,
+  TourApiService,
+} from '../planner/retrieval/tour-api.service';
+import {
+  isEligibleItineraryCandidate,
+  isPlausibleKoreanCoordinate,
+} from '../planner/retrieval/place-eligibility';
 import {
   SAME_PLACE_RADIUS_M,
   metersBetween,
   normalizeCatalogName,
 } from '../planner/retrieval/near-duplicate';
 
-type Target = 'seo' | 'course' | 'coords' | 'lodging' | 'dup';
+type Target = 'seo' | 'course' | 'coords' | 'lodging' | 'retail' | 'dup' | 'ineligible';
 
-const ALL_TARGETS: readonly Target[] = ['seo', 'course', 'coords', 'lodging', 'dup'];
+/**
+ * 실행 순서. `ineligible` 은 **맨 뒤**여야 한다 — 검색 게이트를 그대로 되물어 보는 catch-all 이라
+ * 앞 부류(seo·coords·lodging)와 겹친다. 뒤에 두고 이미 잡힌 행을 빼면 보고서에 "그 외 무엇이
+ * 남아 있었나"만 남는다.
+ */
+const ALL_TARGETS: readonly Target[] = [
+  'seo',
+  'course',
+  'coords',
+  'lodging',
+  'retail',
+  'dup',
+  'ineligible',
+];
 
 interface CatalogRow {
   id: string;
@@ -57,6 +81,7 @@ interface CatalogRow {
   created_at: string;
   destination_region: string | null;
   tourism_api_id: string | null;
+  category_detail: string | null;
   coordinates: { lat: number; lng: number } | null;
 }
 
@@ -105,7 +130,7 @@ async function main() {
 
     const rows: CatalogRow[] = await dataSource.query(
       `SELECT id, name, address, category, opening_hours, image_url, created_at,
-              destination_region, tourism_api_id, coordinates
+              destination_region, tourism_api_id, category_detail, coordinates
        FROM place_embeddings`,
     );
     console.log(`\n카탈로그 ${rows.length}행 검사`);
@@ -147,8 +172,36 @@ async function main() {
       reportDuplicateGroups(groups, options.samples);
     }
 
+    if (options.targets.includes('retail')) {
+      // 쇼핑(38)에는 전통시장과 체인 매장이 섞여 온다. 이름·주소 모양만으로는 못 가르므로
+      // (카카오 소스 카페·식당 지점이 같은 모양이다) KTO 에 쇼핑 목록을 되물어 범위를 좁힌다.
+      const shoppingIds = await collectContentIds(tourApi, SHOPPING_CONTENT_TYPE, '쇼핑');
+      if (shoppingIds === null) {
+        console.log('\n[retail] KTO 키가 없어 소매 점포 단계를 건너뜁니다.');
+      } else {
+        const shoppingRows = rows.filter(
+          (row) => row.tourism_api_id && shoppingIds.has(row.tourism_api_id),
+        );
+        const hits = shoppingRows.filter((row) =>
+          isRetailBranchOutlet(row.name, row.address ?? ''),
+        );
+        for (const row of hits) doomed.set(row.id, { row, reason: 'retail' });
+        console.log(
+          `\n[retail] KTO 쇼핑 contentId ${shoppingIds.size}건 중 카탈로그에 있는 행 ${shoppingRows.length}건` +
+            ` → 소매 점포 ${hits.length}건 삭제 / 시장·상점가 ${shoppingRows.length - hits.length}건 유지`,
+        );
+        report('소매 점포', hits, options.samples);
+        // 유지되는 쪽도 봐야 "전통시장이 통째로 죽지 않았는지" 눈으로 확인된다.
+        report(
+          '유지되는 쇼핑(참고)',
+          shoppingRows.filter((row) => !isRetailBranchOutlet(row.name, row.address ?? '')),
+          Math.min(options.samples, 10),
+        );
+      }
+    }
+
     if (options.targets.includes('course')) {
-      const courseIds = await collectCourseContentIds(tourApi);
+      const courseIds = await collectContentIds(tourApi, TRAVEL_COURSE_CONTENT_TYPE, '여행코스');
       if (courseIds === null) {
         console.log('\n[course] KTO 키가 없어 여행코스 단계를 건너뜁니다.');
       } else {
@@ -171,6 +224,25 @@ async function main() {
           Math.min(options.samples, 10),
         );
       }
+    }
+
+    if (options.targets.includes('ineligible')) {
+      // 검색 게이트를 그대로 되물어 본다 — 게이트가 이미 거부하는 행은 결과에 못 나오면서
+      // 카탈로그 용량과 후보 풀 자리만 차지한다. 규칙을 여기 복제하지 않아야 둘이 안 갈린다.
+      // `category_detail` 까지 넘겨야 검색과 **같은 입력**으로 판정한다 — 그 값이 빠지면
+      // 카테고리 화이트리스트가 안 걸려, 검색은 후보로 쓰는 행을 정리가 지워 버린다.
+      const hits = rows.filter(
+        (row) =>
+          !doomed.has(row.id) &&
+          !isEligibleItineraryCandidate({
+            name: row.name,
+            category: row.category ?? 'attraction',
+            ...(row.category_detail ? { categoryDetail: row.category_detail } : {}),
+            ...(row.coordinates ? { coordinates: row.coordinates } : {}),
+          }),
+      );
+      for (const row of hits) doomed.set(row.id, { row, reason: 'ineligible' });
+      report('검색 게이트 거부(그 외)', hits, options.samples);
     }
 
     const ids = [...doomed.keys()];
@@ -260,16 +332,35 @@ function reportDuplicateGroups(groups: DuplicateGroup[], samples: number): void 
   if (groups.length > samples) console.log(`  … 외 ${groups.length - samples}무리`);
 }
 
-/** 전국 시도의 여행코스 contentId 집합. KTO 키가 없으면 null. */
-async function collectCourseContentIds(tourApi: TourApiService): Promise<Set<string> | null> {
+/**
+ * 전국 시도의 해당 contentTypeId 집합. KTO 키가 없거나 **일 한도를 넘겼으면** null.
+ *
+ * 한도 초과를 던져서 프로세스를 죽이면 안 된다 — KTO 를 쓰는 단계는 course·retail 둘뿐이고
+ * 나머지(seo·coords·lodging·dup·ineligible)는 키 없이 돌아간다. 예전엔 429 가 main 밖으로
+ * 나가면서 뒤에 오는 `ineligible` 단계가 통째로 실행되지 않았다(한도를 다 쓴 날엔 정리 자체가
+ * 불가능해진다). 확정 집합을 못 만든 단계만 건너뛰고 나머지는 그대로 돌린다.
+ */
+async function collectContentIds(
+  tourApi: TourApiService,
+  contentTypeId: string,
+  label: string,
+): Promise<Set<string> | null> {
   const sidos = await tourApi.fetchSidoList();
   if (sidos.length === 0) return null;
 
   const ids = new Set<string>();
-  for (const sido of sidos) {
-    const contentIds = await tourApi.fetchContentIds(sido.code, TRAVEL_COURSE_CONTENT_TYPE);
-    for (const id of contentIds) ids.add(id);
-    console.log(`  [${sido.name}] 여행코스 ${contentIds.length}건`);
+  try {
+    for (const sido of sidos) {
+      const contentIds = await tourApi.fetchContentIds(sido.code, contentTypeId);
+      for (const id of contentIds) ids.add(id);
+      console.log(`  [${sido.name}] ${label} ${contentIds.length}건`);
+    }
+  } catch (error) {
+    if (error instanceof KtoQuotaExceededError) {
+      console.log(`  [${label}] KTO 일 한도 초과 — 이 단계를 건너뜁니다.`);
+      return null;
+    }
+    throw error;
   }
   return ids;
 }

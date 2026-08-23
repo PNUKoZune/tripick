@@ -41,7 +41,9 @@ export function PlaceSearchPicker({ value, onChange, placeholder }: Props) {
   // 키보드로 옮긴 활성 항목이 스크롤 영역 밖이면 보이게 스크롤
   useEffect(() => {
     if (!openList || activeIndex < 0) return;
-    listRef.current?.querySelector(`#${optionId(activeIndex)}`)?.scrollIntoView({ block: 'nearest' });
+    listRef.current
+      ?.querySelector(`#${optionId(activeIndex)}`)
+      ?.scrollIntoView({ block: 'nearest' });
   }, [activeIndex, openList]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -83,9 +85,7 @@ export function PlaceSearchPicker({ value, onChange, placeholder }: Props) {
       lng: resolved.lng,
       ...(category ? { category } : {}),
     };
-    const exists = value.some(
-      (p) => p.name === next.name && Math.abs(p.lat - next.lat) < 1e-6,
-    );
+    const exists = value.some((p) => p.name === next.name && Math.abs(p.lat - next.lat) < 1e-6);
     if (!exists) onChange([...value, next]);
     setQuery('');
     setResults([]);
@@ -100,7 +100,7 @@ export function PlaceSearchPicker({ value, onChange, placeholder }: Props) {
           {value.map((place, index) => (
             <span
               key={`${place.name}-${index}`}
-              className="flex items-center gap-1 rounded-full border border-[#C7DCFF] bg-[#EAF2FF] py-1 pl-2.5 pr-1.5 text-[12px] font-semibold text-[#1B64DA]"
+              className="flex items-center gap-1 rounded-full border border-[color:var(--line-dot,#C7DCFF)] bg-[color:var(--primary-tint,#EAF2FF)] py-1 pl-2.5 pr-1.5 text-[12px] font-semibold text-[color:var(--primary-deep,#1B64DA)]"
             >
               <LuMapPin className="size-3" />
               <span className="max-w-[140px] truncate">{place.name}</span>
@@ -108,7 +108,7 @@ export function PlaceSearchPicker({ value, onChange, placeholder }: Props) {
                 type="button"
                 aria-label={`${place.name} 제거`}
                 onClick={() => onChange(value.filter((_, i) => i !== index))}
-                className="flex size-4 items-center justify-center rounded-full text-[#3182F6] hover:bg-white"
+                className="flex size-4 items-center justify-center rounded-full text-[color:var(--primary,#3182F6)] hover:bg-[color:var(--card,#fff)]"
               >
                 <LuX className="size-3" />
               </button>
@@ -117,8 +117,8 @@ export function PlaceSearchPicker({ value, onChange, placeholder }: Props) {
         </div>
       ) : null}
       <div className="relative">
-        <div className="flex h-11 items-center rounded-[12px] border border-[#E5E8EB] bg-white px-3 focus-within:border-[#3182F6] focus-within:ring-2 focus-within:ring-[#E1ECFF]">
-          <LuSearch className="mr-2 size-4 shrink-0 text-[#8B95A1]" />
+        <div className="flex h-11 items-center rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] px-3 focus-within:border-[color:var(--primary,#3182F6)] focus-within:ring-2 focus-within:ring-[color:var(--primary-tint,#E1ECFF)]">
+          <LuSearch className="mr-2 size-4 shrink-0 text-[color:var(--ink-faint,#8B95A1)]" />
           <input
             type="text"
             value={query}
@@ -136,10 +136,8 @@ export function PlaceSearchPicker({ value, onChange, placeholder }: Props) {
             role="combobox"
             aria-expanded={openList && results.length > 0}
             aria-controls={LISTBOX_ID}
-            aria-activedescendant={
-              openList && activeIndex >= 0 ? optionId(activeIndex) : undefined
-            }
-            className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-[#191F28] outline-none placeholder:text-[#B0B8C1] disabled:cursor-not-allowed"
+            aria-activedescendant={openList && activeIndex >= 0 ? optionId(activeIndex) : undefined}
+            className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-[color:var(--ink,#191F28)] outline-none placeholder:text-[color:var(--ink-faint,#B0B8C1)] disabled:cursor-not-allowed"
           />
         </div>
         {openList && results.length > 0 ? (
@@ -147,7 +145,7 @@ export function PlaceSearchPicker({ value, onChange, placeholder }: Props) {
             ref={listRef}
             id={LISTBOX_ID}
             role="listbox"
-            className="absolute left-0 right-0 top-[calc(100%+4px)] z-10 max-h-56 overflow-y-auto rounded-[12px] border border-[#E5E8EB] bg-white py-1 shadow-[0_12px_28px_rgba(0,0,0,0.12)]"
+            className="absolute left-0 right-0 top-[calc(100%+4px)] z-10 max-h-56 overflow-y-auto rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#fff)] py-1 shadow-[0_12px_28px_rgba(0,0,0,0.12)]"
           >
             {results.map((place, index) => (
               <button
@@ -163,11 +161,15 @@ export function PlaceSearchPicker({ value, onChange, placeholder }: Props) {
                   addPlace(place);
                 }}
                 className={`flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left ${
-                  activeIndex === index ? 'bg-[#F2F4F6]' : 'hover:bg-[#F7F8FA]'
+                  activeIndex === index
+                    ? 'bg-[color:var(--card-soft,#F2F4F6)]'
+                    : 'hover:bg-[color:var(--card-soft,#F7F8FA)]'
                 }`}
               >
-                <span className="text-[14px] font-semibold text-[#191F28]">{place.place_name}</span>
-                <span className="text-[12px] text-[#8B95A1]">
+                <span className="text-[14px] font-semibold text-[color:var(--ink,#191F28)]">
+                  {place.place_name}
+                </span>
+                <span className="text-[12px] text-[color:var(--ink-faint,#8B95A1)]">
                   {place.road_address_name || place.address_name}
                 </span>
               </button>

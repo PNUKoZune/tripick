@@ -126,7 +126,7 @@ export async function refreshTokens(): Promise<AuthTokens | null> {
   if (refreshToken === undefined) return null;
   // null/'' = 토큰 확정 부재 → 세션 소실이라 로컬도 비운다.
   if (!refreshToken) {
-    clearSession();
+    clearSession('expired');
     return null;
   }
   try {
@@ -135,7 +135,7 @@ export async function refreshTokens(): Promise<AuthTokens | null> {
     return tokens;
   } catch {
     // refresh 실패 = 로그인 만료. 로컬 세션 비움.
-    clearSession();
+    clearSession('expired');
     return null;
   }
 }

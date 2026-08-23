@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { redirectToKakao } from '@/entities/session/api/auth-api';
 import { InlineNotice } from '@/shared/ui/app-frame';
+import { Button } from '@/shared/ui';
 
 /**
  * 랜딩 CTA. 예전 primary 였던 "임시 세션으로 둘러보기"는 없앴다 — 그 버튼은 인증 없이
@@ -30,7 +31,7 @@ export function AuthStartActions() {
     <div className="space-y-3">
       <Link
         href="/signup"
-        className="flex h-14 w-full items-center justify-center gap-2 rounded-[18px] bg-[color:var(--btn-bg)] text-[16px] font-bold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)]"
+        className="flex h-14 w-full items-center justify-center gap-2 rounded-[16px] bg-[color:var(--btn-bg)] text-[16px] font-bold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)]"
       >
         이메일로 시작하기
         <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -50,14 +51,9 @@ export function AuthStartActions() {
         <div className="h-px flex-1 bg-[color:var(--line)]" />
       </div>
 
-      <button
-        type="button"
-        disabled={loading}
-        onClick={handleKakaoStart}
-        className="flex h-12 w-full items-center justify-center rounded-[14px] bg-[#FEE500] text-[14px] font-semibold text-[#191919] transition-[filter] hover:brightness-95 disabled:opacity-60"
-      >
+      <Button variant="kakao" size="md" fullWidth disabled={loading} onClick={handleKakaoStart}>
         {loading ? '확인 중' : '카카오로 계속하기'}
-      </button>
+      </Button>
 
       <p className="pt-1 text-center text-[13px] text-[color:var(--ink-sub)]">
         이미 계정이 있나요?{' '}

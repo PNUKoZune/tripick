@@ -61,10 +61,10 @@ export function DestinationSearchInput({
         onFocus={() => setFocused(true)}
         placeholder={placeholder}
         autoComplete="off"
-        className="h-12 w-full rounded-[14px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FFFFFF)] px-4 text-[15px] font-medium text-[color:var(--ink,#191F28)] outline-none transition placeholder:text-[color:var(--ink-faint,#B0B8C1)] focus:border-[color:var(--primary,#3182F6)] focus:bg-[color:var(--card,#FFFFFF)] focus:ring-2 focus:ring-[color:var(--ring,#E1ECFF)]"
+        className="h-12 w-full rounded-[12px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#FFFFFF)] px-4 text-[15px] font-medium text-[color:var(--ink,#191F28)] outline-none transition placeholder:text-[color:var(--ink-faint,#B0B8C1)] focus:border-[color:var(--primary,#3182F6)] focus:bg-[color:var(--card,#FFFFFF)] focus:ring-2 focus:ring-[color:var(--ring,#E1ECFF)]"
       />
       {showList ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-10 max-h-72 overflow-y-auto rounded-[14px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#FFFFFF)] py-1 shadow-[0_12px_28px_rgba(0,0,0,0.08)]">
+        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-10 max-h-72 overflow-y-auto rounded-[16px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#FFFFFF)] py-1 shadow-[0_12px_28px_rgba(0,0,0,0.08)]">
           {suggestions.map((s) => (
             <button
               key={s.id}

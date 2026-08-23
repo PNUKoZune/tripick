@@ -16,6 +16,7 @@ import {
 } from '@/entities/friend';
 import { getStoredSession, SessionGuard } from '@/entities/session';
 import { queryKeys } from '@/shared/api/query-keys';
+import { Skeleton, SkeletonList } from '@/shared/ui';
 import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
 
 export function FriendsView() {
@@ -40,7 +41,11 @@ function FriendsContent() {
     () => null,
   );
 
-  const { data: friends = [], error } = useQuery({
+  const {
+    data: friends = [],
+    error,
+    isLoading,
+  } = useQuery({
     queryKey: queryKeys.friends.list,
     queryFn: fetchFriends,
     staleTime: 60 * 1000,
@@ -109,7 +114,7 @@ function FriendsContent() {
               }
             }}
             placeholder="예) koty 또는 @koty"
-            className="h-11 flex-1 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[14px] font-medium text-[color:var(--ink)] outline-none placeholder:text-[color:var(--ink-faint)] focus:border-[color:var(--primary)]"
+            className="h-11 min-w-0 flex-1 rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] px-3 text-[14px] font-medium text-[color:var(--ink)] outline-none placeholder:text-[color:var(--ink-faint)] focus:border-[color:var(--primary)]"
           />
           <button
             type="button"
@@ -121,13 +126,13 @@ function FriendsContent() {
           </button>
         </div>
         {mutationError ? (
-          <p className="mt-2 text-[12px] font-semibold text-[color:var(--danger)]">
+          <p role="alert" className="mt-2 text-[12px] font-semibold text-[color:var(--danger)]">
             {mutationError}
           </p>
         ) : null}
       </div>
 
-      <div className="flex items-center gap-2 rounded-[14px] bg-[color:var(--card-soft)] px-4 py-2.5">
+      <div className="flex items-center gap-2 rounded-[12px] bg-[color:var(--card-soft)] px-4 py-2.5">
         <LuSearch className="size-4 shrink-0 text-[color:var(--ink-faint)]" aria-hidden />
         <input
           type="text"
@@ -139,7 +144,10 @@ function FriendsContent() {
       </div>
 
       {loadError ? (
-        <div className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]">
+        <div
+          role="alert"
+          className="rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]"
+        >
           {loadError}
         </div>
       ) : null}
@@ -155,7 +163,7 @@ function FriendsContent() {
                   <button
                     type="button"
                     onClick={() => acceptMutation.mutate(friend.id)}
-                    className="h-9 rounded-[10px] bg-[color:var(--btn-bg)] px-3 text-[12px] font-bold text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)]"
+                    className="h-9 rounded-[12px] bg-[color:var(--btn-bg)] px-3 text-[12px] font-bold text-[color:var(--btn-text)] hover:bg-[color:var(--btn-bg-press)]"
                   >
                     수락
                   </button>
@@ -163,7 +171,7 @@ function FriendsContent() {
                     type="button"
                     onClick={() => removeMutation.mutate(friend.id)}
                     aria-label={`${friend.nickname} 요청 거절`}
-                    className="h-9 rounded-[10px] border border-[color:var(--line)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]"
+                    className="h-9 rounded-[12px] border border-[color:var(--line)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]"
                   >
                     거절
                   </button>
@@ -189,7 +197,7 @@ function FriendsContent() {
                     type="button"
                     onClick={() => removeMutation.mutate(friend.id)}
                     aria-label={`${friend.nickname} 요청 취소`}
-                    className="h-9 rounded-[10px] border border-[color:var(--line)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]"
+                    className="h-9 rounded-[12px] border border-[color:var(--line)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]"
                   >
                     요청 취소
                   </button>
@@ -220,7 +228,9 @@ function FriendsContent() {
       ) : null}
 
       <FriendSection title="친구" count={others.length}>
-        {others.length === 0 && !loadError ? (
+        {isLoading ? (
+          <FriendRowsSkeleton />
+        ) : others.length === 0 && !loadError ? (
           <p className="px-4 py-6 text-center text-[13px] text-[color:var(--ink-faint)]">
             친구가 없어요. 핸들(@아이디)로 친구를 추가해보세요.
           </p>
@@ -263,6 +273,23 @@ function FriendsContent() {
   );
 }
 
+/** 친구 목록 첫 조회 중 자리표시. 행 구성은 FriendRow(아바타 + 2줄) 와 같은 높이로 맞춘다. */
+function FriendRowsSkeleton() {
+  return (
+    <SkeletonList label="친구 목록 불러오는 중">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div key={index} className="flex items-center gap-3 px-4 py-3">
+          <Skeleton className="size-10 shrink-0" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <Skeleton className="h-3.5 w-24" />
+            <Skeleton className="h-3 w-40 max-w-full" />
+          </div>
+        </div>
+      ))}
+    </SkeletonList>
+  );
+}
+
 function FriendSection({
   title,
   count,
@@ -300,7 +327,7 @@ function FriendRowMenu({
         type="button"
         onClick={() => onCreateTrip(friend.id)}
         aria-label={`${friend.nickname}와(과) 여행 만들기`}
-        className="flex size-9 items-center justify-center rounded-[10px] text-[color:var(--ink-faint)] transition hover:bg-[color:var(--primary-tint)] hover:text-[color:var(--primary)]"
+        className="flex size-9 items-center justify-center rounded-[12px] text-[color:var(--ink-faint)] transition hover:bg-[color:var(--primary-tint)] hover:text-[color:var(--primary)]"
       >
         <LuPlane className="size-4" />
       </button>
@@ -308,7 +335,7 @@ function FriendRowMenu({
         type="button"
         onClick={() => onPin(friend.id)}
         aria-label={friend.pinned ? '즐겨찾기 해제' : '즐겨찾기'}
-        className={`flex size-9 items-center justify-center rounded-[10px] transition ${
+        className={`flex size-9 items-center justify-center rounded-[12px] transition ${
           friend.pinned
             ? 'text-[color:var(--accent-deep)]'
             : 'text-[color:var(--ink-faint)] hover:bg-[color:var(--accent-tint)] hover:text-[color:var(--accent-deep)]'
@@ -325,7 +352,7 @@ function FriendRowMenu({
           }
         }}
         aria-label={`${friend.nickname} 삭제`}
-        className="flex size-9 items-center justify-center rounded-[10px] text-[color:var(--ink-faint)] transition hover:bg-[color:var(--danger-tint)] hover:text-[color:var(--danger)]"
+        className="flex size-9 items-center justify-center rounded-[12px] text-[color:var(--ink-faint)] transition hover:bg-[color:var(--danger-tint)] hover:text-[color:var(--danger)]"
       >
         <LuX className="size-4" />
       </button>
@@ -355,7 +382,7 @@ function MyHandleShare({ handle }: { handle: string }) {
       <button
         type="button"
         onClick={copy}
-        className="flex h-9 items-center gap-1.5 rounded-[10px] bg-[color:var(--card-soft)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--line)]"
+        className="flex h-9 items-center gap-1.5 rounded-[12px] bg-[color:var(--card-soft)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--line)]"
       >
         {copied ? (
           <>

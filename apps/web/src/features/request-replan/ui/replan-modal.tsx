@@ -88,7 +88,9 @@ export function ReplanModal({
     setBudget('normal');
     setScope(multiDay ? 'days' : 'all');
     const fallbackDay = days[0]?.day ?? 1;
-    setSelectedDays([defaultDay && days.some((d) => d.day === defaultDay) ? defaultDay : fallbackDay]);
+    setSelectedDays([
+      defaultDay && days.some((d) => d.day === defaultDay) ? defaultDay : fallbackDay,
+    ]);
     /* eslint-enable react-hooks/set-state-in-effect */
     mutation.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -130,10 +132,12 @@ export function ReplanModal({
   }
 
   return (
-    <BottomSheet open={open} onClose={onClose} label="AI 재계획">
+    <BottomSheet open={open} onClose={onClose} label="AI 재계획" themed>
       {/* @MX:NOTE: 목업의 사유 칩·"지금 일정" 비교 블록은 새 폼 상태를 도입하므로
           의도적으로 제외한다(Out of Scope — spec.md §D, REQ-WVR-051). */}
-      <div className="wvr-scope px-5 pb-6 pt-2">
+      {/* 스코프는 BottomSheet(themed) 포털 루트가 이미 열어 뒀다. 여기서 다시 붙이면
+          `.wvr-scope{background:var(--bg)}` 가 시트 패널의 --card 를 페이지 배경색으로 덮는다. */}
+      <div className="px-5 pb-6 pt-2">
         <div className="flex items-center gap-2">
           <span className="flex size-8 items-center justify-center rounded-full bg-[color:var(--primary-tint)] text-[color:var(--primary)]">
             <LuSparkles className="size-4" />
@@ -198,7 +202,7 @@ export function ReplanModal({
               placeholder="예) 카페는 1곳만 가고 싶어요. 둘째 날은 바다 위주로 해주세요."
               maxLength={300}
               rows={3}
-              className="w-full resize-none rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-3 py-2.5 text-[15px] text-[color:var(--ink)] outline-none focus:border-[color:var(--primary)] focus:bg-[color:var(--card)] focus:ring-2 focus:ring-[color:var(--ring)]"
+              className="w-full resize-none rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-3 py-2.5 text-[15px] text-[color:var(--ink)] outline-none focus:border-[color:var(--primary)] focus:bg-[color:var(--card)] focus:ring-2 focus:ring-[color:var(--ring)]"
             />
           </Field>
 
@@ -231,7 +235,7 @@ export function ReplanModal({
               onChange={(e) => setAvoid(e.target.value)}
               placeholder="예) 대기 긴 맛집, 계단 많은 곳"
               maxLength={200}
-              className="h-11 w-full rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-3 text-[15px] text-[color:var(--ink)] outline-none focus:border-[color:var(--primary)] focus:bg-[color:var(--card)] focus:ring-2 focus:ring-[color:var(--ring)]"
+              className="h-11 w-full rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-3 text-[15px] text-[color:var(--ink)] outline-none focus:border-[color:var(--primary)] focus:bg-[color:var(--card)] focus:ring-2 focus:ring-[color:var(--ring)]"
             />
           </Field>
 
@@ -263,7 +267,7 @@ export function ReplanModal({
             type="button"
             onClick={onClose}
             disabled={mutation.isPending}
-            className="inline-flex h-14 flex-1 items-center justify-center rounded-[18px] border border-[color:var(--line)] bg-[color:var(--card)] text-[16px] font-semibold text-[color:var(--ink)] transition-colors hover:bg-[color:var(--card-soft)] disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-14 flex-1 items-center justify-center rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] text-[16px] font-semibold text-[color:var(--ink)] transition-colors hover:bg-[color:var(--card-soft)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             취소
           </button>
@@ -271,7 +275,7 @@ export function ReplanModal({
             type="button"
             disabled={mutation.isPending || !canSubmit}
             onClick={handleSubmit}
-            className="inline-flex h-14 flex-1 items-center justify-center rounded-[18px] bg-[color:var(--btn-bg)] text-[16px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none"
+            className="inline-flex h-14 flex-1 items-center justify-center rounded-[16px] bg-[color:var(--btn-bg)] text-[16px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none"
           >
             {/* 전송 중 로딩 상태 문구 — 기존 mutation.isPending "요청 중…" 유지(REQ-WVR-052) */}
             {mutation.isPending ? (
@@ -320,7 +324,7 @@ function SendingSpinner() {
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
-      className="animate-spin"
+      className="motion-safe:animate-spin"
     >
       <circle cx="12" cy="12" r="9" stroke="rgba(255,255,255,.32)" strokeWidth="3" />
       <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />

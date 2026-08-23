@@ -9,9 +9,35 @@ import {
   normalizeDestinationRegion,
   regionPrefixStem,
 } from './place-seeds';
-import { SAME_PLACE_RADIUS_M, normalizeCatalogName } from './near-duplicate';
-import { destinationRegionFilter, placeRegionCodes, sidoCodesForLabel } from './region-code';
-import type { RawPlaceCandidate } from './types';
+import {
+  KM_PER_LAT_DEGREE,
+  KM_PER_LNG_DEGREE,
+  SAME_PLACE_RADIUS_M,
+  normalizeCatalogName,
+} from './near-duplicate';
+import {
+  destinationRegionFilter,
+  placeRegionCodes,
+  sidoCodesForLabel,
+  type RegionFilter,
+} from './region-code';
+import type { RawPlaceCandidate, VisitWindow } from './types';
+
+/**
+ * 후보 검색을 어디로 좁힐지.
+ *
+ * `region` 은 행정 경계 등가 비교(btree pre-filter), `anchor` 는 지점 반경 bbox 다.
+ * 목적지가 행정구역이면 전자, '광안리'처럼 그보다 좁은 지점이면 후자를 쓴다 — 후자는
+ * 경계를 넘는 후보를 자연스럽게 포함한다(광안리 앵커 반경에 남구·해운대구가 함께 들어온다).
+ */
+export type PlaceSearchScope =
+  | { kind: 'region'; region: RegionFilter }
+  | { kind: 'anchor'; center: Coordinates; radiusM: number };
+
+/** Date → KST 기준 'YYYY-MM-DD'. 행사 기간은 날짜 단위라 시각·타임존을 여기서 떨군다. */
+export function toKstDateString(date: Date): string {
+  return new Date(date.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
 
 export interface UpsertPlaceInput {
   kakaoPlaceId?: string | null;
@@ -19,6 +45,11 @@ export interface UpsertPlaceInput {
   name: string;
   address?: string | null;
   category?: string | null;
+  /**
+   * 소스가 준 카테고리 상세 (KTO 유형명 '관광지' / 카카오 category_name 경로).
+   * 임베딩 텍스트·태그 유추·검색 eligibility 판정이 모두 이 값을 보므로 저장해야 적재와 검색이 일치한다.
+   */
+  categoryDetail?: string | null;
   /** destination_region 컬럼에 저장할 지역 라벨 (예: '서울', 'seoul') */
   region: string;
   /** region_sigungu 컬럼에 저장할 시군구 라벨 (예: '경주시') */
@@ -27,6 +58,10 @@ export interface UpsertPlaceInput {
   imageUrl?: string | null;
   /** 'HH:MM-HH:MM' 영업시간 (KTO detailIntro2). 없으면 소비측이 제약 없음으로 처리한다. */
   openingHours?: string | null;
+  /** 행사 시작일 'YYYY-MM-DD' (KTO 축제공연행사). NULL 이면 기간 없는 상시 장소. */
+  eventStartDate?: string | null;
+  /** 행사 종료일 'YYYY-MM-DD'. 여행 날짜가 이 뒤면 후보에서 빠진다. */
+  eventEndDate?: string | null;
   /** 임베딩 대상 텍스트 해시 (증분 upsert 판정용) */
   textHash?: string | null;
   /** 임베딩에 사용한 모델 식별자 */
@@ -40,6 +75,14 @@ export interface PlaceProvenance {
   embeddingModel: string | null;
   /** 영업시간은 임베딩 텍스트에 없어 해시로 변화를 감지할 수 없다. 값 비교용으로 함께 읽는다. */
   openingHours: string | null;
+  /** 행사 기간도 임베딩 텍스트 밖이다. 연례 축제는 매년 날짜가 바뀌므로 비교가 특히 중요하다. */
+  eventStartDate: string | null;
+  eventEndDate: string | null;
+  /**
+   * 카테고리 상세는 임베딩 텍스트 **안**에 있지만(해시가 변화를 잡는다) 컬럼을 새로 추가했으므로
+   * 기존 행은 NULL 이다. 해시가 같아 `unchanged` 로 떨어지는 행을 채우려면 값 비교가 필요하다.
+   */
+  categoryDetail: string | null;
 }
 
 /** 취향 벡터 기반 지역 추천 1건. */
@@ -69,6 +112,7 @@ interface PlaceEmbeddingRow {
   name: string;
   address?: string | null;
   category?: string | null;
+  category_detail?: string | null;
   destination_region?: string | null;
   coordinates?: Coordinates | string | null;
   image_url?: string | null;
@@ -85,29 +129,14 @@ export class PlaceEmbeddingRepository {
 
   async searchByEmbedding(
     embedding: number[],
-    destination: string,
+    scope: PlaceSearchScope,
     limit: number,
     preferenceVector?: number[],
+    visitWindow?: VisitWindow,
   ): Promise<RawPlaceCandidate[]> {
-    // 목적지를 정본 지역 코드로 바꿔 등가 비교로 pre-filter 한다.
-    // ILIKE 프리픽스였을 때는 인덱스를 못 타 (a) 전체 스캔이거나 (b) HNSW 근사 이웃을
-    // 뒤에서 걸러내는 post-filter 였고, 후자는 후보가 통째로 탈락해 결과가 비었다.
-    // 등가 비교면 플래너가 btree(region_code/sigungu_code)로 먼저 좁히고 정확 KNN 을 돌린다.
-    // 예: '경주'→sigungu '경주', '부산 해운대구'→sido '부산', '경상북도'→sido '경북'.
-    const { sido, sigungu } = destinationRegionFilter(destination);
     const params: unknown[] = [`[${embedding.join(',')}]`];
-
-    // 지역 코드가 안 잡히는 목적지(자유 입력·해외)는 필터 없이 전역 검색으로 둔다.
-    // 지역 라벨이 아예 없는 행(폴백 시드)은 어느 목적지에서도 후보로 남긴다.
-    const unlabeled = '(region_code IS NULL AND sigungu_code IS NULL)';
-    let regionClause = '';
-    if (sido) {
-      params.push(sido);
-      regionClause = `AND (region_code = $${params.length} OR ${unlabeled})`;
-    } else if (sigungu) {
-      params.push(sigungu);
-      regionClause = `AND (sigungu_code = $${params.length} OR ${unlabeled})`;
-    }
+    const regionClause = this.scopeClause(scope, params);
+    const eventClause = this.eventPeriodClause(visitWindow, params);
 
     params.push(limit);
     const limitIndex = params.length;
@@ -129,6 +158,7 @@ export class PlaceEmbeddingRepository {
                name,
                address,
                category,
+               category_detail,
                destination_region,
                coordinates,
                image_url,
@@ -138,6 +168,7 @@ export class PlaceEmbeddingRepository {
         FROM place_embeddings
         WHERE embedding IS NOT NULL
           ${regionClause}
+          ${eventClause}
         ORDER BY embedding <=> $1::vector
         LIMIT $${limitIndex}
         `,
@@ -151,6 +182,88 @@ export class PlaceEmbeddingRepository {
       );
       return [];
     }
+  }
+
+  /**
+   * 기간 있는 행사(KTO 축제공연행사)를 **여행 날짜와 겹칠 때만** 남긴다.
+   *
+   * 축제는 장소가 아니라 이벤트다 — 적재 시점에 "끝난 것"만 빼면 오늘 적재한 8월 축제를
+   * 10월 여행 후보로 내주게 된다. 판정은 반드시 소비 시점(여행 날짜)에 해야 한다.
+   * 실측에서 `2025 영호남 전통시장 박람회`(2026년 8월 현재 종료)가 서면역·부산 결과에,
+   * `해운대 모래축제`가 골든셋 busan-beach 상위 16 안에 올라왔다.
+   *
+   * NULL 은 **기간 없음 = 상시**다. 축제가 아닌 행(관광지·음식점·카페)이 전부 여기 해당하므로
+   * 이 조건은 그들에게 아무 영향이 없다.
+   *
+   * 여행 날짜를 모르는 호출(스크립트·진단)은 오늘로 판정한다 — 이미 끝난 행사를 후보로
+   * 내주지 않는 쪽이 안전한 기본값이다.
+   */
+  private eventPeriodClause(visitWindow: VisitWindow | undefined, params: unknown[]): string {
+    const today = toKstDateString(new Date());
+    const from = visitWindow?.from ?? today;
+    const to = visitWindow?.to ?? from;
+    params.push(from, to);
+    const index = params.length - 1;
+    return `AND (event_end_date IS NULL OR event_end_date >= $${index}::date)
+          AND (event_start_date IS NULL OR event_start_date <= $${index + 1}::date)`;
+  }
+
+  /**
+   * scope 를 WHERE 절 조각으로 바꾸고 바인딩을 `params` 에 밀어 넣는다.
+   *
+   * **지역 모드** — 정본 지역 코드 등가 비교. ILIKE 프리픽스였을 때는 인덱스를 못 타
+   * (a) 전체 스캔이거나 (b) HNSW 근사 이웃을 뒤에서 걸러내는 post-filter 였고, 후자는 후보가
+   * 통째로 탈락해 결과가 비었다. 등가 비교면 플래너가 btree(region_code/sigungu_code)로 먼저
+   * 좁히고 정확 KNN 을 돌린다. 코드가 안 잡히는 목적지(자유 입력·해외)는 필터 없이 전역 검색,
+   * 지역 라벨이 아예 없는 행(폴백 시드)은 어느 목적지에서도 후보로 남긴다.
+   *
+   * **앵커 모드** — bbox 로 좁히고 **정확 거리로 한 번 더 자른다**. 둘 다 필요하다:
+   * bbox 는 `(lat, lng)` btree 를 타서 스캔을 없애고(실측 3km 질의 26.8ms → 0.8ms), 거리 조건은
+   * 인덱스를 못 타는 대신 모서리를 깎는다.
+   *
+   * 모서리를 왜 깎아야 하나 — 외접 정사각형은 대각선이 반경의 1.41배라 "10km 반경"이 실제로는
+   * 14km 까지 닿는다. 장소 밀도가 균일하지 않아서 이 차이가 면적비(1.27배)보다 훨씬 크게 터진다:
+   * 에버랜드 10km 가 **원 15건 vs bbox 54건**이었고, 늘어난 39건은 대부분 북서쪽 모서리에 걸린
+   * 분당이었다(실측 결과 1·2위가 분당 카페). 반경 확장 판정도 이 부풀린 수를 보고 "충분하다"고
+   * 멈춰 버려, 지역 폴백이 떠야 할 케이스가 안 떴다.
+   *
+   * 거리식은 `near-duplicate` 의 평면 근사와 같은 상수를 쓴다 — 같은 좌표가 JS·SQL 두 곳에서
+   * 다르게 판정되면 안 된다.
+   */
+  private scopeClause(scope: PlaceSearchScope, params: unknown[]): string {
+    if (scope.kind === 'anchor') {
+      const radiusKm = scope.radiusM / 1000;
+      const latDelta = radiusKm / KM_PER_LAT_DEGREE;
+      const lngDelta = radiusKm / KM_PER_LNG_DEGREE;
+      params.push(
+        scope.center.lat - latDelta,
+        scope.center.lat + latDelta,
+        scope.center.lng - lngDelta,
+        scope.center.lng + lngDelta,
+        scope.center.lat,
+        scope.center.lng,
+        radiusKm,
+      );
+      const box = params.length - 6;
+      const center = params.length - 2;
+      return `AND lat BETWEEN $${box} AND $${box + 1} AND lng BETWEEN $${box + 2} AND $${box + 3}
+          AND sqrt(
+                power((lat - $${center}) * ${KM_PER_LAT_DEGREE}, 2)
+                + power((lng - $${center + 1}) * ${KM_PER_LNG_DEGREE}, 2)
+              ) <= $${center + 2}`;
+    }
+
+    const unlabeled = '(region_code IS NULL AND sigungu_code IS NULL)';
+    const { sido, sigungu } = scope.region;
+    if (sido) {
+      params.push(sido);
+      return `AND (region_code = $${params.length} OR ${unlabeled})`;
+    }
+    if (sigungu) {
+      params.push(sigungu);
+      return `AND (sigungu_code = $${params.length} OR ${unlabeled})`;
+    }
+    return '';
   }
 
   /**
@@ -234,6 +347,42 @@ export class PlaceEmbeddingRepository {
     }
   }
 
+  /**
+   * 이 지역 카탈로그에 이미 적재된 좌표 목록. 카카오 주변 검색의 **앵커 후보**로만 쓴다.
+   *
+   * 카카오만 돌리는 실행(`--sources=kakao`)은 같은 실행에서 KTO 좌표를 못 받아
+   * 지역 중심 1곳(반경 10km)으로 떨어졌다 — 시도 하나를 그 한 점으로 훑을 수 없어
+   * 카카오 전용 장소(카페·음식점) 보강이 사실상 도심 근처만 됐다. 이미 적재된 관광지
+   * 좌표가 그 지역의 관광 밀집지를 그대로 알려 주므로, KTO 호출 없이 앵커를 얻는다
+   * — KTO 일 한도를 다 쓴 날에도 카카오(별개 한도)만으로 보강 실행이 가능해진다.
+   *
+   * `ORDER BY id` 는 실행 간 같은 표본을 보장하려는 것이다(정렬 없는 LIMIT 은 계획에 따라
+   * 표본이 바뀌어 앵커가 흔들린다). 좌표만 읽으므로 전 지역 최대치를 그대로 받아도 싸다.
+   */
+  async findRegionCoordinates(destination: string, limit: number): Promise<Coordinates[]> {
+    const { sido, sigungu } = destinationRegionFilter(destination);
+    const column = sido ? 'region_code' : sigungu ? 'sigungu_code' : null;
+    const code = sido ?? sigungu;
+    if (!column || !code) return [];
+    try {
+      const rows: Array<{ lat: number; lng: number }> = await this.dataSource.query(
+        `SELECT lat, lng FROM place_embeddings
+         WHERE ${column} = $1 AND lat IS NOT NULL AND lng IS NOT NULL
+         ORDER BY id
+         LIMIT $2`,
+        [code, limit],
+      );
+      return rows
+        .map((row) => ({ lat: Number(row.lat), lng: Number(row.lng) }))
+        .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+    } catch (error) {
+      this.logger.warn(
+        `앵커용 좌표 조회 실패 (${destination}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return [];
+    }
+  }
+
   async seedRegion(
     destination: string,
     embed: (text: string) => Promise<number[]>,
@@ -306,8 +455,16 @@ export class PlaceEmbeddingRepository {
       text_hash: string | null;
       embedding_model: string | null;
       opening_hours: string | null;
+      category_detail: string | null;
+      event_start_date: string | null;
+      event_end_date: string | null;
     }> = await this.dataSource.query(
-      `SELECT id, text_hash, embedding_model, opening_hours FROM place_embeddings WHERE ${clause.sql} LIMIT 1`,
+      // 날짜는 **문자로 읽는다** — pg 드라이버가 date 를 로컬 자정 Date 로 파싱해서 그대로
+      // 비교하면 UTC 컨테이너에서 하루가 밀린다(이 저장소가 offsetDate 주석에 남긴 것과 같은 함정).
+      `SELECT id, text_hash, embedding_model, opening_hours,
+              to_char(event_start_date, 'YYYY-MM-DD') AS event_start_date,
+              to_char(event_end_date, 'YYYY-MM-DD') AS event_end_date
+       FROM place_embeddings WHERE ${clause.sql} LIMIT 1`,
       clause.params,
     );
     const row = rows[0];
@@ -317,6 +474,9 @@ export class PlaceEmbeddingRepository {
           textHash: row.text_hash,
           embeddingModel: row.embedding_model,
           openingHours: row.opening_hours,
+          eventStartDate: row.event_start_date,
+          eventEndDate: row.event_end_date,
+          categoryDetail: row.category_detail,
         }
       : null;
   }
@@ -367,6 +527,32 @@ export class PlaceEmbeddingRepository {
     await this.dataSource.query(
       'UPDATE place_embeddings SET opening_hours = $2, updated_at = NOW() WHERE id = $1',
       [id, openingHours],
+    );
+  }
+
+  /**
+   * 행사 기간만 갱신한다(재임베딩 없음). 영업시간과 같은 이유로 필요하다 — 기간은 임베딩 텍스트에
+   * 들어가지 않아 텍스트 해시가 그대로면 증분 적재가 통째로 건너뛴다.
+   *
+   * 영업시간보다 더 자주 필요하다: **연례 축제는 같은 contentId 의 날짜가 매년 바뀐다.**
+   * 이 경로가 없으면 작년 날짜가 박힌 채 영영 안 갱신돼 그 축제가 영구히 안 보이게 된다.
+   */
+  async updateEventPeriod(id: string, startDate: string, endDate: string): Promise<void> {
+    await this.dataSource.query(
+      'UPDATE place_embeddings SET event_start_date = $2, event_end_date = $3, updated_at = NOW() WHERE id = $1',
+      [id, startDate, endDate],
+    );
+  }
+
+  /**
+   * 카테고리 상세만 갱신한다(재임베딩 없음). 이 컬럼은 나중에 추가돼 기존 행이 NULL 인데,
+   * 임베딩 텍스트는 이미 그 값을 포함해 만들어졌으므로 해시가 같아 증분 적재가 건너뛴다.
+   * 백필 1회를 위한 경로 — 그 뒤로는 텍스트 해시가 변화를 잡는다.
+   */
+  async updateCategoryDetail(id: string, categoryDetail: string): Promise<void> {
+    await this.dataSource.query(
+      'UPDATE place_embeddings SET category_detail = $2, updated_at = NOW() WHERE id = $1',
+      [id, categoryDetail],
     );
   }
 
@@ -428,6 +614,9 @@ export class PlaceEmbeddingRepository {
           embedding_model = $12,
           region_code = $13,
           sigungu_code = $14,
+          event_start_date = $15,
+          event_end_date = $16,
+          category_detail = $17,
           updated_at = NOW()
         WHERE id = $1
         `,
@@ -446,6 +635,9 @@ export class PlaceEmbeddingRepository {
           place.embeddingModel ?? null,
           regionCode,
           sigunguCode,
+          place.eventStartDate ?? null,
+          place.eventEndDate ?? null,
+          place.categoryDetail ?? null,
         ],
       );
       return;
@@ -469,9 +661,12 @@ export class PlaceEmbeddingRepository {
         embedding_model,
         region_code,
         sigungu_code,
+        event_start_date,
+        event_end_date,
+        category_detail,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::vector, $12, $13, $14, $15, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::vector, $12, $13, $14, $15, $16, $17, $18, NOW())
       `,
       [
         place.kakaoPlaceId ?? null,
@@ -489,6 +684,9 @@ export class PlaceEmbeddingRepository {
         place.embeddingModel ?? null,
         regionCode,
         sigunguCode,
+        place.eventStartDate ?? null,
+        place.eventEndDate ?? null,
+        place.categoryDetail ?? null,
       ],
     );
   }
@@ -553,6 +751,7 @@ export class PlaceEmbeddingRepository {
       ...(row.tourism_api_id ? { tourismApiId: row.tourism_api_id } : {}),
       name: row.name,
       category: row.category ?? 'attraction',
+      ...(row.category_detail ? { categoryDetail: row.category_detail } : {}),
       address: row.address ?? '',
       coordinates,
       ...(row.image_url ? { imageUrl: row.image_url } : {}),

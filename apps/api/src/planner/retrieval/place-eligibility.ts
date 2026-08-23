@@ -1,4 +1,4 @@
-import { isSeoBusinessName } from './place-name-quality';
+import { isChainBranchOutlet, isSeoBusinessName } from './place-name-quality';
 import { isRegionLabel } from './region-code';
 import type { RawPlaceCandidate } from './types';
 
@@ -25,6 +25,17 @@ const EXCLUDED_CATEGORY_KEYWORDS = [
  */
 const EXCLUDED_CATEGORIES = new Set(['accommodation']);
 
+/**
+ * 소스가 "여행 대상"이라고 명시한 카테고리. 이 값이 있으면 **장소명의 단어보다 우선한다** —
+ * '병원앞카페'처럼 이름에 제외 키워드가 든 실제 여행지를 살리기 위한 화이트리스트다.
+ *
+ * ⚠️ `'쇼핑'` 은 **일부러 뺐다.** KTO 쇼핑(38)에는 전통시장(여행지)과 약국·의원(여행지 아님)이
+ * 함께 들어 있어 "소스가 쇼핑으로 줬다"가 여행 대상임을 보증하지 못한다. 실측에서 '가까운약국'·
+ * '서면365약국' 이 쇼핑(38)이었고, 화이트리스트에 두면 이름 검사를 건너뛰어 통과한다.
+ * 쇼핑 행은 이 목록을 안 타고 아래 이름 검사로 내려가 의료 키워드에서 걸린다(전통시장은 통과).
+ *
+ * 반대로 KTO 는 '부산 구 백제병원'(등록문화재)을 관광지(12)로 주므로 `'관광'` 이 그걸 살린다.
+ */
 const TRAVEL_CATEGORY_KEYWORDS = [
   '여행',
   '관광',
@@ -33,7 +44,6 @@ const TRAVEL_CATEGORY_KEYWORDS = [
   '레포츠',
   '음식점',
   '카페',
-  '쇼핑',
 ];
 
 /**
@@ -86,6 +96,10 @@ export function isEligibleItineraryCandidate(
   // 전에 들어온 행과 아직 정리 스크립트를 돌리지 않은 환경이 있어 검색 단계에서도 뺀다.
   // 카테고리 화이트리스트는 이걸 못 막는다 — 실존 음식점이라 '음식점' 카테고리를 달고 온다.
   if (isSeoBusinessName(place.name)) return false;
+
+  // 프랜차이즈 개별 지점('스타벅스 다대포해수욕장점'). **카테고리 화이트리스트보다 위여야 한다** —
+  // 지점은 소스가 '음식점'·'카페' 로 주므로 아래 화이트리스트가 먼저 true 로 끊어 버린다.
+  if (isChainBranchOutlet(place.name)) return false;
 
   const categoryDetail = normalize(place.categoryDetail ?? '');
   if (EXCLUDED_CATEGORY_KEYWORDS.some((keyword) => categoryDetail.includes(normalize(keyword)))) {

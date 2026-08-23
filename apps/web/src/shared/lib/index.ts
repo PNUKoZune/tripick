@@ -4,6 +4,8 @@ export { firstErrorMessage } from './first-error-message';
 export { useRetryCountdown } from './use-retry-countdown';
 export { loadKakaoMaps, getKakaoKey } from './kakao-loader';
 export { useMediaQuery } from './use-media-query';
+export { usePrefersReducedMotion } from './use-prefers-reduced-motion';
+export { useExitTransition } from './use-exit-transition';
 export { useFocusTrap } from './use-focus-trap';
 export { useBodyScrollLock } from './use-body-scroll-lock';
 export { useDismissOnEscape } from './use-dismiss-on-escape';

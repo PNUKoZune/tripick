@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { exchangeKakaoCode, redirectToKakao } from '@/entities/session/api/auth-api';
-import { AppFrame, InlineNotice, PrimaryButton } from '@/shared/ui/app-frame';
+import { Button } from '@/shared/ui';
+import { AppFrame, InlineNotice } from '@/shared/ui/app-frame';
 
 type CallbackState = { status: 'checking' } | { status: 'error'; message: string };
 
@@ -54,10 +55,10 @@ export function KakaoCallbackView() {
     <AppFrame showNav={false} themed>
       <section className="flex min-h-screen items-center justify-center px-5">
         <section className="w-full max-w-[360px]">
-          <div className="text-[13px] font-black leading-5 text-[color:var(--blue-600)]">
+          <div className="text-[13px] font-extrabold leading-5 text-[color:var(--blue-600)]">
             Tripick
           </div>
-          <h1 className="mt-3 text-[30px] font-black leading-9">
+          <h1 className="mt-3 text-[30px] font-extrabold leading-9">
             {state.status === 'checking' ? '로그인 확인 중' : '로그인을 완료하지 못했어요'}
           </h1>
           <p className="mt-3 text-[15px] font-bold leading-6 text-[color:var(--text-secondary)]">
@@ -75,19 +76,19 @@ export function KakaoCallbackView() {
           <div className="mt-8 space-y-3">
             {state.status === 'error' ? (
               <>
-                <PrimaryButton tone="kakao" onClick={handleRetry}>
+                <Button variant="kakao" fullWidth onClick={handleRetry}>
                   카카오로 다시 시작
-                </PrimaryButton>
+                </Button>
                 <Link
                   href="/login"
-                  className="flex h-12 w-full items-center justify-center rounded-[14px] border border-[color:var(--line)] bg-[color:var(--card)] text-[14px] font-semibold text-[color:var(--ink)] hover:bg-[color:var(--card-soft)]"
+                  className="flex h-12 w-full items-center justify-center rounded-[12px] border border-[color:var(--line)] bg-[color:var(--card)] text-[14px] font-semibold text-[color:var(--ink)] hover:bg-[color:var(--card-soft)]"
                 >
                   이메일로 로그인
                 </Link>
               </>
             ) : (
               <div className="h-2 overflow-hidden rounded-full bg-[color:var(--soft-bg)]">
-                <div className="h-full w-1/2 animate-pulse rounded-full bg-[color:var(--blue-600)]" />
+                <div className="h-full w-1/2 motion-safe:animate-pulse rounded-full bg-[color:var(--blue-600)]" />
               </div>
             )}
           </div>

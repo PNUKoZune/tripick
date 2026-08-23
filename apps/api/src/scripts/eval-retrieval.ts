@@ -25,6 +25,21 @@
  *
  * 주의: 실제 파이프라인을 그대로 태운다 — pgvector·카카오·네이버 인지도까지 호출한다.
  * 즉 외부 API 키가 없으면 그 신호만 빠진 상태의 점수가 나온다(비교 자체는 유효).
+ *
+ * ## ⚠️ 전후 비교는 **한 프로세스 안에서** 해야 한다
+ *
+ * 인지도 코퍼스가 네이버 실시간 검색이라 **시간이 지나면 바뀐다.** 캐시는 프로세스 안에만
+ * 살아 있어 실행마다 새로 받는다. 그래서:
+ *
+ *   - 몇 분 안에 반복 실행 → **완전히 동일**(실측 3회 연속 소수점까지 일치)
+ *   - 30분쯤 지난 뒤 실행 → R@10 이 0.356~0.369 로 흔들린다(폭 0.013)
+ *
+ * 이 변동폭이 웬만한 튜닝 효과보다 크다. 실제로 태그 사전 확장을 시점이 다른 두 실행으로
+ * 비교했을 때 "R@10 +0.006, 제주 MRR 0.50→1.00, 속초 R@10 +0.10" 이 나왔는데, 같은 코드로
+ * 연속 A/B 하니 **소수점까지 완전히 동일**했다 — 전부 코퍼스 변동이었다.
+ *
+ * 그래서 파라미터 비교는 `--sweep` 을 쓴다(한 프로세스에서 코퍼스를 공유한다). 코드 변경은
+ * 노브로 뺄 수 있으면 노브 스윕으로, 아니면 **몇 분 안에 연속으로** 돌려 비교할 것.
  */
 import 'reflect-metadata';
 import { readFileSync, writeFileSync } from 'fs';
@@ -37,6 +52,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import type { ReplanTrigger, TasteTagDto } from '@tripick/types';
 import { CragEvaluatorService } from '../planner/retrieval/crag-evaluator.service';
+import { DestinationAnchorService } from '../planner/retrieval/destination-anchor.service';
 import { KakaoLocalService } from '../planner/retrieval/kakao-local.service';
 import { NaverSearchService } from '../planner/retrieval/naver-search.service';
 import { PlaceEmbeddingRepository } from '../planner/retrieval/place-embedding.repository';
@@ -57,10 +73,16 @@ import type { CandidatePlace } from '../planner/retrieval/types';
  * 안 그러면 적재를 안 돌린 지역의 낮은 recall 을 랭킹 탓으로 오독하게 된다.
  */
 class CatalogProbe {
-  constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
+  constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly anchors: DestinationAnchorService,
+  ) {}
 
   async exists(name: string, destination: string): Promise<boolean> {
-    const { sido, sigungu } = destinationRegionFilter(destination);
+    // 앵커 목적지('광안리')는 destinationRegionFilter 가 실재하지 않는 코드를 만들어 내
+    // 존재 확인이 통째로 0 건이 된다(실측: 앵커 케이스 catalog 0%). 검색과 같은 해석을 쓴다.
+    const anchor = await this.anchors.resolve(destination);
+    const { sido, sigungu } = anchor?.region ?? destinationRegionFilter(destination);
     const code = sido ?? sigungu;
     const rows: Array<{ hit: string }> = await this.dataSource.query(
       `SELECT '1' AS hit FROM place_embeddings
@@ -96,6 +118,7 @@ class CatalogProbe {
     KakaoLocalService,
     NaverSearchService,
     CragEvaluatorService,
+    DestinationAnchorService,
     PlaceRetrievalService,
     CatalogProbe,
   ],
@@ -217,10 +240,24 @@ function parseArgs(argv: string[]) {
  */
 const MIN_NAME_MATCH_LENGTH = 3;
 
+/**
+ * 정답 이름을 품고 있어도 **그 장소가 아닌** 부속 시설. 정답 쪽에 같은 토큰이 없으면 매칭에서 뺀다.
+ *
+ * 왜 필요한가 — 포함 매칭이 양방향이라 '남부시장 천변유료주차장'이 정답 '남부시장'의 hit 로,
+ * '무섬마을 임시주차장'이 '무섬마을'의 hit 로 세어지고 있었다(실측 2건). 주차장을 찾아 준 걸
+ * 정답으로 세면 recall 이 부풀고, 그 위에서 랭킹을 튜닝하면 노이즈를 쫓게 된다.
+ *
+ * 브랜드 지점('테라로사 사천해변점')은 빼지 않는다 — 강릉 케이스의 정답 '테라로사'는 브랜드이고
+ * 그 지점이 실제로 방문할 장소다. 부속 시설과 지점은 다른 문제라 같은 규칙으로 묶으면 안 된다.
+ */
+const ANCILLARY_TOKENS = ['주차장', '매표소', '안내소', '정류장', '화장실'] as const;
+
 function nameMatches(candidate: string, expected: string): boolean {
   const a = candidate.replace(/\s+/g, '').toLowerCase();
   const b = expected.replace(/\s+/g, '').toLowerCase();
   if (a === b) return true;
+  if (ANCILLARY_TOKENS.some((token) => a.includes(token) && !b.includes(token))) return false;
+  // 2자 이름('우도'·'홍대')은 완전 일치로만 잡는다. 부분 매칭을 허용하면 우연한 포함이 흔하다.
   const shorter = a.length <= b.length ? a : b;
   if (shorter.length < MIN_NAME_MATCH_LENGTH) return false;
   return a.includes(b) || b.includes(a);
