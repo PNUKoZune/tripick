@@ -4,6 +4,7 @@ import {
   clearStoredSession,
   persistSession,
   SESSION_STORAGE_KEY,
+  type SessionEndReason,
 } from '@/shared/lib/session-token';
 
 export type Session = LoginResponseDto;
@@ -17,6 +18,7 @@ export function storeSession(session: Session): void {
   persistSession(session);
 }
 
-export function clearSession(): void {
-  clearStoredSession();
+/** 사유는 안내 문구를 가른다 — 만료면 'expired', 사용자가 끝낸 세션이면 기본값. */
+export function clearSession(reason: SessionEndReason = 'signed-out'): void {
+  clearStoredSession(reason);
 }

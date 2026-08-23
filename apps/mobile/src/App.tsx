@@ -59,8 +59,9 @@ type BridgeMessage =
 
 const WEB_APP_HOST = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
 const WEB_APP_URL = __DEV__ ? WEB_APP_HOST : 'https://tripick.vercel.app';
-// 라우트가 아직 정해지지 않은 단계에선 루트로 진입. planner v1 (`/trips`) 머지된 뒤 변경.
-const ENTRY_PATH = '/';
+// 첫 진입은 랜딩(`/start`). 루트(`/`)는 로그인 필수 화면이라 미로그인 사용자가 랜딩을
+// 못 보고 바로 /login 으로 떨어졌다. 로그인 상태면 /start 의 GuestGuard 가 `/` 로 되돌린다.
+const ENTRY_PATH = '/start';
 const WEB_APP_ORIGIN = new URL(WEB_APP_URL).origin;
 
 // react-native-webview 13.x 타입 union 에서 Android 전용 onPermissionRequest 가 빠져있다.
