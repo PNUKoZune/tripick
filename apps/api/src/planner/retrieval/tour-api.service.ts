@@ -37,6 +37,12 @@ interface TourAreaItem {
   cat1?: string;
   cat2?: string;
   cat3?: string;
+  /** 분류체계 대분류 (음식은 'FD'). cat1~3 을 대체하는 신 체계 */
+  lclsSystm1?: string;
+  /** 분류체계 중분류 (FD01 한식 / FD02 외국식 / FD03 간이음식 / FD04 주점 / FD05 카페·찻집) */
+  lclsSystm2?: string;
+  /** 분류체계 소분류 (FD030100 제과 등) */
+  lclsSystm3?: string;
 }
 
 interface TourAreaResponse {
@@ -134,6 +140,9 @@ const FESTIVAL_SEARCH_FROM = '19000101';
 /** 시도당 축제 페이지 상한. 실측 최다가 서울 191건(2페이지)이라 여유가 크다. */
 const FESTIVAL_MAX_PAGES = 10;
 
+/** 시도당 음식 분류 페이지 상한. 전국 카페가 3,075건이라 한 시도가 10페이지(1,000건)를 넘지 않는다. */
+const FOOD_CLASS_MAX_PAGES = 10;
+
 /** KTO 날짜(YYYYMMDD) → 'YYYY-MM-DD'. 형식이 어긋나면 undefined 로 두어 상시 장소로 남긴다. */
 function toIsoDate(value: string | number | undefined): string | undefined {
   const raw = String(value ?? '').trim();
@@ -151,6 +160,75 @@ const CONTENT_TYPE_NAME: Record<string, string> = {
   '38': '쇼핑',
   '39': '음식점',
 };
+
+/** 음식점 contentTypeId. 이것만 분류체계 중분류로 한 번 더 가른다. */
+export const FOOD_CONTENT_TYPE = '39';
+
+/** areaBasedList2 의 음식 분류 필터. 둘 다 주면 KTO 가 AND 로 좁힌다. */
+export interface FoodClassFilter {
+  lclsSystm2?: string;
+  lclsSystm3?: string;
+}
+
+/**
+ * 음식(FD) 중분류 → 내부 category. contentTypeId 39 가 카페·찻집까지 한 덩어리라
+ * KTO 에서 온 카페가 전부 restaurant 로 적재됐다 — 카페 후보는 카카오 소스에만 있었고,
+ * 일정의 카페 자리가 만성적으로 비는 원인이었다(전국 13,498건 중 FD05 가 3,075건).
+ *
+ * 소분류(lclsSystm3)가 아니라 **중분류**로 가르는 이유 — 소분류는 한식만 관광식당·모범음식점
+ * 둘뿐이라 끼니/휴식 구분에 아무 정보도 더하지 않고, 표를 KTO 개편마다 따라다녀야 한다.
+ * 예외는 제과 하나뿐이라 그것만 소분류로 집는다.
+ */
+const FOOD_CLASS_CATEGORY: Record<string, string> = {
+  FD01: 'restaurant', // 한식
+  FD02: 'restaurant', // 외국식
+  FD03: 'restaurant', // 간이음식 (제과만 아래에서 예외)
+  FD04: 'restaurant', // 주점 — 전국 7건뿐이라 따로 다루지 않는다
+  FD05: 'cafe', // 카페/찻집
+};
+
+/**
+ * 간이음식(FD03) 중 제과. 앉아 쉬는 자리라 끼니보다 오후 휴식 슬롯에 맞다 —
+ * 카페로 두면 최악이 "빵집에서 쉼", 음식점으로 두면 최악이 "빵집에서 저녁". 전자가 낫다.
+ */
+const BAKERY_FOOD_CLASS = 'FD030100';
+
+/** 카페로 분류된 KTO 음식 행의 categoryDetail. 임베딩 텍스트가 '음식점'이라고 말하던 걸 바로잡는다. */
+const FOOD_CLASS_NAME: Record<string, string> = {
+  FD05: '카페',
+  [BAKERY_FOOD_CLASS]: '제과',
+};
+
+/**
+ * KTO 음식 행의 category·categoryDetail 을 분류체계로 정한다.
+ *
+ * 분류체계가 비어 있으면 기존 동작(restaurant/'음식점')으로 떨어진다. 구 `cat3` 폴백은 두지
+ * 않았다 — 표본 600건 전부 lclsSystm2 가 채워져 있어(빈값 0) 쓰이지 않을 경로다.
+ *
+ * restaurant 로 남는 행의 categoryDetail 을 '음식점' 그대로 두는 것도 의도다. 라벨이 임베딩
+ * 텍스트에 들어가므로 바꾸면 해시가 달라져 멀쩡한 12,000여 행이 통째로 재임베딩된다.
+ */
+export function classifyTourFood(item: {
+  lclsSystm2?: string;
+  lclsSystm3?: string;
+}): { category: string; categoryDetail: string } {
+  const mid = String(item.lclsSystm2 ?? '').trim().toUpperCase();
+  const leaf = String(item.lclsSystm3 ?? '').trim().toUpperCase();
+  if (leaf === BAKERY_FOOD_CLASS) {
+    return { category: 'cafe', categoryDetail: FOOD_CLASS_NAME[BAKERY_FOOD_CLASS]! };
+  }
+  const category = FOOD_CLASS_CATEGORY[mid] ?? 'restaurant';
+  return { category, categoryDetail: FOOD_CLASS_NAME[mid] ?? CONTENT_TYPE_NAME[FOOD_CONTENT_TYPE]! };
+}
+
+/**
+ * 카페로 재분류해야 할 음식 분류. 이미 적재된 행을 고치는 backfill CLI 가 이 필터로
+ * "카페인 contentId" 만 KTO 에 물어본다 — 전체를 다시 읽으면 일일 예산(900콜)으로는 며칠이 걸린다.
+ */
+export const CAFE_FOOD_CLASSES: ReadonlyArray<FoodClassFilter & { categoryDetail: string }> = [
+  { lclsSystm2: 'FD05', categoryDetail: FOOD_CLASS_NAME.FD05! },
+  { lclsSystm3: BAKERY_FOOD_CLASS, categoryDetail: FOOD_CLASS_NAME[BAKERY_FOOD_CLASS]! },
+];
 
 function toArray<T>(item: T | T[] | undefined): T[] {
   if (!item) return [];
@@ -664,6 +742,7 @@ export class TourApiService {
     numOfRows: number,
     budget?: KtoCallBudget,
     contentTypeId?: string,
+    classFilter?: FoodClassFilter,
   ): Promise<TourAreaItem[]> {
     if (budget && !budget.consume()) throw new KtoQuotaExceededError('areaBasedList2');
     try {
@@ -678,6 +757,8 @@ export class TourApiService {
           arrange: 'O', // 대표이미지 있는 순 정렬
           lDongRegnCd, // 폐기 예정인 areaCode 대체 (법정동 시도 코드)
           ...(contentTypeId ? { contentTypeId } : {}),
+          ...(classFilter?.lclsSystm2 ? { lclsSystm2: classFilter.lclsSystm2 } : {}),
+          ...(classFilter?.lclsSystm3 ? { lclsSystm3: classFilter.lclsSystm3 } : {}),
         },
         timeout: 10000,
       });
@@ -699,6 +780,42 @@ export class TourApiService {
       );
       return [];
     }
+  }
+
+  /**
+   * 한 시도에서 특정 음식 분류에 속하는 contentId 를 전부 모은다. 카테고리 backfill 전용이라
+   * 장소를 만들지 않고 id 만 돌려준다 — 고칠 대상은 이미 적재돼 있고, 필요한 건 "어느 행이
+   * 카페인가" 뿐이다.
+   *
+   * 전국 한 번이 아니라 **시도별**로 도는 이유 — 한 목록이 작을수록 페이지 경계가 흔들릴 여지가
+   * 적다. 시도별 카페는 평균 180건이라 대개 2페이지로 끝나고, 전체를 돌아도 KTO 호출은 40여 번이다.
+   */
+  async fetchFoodClassContentIds(
+    lDongRegnCd: string,
+    classFilter: FoodClassFilter,
+    budget?: KtoCallBudget,
+  ): Promise<string[]> {
+    const apiKey = this.apiKey();
+    if (!apiKey) return [];
+    const ids = new Set<string>();
+    const batchSize = 100; // KTO numOfRows 상한
+    for (let page = 1; page <= FOOD_CLASS_MAX_PAGES; page += 1) {
+      const rows = await this.fetchPage(
+        apiKey,
+        lDongRegnCd,
+        page,
+        batchSize,
+        budget,
+        FOOD_CONTENT_TYPE,
+        classFilter,
+      );
+      for (const row of rows) {
+        const id = String(row.contentid ?? '').trim();
+        if (id) ids.add(id);
+      }
+      if (rows.length < batchSize) break;
+    }
+    return [...ids];
   }
 
   private toIngestPlace(row: TourAreaItem, region: string): IngestPlace | null {
@@ -730,12 +847,14 @@ export class TourApiService {
       return null;
     }
     const sigungu = parseSigungu(address);
-    const categoryDetail = CONTENT_TYPE_NAME[contentTypeId];
+    // 음식(39)만 분류체계 중분류로 한 번 더 가른다 — 카페·찻집이 restaurant 로 뭉뚱그려지던 자리.
+    const food = contentTypeId === FOOD_CONTENT_TYPE ? classifyTourFood(row) : null;
+    const categoryDetail = food ? food.categoryDetail : CONTENT_TYPE_NAME[contentTypeId];
 
     return {
       tourismApiId: String(row.contentid),
       name,
-      category,
+      category: food ? food.category : category,
       ...(categoryDetail ? { categoryDetail } : {}),
       address,
       coordinates: { lat, lng },

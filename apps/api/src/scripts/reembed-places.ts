@@ -29,8 +29,7 @@ import { DataSource } from 'typeorm';
 import type { Coordinates } from '@tripick/types';
 import { PlaceIngestionModule } from '../planner/retrieval/place-ingestion.module';
 import { TextEmbeddingService } from '../embedding/text-embedding.service';
-import { inferPlaceTags } from '../planner/retrieval/place-seeds';
-import { placeRegionCodes } from '../planner/retrieval/region-code';
+import { buildPlaceEmbeddingText } from '../planner/retrieval/place-embedding-text';
 
 interface Row {
   id: string;
@@ -67,32 +66,20 @@ function parseArgs(argv: string[]): Options {
 }
 
 /**
- * 적재의 `PlaceIngestionService.buildText` 와 **글자까지 같아야 한다.** 한쪽만 고치면 해시가
- * 갈려 두 경로가 서로의 행을 영영 재임베딩한다.
+ * 적재와 **글자까지 같은 텍스트**여야 한다 — 한쪽만 고치면 해시가 갈려 두 경로가 서로의 행을
+ * 영영 재임베딩한다. 그래서 규칙을 복사하지 않고 적재가 쓰는 함수를 그대로 부른다.
  */
 function buildText(row: Row): string {
-  const place = {
+  return buildPlaceEmbeddingText({
     name: row.name,
     category: row.category ?? 'attraction',
     ...(row.category_detail ? { categoryDetail: row.category_detail } : {}),
     address: row.address ?? '',
-  };
-  const tags = inferPlaceTags(place).join(', ');
-  const { regionCode, sigunguCode } = placeRegionCodes(
-    row.destination_region,
-    row.region_sigungu,
-    row.address,
-  );
-  const regionLabel = [regionCode, sigunguCode].filter(Boolean).join(' ');
-  return [
-    row.name,
-    row.category_detail || row.category,
-    regionLabel ? `지역: ${regionLabel}` : '',
-    row.address,
-    tags ? `태그: ${tags}` : '',
-  ]
-    .filter(Boolean)
-    .join(' | ');
+    region: row.destination_region ?? '',
+    ...(row.region_sigungu ? { sigungu: row.region_sigungu } : {}),
+    coordinates: row.coordinates ?? { lat: 0, lng: 0 },
+    source: 'tour',
+  });
 }
 
 async function main() {

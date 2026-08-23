@@ -12,8 +12,9 @@ import { PopularPlaceService } from './popular-place.service';
 import { isSeoBusinessName } from './place-name-quality';
 import { isEligibleItineraryCandidate } from './place-eligibility';
 import { SAME_PLACE_RADIUS_M, metersBetween, normalizeCatalogName } from './near-duplicate';
-import { inferPlaceTags, parseSigungu } from './place-seeds';
-import { SIDO_CODES, placeRegionCodes } from './region-code';
+import { parseSigungu } from './place-seeds';
+import { SIDO_CODES } from './region-code';
+import { buildPlaceEmbeddingText } from './place-embedding-text';
 import type { IngestPlace, IngestRegionResult, IngestSource, IngestSummary } from './ingestion.types';
 
 /**
@@ -331,7 +332,7 @@ export class PlaceIngestionService {
     let eventPeriodsFilled = 0;
     let categoryDetailsFilled = 0;
     for (const place of deduped) {
-      const text = this.buildText(place);
+      const text = buildPlaceEmbeddingText(place);
       const textHash = createHash('sha256').update(text).digest('hex');
       const existing = await this.repository.findProvenance({
         kakaoPlaceId: place.kakaoPlaceId ?? null,
@@ -658,33 +659,5 @@ export class PlaceIngestionService {
   /** provenance 에 기록할 임베딩 모델 식별자 (embedding_model 컬럼). */
   private embeddingModelId(): string {
     return this.config.get<string>('LLM_EMBEDDING_MODEL', 'text-embedding-model');
-  }
-
-  /**
-   * 임베딩 대상 텍스트를 구성한다. 카테고리 상세(카카오 경로/KTO 유형명)와 지역(시도·시군구)을
-   * 명시적으로 포함해 질의(destination:… taste:…)와 토큰이 겹치도록 하고 의미 신호를 강화한다.
-   *
-   * 지역은 수집 라벨이 아니라 **정본 코드**를 쓴다. 라벨은 그 행을 어떤 타깃으로 수집했는지에
-   * 따라 달라져서('속초' vs '강원특별자치도'), 같은 장소가 실행마다 다른 텍스트 해시를 갖고
-   * 매번 재임베딩됐다(증분 적재가 무력화되고 라벨이 뒤집힌다). 코드는 주소에서 파생되므로
-   * 어느 타깃으로 수집해도 같다 — 해시가 안정되고 unchanged 로 떨어진다.
-   */
-  private buildText(place: IngestPlace): string {
-    const tags = inferPlaceTags(place).join(', ');
-    const { regionCode, sigunguCode } = placeRegionCodes(
-      place.region,
-      place.sigungu ?? null,
-      place.address,
-    );
-    const regionLabel = [regionCode, sigunguCode].filter(Boolean).join(' ');
-    return [
-      place.name,
-      place.categoryDetail || place.category,
-      regionLabel ? `지역: ${regionLabel}` : '',
-      place.address,
-      tags ? `태그: ${tags}` : '',
-    ]
-      .filter(Boolean)
-      .join(' | ');
   }
 }
