@@ -6,7 +6,6 @@ import type { ItineraryItemEntity } from '../itinerary/itinerary-item.entity';
 import { PreferencesService } from '../preferences/preferences.service';
 import { WeatherHelper } from './helpers/weather.helper';
 import { RouteHelper } from './helpers/route.helper';
-import { ScheduleConstraint } from './helpers/schedule.constraint';
 import {
   defaultVisitDuration,
   distributeFallbackDurations,
@@ -40,8 +39,6 @@ import type {
   ReplanBudget,
   ReplanPace,
   ReplanRequestDto,
-  ReplanTrigger,
-  TasteTagDto,
 } from '@tripick/types';
 import type { CandidatePlace, PoolCategoryQuota, RetrievalContext } from './retrieval/types';
 
@@ -64,17 +61,6 @@ const BUDGET_HINT: Record<ReplanBudget, string> = {
   thrifty: '가성비 위주(무료·저렴한 장소 선호)',
   normal: '보통 예산',
   premium: '프리미엄(고급 맛집·명소 선호)',
-};
-
-/**
- * 트리거별 memo 꼬리말. `Record<ReplanTrigger, …>` 라 ReplanTrigger 에 값이 늘면 여기서
- * 컴파일 에러로 잡힌다 — if 체인 시절엔 새 트리거의 memo 가 조용히 빈 채로 나갔다.
- */
-const TRIGGER_MEMO_NOTE: Record<ReplanTrigger, string> = {
-  manual: '수동 재계획 요청 반영',
-  deviation: '이탈 상황에서 복귀 쉬운 순서로 재배치',
-  weather: '날씨 이벤트를 고려해 실내/대체 가능 장소 우선',
-  crowd: '혼잡 예상을 고려해 붐비지 않는 대체 장소·시간대 우선',
 };
 
 /**
@@ -137,9 +123,7 @@ interface DraftBuildContext {
   anchorByDay: Map<number, DayAnchor>;
   wakeTime: string;
   sleepTime: string;
-  tasteTags: TasteTagDto | undefined;
   options: GenerateOptions;
-  weatherHint: string;
   /** 활동 구간에 비 예보가 걸린 일차(1-based). 볼거리 슬롯이 실내를 먼저 집는다. */
   rainyDays: ReadonlySet<number>;
 }
@@ -159,7 +143,6 @@ export class PlannerService {
     private readonly weatherHelper: WeatherHelper,
     private readonly routeHelper: RouteHelper,
     private readonly placeRetrieval: PlaceRetrievalService,
-    private readonly scheduleConstraint: ScheduleConstraint,
     private readonly constraintEngine: ConstraintEngine,
   ) {}
 
@@ -369,9 +352,7 @@ export class PlannerService {
       anchorByDay,
       wakeTime,
       sleepTime,
-      tasteTags,
       options,
-      weatherHint,
       rainyDays,
     };
     // LLM 이 필수 포함 장소를 누락했으면 강제로 주입한다(시드+프롬프트는 best-effort 라 보장 안 됨).
@@ -658,7 +639,7 @@ export class PlannerService {
     plan: PlannedCandidate[],
     context: DraftBuildContext,
   ): Promise<ItineraryItemDto[]> {
-    const { trip, planDays, itemsPerDay, anchorByDay, wakeTime, tasteTags, options, weatherHint } =
+    const { trip, planDays, itemsPerDay, anchorByDay, wakeTime, options } =
       context;
     const created: CreateItineraryItemDto[] = [];
 
@@ -718,7 +699,6 @@ export class PlannerService {
           coordinates: seed.coordinates,
           scheduledAt: currentAt.toISOString(),
           durationMin,
-          memo: this.buildMemo(seed, tasteTags, trip, options, planned.memo, planned.aiGenerated),
         };
         if (seed.kakaoPlaceId) item.kakaoPlaceId = seed.kakaoPlaceId;
         if (seed.openingHours) item.openingHours = seed.openingHours;
@@ -747,19 +727,21 @@ export class PlannerService {
       ...(item.phoneNumber ? { phoneNumber: item.phoneNumber } : {}),
       ...(item.kakaoPlaceId ? { kakaoPlaceId: item.kakaoPlaceId } : {}),
       ...(item.imageUrl ? { imageUrl: item.imageUrl } : {}),
-      memo: `${item.memo ?? ''}${item.memo ? ' · ' : ''}${weatherHint}`,
     }));
   }
 
+  /**
+   * 초안을 하드 제약으로 판정한다.
+   *
+   * 여기서 `ScheduleConstraint` 를 직접 부르지 않는다 — `ConstraintEngine.validate` 가 같은
+   * 경계를 스스로 적용하고 그 결과(`items`)를 돌려주므로, 앞에서 한 번 더 부르면 멱등 연산을
+   * 중복 실행할 뿐이고 "여기서도 시각을 손본다"는 오해만 남는다.
+   */
   private async validateDraft(
     draft: ItineraryItemDto[],
     context: DraftBuildContext,
   ): Promise<ValidationResult> {
-    const bounded = this.scheduleConstraint.apply(draft, {
-      wakeTime: context.wakeTime,
-      sleepTime: context.sleepTime,
-    });
-    return this.constraintEngine.validate(bounded, {
+    return this.constraintEngine.validate(draft, {
       wakeTime: context.wakeTime,
       sleepTime: context.sleepTime,
       transportMode: context.trip.transportMode,
@@ -1184,32 +1166,6 @@ export class PlannerService {
   }): string {
     if (item.kakaoPlaceId) return `kakao:${item.kakaoPlaceId}`;
     return `name:${item.name.trim()}@${item.coordinates.lat.toFixed(4)},${item.coordinates.lng.toFixed(4)}`;
-  }
-
-  private buildMemo(
-    place: CandidatePlace,
-    tasteTags: TasteTagDto | undefined,
-    trip: TripEntity,
-    options: GenerateOptions,
-    agentMemo: string,
-    aiGenerated: boolean,
-  ): string {
-    const keywords = [
-      ...(tasteTags?.food ?? []),
-      ...(tasteTags?.mood ?? []),
-      ...(tasteTags?.environment ?? []),
-    ].filter((tag) => place.tags.includes(tag));
-
-    const base = keywords.length > 0
-      ? `선호 태그(${keywords.join(', ')}) 기준 추천`
-      : `${trip.destination} 대표 동선에 맞춘 추천`;
-    const cragEvidence = `CRAG ${place.source} confidence ${Math.round(place.confidence * 100)}%; ${place.reason}`;
-    const agentEvidence = aiGenerated
-      ? `AI planner 생성: ${agentMemo}`
-      : `AI planner fallback: ${agentMemo}`;
-
-    const triggerNote = options.trigger ? TRIGGER_MEMO_NOTE[options.trigger] : undefined;
-    return [base, agentEvidence, cragEvidence, ...(triggerNote ? [triggerNote] : [])].join('; ');
   }
 
   private toItemType(category: string): ItineraryItemDto['type'] {

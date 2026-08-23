@@ -105,7 +105,8 @@ describe('PlannerService hard constraints', () => {
     await harness.service.replan({ tripId: TRIP.id, trigger: 'crowd' });
 
     const stored = harness.itineraryService.replaceTripItems.mock.calls[0]?.[1] ?? [];
-    // 트리거 맥락은 memo 로만 남긴다 — 장소명에 영문 enum 을 붙이면 화면·공유·메모 매칭이 다 깨진다.
+    // 장소명에 영문 enum(트리거)을 붙이면 화면·공유·메모 매칭이 다 깨진다. 트리거 맥락은
+    // 어디에도 안 싣는다 — memo 는 사용자 메모 공간이라 생성 단계 추론을 저장하지 않는다.
     expect(stored.map((item: ItineraryItemDto) => item.name)).toEqual(['광안리 카페', '해동용궁사']);
   });
 
@@ -225,7 +226,6 @@ function createHarness(
     weatherHelper as any,
     routeHelper as any,
     placeRetrieval as any,
-    scheduleConstraint as any,
     constraintEngine as any,
   );
 
@@ -295,8 +295,7 @@ describe('PlannerService 일자별 지역', () => {
       weatherHelper as any,
       routeHelper as any,
       placeRetrieval as any,
-      scheduleConstraint as any,
-      constraintEngine as any,
+        constraintEngine as any,
     );
 
     await service.generateItinerary(trip.id);
@@ -464,7 +463,6 @@ function createPartialHarness() {
     weatherHelper as any,
     routeHelper as any,
     placeRetrieval as any,
-    scheduleConstraint as any,
     constraintEngine as any,
   );
 
