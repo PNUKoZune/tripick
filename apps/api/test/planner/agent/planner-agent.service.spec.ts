@@ -199,7 +199,54 @@ describe('PlannerAgentService', () => {
     expect(plan.map((item) => item.candidate.id)).toEqual(['busan-cafe', 'busan-food']);
     expect(plan.every((item) => item.aiGenerated === false)).toBe(true);
   });
+
+  /**
+   * 예전엔 카테고리와 무관하게 45-150 으로만 잘랐다. 프롬프트가 "체류 합계를 활동 시간의
+   * 75-85% 로 채우라"고 밀기 때문에 모델은 가장 늘리기 쉬운 카페·음식점을 부풀렸고,
+   * 그 결과가 그대로 통과했다.
+   */
+  it('카테고리별 상한으로 AI 체류시간을 자른다', async () => {
+    mockedAxios.post.mockResolvedValueOnce({
+      data: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                items: [
+                  { candidateId: 'busan-cafe', day: 1, order: 1, durationMin: 180, memo: '카페' },
+                  { candidateId: 'busan-food', day: 1, order: 2, durationMin: 150, memo: '식당' },
+                ],
+              }),
+            },
+          },
+        ],
+      },
+    });
+
+    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
+    const plan = await service.plan(baseOptions());
+
+    expect(plan[0]!.durationMin).toBe(90); // cafe
+    expect(plan[1]!.durationMin).toBe(120); // restaurant
+  });
+
+  it('상한을 프롬프트에도 실어 모델이 잘릴 값을 계획하지 않게 한다', async () => {
+    mockedAxios.post.mockResolvedValueOnce({
+      data: { choices: [{ message: { content: JSON.stringify({ items: [] }) } }] },
+    });
+
+    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
+    await service.plan(baseOptions());
+
+    const body = mockedAxios.post.mock.calls[0]![1] as {
+      messages: Array<{ content: string }>;
+    };
+    const prompt = body.messages[1]!.content;
+    expect(prompt).toContain('durationMin 절대 상한');
+    expect(prompt).toContain('cafe 90');
+  });
 });
+
 
 function fakeConfig(values: Record<string, string>) {
   return {
