@@ -10,6 +10,8 @@
  * 문서를 다시 띄우므로 메모리 상태는 그 순간 날아간다.
  */
 
+import type { SessionEndReason } from '@/shared/lib/session-token';
+
 const FLASH_KEY = 'tripick.session-flash';
 
 export type SessionFlashTone = 'neutral' | 'primary' | 'warning' | 'error';
@@ -80,4 +82,26 @@ export function parseSessionFlash(raw: string | null): SessionFlash | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * 세션 종료 사유별 안내 문구. null 이면 토스트를 띄우지 않는다.
+ * - `expired`: 사용자가 한 일이 아니다 — "왜 튕겼지" 를 먼저 풀어 준다.
+ * - `signed-out`: 방금 스스로 로그아웃·탈퇴한 사람에게 "로그인이 필요해요" 는 잔소리다.
+ * - 마커 없음(처음부터 세션 없이 보호 화면 진입): 지금 필요한 행동만 알려준다.
+ */
+export function sessionFlashFor(reason: SessionEndReason | null): SessionFlash | null {
+  if (reason === 'signed-out') return null;
+  if (reason === 'expired') {
+    return {
+      title: '로그인이 만료됐어요',
+      message: '다시 로그인하면 이어서 볼 수 있어요.',
+      tone: 'warning',
+    };
+  }
+  return {
+    title: '로그인이 필요해요',
+    message: '로그인하면 이어서 볼 수 있어요.',
+    tone: 'warning',
+  };
 }

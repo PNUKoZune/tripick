@@ -75,7 +75,7 @@ async function fetcher<T>(path: string, init?: RequestInit, attempt = 0): Promis
     // 인증된 요청이 401 → 세션 만료. /auth/* (로그인 시도 등) 의 401 은 자격 증명 실패라 세션을 건드리지 않는다.
     const isAuthEndpoint = path.startsWith('/auth/');
     if (res.status === 401 && !isAuthEndpoint) {
-      clearStoredSession();
+      clearStoredSession('expired');
     }
     const retryAfterSeconds =
       res.status === 429 ? parseRetryAfter(res.headers.get('Retry-After')) : undefined;
@@ -102,14 +102,14 @@ async function tryRefresh(): Promise<string | null> {
         body: JSON.stringify({ refreshToken }),
       });
       if (!res.ok) {
-        clearStoredSession();
+        clearStoredSession('expired');
         return null;
       }
       const tokens = (await res.json()) as { accessToken: string; refreshToken: string };
       replaceTokens(tokens);
       return tokens.accessToken;
     } catch {
-      clearStoredSession();
+      clearStoredSession('expired');
       return null;
     } finally {
       refreshInFlight = null;
