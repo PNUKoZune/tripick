@@ -41,6 +41,14 @@ export interface PlannerAgentOptions {
   trigger?: ReplanTrigger;
   notes?: string | null;
   weatherHint: string;
+  /**
+   * 활동 구간에 비 예보가 걸린 day 인덱스(0-based, `dayDates` 와 같은 인덱스).
+   *
+   * `weatherHint` 와 중복이 아니다 — 힌트는 LLM 이 읽는 문장이고 이건 결정적 폴백이 읽는
+   * 구조화 값이다. 폴백은 프롬프트를 안 거치므로 이게 없으면 LLM 이 죽는 순간(타임아웃·미기동)
+   * 우천 배려가 통째로 사라진다.
+   */
+  rainyDayIndexes?: number[];
 }
 
 export interface PlannedCandidate {
@@ -288,6 +296,7 @@ export class PlannerAgentService {
         startTime,
         itemCount: dayTarget,
         searchWindow: dayTarget * 2,
+        preferIndoor: this.isRainyDay(options, day - 1),
       });
       const durations = distributeFallbackDurations(
         dayCandidates.map((candidate) => candidate.category),
@@ -342,6 +351,7 @@ export class PlannerAgentService {
         itemCount: dayTarget,
         searchWindow: dayTarget * 2,
         preassigned: aiPicks.map((item) => item.candidate),
+        preferIndoor: this.isRainyDay(options, day - 1),
       });
       dayCandidates.forEach((candidate, index) => {
         const aiPick = aiPicks[index];
@@ -380,6 +390,11 @@ export class PlannerAgentService {
       total += this.dayItemTarget(options, index);
     }
     return total;
+  }
+
+  /** 이 day 인덱스(0-based)의 활동 구간에 비 예보가 걸렸는지. */
+  private isRainyDay(options: PlannerAgentOptions, dayIndex: number): boolean {
+    return options.rainyDayIndexes?.includes(dayIndex) ?? false;
   }
 
   private normalizeDuration(value: unknown, category: string): number {

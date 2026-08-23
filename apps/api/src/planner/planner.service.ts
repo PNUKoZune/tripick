@@ -15,6 +15,7 @@ import {
   targetItemsPerDay,
 } from './helpers/itinerary-density';
 import { fillDaySlots } from './helpers/day-slot-planner';
+import { rainyDates } from './helpers/weather-exposure';
 import { ARRIVAL_RADIUS_M } from '../arrival-alert/arrival-alert.constants';
 import { ConstraintEngine, type ValidationResult } from './constraint/constraint.engine';
 import { PlannerAgentService } from './agent/planner-agent.service';
@@ -139,6 +140,8 @@ interface DraftBuildContext {
   tasteTags: TasteTagDto | undefined;
   options: GenerateOptions;
   weatherHint: string;
+  /** 활동 구간에 비 예보가 걸린 일차(1-based). 볼거리 슬롯이 실내를 먼저 집는다. */
+  rainyDays: ReadonlySet<number>;
 }
 
 @Injectable()
@@ -312,9 +315,13 @@ export class PlannerService {
       ? await this.weatherHelper.getExtendedForecast(firstCandidate.coordinates.lat, firstCandidate.coordinates.lng)
       : new Map();
     // 예보맵 키는 기상청 포맷(YYYYMMDD)이라 하이픈을 뗀다. 대상 일차 예보만 힌트에 싣는다.
-    const weatherHint = this.weatherHelper.buildWeatherHint(
-      forecast,
-      planDates.map((date) => date.replace(/-/g, '')),
+    const forecastDates = planDates.map((date) => date.replace(/-/g, ''));
+    const weatherHint = this.weatherHelper.buildWeatherHint(forecast, forecastDates);
+    // 힌트는 LLM 만 읽는 문장이다. 결정적 배치 경로(LLM 실패·제약 재생성·일자별 지역)는 그
+    // 문장을 못 읽으므로, 같은 예보에서 **구조화된 일차 집합**을 따로 뽑아 넘긴다.
+    const rainy = rainyDates(forecast, forecastDates, wakeTime, sleepTime);
+    const rainyDays = new Set(
+      planDays.filter((_, index) => rainy.has(forecastDates[index]!)),
     );
     // 단일 지역: AI 플래너가 하루 리듬·카테고리 균형을 맞춘다.
     // 일자별 지역: 각 일차를 그 날 지역 후보로만 채워야 하므로 지역-스코프 결정적 배치를 쓴다
@@ -324,7 +331,7 @@ export class PlannerService {
     // 후보 수·day 검증(1..dayCount)과도 어긋나지 않는다. 실제 날짜는 dayDates 로 함께 넘긴다 —
     // 시작·종료일 두 값은 [1,3] 같은 비연속 범위를 표현하지 못해 dayCount 와 어긋났다.
     const agentPlan = perDayMode
-      ? this.buildPerDayDeterministicPlan(poolsByDay!, itemsPerDay, planDays, anchorByDay, wakeTime)
+      ? this.buildPerDayDeterministicPlan(poolsByDay!, itemsPerDay, planDays, anchorByDay, wakeTime, rainyDays)
       : this.remapPlanDays(
           await this.plannerAgent.plan({
             destination: trip.destination,
@@ -343,6 +350,11 @@ export class PlannerService {
             candidates,
             notes: combinedNotes,
             weatherHint,
+            // 결정적 폴백(LLM 실패)도 같은 비 정보를 쓰게 한다 — 프롬프트에만 실으면
+            // 폴백이 도는 순간 우천 배려가 통째로 사라진다.
+            rainyDayIndexes: planDays
+              .map((day, index) => (rainyDays.has(day) ? index : -1))
+              .filter((index) => index >= 0),
             ...(tasteTags !== undefined ? { tasteTags } : {}),
             ...(options.trigger !== undefined ? { trigger: options.trigger } : {}),
           }),
@@ -360,6 +372,7 @@ export class PlannerService {
       tasteTags,
       options,
       weatherHint,
+      rainyDays,
     };
     // LLM 이 필수 포함 장소를 누락했으면 강제로 주입한다(시드+프롬프트는 best-effort 라 보장 안 됨).
     const guaranteedPlan = this.enforceMustInclude(agentPlan, mustCandidates, planDays, perDayMode);
@@ -380,6 +393,7 @@ export class PlannerService {
               planDays,
               anchorByDay,
               wakeTime,
+              rainyDays,
             ),
             mustCandidates,
             planDays,
@@ -892,6 +906,7 @@ export class PlannerService {
         startTime,
         itemCount: dayTarget,
         searchWindow: dayTarget * 2,
+        preferIndoor: context.rainyDays.has(day),
       });
       const durations = distributeFallbackDurations(
         dayCandidates.map((candidate) => candidate.category),
@@ -1001,6 +1016,7 @@ export class PlannerService {
     planDays: number[],
     anchorByDay: Map<number, DayAnchor>,
     wakeTime: string,
+    rainyDays: ReadonlySet<number>,
   ): PlannedCandidate[] {
     const planned: PlannedCandidate[] = [];
     // 일차별 풀은 지역이 겹치면 같은 후보를 담을 수 있다. 소비한 id 를 공유해 중복 배치를 막는다.
@@ -1015,6 +1031,7 @@ export class PlannerService {
         used,
         startTime,
         itemCount: this.dayItemTarget(anchorByDay, day, itemsPerDay),
+        preferIndoor: rainyDays.has(day),
       }).forEach((candidate, index) => {
         planned.push({
           candidate,

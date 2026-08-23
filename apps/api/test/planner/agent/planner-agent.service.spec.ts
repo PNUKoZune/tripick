@@ -245,7 +245,47 @@ describe('PlannerAgentService', () => {
     expect(prompt).toContain('durationMin 절대 상한');
     expect(prompt).toContain('cafe 90');
   });
+
+  /**
+   * 우천 배려가 프롬프트 문장으로만 있으면 LLM 이 죽는 순간 통째로 사라진다. 폴백은 프롬프트를
+   * 안 거치므로 구조화된 일차 목록을 따로 받아야 한다.
+   */
+  it('LLM 이 꺼져 있어도 비 오는 일차는 실내를 먼저 집는다', async () => {
+    const service = new PlannerAgentService(fakeConfig({}));
+    const options = {
+      ...baseOptions(),
+      itemsPerDay: 1,
+      minimumItemsPerDay: 1,
+      candidates: [
+        candidate('beach', '해운대해수욕장', 'attraction'),
+        candidate('museum', '국립부산과학관', 'attraction'),
+      ],
+      rainyDayIndexes: [0],
+    };
+
+    const plan = await service.plan(options);
+
+    expect(plan[0]!.candidate.id).toBe('museum');
+  });
+
+  it('비 예보가 없으면 종전 순위 그대로', async () => {
+    const service = new PlannerAgentService(fakeConfig({}));
+    const options = {
+      ...baseOptions(),
+      itemsPerDay: 1,
+      minimumItemsPerDay: 1,
+      candidates: [
+        candidate('beach', '해운대해수욕장', 'attraction'),
+        candidate('museum', '국립부산과학관', 'attraction'),
+      ],
+    };
+
+    const plan = await service.plan(options);
+
+    expect(plan[0]!.candidate.id).toBe('beach');
+  });
 });
+
 
 
 function fakeConfig(values: Record<string, string>) {
