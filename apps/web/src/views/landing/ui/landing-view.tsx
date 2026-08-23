@@ -1,3 +1,4 @@
+import { GuestGuard } from '@/entities/session';
 import { AuthStartActions } from '@/features/auth-start/ui/auth-start-actions';
 import { AppFrame } from '@/shared/ui/app-frame';
 
@@ -60,7 +61,20 @@ const PREVIEW_TIMELINE = [
 
 const PREVIEW_TAGS = ['대중교통 동선', '걷기 적당히', '웨이팅 길면 대안 추천'] as const;
 
+/**
+ * 모바일 앱의 첫 진입 경로(`ENTRY_PATH`)이자 웹의 비로그인 랜딩.
+ * 이미 로그인한 사용자에겐 보여줄 이유가 없으므로 GuestGuard 로 `/`(여행 목록) 로 되돌린다.
+ * 본문은 클라이언트 훅을 쓰지 않는 서버 컴포넌트로 남겨, 가드만 클라이언트에서 돈다.
+ */
 export function LandingView() {
+  return (
+    <GuestGuard>
+      <LandingContent />
+    </GuestGuard>
+  );
+}
+
+function LandingContent() {
   return (
     <AppFrame showNav={false}>
       <div className="wvr-scope min-h-dvh px-5 pb-16 pt-4 lg:px-10">

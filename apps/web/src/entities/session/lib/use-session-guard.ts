@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
+import { setSessionFlash } from '../model/session-flash';
 import { getStoredSession } from '../model/session-storage';
 import { useHasSession } from './use-has-session';
 
@@ -26,6 +27,14 @@ export function useSessionGuard(redirectTo = '/login'): SessionGuardState {
   useEffect(() => {
     // 하이드레이션 첫 렌더의 스냅샷(false)이 아니라 스토리지를 직접 재확인하고 리다이렉트한다
     if (!getStoredSession()) {
+      // 아무 설명 없이 로그인 화면으로 튕기면 "눌렀는데 엉뚱한 데로 갔다"로 읽힌다.
+      // 토스트는 이 화면에서 띄우면 리다이렉트와 함께 사라지므로 플래시로 넘겨,
+      // 도착한 화면의 SessionFlashToast 가 대신 띄운다.
+      setSessionFlash({
+        title: '로그인이 필요해요',
+        message: '로그인하면 이어서 볼 수 있어요.',
+        tone: 'warning',
+      });
       redirectWithFallback(router.replace, redirectTo);
     }
   }, [router, redirectTo]);
