@@ -110,6 +110,7 @@
 - [ops/production-ai-long-term-readiness.md](ops/production-ai-long-term-readiness.md) — production AI 장기 운영 준비
 - [ops/test-coverage-expansion-v1.md](ops/test-coverage-expansion-v1.md) — API 테스트 커버리지 확장
 - [ops/eslint-flat-config-v1.md](ops/eslint-flat-config-v1.md) — ESLint 9 flat config 워크스페이스 세팅 + react-hooks 오류 해소
+- [ops/production-catalog-reingest-v1.md](ops/production-catalog-reingest-v1.md) — 프로덕션 카탈로그 재적재(6,473→71,684행). 적재량이 인지도 커버리지 게이트를 뒤집는다, 병목은 DB 왕복
 
 ## 수정 기록 (Fix)
 
