@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.tripick.place",
+      "sha256_cert_fingerprints": [
+        "9B:0D:26:BD:71:23:11:72:42:B3:0B:B9:6E:B4:66:0A:5E:31:62:5E:5B:E0:8E:35:F0:60:AE:72:00:5C:8C:8B"
+      ]
+    }
+  }
+]

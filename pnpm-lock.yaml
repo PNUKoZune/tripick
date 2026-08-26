@@ -250,6 +250,12 @@ importers:
       '@react-native-community/cli':
         specifier: 14.1.0
         version: 14.1.0(typescript@6.0.3)
+      '@react-native-community/cli-platform-android':
+        specifier: 14.1.0
+        version: 14.1.0
+      '@react-native-community/cli-platform-ios':
+        specifier: 14.1.0
+        version: 14.1.0
       '@react-native/babel-preset':
         specifier: 0.85.2
         version: 0.85.2(@babel/core@7.29.0)
@@ -274,6 +280,9 @@ importers:
       eslint:
         specifier: ^9.39.4
         version: 9.39.4(jiti@2.6.1)
+      hermes-compiler:
+        specifier: 250829098.0.10
+        version: 250829098.0.10
       typescript:
         specifier: ^6.0.0
         version: 6.0.3
@@ -4499,6 +4508,7 @@ packages:
   cron-parser@4.9.0:
     resolution: {integrity: sha512-p0SaNjrHOnQeR8/VnfGbmg9te2kfyYSQ7Sc/j/6DtPL3JQvKxmjO9TSjNFpujqV3vEYYBvNNvXSxzyksBWAx1Q==}
     engines: {node: '>=12.0.0'}
+    deprecated: v4 is no longer maintained, upgrade to v5
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -4934,6 +4944,7 @@ packages:
   eslint@9.39.4:
     resolution: {integrity: sha512-XoMjdBOwe/esVgEvLmNsD3IRHkm7fbKIUGvrleloJXUZgDHig2IPWNniv+GwjyJXzuNqVjlr5+4yVUZjycJwfQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'

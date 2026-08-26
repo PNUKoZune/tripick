@@ -57,12 +57,36 @@ type BridgeMessage =
   | { type: 'WEB_READY' }
   | { type: 'NAV_STATE'; canGoBack: boolean };
 
+const PRODUCTION_WEB_APP_URL = 'https://tripick.place';
 const WEB_APP_HOST = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
-const WEB_APP_URL = __DEV__ ? WEB_APP_HOST : 'https://tripick.vercel.app';
+const WEB_APP_URL = __DEV__ ? WEB_APP_HOST : PRODUCTION_WEB_APP_URL;
 // 첫 진입은 랜딩(`/start`). 루트(`/`)는 로그인 필수 화면이라 미로그인 사용자가 랜딩을
 // 못 보고 바로 /login 으로 떨어졌다. 로그인 상태면 /start 의 GuestGuard 가 `/` 로 되돌린다.
 const ENTRY_PATH = '/start';
 const WEB_APP_ORIGIN = new URL(WEB_APP_URL).origin;
+const PRODUCTION_WEB_APP_ORIGIN = new URL(PRODUCTION_WEB_APP_URL).origin;
+const KAKAO_CALLBACK_PATH = '/auth/kakao/callback';
+
+function isInternalWebUrl(url: string): boolean {
+  try {
+    const origin = new URL(url).origin;
+    return origin === WEB_APP_ORIGIN || origin === PRODUCTION_WEB_APP_ORIGIN;
+  } catch {
+    return false;
+  }
+}
+
+/** 검증된 Android App Link 로 들어온 카카오 콜백만 WebView 에 다시 싣는다. */
+function getKakaoCallbackUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.origin !== PRODUCTION_WEB_APP_ORIGIN) return null;
+    if (parsed.pathname !== KAKAO_CALLBACK_PATH) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
 
 // react-native-webview 13.x 타입 union 에서 Android 전용 onPermissionRequest 가 빠져있다.
 // Platform 분기로 prop 을 객체에 모아 spread 하면 타입 충돌 없이 안드로이드에만 적용된다.
@@ -102,10 +126,20 @@ export default function App() {
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // 앱이 종료 상태에서 푸시 탭으로 켜졌을 때, WebView 로드가 끝나기 전 도착한 탭을 보관했다가 flush.
   const pendingTapRef = useRef<Record<string, string> | null>(null);
+  const handledDeepLinkRef = useRef<string | null>(null);
   const hasLoadedOnceRef = useRef(false);
   const [canGoBack, setCanGoBack] = useState(false);
   const [webViewKey, setWebViewKey] = useState(0);
+  const [webViewUri, setWebViewUri] = useState(`${WEB_APP_URL}${ENTRY_PATH}`);
   const [initialLoadFailed, setInitialLoadFailed] = useState(false);
+
+  const handleIncomingUrl = useCallback((url: string) => {
+    const callbackUrl = getKakaoCallbackUrl(url);
+    if (!callbackUrl || handledDeepLinkRef.current === callbackUrl) return;
+    handledDeepLinkRef.current = callbackUrl;
+    setInitialLoadFailed(false);
+    setWebViewUri(callbackUrl);
+  }, []);
 
   useEffect(() => {
     requestPermissions();
@@ -114,6 +148,18 @@ export default function App() {
     return () => stopTracking();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 카카오 인증은 시스템 브라우저에서 진행한다. API 가 성공 후 tripick.place 콜백으로
+  // 리디렉트하면 Android App Link 가 앱을 열고, 그 URL 을 WebView 에 넘겨 세션을 교환한다.
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', ({ url }) => handleIncomingUrl(url));
+    Linking.getInitialURL()
+      .then((url) => {
+        if (url) handleIncomingUrl(url);
+      })
+      .catch(() => undefined);
+    return () => subscription.remove();
+  }, [handleIncomingUrl]);
 
   // Android 하드웨어 백버튼 → WebView 히스토리 이동 (없으면 앱 종료)
   useEffect(() => {
@@ -476,7 +522,7 @@ export default function App() {
       <WebView
         key={webViewKey}
         ref={webViewRef}
-        source={{ uri: `${WEB_APP_URL}${ENTRY_PATH}` }}
+        source={{ uri: webViewUri }}
         style={styles.webview}
         // Next.js 웹앱이 필요로 하는 설정
         javaScriptEnabled
@@ -493,7 +539,7 @@ export default function App() {
         {...androidOnlyProps}
         // 외부 도메인 진입 차단 → 시스템 브라우저로 위임
         onShouldStartLoadWithRequest={(request) => {
-          if (request.url.startsWith(WEB_APP_ORIGIN)) return true;
+          if (isInternalWebUrl(request.url)) return true;
           if (request.url.startsWith('about:') || request.url === 'about:blank') return true;
           Linking.openURL(request.url).catch(() => undefined);
           return false;
