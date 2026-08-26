@@ -5,7 +5,8 @@
       "namespace": "android_app",
       "package_name": "com.tripick.place",
       "sha256_cert_fingerprints": [
-        "9B:0D:26:BD:71:23:11:72:42:B3:0B:B9:6E:B4:66:0A:5E:31:62:5E:5B:E0:8E:35:F0:60:AE:72:00:5C:8C:8B"
+        "9B:0D:26:BD:71:23:11:72:42:B3:0B:B9:6E:B4:66:0A:5E:31:62:5E:5B:E0:8E:35:F0:60:AE:72:00:5C:8C:8B",
+        "E2:94:7D:EA:6C:CA:90:54:57:1B:7C:8E:41:E5:35:78:FC:95:00:28:E0:93:A9:72:82:C4:51:D0:5B:06:55:07"
       ]
     }
   }
