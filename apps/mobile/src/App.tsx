@@ -66,6 +66,7 @@ const ENTRY_PATH = '/start';
 const WEB_APP_ORIGIN = new URL(WEB_APP_URL).origin;
 const PRODUCTION_WEB_APP_ORIGIN = new URL(PRODUCTION_WEB_APP_URL).origin;
 const KAKAO_CALLBACK_PATH = '/auth/kakao/callback';
+const KAKAO_APP_LINK_PROTOCOL = 'tripick:';
 
 function isInternalWebUrl(url: string): boolean {
   try {
@@ -80,9 +81,25 @@ function isInternalWebUrl(url: string): boolean {
 function getKakaoCallbackUrl(url: string): string | null {
   try {
     const parsed = new URL(url);
-    if (parsed.origin !== PRODUCTION_WEB_APP_ORIGIN) return null;
-    if (parsed.pathname !== KAKAO_CALLBACK_PATH) return null;
-    return parsed.toString();
+    if (parsed.origin === PRODUCTION_WEB_APP_ORIGIN && parsed.pathname === KAKAO_CALLBACK_PATH) {
+      return parsed.toString();
+    }
+
+    if (
+      parsed.protocol !== KAKAO_APP_LINK_PROTOCOL ||
+      parsed.hostname !== 'auth' ||
+      parsed.pathname !== '/kakao/callback'
+    ) {
+      return null;
+    }
+
+    const callback = new URL(KAKAO_CALLBACK_PATH, PRODUCTION_WEB_APP_ORIGIN);
+    const code = parsed.searchParams.get('code');
+    const error = parsed.searchParams.get('error');
+    if (code) callback.hash = `code=${encodeURIComponent(code)}`;
+    else if (error) callback.searchParams.set('error', error);
+    else return null;
+    return callback.toString();
   } catch {
     return null;
   }
