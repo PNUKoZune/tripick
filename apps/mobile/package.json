@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "android": "react-native run-android",
+    "android:bundle:release": "bash ./scripts/bundle-android-release.sh",
     "ios": "react-native run-ios",
     "start": "react-native start",
     "lint": "eslint .",
@@ -27,6 +28,8 @@
     "@babel/preset-env": "^7.29.0",
     "@babel/runtime": "^7.29.0",
     "@react-native-community/cli": "14.1.0",
+    "@react-native-community/cli-platform-android": "14.1.0",
+    "@react-native-community/cli-platform-ios": "14.1.0",
     "@react-native/babel-preset": "0.85.2",
     "@react-native/codegen": "0.85.2",
     "@react-native/eslint-config": "0.85.2",
@@ -35,6 +38,7 @@
     "@react-native/typescript-config": "0.85.2",
     "@types/react": "^19.2.14",
     "eslint": "^9.39.4",
+    "hermes-compiler": "250829098.0.10",
     "typescript": "^6.0.0"
   }
 }
