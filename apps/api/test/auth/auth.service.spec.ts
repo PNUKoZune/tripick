@@ -77,7 +77,9 @@ function createHarness(configOverrides: Record<string, string> = {}) {
     findOrCreateByKakao: jest.fn(),
   };
   const jwtService = {
-    signAsync: jest.fn(async (payload: any, opts?: any) => `jwt(${payload.sub})${opts ? '-r' : ''}`),
+    signAsync: jest.fn(
+      async (payload: any, opts?: any) => `jwt(${payload.sub})${opts ? '-r' : ''}`,
+    ),
     verify: jest.fn(),
   };
   const emailService = {
@@ -134,7 +136,11 @@ describe('AuthService — email signup', () => {
   it('rejects a password without both letters and digits', async () => {
     const { service } = createHarness();
     await expect(
-      service.signupWithEmail({ email: 'a@b.com', password: 'onlyletters', nickname: '앨리스' } as any),
+      service.signupWithEmail({
+        email: 'a@b.com',
+        password: 'onlyletters',
+        nickname: '앨리스',
+      } as any),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -355,7 +361,9 @@ describe('AuthService — email login', () => {
   it('issues tokens and a session user on success', async () => {
     const { service, usersService, refreshRepo } = createHarness();
     const hash = await bcrypt.hash('correct1', 10);
-    usersService.findByEmail.mockResolvedValue(user({ id: 'u9', passwordHash: hash, email: 'a@b.com' }));
+    usersService.findByEmail.mockResolvedValue(
+      user({ id: 'u9', passwordHash: hash, email: 'a@b.com' }),
+    );
 
     const res = await service.loginWithEmail({ email: 'a@b.com', password: 'correct1' } as any);
 
@@ -536,6 +544,20 @@ describe('AuthService — logout & kakao status', () => {
 
     expect(url.hash).toBe('#code=exchange-code-123');
     expect(url.href).not.toContain('session=');
+  });
+
+  it('builds an Android package-scoped intent callback with a web fallback', () => {
+    const { service } = createHarness({ WEB_APP_URL: 'https://tripick.place' });
+    const intent = service.getAndroidKakaoSuccessUrl('exchange-code-123');
+
+    expect(intent).toContain('intent://auth/kakao/callback?code=exchange-code-123');
+    expect(intent).toContain('scheme=tripick');
+    expect(intent).toContain('package=com.tripick.place');
+    expect(intent).toContain(
+      `S.browser_fallback_url=${encodeURIComponent(
+        'https://tripick.place/auth/kakao/callback#code=exchange-code-123',
+      )}`,
+    );
   });
 
   // state 가 authorize URL 에만 있고 콜백에서 대조되지 않으면 로그인 CSRF 가 열린다.

@@ -36,6 +36,7 @@ const perMinute = (limit: number) => ({ default: { limit, ttl: 60_000 } });
 
 /** 카카오 로그인 CSRF 방어용 state 를 담는 쿠키. 로그인 시작 → 콜백 한 왕복만 산다. */
 const KAKAO_STATE_COOKIE = 'tripick_kakao_state';
+const KAKAO_RETURN_COOKIE = 'tripick_kakao_return';
 const KAKAO_STATE_TTL_MS = 10 * 60 * 1000;
 
 @ApiTags('Auth')
@@ -115,11 +116,16 @@ export class AuthController {
 
   @Get('kakao')
   @ApiOperation({ summary: '카카오 OAuth 로그인 리디렉트' })
-  kakaoLogin(@Res() res: Response) {
+  kakaoLogin(@Query('returnTo') returnTo: string | undefined, @Res() res: Response) {
     const { authorizeUrl, state } = this.authService.startKakaoAuth();
     // state 를 브라우저에 묶어 둔다. httpOnly 라 스크립트가 못 읽고, SameSite=Lax 여도
     // 카카오에서 돌아오는 건 top-level GET 이라 콜백에 정상적으로 실려 온다.
     res.cookie(KAKAO_STATE_COOKIE, state, this.stateCookieOptions());
+    if (returnTo === 'android') {
+      res.cookie(KAKAO_RETURN_COOKIE, 'android', this.stateCookieOptions());
+    } else {
+      res.clearCookie(KAKAO_RETURN_COOKIE, this.stateCookieOptions());
+    }
     res.redirect(authorizeUrl);
   }
 
@@ -141,19 +147,29 @@ export class AuthController {
     const wantsJson = format === 'json';
     // state 는 한 번 쓰고 버린다 — 성공이든 실패든 먼저 지워 재사용을 막는다.
     const expectedState = readCookie(req, KAKAO_STATE_COOKIE);
+    const returnTo = readCookie(req, KAKAO_RETURN_COOKIE);
     res.clearCookie(KAKAO_STATE_COOKIE, this.stateCookieOptions());
+    res.clearCookie(KAKAO_RETURN_COOKIE, this.stateCookieOptions());
 
     if (!code) {
       const message = '카카오 인증 코드가 없습니다.';
       if (wantsJson) throw new BadRequestException(message);
-      res.redirect(this.authService.getWebKakaoErrorUrl(message));
+      res.redirect(
+        returnTo === 'android'
+          ? this.authService.getAndroidKakaoErrorUrl(message)
+          : this.authService.getWebKakaoErrorUrl(message),
+      );
       return undefined;
     }
     // 이 브라우저가 시작하지 않은 콜백 — 공격자 인가 코드로 남의 계정에 로그인시키는 CSRF.
     if (!matchesState(expectedState, state)) {
       const message = '로그인 요청이 만료됐거나 유효하지 않습니다. 다시 시도해주세요.';
       if (wantsJson) throw new BadRequestException(message);
-      res.redirect(this.authService.getWebKakaoErrorUrl(message));
+      res.redirect(
+        returnTo === 'android'
+          ? this.authService.getAndroidKakaoErrorUrl(message)
+          : this.authService.getWebKakaoErrorUrl(message),
+      );
       return undefined;
     }
 
@@ -161,14 +177,20 @@ export class AuthController {
       const session = await this.authService.loginWithKakao(code, this.tokenContext(req));
       if (wantsJson) return session;
       const exchangeCode = await this.kakaoExchange.issue(session);
-      res.redirect(this.authService.getWebKakaoSuccessUrl(exchangeCode));
+      res.redirect(
+        returnTo === 'android'
+          ? this.authService.getAndroidKakaoSuccessUrl(exchangeCode)
+          : this.authService.getWebKakaoSuccessUrl(exchangeCode),
+      );
       return undefined;
     } catch (error) {
       if (wantsJson) throw error;
+      const message =
+        error instanceof Error ? error.message : '카카오 로그인을 완료하지 못했습니다.';
       res.redirect(
-        this.authService.getWebKakaoErrorUrl(
-          error instanceof Error ? error.message : '카카오 로그인을 완료하지 못했습니다.',
-        ),
+        returnTo === 'android'
+          ? this.authService.getAndroidKakaoErrorUrl(message)
+          : this.authService.getWebKakaoErrorUrl(message),
       );
       return undefined;
     }

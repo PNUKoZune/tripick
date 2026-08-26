@@ -29,8 +29,8 @@
     <application
       android:name=".MainApplication"
       android:label="@string/app_name"
-      android:icon="@mipmap/ic_launcher"
-      android:roundIcon="@mipmap/ic_launcher_round"
+      android:icon="@mipmap/ic_tripick"
+      android:roundIcon="@mipmap/ic_tripick_round"
       android:allowBackup="false"
       android:theme="@style/AppTheme"
       android:usesCleartextTraffic="${usesCleartextTraffic}"
@@ -55,6 +55,19 @@
                 android:scheme="https"
                 android:host="tripick.place"
                 android:pathPrefix="/auth/kakao/callback" />
+        </intent-filter>
+        <!--
+          지원 링크 열기가 사용자 설정으로 꺼져 있어도 OAuth 완료 후 앱으로 복귀할 수 있는
+          Android 전용 fallback. 서버는 package 가 고정된 intent:// URL 로만 이 스킴을 연다.
+        -->
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data
+                android:scheme="tripick"
+                android:host="auth"
+                android:pathPrefix="/kakao/callback" />
         </intent-filter>
       </activity>
       <!-- 여행 진행 중 백그라운드 위치 추적 foreground service -->

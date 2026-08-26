@@ -3,22 +3,40 @@
 import { HttpException } from '@nestjs/common';
 import { AuthController } from '../../src/auth/auth.controller';
 
-function makeController(
-  consume = jest.fn().mockResolvedValue({ allowed: true, retryAfter: 0 }),
-) {
+function makeController(consume = jest.fn().mockResolvedValue({ allowed: true, retryAfter: 0 })) {
   const authService = {
     signupWithEmail: jest.fn().mockResolvedValue({ ok: true }),
     resendVerification: jest.fn().mockResolvedValue({ ok: true }),
     requestPasswordReset: jest.fn().mockResolvedValue({ ok: true }),
+    startKakaoAuth: jest
+      .fn()
+      .mockReturnValue({
+        authorizeUrl: 'https://kauth.kakao.com/oauth/authorize',
+        state: 'state-1',
+      }),
+    loginWithKakao: jest.fn().mockResolvedValue({ tokens: {}, user: {} }),
+    getWebKakaoSuccessUrl: jest.fn((code: string) => `https://tripick.place/callback#${code}`),
+    getWebKakaoErrorUrl: jest.fn((message: string) => `https://tripick.place/error?m=${message}`),
+    getAndroidKakaoSuccessUrl: jest.fn((code: string) => `intent://success?code=${code}`),
+    getAndroidKakaoErrorUrl: jest.fn((message: string) => `intent://error?message=${message}`),
+  };
+  const kakaoExchange = {
+    issue: jest.fn().mockResolvedValue('exchange-1'),
+    consume: jest.fn(),
   };
   const controller = new AuthController(
     authService as any,
-    {} as any,
+    kakaoExchange as any,
     { consume } as any,
     { get: () => undefined } as any,
   );
-  const res = { setHeader: jest.fn() } as any;
-  return { controller, authService, consume, res };
+  const res = {
+    setHeader: jest.fn(),
+    cookie: jest.fn(),
+    clearCookie: jest.fn(),
+    redirect: jest.fn(),
+  } as any;
+  return { controller, authService, kakaoExchange, consume, res };
 }
 
 const signupBody = { email: 'a@b.com', password: 'abcd1234', nickname: '여행자' } as any;
@@ -48,5 +66,33 @@ describe('AuthController — 주소별 메일 한도', () => {
     const { controller, consume, res } = makeController();
     await controller.forgotPassword({ email: 'a@b.com' } as any, res);
     expect(consume).toHaveBeenCalledWith('a@b.com', 'reset');
+  });
+});
+
+describe('AuthController — Android Kakao 복귀', () => {
+  it('remembers that OAuth started from the Android shell', () => {
+    const { controller, res } = makeController();
+
+    controller.kakaoLogin('android', res);
+
+    expect(res.cookie).toHaveBeenCalledWith(
+      'tripick_kakao_return',
+      'android',
+      expect.objectContaining({ httpOnly: true, sameSite: 'lax' }),
+    );
+  });
+
+  it('redirects a completed Android login to the package-scoped intent', async () => {
+    const { controller, authService, res } = makeController();
+    const req = {
+      headers: {
+        cookie: 'tripick_kakao_state=state-1; tripick_kakao_return=android',
+      },
+    } as any;
+
+    await controller.kakaoCallback('kakao-code', 'state-1', undefined, req, res);
+
+    expect(authService.getAndroidKakaoSuccessUrl).toHaveBeenCalledWith('exchange-1');
+    expect(res.redirect).toHaveBeenCalledWith('intent://success?code=exchange-1');
   });
 });

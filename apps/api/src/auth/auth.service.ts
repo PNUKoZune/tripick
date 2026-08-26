@@ -335,6 +335,24 @@ export class AuthService {
     return url.toString();
   }
 
+  /** Android 앱이 시작한 OAuth 를 사용자 링크 설정과 무관하게 해당 패키지로 돌려보낸다. */
+  getAndroidKakaoSuccessUrl(code: string): string {
+    return this.getAndroidKakaoIntentUrl({ code }, this.getWebKakaoSuccessUrl(code));
+  }
+
+  getAndroidKakaoErrorUrl(message: string): string {
+    return this.getAndroidKakaoIntentUrl({ error: message }, this.getWebKakaoErrorUrl(message));
+  }
+
+  private getAndroidKakaoIntentUrl(params: Record<string, string>, fallbackUrl: string): string {
+    const query = new URLSearchParams(params).toString();
+    return (
+      `intent://auth/kakao/callback?${query}` +
+      '#Intent;scheme=tripick;package=com.tripick.place;' +
+      `S.browser_fallback_url=${encodeURIComponent(fallbackUrl)};end`
+    );
+  }
+
   // ─────────────────────────────────────────────────────────────
   // Refresh rotation + logout
   // ─────────────────────────────────────────────────────────────
@@ -736,4 +754,3 @@ function assertValidPassword(password: string): void {
     throw new BadRequestException('비밀번호는 영문과 숫자를 모두 포함해야 해요.');
   }
 }
-

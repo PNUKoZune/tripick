@@ -61,7 +61,13 @@ export async function redirectToKakao(): Promise<void> {
         : '카카오 로그인을 시작하지 못했습니다.',
     );
   }
-  window.location.href = status.startUrl;
+  const startUrl = new URL(status.startUrl);
+  // Android 앱에서 시작한 OAuth 는 서버가 최종 콜백을 package 지정 intent:// 로 돌려준다.
+  // 검증된 App Link 가 사용자 설정으로 꺼져 있어도 시스템 브라우저에 세션이 갇히지 않는다.
+  if (isNativeShell() && /Android/i.test(navigator.userAgent)) {
+    startUrl.searchParams.set('returnTo', 'android');
+  }
+  window.location.href = startUrl.toString();
 }
 
 /** 콜백 URL 의 1회용 코드를 실제 세션으로 바꾼다. 코드는 서버에서 즉시 소비된다. */
