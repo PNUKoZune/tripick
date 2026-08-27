@@ -412,9 +412,11 @@ type FallbackProps = {
 
 function FallbackMap({ markers, showCurrentDot, selectedMarkerId, onMarkerClick }: FallbackProps) {
   return (
-    <div className="absolute inset-0 bg-[#EEF2F4]">
-      <div className="absolute inset-x-0 top-0 h-1/2 bg-[#F2F4F6]" />
-      <div className="absolute left-1/4 top-2/3 h-12 w-full bg-[#E1ECF7]" />
+    // 지도 SDK 키가 없을 때 대신 그리는 판. 실제 지도 타일과 달리 우리가 칠하는 면이라
+    // 토큰을 쓴다 — 고정 라이트 색이면 다크 화면 한가운데에 흰 판이 박힌다.
+    <div className="absolute inset-0 bg-[color:var(--card-soft,#EEF2F4)]">
+      <div className="absolute inset-x-0 top-0 h-1/2 bg-[color:var(--bg,#F2F4F6)]" />
+      <div className="absolute left-1/4 top-2/3 h-12 w-full bg-[color:var(--primary-tint,#E1ECF7)]" />
       {markers.map((marker) => {
         const isSelected = marker.id === selectedMarkerId;
         const style = isSelected ? selectedStyle : variantStyle[marker.variant];
@@ -445,7 +447,7 @@ function FallbackMap({ markers, showCurrentDot, selectedMarkerId, onMarkerClick 
           <span className="size-3 rounded-full bg-[#3182F6]" />
         </div>
       ) : null}
-      <div className="absolute bottom-2 left-3 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-[#6B7684]">
+      <div className="absolute bottom-2 left-3 rounded-full bg-[color:var(--card,#fff)]/85 px-2 py-0.5 text-[10px] font-semibold text-[color:var(--ink-faint,#6B7684)]">
         SDK key 미설정 — 폴백 미리보기
       </div>
     </div>

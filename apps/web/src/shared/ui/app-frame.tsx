@@ -105,7 +105,7 @@ export function AppFrame({
     <div
       className={`min-h-dvh overflow-x-clip bg-[color:var(--app-bg)] ${themed ? 'wvr-scope' : ''}`}
     >
-      <div className="mx-auto w-full max-w-[430px] bg-[color:var(--app-surface)] pb-[calc(88px+var(--safe-bottom))] lg:grid lg:max-w-[1440px] lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:bg-transparent lg:px-6 lg:pb-0">
+      <div className="mx-auto w-full max-w-[430px] bg-[color:var(--app-surface)] pb-[calc(88px+var(--fab-reserve)+var(--safe-bottom))] lg:grid lg:max-w-[1440px] lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:bg-transparent lg:px-6 lg:pb-0">
         <AppDesktopNavigation />
         {/* 본문만 등장 모션 — 탭바·사이드 네비는 애니메이션 없이 그려 셸이 고정된 것처럼 보이게 한다 */}
         <div

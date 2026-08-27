@@ -456,7 +456,7 @@ function PlannerContent({
     <div className="wvr-scope min-h-dvh overflow-x-clip bg-[color:var(--bg)]">
       {/* < lg : phone shell (모바일 우선) — 대상 화면(결과) 범위: wvr-scope 로컬 팔레트 */}
       <div
-        className={`wvr-scope ${pageInClass} mx-auto min-h-dvh max-w-[430px] pb-[calc(88px+var(--safe-bottom))] lg:hidden`}
+        className={`wvr-scope ${pageInClass} mx-auto min-h-dvh max-w-[430px] pb-[calc(168px+var(--fab-reserve)+var(--safe-bottom))] lg:hidden`}
       >
         <PlannerHeader
           title={trip?.title ?? (isResolvingTrip ? '여행 찾는 중' : '여행을 먼저 만들어주세요')}
@@ -549,7 +549,9 @@ function PlannerContent({
               aria-label="AI 재계획"
               onClick={() => openReplan('manual')}
               className={`fixed z-20 flex size-14 items-center justify-center rounded-full text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] active:translate-y-px lg:hidden ${
-                activeTrip ? 'bottom-[152px]' : 'bottom-[96px]'
+                activeTrip
+                  ? 'bottom-[calc(152px+var(--safe-bottom))]'
+                  : 'bottom-[calc(96px+var(--safe-bottom))]'
               }`}
               style={{
                 right: 'max(20px, calc((100vw - 430px) / 2 + 20px))',
@@ -883,7 +885,7 @@ function PlannerContent({
       {/* 알림(날씨·혼잡·미도착) 딥링크로 열린 경우에만 뜨는 비침습 배너.
           두 반응형 레이아웃 공통으로 상단 중앙에 떠 있고, 닫으면 그냥 일정을 본다. */}
       {alertBanner && alertBanner !== 'manual' && trip ? (
-        <div className="fixed left-1/2 top-3 z-40 w-[calc(100%-24px)] max-w-[420px] -translate-x-1/2">
+        <div className="fixed left-1/2 top-[calc(12px+var(--safe-top))] z-40 w-[calc(100%-24px)] max-w-[420px] -translate-x-1/2">
           <div className="flex items-start gap-3 rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] p-3.5 shadow-[var(--shadow-btn)]">
             {(() => {
               const BannerIcon = REPLAN_BANNER_COPY[alertBanner].Icon;

@@ -12,6 +12,12 @@
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
+  /* 우하단 "여행 중" FAB 이 떠 있는 동안 본문이 확보해야 하는 추가 하단 여백(FAB 48 + 간격 16).
+     하단 탭바 높이(88px)만 빼 두면 FAB 이 그 바로 위 구간을 덮어, 마지막 카드의 삭제·토글
+     같은 조작부가 눌리지 않는다. FAB 은 전역(providers)에 살아 레이아웃이 존재를 모르므로,
+     FAB 이 붙이는 표식을 :has() 로 읽어 여백만 늘린다(미지원 브라우저는 예전 여백 그대로). */
+  --fab-reserve: 0px;
+
   --app-bg: #f2f4f6;
   --app-surface: #ffffff;
   --soft-bg: #f6f8fa;
@@ -27,6 +33,10 @@
   --blue-600: #3182f6;
   --blue-700: #1b64da;
   --blue-800: #124fb2;
+}
+
+:root:has([data-active-trip-fab]) {
+  --fab-reserve: 64px;
 }
 
 * {
