@@ -38,6 +38,6 @@ export class NotificationEntity {
   @Column({ type: 'timestamptz', nullable: true })
   readAt: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 }

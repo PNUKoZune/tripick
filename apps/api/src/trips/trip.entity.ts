@@ -53,9 +53,9 @@ export class TripEntity {
   @Column({ type: 'varchar', nullable: true, unique: true })
   shareToken: string | null;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 }

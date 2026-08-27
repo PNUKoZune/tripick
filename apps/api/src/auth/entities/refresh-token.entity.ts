@@ -52,6 +52,6 @@ export class RefreshTokenEntity {
   @Column({ nullable: true })
   ipAddress?: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 }
