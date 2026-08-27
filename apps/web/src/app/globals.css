@@ -3,6 +3,15 @@
 
 :root {
   color-scheme: light;
+
+  /* 시스템 바 안전 영역. 고정 여백에 더해 쓰는 값이라 fixed 오버레이·헤더가 바 밑으로 안 잘린다.
+     값은 실행 환경이 정한다 — 모바일 브라우저·iOS 웹뷰는 노치·홈 인디케이터 높이를, edge-to-edge
+     안드로이드 웹뷰는 상태바·내비바 높이를 준다(둘 다 `viewport-fit=cover` 가 있어야 0 이 아니다).
+     RN 안드로이드 셸에선 MainActivity 가 창 인셋을 네이티브 패딩으로 먼저 걷어내므로 여기선 0 이
+     되고, 그래서 두 겹으로 밀리지 않는다(에뮬레이터 Android 17 실측 확인). */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
   --app-bg: #f2f4f6;
   --app-surface: #ffffff;
   --soft-bg: #f6f8fa;

@@ -77,7 +77,7 @@ export function LandingView() {
 function LandingContent() {
   return (
     <AppFrame showNav={false}>
-      <div className="wvr-scope min-h-dvh px-5 pb-16 pt-4 lg:px-10">
+      <div className="wvr-scope min-h-dvh px-5 pb-[calc(64px+var(--safe-bottom))] pt-[calc(16px+var(--safe-top))] lg:px-10">
         <div className="mx-auto w-full max-w-[500px] lg:max-w-[560px]">
           {/* ===== 헤더 ===== */}
           <header className="flex items-center justify-between py-3.5">

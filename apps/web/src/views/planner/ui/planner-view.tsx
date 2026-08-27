@@ -456,7 +456,7 @@ function PlannerContent({
     <div className="wvr-scope min-h-dvh overflow-x-clip bg-[color:var(--bg)]">
       {/* < lg : phone shell (모바일 우선) — 대상 화면(결과) 범위: wvr-scope 로컬 팔레트 */}
       <div
-        className={`wvr-scope ${pageInClass} mx-auto min-h-dvh max-w-[430px] pb-[88px] lg:hidden`}
+        className={`wvr-scope ${pageInClass} mx-auto min-h-dvh max-w-[430px] pb-[calc(88px+var(--safe-bottom))] lg:hidden`}
       >
         <PlannerHeader
           title={trip?.title ?? (isResolvingTrip ? '여행 찾는 중' : '여행을 먼저 만들어주세요')}

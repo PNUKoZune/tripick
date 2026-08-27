@@ -19,7 +19,7 @@ export function ActiveTripFab() {
     <Link
       href="/trip/live"
       aria-label="진행 중인 여행 보기"
-      className="fixed bottom-[88px] right-4 z-30 flex h-12 items-center gap-2 rounded-full bg-[#3182F6] pl-3.5 pr-4 text-white shadow-[0_12px_24px_rgba(49,130,246,0.36)] transition active:scale-[0.97] lg:bottom-8 lg:right-8"
+      className="fixed bottom-[calc(88px+var(--safe-bottom))] right-4 z-30 flex h-12 items-center gap-2 rounded-full bg-[#3182F6] pl-3.5 pr-4 text-white shadow-[0_12px_24px_rgba(49,130,246,0.36)] transition active:scale-[0.97] lg:bottom-8 lg:right-8"
     >
       <span className="relative flex size-2.5 items-center justify-center">
         <span className="absolute inline-flex size-full motion-safe:animate-ping rounded-full bg-white/70" />

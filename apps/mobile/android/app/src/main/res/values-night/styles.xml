@@ -1,0 +1,11 @@
+<resources>
+
+    <!-- 다크에서는 바 아이콘을 밝게 — 어두운 창 배경 위에서 어두운 아이콘은 보이지 않는다. -->
+    <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        <item name="android:windowBackground">@color/window_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+</resources>

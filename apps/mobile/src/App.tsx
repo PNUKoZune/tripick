@@ -11,6 +11,7 @@ import {
   Linking,
   NativeModules,
   NativeEventEmitter,
+  useColorScheme,
   type EmitterSubscription,
 } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
@@ -130,6 +131,10 @@ const androidOnlyProps =
     : {};
 
 export default function App() {
+  // 시스템 바 아이콘·셸 배경을 웹 팔레트(--app-bg)와 같은 명암으로 맞춘다.
+  // 하나로 고정해 두면 다크에서 상태바 아이콘이 어두운 배경에 묻히고, 로딩 순간 흰 판이 번쩍인다.
+  const isDark = useColorScheme() === 'dark';
+  const shellColor = isDark ? SHELL_BG_DARK : SHELL_BG_LIGHT;
   const webViewRef = useRef<InstanceType<typeof WebView>>(null);
   const watchIdRef = useRef<number | null>(null);
   const nativeSubsRef = useRef<EmitterSubscription[]>([]);
@@ -534,13 +539,13 @@ export default function App() {
   }, []);
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+    <View style={[styles.container, { backgroundColor: shellColor }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
       <WebView
         key={webViewKey}
         ref={webViewRef}
         source={{ uri: webViewUri }}
-        style={styles.webview}
+        style={[styles.webview, { backgroundColor: shellColor }]}
         // Next.js 웹앱이 필요로 하는 설정
         javaScriptEnabled
         domStorageEnabled
@@ -575,8 +580,8 @@ export default function App() {
         }}
         onMessage={handleMessage}
         // 로딩 인디케이터는 web 의 스켈레톤이 담당하므로 native 에선 비움
-        renderLoading={() => <View style={styles.loadingFill} />}
-        renderError={() => <View style={styles.loadingFill} />}
+        renderLoading={() => <View style={[styles.loadingFill, { backgroundColor: shellColor }]} />}
+        renderError={() => <View style={[styles.loadingFill, { backgroundColor: shellColor }]} />}
         startInLoadingState
       />
       {initialLoadFailed ? (
@@ -597,10 +602,16 @@ export default function App() {
   );
 }
 
+// 웹 팔레트의 --app-bg 와 같은 값 (라이트 #F2F4F6 / 다크 #0B111E).
+// android/app/src/main/res/values{,-night}/colors.xml 의 window_bg 와도 같은 값이어야
+// 시스템 바 뒤(창 배경)와 웹뷰 면이 이어져 보인다.
+const SHELL_BG_LIGHT = '#F2F4F6';
+const SHELL_BG_DARK = '#0B111E';
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F7F8FA' },
-  webview: { flex: 1, backgroundColor: '#F7F8FA' },
-  loadingFill: { flex: 1, backgroundColor: '#F7F8FA' },
+  container: { flex: 1, backgroundColor: SHELL_BG_LIGHT },
+  webview: { flex: 1, backgroundColor: SHELL_BG_LIGHT },
+  loadingFill: { flex: 1, backgroundColor: SHELL_BG_LIGHT },
   loadError: {
     alignItems: 'center',
     bottom: 0,

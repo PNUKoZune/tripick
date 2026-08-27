@@ -22,7 +22,7 @@ export function PlannerHeader({
   onShareClick,
 }: Props) {
   return (
-    <header className="flex items-center justify-between gap-2 px-3 py-3">
+    <header className="flex items-center justify-between gap-2 px-3 pb-3 pt-[calc(12px+var(--safe-top))]">
       <div className="flex min-w-0 items-center gap-2">
         <Link
           href={backHref}

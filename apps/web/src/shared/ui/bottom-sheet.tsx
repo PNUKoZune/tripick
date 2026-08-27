@@ -172,7 +172,7 @@ export function BottomSheet({ open, onClose, children, label, topSlot, themed = 
           <div className="flex items-center justify-center pt-2.5 lg:hidden">
             <span className={`h-1 w-10 rounded-full ${grabber}`} />
           </div>
-          <div className="max-h-[70vh] min-h-0 flex-1 overflow-y-auto px-5 pb-6 pt-3 lg:max-h-[78vh]">
+          <div className="max-h-[70vh] min-h-0 flex-1 overflow-y-auto px-5 pb-[calc(24px+var(--safe-bottom))] pt-3 lg:max-h-[78vh] lg:pb-6">
             {children}
           </div>
         </div>

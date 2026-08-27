@@ -66,7 +66,7 @@ export function Toast({
   const clickable = Boolean(onClick);
   return (
     <div
-      className={`fixed inset-x-0 bottom-[104px] z-40 flex justify-center px-4 lg:bottom-6 ${className ?? ''}`}
+      className={`fixed inset-x-0 bottom-[calc(104px+var(--safe-bottom))] z-40 flex justify-center px-4 lg:bottom-6 ${className ?? ''}`}
       role="status"
       aria-live="polite"
     >
