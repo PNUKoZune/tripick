@@ -13,7 +13,10 @@ import {
   NativeModules,
   NativeEventEmitter,
   useColorScheme,
+  Animated,
+  Image,
   type EmitterSubscription,
+  type ImageSourcePropType,
 } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { getApps } from '@react-native-firebase/app';
@@ -73,6 +76,13 @@ const WEB_APP_URL = __DEV__ ? WEB_APP_HOST : PRODUCTION_WEB_APP_URL;
 // 첫 진입은 랜딩(`/start`). 루트(`/`)는 로그인 필수 화면이라 미로그인 사용자가 랜딩을
 // 못 보고 바로 /login 으로 떨어졌다. 로그인 상태면 /start 의 GuestGuard 가 `/` 로 되돌린다.
 const ENTRY_PATH = '/start';
+// 이미 로그인해 둔 사용자의 진입 경로. `/start` 로 들어가면 랜딩이 한 번 그려진 뒤
+// GuestGuard 가 `/` 로 되돌려, 켤 때마다 남의 화면이 스쳐 지나간 것처럼 보인다.
+const SESSION_ENTRY_PATH = '/';
+// 웹이 첫 화면을 그렸다고 알려주지 않을 때(구버전 웹 등) 스플래시를 걷어낼 상한.
+const SPLASH_FALLBACK_MS = 10_000;
+const SPLASH_FADE_MS = 220;
+const APP_ICON = require('../../../assets/brand/tripick-app-icon-1024.png') as ImageSourcePropType;
 const WEB_APP_ORIGIN = new URL(WEB_APP_URL).origin;
 const PRODUCTION_WEB_APP_ORIGIN = new URL(PRODUCTION_WEB_APP_URL).origin;
 const KAKAO_CALLBACK_PATH = '/auth/kakao/callback';
@@ -195,8 +205,14 @@ export default function App() {
   // 웹이 바텀시트·모달을 띄우고 있는지. 떠 있으면 뒤로가기를 히스토리·종료가 아니라 "시트 닫기" 로 돌린다.
   const overlayOpenRef = useRef(false);
   const [webViewKey, setWebViewKey] = useState(0);
-  const [webViewUri, setWebViewUri] = useState(`${WEB_APP_URL}${ENTRY_PATH}`);
+  // 진입 URL 은 저장된 세션 여부를 보고 정한다 — 정해지기 전엔 스플래시만 보이므로 null.
+  const [webViewUri, setWebViewUri] = useState<string | null>(null);
   const [initialLoadFailed, setInitialLoadFailed] = useState(false);
+  // 웹이 첫 화면을 그릴 때까지 덮어 두는 스플래시. 이게 없으면 셸 배경만 깔린 빈 화면이
+  // 몇 초 있다가 웹 화면이 툭 튀어나와, 흰 화면이 떴다 꺼진 것처럼 보인다.
+  const [splashVisible, setSplashVisible] = useState(true);
+  const [webPainted, setWebPainted] = useState(false);
+  const splashOpacity = useRef(new Animated.Value(1)).current;
 
   const handleIncomingUrl = useCallback((url: string) => {
     const callbackUrl = getKakaoCallbackUrl(url);
@@ -205,6 +221,43 @@ export default function App() {
     setInitialLoadFailed(false);
     setWebViewUri(callbackUrl);
   }, []);
+
+  // 저장된 refresh 토큰이 있으면 로그인 사용자로 보고 홈으로 바로 들어간다.
+  // 딥링크(카카오 콜백)가 먼저 URL 을 정했으면 그쪽이 우선.
+  useEffect(() => {
+    let cancelled = false;
+    const enter = (path: string) => {
+      if (cancelled || handledDeepLinkRef.current) return;
+      setWebViewUri((current) => current ?? `${WEB_APP_URL}${path}`);
+    };
+    Keychain.getGenericPassword({ service: REFRESH_TOKEN_SERVICE })
+      .then((cred) => enter(cred ? SESSION_ENTRY_PATH : ENTRY_PATH))
+      .catch(() => enter(ENTRY_PATH));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 웹이 준비됐다고 알리면(WEB_READY) 스플래시를 부드럽게 걷는다. 신호가 안 오는
+  // 경우(구버전 웹·로드 실패)에도 상한 시간이 지나면 걷어 화면이 잠기지 않게 한다.
+  useEffect(() => {
+    if (!splashVisible) return;
+    if (!webPainted) {
+      const timer = setTimeout(() => setWebPainted(true), SPLASH_FALLBACK_MS);
+      return () => clearTimeout(timer);
+    }
+    const animation = Animated.timing(splashOpacity, {
+      toValue: 0,
+      duration: SPLASH_FADE_MS,
+      // 네이티브 드라이버를 쓰면 이 저장소의 react(19.2.5)·react-native-renderer(19.2.3) 버전
+      // 불일치가 __makeNative 경로에서 터진다. 220ms 페이드 하나라 JS 드라이버로 충분하다.
+      useNativeDriver: false,
+    });
+    animation.start(({ finished }) => {
+      if (finished) setSplashVisible(false);
+    });
+    return () => animation.stop();
+  }, [splashVisible, webPainted, splashOpacity]);
 
   useEffect(() => {
     requestPermissions();
@@ -611,6 +664,8 @@ export default function App() {
       return;
     }
     if (msg.type === 'WEB_READY') {
+      // 웹이 첫 화면을 그리고 리스너까지 붙인 시점 — 이제 스플래시를 걷어도 빈 화면이 안 보인다.
+      setWebPainted(true);
       // 웹이 리스너를 붙였으니 앱 버전을 알려 준다(설정 화면 "버전" 표기용).
       if (AppInfo?.version) postToWeb({ type: 'APP_VERSION', version: AppInfo.version });
       // 웹이 message 리스너를 붙인 시점 — 종료 상태 탭으로 보관해둔 라우팅을 이제 안전하게 전달.
@@ -628,61 +683,77 @@ export default function App() {
   const retryInitialLoad = useCallback(() => {
     hasLoadedOnceRef.current = false;
     setInitialLoadFailed(false);
+    setWebPainted(false);
+    setSplashVisible(true);
+    splashOpacity.setValue(1);
     setWebViewKey((current) => current + 1);
-  }, []);
+  }, [splashOpacity]);
 
   return (
     <View style={[styles.container, { backgroundColor: shellColor }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-      <WebView
-        key={webViewKey}
-        ref={webViewRef}
-        source={{ uri: webViewUri }}
-        style={[styles.webview, { backgroundColor: shellColor }]}
-        // Next.js 웹앱이 필요로 하는 설정
-        javaScriptEnabled
-        domStorageEnabled
-        sharedCookiesEnabled
-        thirdPartyCookiesEnabled
-        // Kakao Maps 가 https 리소스를 요청하므로 mixed content 는 허용 X
-        mixedContentMode="never"
-        allowsBackForwardNavigationGestures
-        // 사진은 <input type=file> → 네이티브 파일 선택 시트로만 올린다(getUserMedia 미사용)
-        mediaPlaybackRequiresUserAction={false}
-        // Geolocation + Android 전용 권한 brige
-        geolocationEnabled
-        {...androidOnlyProps}
-        // 외부 도메인 진입 차단 → 시스템 브라우저로 위임
-        onShouldStartLoadWithRequest={(request) => {
-          if (isInternalWebUrl(request.url)) return true;
-          if (request.url.startsWith('about:') || request.url === 'about:blank') return true;
-          Linking.openURL(request.url).catch(() => undefined);
-          return false;
-        }}
-        onNavigationStateChange={(state) => {
-          console.log('[TriPick] WebView URL:', state.url);
-          setCanGoBack(state.canGoBack);
-          setIsTabRoot(isTabRootUrl(state.url));
-          // 페이지가 바뀌면 열려 있던 시트도 함께 사라진다 — 웹의 알림을 못 받는 경우에 대비해 여기서도 내린다.
-          overlayOpenRef.current = false;
-          // 화면이 바뀌면 직전 화면에서 켜 둔 종료 확인은 무효 — 탭을 옮긴 직후의 뒤로가기가
-          // 곧장 종료로 이어지지 않게 한다.
-          exitArmedUntilRef.current = 0;
-        }}
-        onLoad={() => {
-          hasLoadedOnceRef.current = true;
-          setInitialLoadFailed(false);
-        }}
-        onError={handleInitialLoadError}
-        onHttpError={(event) => {
-          if (event.nativeEvent.statusCode >= 400) handleInitialLoadError();
-        }}
-        onMessage={handleMessage}
-        // 로딩 인디케이터는 web 의 스켈레톤이 담당하므로 native 에선 비움
-        renderLoading={() => <View style={[styles.loadingFill, { backgroundColor: shellColor }]} />}
-        renderError={() => <View style={[styles.loadingFill, { backgroundColor: shellColor }]} />}
-        startInLoadingState
-      />
+      {webViewUri ? (
+        <WebView
+          key={webViewKey}
+          ref={webViewRef}
+          source={{ uri: webViewUri }}
+          style={[styles.webview, { backgroundColor: shellColor }]}
+          // Next.js 웹앱이 필요로 하는 설정
+          javaScriptEnabled
+          domStorageEnabled
+          sharedCookiesEnabled
+          thirdPartyCookiesEnabled
+          // Kakao Maps 가 https 리소스를 요청하므로 mixed content 는 허용 X
+          mixedContentMode="never"
+          allowsBackForwardNavigationGestures
+          // 사진은 <input type=file> → 네이티브 파일 선택 시트로만 올린다(getUserMedia 미사용)
+          mediaPlaybackRequiresUserAction={false}
+          // Geolocation + Android 전용 권한 brige
+          geolocationEnabled
+          {...androidOnlyProps}
+          // 외부 도메인 진입 차단 → 시스템 브라우저로 위임
+          onShouldStartLoadWithRequest={(request) => {
+            if (isInternalWebUrl(request.url)) return true;
+            if (request.url.startsWith('about:') || request.url === 'about:blank') return true;
+            Linking.openURL(request.url).catch(() => undefined);
+            return false;
+          }}
+          onNavigationStateChange={(state) => {
+            console.log('[TriPick] WebView URL:', state.url);
+            setCanGoBack(state.canGoBack);
+            setIsTabRoot(isTabRootUrl(state.url));
+            // 페이지가 바뀌면 열려 있던 시트도 함께 사라진다 — 웹의 알림을 못 받는 경우에 대비해 여기서도 내린다.
+            overlayOpenRef.current = false;
+            // 화면이 바뀌면 직전 화면에서 켜 둔 종료 확인은 무효 — 탭을 옮긴 직후의 뒤로가기가
+            // 곧장 종료로 이어지지 않게 한다.
+            exitArmedUntilRef.current = 0;
+          }}
+          onLoad={() => {
+            hasLoadedOnceRef.current = true;
+            setInitialLoadFailed(false);
+          }}
+          onError={handleInitialLoadError}
+          onHttpError={(event) => {
+            if (event.nativeEvent.statusCode >= 400) handleInitialLoadError();
+          }}
+          onMessage={handleMessage}
+          // 로딩 인디케이터는 web 의 스켈레톤이 담당하므로 native 에선 비움
+          renderLoading={() => (
+            <View style={[styles.loadingFill, { backgroundColor: shellColor }]} />
+          )}
+          renderError={() => <View style={[styles.loadingFill, { backgroundColor: shellColor }]} />}
+          startInLoadingState
+        />
+      ) : null}
+      {/* 웹이 첫 화면을 그릴 때까지 덮는 스플래시. 실패 안내(아래)는 이보다 뒤에 그려 위로 올린다. */}
+      {splashVisible ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.splash, { backgroundColor: shellColor, opacity: splashOpacity }]}
+        >
+          <Image source={APP_ICON} style={styles.splashIcon} resizeMode="contain" />
+        </Animated.View>
+      ) : null}
       {initialLoadFailed ? (
         <View style={styles.loadError} accessibilityRole="alert">
           <Text style={styles.loadErrorTitle}>페이지를 불러오지 못했어요</Text>
@@ -711,6 +782,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: SHELL_BG_LIGHT },
   webview: { flex: 1, backgroundColor: SHELL_BG_LIGHT },
   loadingFill: { flex: 1, backgroundColor: SHELL_BG_LIGHT },
+  splash: {
+    alignItems: 'center',
+    bottom: 0,
+    justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  // Android 12+ 시스템 스플래시가 어댑티브 아이콘을 원형으로 마스킹해 먼저 보여준다 —
+  // 이어받는 이 아이콘도 같은 원형·비슷한 크기로 그려야 두 장이 겹쳐 보이지 않는다.
+  splashIcon: { borderRadius: 80, height: 160, overflow: 'hidden', width: 160 },
   loadError: {
     alignItems: 'center',
     bottom: 0,
