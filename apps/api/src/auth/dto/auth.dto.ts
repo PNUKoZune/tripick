@@ -1,4 +1,12 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 import {
   NICKNAME_MAX_LENGTH,
@@ -86,6 +94,13 @@ export class KakaoExchangeBodyDto implements KakaoExchangeDto {
   @IsNotEmpty({ message: '로그인 코드가 없습니다.' })
   @MaxLength(512, { message: '로그인 코드가 올바르지 않습니다.' })
   code: string;
+
+  // 로그인을 시작한 브라우저만 아는 값. 서버가 해시로 대조해 코드를 그 브라우저에 묶는다.
+  // 길이 하한이 곧 추측 저항이라 형식까지 여기서 고정한다(컨트롤러 `isAcceptableBind` 와 같은 규칙).
+  @Transform(trim)
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{32,256}$/, { message: '로그인 요청이 올바르지 않습니다.' })
+  bind: string;
 }
 
 export class RefreshTokenBodyDto {

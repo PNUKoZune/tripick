@@ -28,6 +28,24 @@ const nextConfig = {
   async headers() {
     return [
       {
+        // 전 경로 공통 보안 헤더.
+        //
+        // frame-ancestors/X-Frame-Options 는 브리지 origin 검사(bridge-origin.ts)와 한 쌍이다 —
+        // 프레이밍을 막으면 공격자 페이지가 우리 문서를 띄워 postMessage 를 던지는 통로 자체가
+        // 사라진다. 둘 중 하나만으로도 막히지만, 새 message 리스너가 추가될 때를 대비해
+        // 플랫폼 레벨에서도 닫아 둔다. (RN WebView 는 프레임이 아니라 최상위 문서라 무영향)
+        //
+        // nosniff 는 특히 /storage 프록시 때문에 필요하다 — 사용자가 올린 바이트를 같은
+        // 오리진에서 되돌려주므로, 브라우저가 Content-Type 을 무시하고 스니핑하면 안 된다.
+        source: '/:path*',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        ],
+      },
+      {
         // self-host 폰트. 경로에 버전이 박혀 있어(`pretendard-1.3.9`) 내용이 바뀔 일이
         // 없으므로 1년 immutable 로 못 박는다 — Next 는 public/ 기본이 max-age=0 이라
         // 방문할 때마다 92개 서브셋에 재검증 요청이 붙는다.

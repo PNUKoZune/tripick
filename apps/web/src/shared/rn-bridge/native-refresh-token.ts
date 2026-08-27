@@ -1,3 +1,4 @@
+import { isTrustedBridgeOrigin } from './bridge-origin';
 import { getReactNativeWebView } from './rn-webview';
 
 /**
@@ -76,6 +77,8 @@ function resolvePending(requestId: string, token: string | null): void {
 // 무관하게 응답을 받아야, 부팅 직후 refresh 요청이 리스너보다 먼저 나가도 유실되지 않는다.
 if (typeof window !== 'undefined') {
   window.addEventListener('message', (event: MessageEvent) => {
+    // 다른 프레임이 위조한 REFRESH_TOKEN 응답으로 대기 중인 갱신을 망치지 못하게 한다.
+    if (!isTrustedBridgeOrigin(event)) return;
     if (typeof event.data !== 'string') return;
     let msg: { type?: string; requestId?: string; token?: string | null } | null = null;
     try {

@@ -47,6 +47,16 @@ export interface KakaoAuthStatusDto {
 /** 카카오 콜백이 URL 로 넘긴 1회용 교환 코드 → 실제 세션. */
 export interface KakaoExchangeDto {
   code: string;
+  /**
+   * 로그인을 **시작한 브라우저**만 아는 비밀. 시작 요청(`/auth/kakao?bind=…`)에 실어 보내고
+   * 교환에서 다시 제시해, 코드가 그 브라우저에 묶이게 한다.
+   *
+   * 없으면 교환 코드는 URL 에 실린 그 자체로 세션이 된다 — 공격자가 자기 카카오 로그인을
+   * 끝내 얻은 코드를 피해자에게 링크(또는 Android 딥링크)로 던지면 피해자가 조용히 **공격자
+   * 계정으로** 로그인되고, 이후 만드는 여행·사진이 전부 공격자 계정에 쌓인다. 시작 단계의
+   * `state` 는 카카오 왕복만 보호해서 이 마지막 홉을 못 막는다.
+   */
+  bind: string;
 }
 
 export interface EmailSignupDto {

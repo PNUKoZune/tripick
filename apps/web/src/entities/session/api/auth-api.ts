@@ -10,6 +10,7 @@ import { api, apiUrl } from '@/shared/api/client';
 import { deleteFcmToken, flushPendingFcmToken } from '@/entities/user';
 import { clearLastFcmToken, getLastFcmToken } from '@/shared/rn-bridge/fcm-token-storage';
 import { isNativeShell, requestNativeRefreshToken } from '@/shared/rn-bridge/native-refresh-token';
+import { clearKakaoBind, readKakaoBind, startKakaoBind } from '../model/kakao-bind';
 import { clearSession, getStoredSession, storeSession } from '../model/session-storage';
 
 // ─── 이메일 가입 / 로그인 / 인증 / 재설정 ─────────────────────
@@ -62,6 +63,9 @@ export async function redirectToKakao(): Promise<void> {
     );
   }
   const startUrl = new URL(status.startUrl);
+  // 이 브라우저가 로그인을 시작했다는 증거. 서버가 해시를 교환 코드에 묶어, 남이 던진
+  // 코드로는 세션이 안 나오게 한다 (로그인 CSRF 차단). 없으면 서버가 시작 자체를 거절한다.
+  startUrl.searchParams.set('bind', startKakaoBind());
   // Android 앱에서 시작한 OAuth 는 서버가 최종 콜백을 package 지정 intent:// 로 돌려준다.
   // 검증된 App Link 가 사용자 설정으로 꺼져 있어도 시스템 브라우저에 세션이 갇히지 않는다.
   if (isNativeShell() && /Android/i.test(navigator.userAgent)) {
@@ -70,12 +74,22 @@ export async function redirectToKakao(): Promise<void> {
   window.location.href = startUrl.toString();
 }
 
-/** 콜백 URL 의 1회용 코드를 실제 세션으로 바꾼다. 코드는 서버에서 즉시 소비된다. */
+/**
+ * 콜백 URL 의 1회용 코드를 실제 세션으로 바꾼다. 코드는 서버에서 즉시 소비된다.
+ *
+ * 시작 때 보관한 bind 비밀을 같이 제시한다 — 서버가 코드에 실린 해시와 대조하므로,
+ * 남이 링크·딥링크로 던진 코드는 여기서 떨어진다. 성공·실패 모두 1회용이라 바로 비운다.
+ */
 export async function exchangeKakaoCode(code: string): Promise<LoginResponseDto> {
-  const session = await api.post<LoginResponseDto>('/auth/kakao/exchange', { code });
-  storeSession(session);
-  void flushPendingFcmToken();
-  return session;
+  const bind = readKakaoBind();
+  try {
+    const session = await api.post<LoginResponseDto>('/auth/kakao/exchange', { code, bind });
+    storeSession(session);
+    void flushPendingFcmToken();
+    return session;
+  } finally {
+    clearKakaoBind();
+  }
 }
 
 // ─── 세션 종료 / 토큰 갱신 ───────────────────────────────────
