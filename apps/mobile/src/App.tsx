@@ -144,6 +144,11 @@ type FileSaveNative = {
   saveBase64(fileName: string, mimeType: string, base64: string): Promise<string>;
 };
 const FileSave = (NativeModules.TripickFileSave ?? null) as FileSaveNative | null;
+
+// 설치된 앱 자신의 버전(versionName). 설정 화면이 웹 빌드 버전 대신 이걸 보여준다.
+// iOS 는 아직 모듈이 없어 null → 웹이 자기 빌드 버전으로 폴백한다.
+type AppInfoNative = { version?: string; build?: string };
+const AppInfo = (NativeModules.TripickAppInfo ?? null) as AppInfoNative | null;
 const LOCATION_EVENT = 'TripickLocationUpdate';
 const LOCATION_ERROR_EVENT = 'TripickLocationError';
 // 서버 위치 보고 최소 간격(ms). 미도착 판정은 분 단위라 과보고를 막는다(웹 스로틀과 동일).
@@ -606,6 +611,8 @@ export default function App() {
       return;
     }
     if (msg.type === 'WEB_READY') {
+      // 웹이 리스너를 붙였으니 앱 버전을 알려 준다(설정 화면 "버전" 표기용).
+      if (AppInfo?.version) postToWeb({ type: 'APP_VERSION', version: AppInfo.version });
       // 웹이 message 리스너를 붙인 시점 — 종료 상태 탭으로 보관해둔 라우팅을 이제 안전하게 전달.
       if (pendingTapRef.current) {
         dispatchNotificationTap(pendingTapRef.current);
