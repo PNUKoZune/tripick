@@ -11,9 +11,11 @@ import { Repository } from 'typeorm';
 import { randomBytes } from 'node:crypto';
 import { isUniqueViolation } from '../common/db-errors';
 import { StorageService } from '../storage/storage.service';
+import { extForMime, imageUploadRejection } from '../common/image-upload';
 import { FcmTokenService } from '../notification/fcm-token.service';
 import { RefreshTokenEntity } from '../auth/entities/refresh-token.entity';
 import { EmailTokenEntity } from '../auth/entities/email-token.entity';
+import { PreferenceEntity } from '../preferences/preference.entity';
 import { UserEntity } from './user.entity';
 import { WithdrawalReasonEntity } from './withdrawal-reason.entity';
 import { WithdrawUserDto } from './dto/withdraw-user.dto';
@@ -28,8 +30,8 @@ import {
   type WithdrawalReasonCode,
 } from '@tripick/types';
 
-const ALLOWED_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
+/** 프로필은 취향 사진(10MB)보다 작게 받는다 — 아바타 한 장에 그 이상은 필요 없다. */
+const MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_REASON_DETAIL_LENGTH = 500;
 
 export type PublicProfile = Omit<UserEntity, 'passwordHash'>;
@@ -47,6 +49,8 @@ export class UsersService {
     private readonly refreshTokens: Repository<RefreshTokenEntity>,
     @InjectRepository(EmailTokenEntity)
     private readonly emailTokens: Repository<EmailTokenEntity>,
+    @InjectRepository(PreferenceEntity)
+    private readonly preferences: Repository<PreferenceEntity>,
     private readonly storage: StorageService,
     private readonly fcmTokens: FcmTokenService,
   ) {}
@@ -319,11 +323,11 @@ export class UsersService {
     if (!this.storage.isReady()) {
       throw new ServiceUnavailableException('스토리지가 설정되지 않았습니다.');
     }
-    if (!ALLOWED_IMAGE_MIME.has(file.mimetype)) {
-      throw new BadRequestException('JPG, PNG, WebP 이미지만 업로드할 수 있어요.');
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      throw new BadRequestException('이미지 크기는 5MB 이하만 업로드할 수 있어요.');
+    // mimetype·크기뿐 아니라 실제 바이트가 그 포맷인지도 본다(공용 규칙).
+    // mimetype 은 클라이언트가 정하는 값인데 그대로 오브젝트 Content-Type 이 된다.
+    const rejection = imageUploadRejection(file, MAX_PROFILE_IMAGE_BYTES);
+    if (rejection) {
+      throw new BadRequestException(rejection);
     }
 
     const user = await this.findById(id);
@@ -396,12 +400,53 @@ export class UsersService {
    * 계정 + 세션 흔적 삭제. FK cascade 가 걸린 테이블은 자동으로 지워지지만, FK 없이 userId
    * 컬럼만 가진 테이블(fcm_tokens·refresh_tokens·email_tokens)은 여기서 직접 지운다 —
    * 특히 refresh 토큰이 남으면 탈퇴 후에도 /auth/refresh 가 계속 새 토큰을 발급한다.
+   *
+   * 업로드한 이미지도 함께 지운다. DB 밖(오브젝트 스토리지)이라 CASCADE 가 닿지 않고,
+   * 키가 익명 다운로드가 허용된 `public/` 프리픽스에 있어 그대로 두면 **탈퇴한 사용자의
+   * 취향 사진·프로필 이미지가 URL 만으로 계속 열린다.** 계정을 지운 뒤 남는 개인 사진은
+   * 삭제 요청을 이행하지 않은 것과 같다.
    */
   private async removeUser(user: UserEntity): Promise<void> {
+    // 행이 사라지면 키를 알 방법이 없으므로 DB 삭제 **전에** 읽어 둔다.
+    const { publicKeys, privateKeys } = await this.uploadedStorageKeys(user);
     await this.fcmTokens.removeAllForUser(user.id);
     await this.refreshTokens.delete({ userId: user.id });
     await this.emailTokens.delete({ userId: user.id });
     await this.repo.remove(user);
+    // 오브젝트 삭제 실패로 탈퇴를 되돌리지는 않는다 — 계정은 이미 지워졌고, 사용자에게
+    // 500 을 돌려주면 "탈퇴가 안 됐다"고 읽힌다. `allSettled` 로 여기서 직접 막는다:
+    // deleteObject 가 지금은 스스로 삼키지만, 그 구현에 기대면 나중에 던지도록 바뀔 때
+    // 탈퇴 응답이 조용히 500 이 된다.
+    const results = await Promise.allSettled([
+      ...publicKeys.map((key) => this.storage.deleteObject(key)),
+      ...privateKeys.map((key) => this.storage.deletePrivateObject(key)),
+    ]);
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        this.logger.warn(`탈퇴 정리 중 오브젝트 삭제 실패 (user=${user.id}): ${String(result.reason)}`);
+      }
+    }
+    const total = publicKeys.length + privateKeys.length;
+    if (total > 0) {
+      this.logger.log(`탈퇴 정리: 업로드 이미지 ${total}건 삭제 (user=${user.id})`);
+    }
+  }
+
+  /**
+   * 이 사용자가 올려 우리 스토리지에 있는 오브젝트 키 전체.
+   * 카카오 프로필처럼 외부 URL 은 `keyFromPublicUrl` 이 null 을 주므로 자연히 빠진다.
+   */
+  private async uploadedStorageKeys(
+    user: UserEntity,
+  ): Promise<{ publicKeys: string[]; privateKeys: string[] }> {
+    const preference = await this.preferences.findOne({ where: { userId: user.id } });
+    // 취향 사진은 비공개 버킷의 키가 그대로 저장돼 있다(URL 변환 불필요).
+    const privateKeys = [...new Set(preference?.photoKeys ?? [])];
+    // 프로필 이미지는 공개 버킷이고 값이 URL 이다. 카카오 등 외부 URL 은 null 이라 빠진다.
+    const profileKey = user.profileImageUrl
+      ? this.storage.keyFromPublicUrl(user.profileImageUrl)
+      : null;
+    return { publicKeys: profileKey ? [profileKey] : [], privateKeys };
   }
 
   /** 사유 적재는 탈퇴 자체를 막지 않는다 — 실패하면 로그만 남긴다(계정은 이미 삭제됨). */
@@ -441,13 +486,6 @@ function pickKnownPreferences(
 function daysSince(date: Date): number {
   const ageMs = Date.now() - new Date(date).getTime();
   return Math.max(0, Math.floor(ageMs / 86_400_000));
-}
-
-function extForMime(mime: string): string {
-  if (mime === 'image/jpeg') return 'jpg';
-  if (mime === 'image/png') return 'png';
-  if (mime === 'image/webp') return 'webp';
-  return 'bin';
 }
 
 const HANDLE_MAX_LENGTH = 20;

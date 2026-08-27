@@ -70,8 +70,10 @@ describe('RouteHelper', () => {
 
       await helper.getDrivingEta(SEOUL, BUSAN);
       const [, options] = mockedAxios.get.mock.calls[0]!;
-      expect(options?.params.origin).toBe(`${SEOUL.lng},${SEOUL.lat}`);
-      expect(options?.params.destination).toBe(`${BUSAN.lng},${BUSAN.lat}`);
+      // axios 1.20 부터 `params` 가 unknown 이라 형태를 명시해야 읽을 수 있다.
+      const params = options?.params as { origin: string; destination: string } | undefined;
+      expect(params?.origin).toBe(`${SEOUL.lng},${SEOUL.lat}`);
+      expect(params?.destination).toBe(`${BUSAN.lng},${BUSAN.lat}`);
       expect(options?.headers?.Authorization).toBe('KakaoAK k');
     });
 

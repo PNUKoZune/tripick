@@ -19,6 +19,7 @@ function harness(stored?: Record<string, unknown>) {
     null as any,
     null as any,
     null as any,
+    null as any,
   );
   return { service, user };
 }

@@ -12,6 +12,12 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Throttle } from '@nestjs/throttler';
+import {
+  LLM_GENERATION_LIMIT,
+  PLACE_LOOKUP_LIMIT,
+  RETRIEVAL_READ_LIMIT,
+} from '../common/throttle';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UserEntity } from '../users/user.entity';
 import { DestinationsService } from './destinations.service';
@@ -55,6 +61,8 @@ export class MainPlannerController {
   }
 
   @Post('trips')
+  // 생성 한 건이 일정 전체를 LLM 으로 만든다 (trips.controller 의 생성과 같은 비용).
+  @Throttle(LLM_GENERATION_LIMIT)
   @ApiOperation({ summary: '신규 여행 생성 및 일정 생성' })
   createTrip(@CurrentUser() user: UserEntity, @Body() dto: CreateTripRequestBodyDto) {
     return this.mainPlannerService.createTrip(user, dto);
@@ -73,6 +81,8 @@ export class MainPlannerController {
   }
 
   @Get('trips/:tripId/items/:itemId/alternatives')
+  // CRAG 검색 + 네이버·카카오 호출이 붙는다(읽기지만 외부 쿼터를 태운다).
+  @Throttle(RETRIEVAL_READ_LIMIT)
   @ApiOperation({ summary: '일정 항목 대안 추천 (취향 기반 CRAG, note: 사용자 조건)' })
   getAlternatives(
     @CurrentUser() user: UserEntity,
@@ -85,6 +95,7 @@ export class MainPlannerController {
 
   @Post('trips/:tripId/items/:itemId/resolve-place')
   @HttpCode(200)
+  @Throttle(PLACE_LOOKUP_LIMIT)
   @ApiOperation({ summary: '장소 이름 → 카카오 Local 실제 장소 해석 (확인용)' })
   resolvePlace(
     @CurrentUser() user: UserEntity,

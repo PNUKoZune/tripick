@@ -28,6 +28,7 @@ import { UserEntity } from './user.entity';
 import { WithdrawUserDto } from './dto/withdraw-user.dto';
 import { UpdateNotificationPreferencesBodyDto } from './dto/update-notification-preferences.dto';
 import { UpdateUserBodyDto } from './dto/update-user.dto';
+import { RemoveFcmTokenQueryDto, UpdateFcmTokenBodyDto } from './dto/fcm-token.dto';
 
 interface UploadedImage {
   buffer: Buffer;
@@ -70,10 +71,9 @@ export class UsersController {
   @ApiOperation({ summary: 'FCM 토큰 등록/갱신 (기기별 다건 지원)' })
   async updateFcmToken(
     @CurrentUser() user: UserEntity,
-    @Body('fcmToken') fcmToken: string,
-    @Body('platform') platform?: string,
+    @Body() dto: UpdateFcmTokenBodyDto,
   ) {
-    await this.fcmTokens.register(user.id, fcmToken, platform);
+    await this.fcmTokens.register(user.id, dto.fcmToken, dto.platform);
     return { success: true };
   }
 
@@ -81,9 +81,9 @@ export class UsersController {
   @ApiOperation({ summary: 'FCM 토큰 해제 (로그아웃/기기 정리)' })
   async removeFcmToken(
     @CurrentUser() user: UserEntity,
-    @Query('fcmToken') fcmToken: string,
+    @Query() query: RemoveFcmTokenQueryDto,
   ) {
-    await this.fcmTokens.removeForUser(user.id, fcmToken);
+    await this.fcmTokens.removeForUser(user.id, query.fcmToken);
     return { success: true };
   }
 

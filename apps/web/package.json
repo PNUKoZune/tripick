@@ -20,7 +20,7 @@
     "firebase": "^12.16.0",
     "html-to-image": "^1.11.13",
     "jspdf": "^4.2.1",
-    "next": "^16.2.4",
+    "next": "^16.3.3",
     "react": "^19.2.5",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.5",
@@ -33,7 +33,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "eslint": "^9.0.0",
-    "eslint-config-next": "^16.2.4",
+    "eslint-config-next": "^16.3.3",
     "postcss": "^8.4.47",
     "tailwindcss": "^4.2.4",
     "typescript": "^6.0.0"

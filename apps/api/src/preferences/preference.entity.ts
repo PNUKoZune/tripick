@@ -29,12 +29,18 @@ export class PreferenceEntity {
   @Column({ type: 'jsonb', default: '{}' })
   profile: PreferenceProfileDto;
 
-  /** 사용자가 올린 취향 원본 사진 URL (Object Storage) */
-  @Column({ type: 'jsonb', default: '[]' })
-  photoUrls: string[];
+  /**
+   * 사용자가 올린 취향 사진의 **비공개 버킷 키**.
+   *
+   * 컬럼명은 `photoUrls` 로 남겨 둔다(rename 마이그레이션 회피) — 담기는 값이 공개 URL 에서
+   * 스토리지 키로 바뀌었을 뿐이다. 표시용 URL 은 만료되는 서명 URL 이라 DB 에 둘 수 없다.
+   * `photoTags`·`disabledPhotoTags` 의 key 도 같은 스토리지 키다.
+   */
+  @Column({ type: 'jsonb', default: '[]', name: 'photoUrls' })
+  photoKeys: string[];
 
   /**
-   * 사진별 분석 결과 (key = 사진 URL).
+   * 사진별 분석 결과 (key = 스토리지 키).
    * 사진을 추가할 때 새 사진만 분석하고, 삭제할 때는 남은 사진으로 다시 집계하기 위해 보관한다.
    */
   @Column({ type: 'jsonb', default: '{}' })

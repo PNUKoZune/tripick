@@ -26,7 +26,7 @@ export class PreferenceAnalyzerProcessor extends WorkerHost {
   async process(
     job: Job<AnalyzePhotosJobData, AnalyzePhotosJobResult>,
   ): Promise<AnalyzePhotosJobResult> {
-    if (job.name !== ANALYZE_PHOTOS_JOB) return { analyzed: 0, photoUrls: [] };
+    if (job.name !== ANALYZE_PHOTOS_JOB) return { analyzed: 0, photoKeys: [] };
 
     const started = Date.now();
     const result = await this.analysisService.runJob(job);

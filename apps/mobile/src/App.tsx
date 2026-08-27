@@ -58,7 +58,6 @@ type BridgeMessage =
   | { type: 'STORE_REFRESH_TOKEN'; token: string }
   | { type: 'CLEAR_REFRESH_TOKEN' }
   | { type: 'REQUEST_REFRESH_TOKEN'; requestId: string }
-  | { type: 'OPEN_EXTERNAL'; url: string }
   | { type: 'WEB_READY' }
   | { type: 'NAV_STATE'; canGoBack: boolean }
   | { type: 'OVERLAY_STATE'; open: boolean }
@@ -103,6 +102,23 @@ function isTabRootUrl(url: string): boolean {
   }
 }
 
+/**
+ * 웹뷰 밖(시스템 브라우저·기본 앱)으로 넘겨도 되는 URL 인지.
+ *
+ * 페이지가 시작한 내비게이션은 전부 이 판정을 거친다 — 스킴을 안 보면 `intent://` 나
+ * 남의 앱 딥링크로 임의 앱을 띄우는 통로가 된다. 웹이 실제로 필요한 건 외부 https 링크와
+ * 문의용 `mailto:` 이고, `tel:` 은 같은 성질이라 함께 허용한다.
+ */
+const DELEGATABLE_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:']);
+
+function isDelegatableUrl(url: string): boolean {
+  try {
+    return DELEGATABLE_PROTOCOLS.has(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}
+
 function isInternalWebUrl(url: string): boolean {
   try {
     const origin = new URL(url).origin;
@@ -140,8 +156,6 @@ function getKakaoCallbackUrl(url: string): string | null {
   }
 }
 
-// react-native-webview 13.x 타입 union 에서 Android 전용 onPermissionRequest 가 빠져있다.
-// Platform 분기로 prop 을 객체에 모아 spread 하면 타입 충돌 없이 안드로이드에만 적용된다.
 // Android 전용 백그라운드 위치 추적 네이티브 모듈 (foreground service).
 // iOS 는 모듈이 없어 undefined → watchPosition 폴백을 사용한다.
 type LocationTrackingNative = { start(): void; stop(): void };
@@ -168,14 +182,6 @@ const LOCATION_REPORT_THROTTLE_MS = 60_000;
 // WebView localStorage 에 두던 장수 자격증명을 여기로 옮겨 검사·탈취 노출면을 줄인다.
 const REFRESH_TOKEN_SERVICE = 'place.tripick.refreshToken';
 const REFRESH_TOKEN_ACCOUNT = 'refreshToken';
-
-const androidOnlyProps =
-  Platform.OS === 'android'
-    ? {
-        onPermissionRequest: (request: { grant: (r: string[]) => void; resources: string[] }) =>
-          request.grant(request.resources),
-      }
-    : {};
 
 export default function App() {
   // 시스템 바 아이콘·셸 배경을 웹 팔레트(--app-bg)와 같은 명암으로 맞춘다.
@@ -659,10 +665,6 @@ export default function App() {
       saveFileToDownloads(msg.requestId, msg.fileName, msg.mimeType, msg.base64);
       return;
     }
-    if (msg.type === 'OPEN_EXTERNAL' && msg.url) {
-      Linking.openURL(msg.url).catch(() => undefined);
-      return;
-    }
     if (msg.type === 'WEB_READY') {
       // 웹이 첫 화면을 그리고 리스너까지 붙인 시점 — 이제 스플래시를 걷어도 빈 화면이 안 보인다.
       setWebPainted(true);
@@ -708,13 +710,22 @@ export default function App() {
           allowsBackForwardNavigationGestures
           // 사진은 <input type=file> → 네이티브 파일 선택 시트로만 올린다(getUserMedia 미사용)
           mediaPlaybackRequiresUserAction={false}
-          // Geolocation + Android 전용 권한 brige
+          // geolocation 권한은 JS 에서 손댈 게 없다 — 라이브러리 네이티브(RNCWebChromeClient)의
+          // onGeolocationPermissionsShowPrompt 가 ACCESS_FINE_LOCATION 을 직접 확인·요청한다.
+          // 예전엔 `onPermissionRequest` 로 요청 리소스를 통째로 grant 했는데, 그 이름은
+          // react-native-webview 13.16.1 의 JS prop 에 아예 없어 호출되지 않는 죽은 코드였다.
+          // 게다가 그 네이티브 콜백이 담당하는 건 geolocation 이 아니라 카메라·마이크·
+          // protected media 라, 살아 있었다면 페이지 안의 아무 스크립트에나 캡처 권한을
+          // 내주는 코드였다 — 되살리지 말 것.
           geolocationEnabled
-          {...androidOnlyProps}
           // 외부 도메인 진입 차단 → 시스템 브라우저로 위임
           onShouldStartLoadWithRequest={(request) => {
             if (isInternalWebUrl(request.url)) return true;
             if (request.url.startsWith('about:') || request.url === 'about:blank') return true;
+            // 넘길 수 있는 스킴만 넘긴다. 예전엔 URL 을 그대로 openURL 에 흘려서,
+            // 페이지가 만든 `intent://`·앱 딥링크로 임의의 다른 앱을 띄울 수 있었다.
+            // (웹이 실제로 쓰는 건 https 링크와 문의용 mailto 뿐이다)
+            if (!isDelegatableUrl(request.url)) return false;
             Linking.openURL(request.url).catch(() => undefined);
             return false;
           }}

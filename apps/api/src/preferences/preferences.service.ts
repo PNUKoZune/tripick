@@ -43,7 +43,7 @@ export class PreferencesService {
    * 태그가 그대로면 임베딩 텍스트도 그대로라 재임베딩(원격 호출)을 건너뛴다 —
    * 업로드 직후처럼 아직 분석 결과가 없는 시점에 upsert 를 쓰면 임베딩만 헛돈다.
    */
-  async setPhotoUrls(userId: string, urls: string[]): Promise<PreferenceEntity> {
+  async setPhotoKeys(userId: string, keys: string[]): Promise<PreferenceEntity> {
     const pref =
       (await this.repo.findOneBy({ userId })) ??
       this.repo.create({
@@ -52,10 +52,10 @@ export class PreferencesService {
         profile: { ...DEFAULT_PROFILE },
         photoTags: {},
       });
-    pref.photoUrls = urls;
+    pref.photoKeys = keys;
     // 남지 않은 사진의 분석 결과·비활성 설정은 버린다 — 재집계 대상에서 빠져야 한다.
-    pref.photoTags = pruneToPhotos(pref.photoTags ?? {}, urls);
-    pref.disabledPhotoTags = pruneToPhotos(pref.disabledPhotoTags ?? {}, urls);
+    pref.photoTags = pruneToPhotos(pref.photoTags ?? {}, keys);
+    pref.disabledPhotoTags = pruneToPhotos(pref.disabledPhotoTags ?? {}, keys);
     return this.repo.save(pref);
   }
 
@@ -108,8 +108,8 @@ export class PreferencesService {
       throw new BadRequestException('기상 시간과 취침 시간은 달라야 합니다.');
     }
 
-    // photoUrls / photoTags / disabledPhotoTags 는 지정된 경우에만 통째로 교체, 아니면 기존 유지
-    const nextPhotoUrls = dto?.photoUrls ?? pref?.photoUrls ?? [];
+    // photoKeys / photoTags / disabledPhotoTags 는 지정된 경우에만 통째로 교체, 아니면 기존 유지
+    const nextPhotoKeys = dto?.photoKeys ?? pref?.photoKeys ?? [];
     const nextPhotoTags = dto?.photoTags ?? pref?.photoTags ?? {};
     const nextDisabledPhotoTags = dto?.disabledPhotoTags ?? pref?.disabledPhotoTags ?? {};
 
@@ -118,14 +118,14 @@ export class PreferencesService {
         userId,
         tasteTags: nextTags,
         profile: nextProfile,
-        photoUrls: nextPhotoUrls,
+        photoKeys: nextPhotoKeys,
         photoTags: nextPhotoTags,
         disabledPhotoTags: nextDisabledPhotoTags,
       });
     } else {
       pref.tasteTags = nextTags;
       pref.profile = nextProfile;
-      pref.photoUrls = nextPhotoUrls;
+      pref.photoKeys = nextPhotoKeys;
       pref.photoTags = nextPhotoTags;
       pref.disabledPhotoTags = nextDisabledPhotoTags;
     }

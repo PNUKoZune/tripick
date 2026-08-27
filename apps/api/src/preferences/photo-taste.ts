@@ -18,7 +18,8 @@ import {
  */
 
 export interface PhotoTasteState {
-  photoUrls: string[];
+  /** 스토리지 키 목록. 태그 맵의 key 와 같은 값이다. */
+  photoKeys: string[];
   photoTags: Record<string, TasteTagDto>;
   disabledPhotoTags: Record<string, TasteTagValue[]>;
 }
@@ -40,17 +41,17 @@ function withoutDisabled(tags: TasteTagDto, disabled: readonly TasteTagValue[]):
  * 저장된 사진 목록에 없는 항목은 제외하고, 사용자가 끈 태그는 빼고 돌려준다.
  */
 export function effectivePhotoTags(state: PhotoTasteState): TasteTagDto[] {
-  return state.photoUrls
-    .filter((url) => state.photoTags[url])
-    .map((url) => withoutDisabled(state.photoTags[url] as TasteTagDto, state.disabledPhotoTags[url] ?? []));
+  return state.photoKeys
+    .filter((key) => state.photoTags[key])
+    .map((key) => withoutDisabled(state.photoTags[key] as TasteTagDto, state.disabledPhotoTags[key] ?? []));
 }
 
 /** 살아있는 사진 것만 남기고 나머지 키는 버린다 (사진 삭제 후 정리용). */
 export function pruneToPhotos<T>(
   record: Record<string, T>,
-  photoUrls: readonly string[],
+  photoKeys: readonly string[],
 ): Record<string, T> {
-  return Object.fromEntries(Object.entries(record).filter(([url]) => photoUrls.includes(url)));
+  return Object.fromEntries(Object.entries(record).filter(([key]) => photoKeys.includes(key)));
 }
 
 /** 사진에서 뽑힌 태그를 축 순서(food → mood → environment)대로 나열한다. */
@@ -64,13 +65,23 @@ export function tagsOf(tags: TasteTagDto): TasteTagValue[] {
   ];
 }
 
-/** 프론트에 내려줄 사진별 태그 on/off 목록. */
-export function buildPhotoTagsView(state: PhotoTasteState): PreferencePhotoTagsDto[] {
-  return state.photoUrls.map((url) => {
-    const analyzed = state.photoTags[url];
-    const off = new Set<string>(state.disabledPhotoTags[url] ?? []);
+/**
+ * 프론트에 내려줄 사진별 태그 on/off 목록.
+ *
+ * `urlByKey` 는 표시용 서명 URL 맵이다 — 서명은 만료되므로 이 함수가 불릴 때마다 새로
+ * 만들어 주입한다(DB 에 저장하지 않는다). 서명에 실패한 키는 빈 문자열로 남겨, 목록에서
+ * 사라지는 대신 그 자리에 이미지가 안 뜨는 형태가 되게 한다(태그 편집은 계속 가능).
+ */
+export function buildPhotoTagsView(
+  state: PhotoTasteState,
+  urlByKey: ReadonlyMap<string, string> = new Map(),
+): PreferencePhotoTagsDto[] {
+  return state.photoKeys.map((key) => {
+    const analyzed = state.photoTags[key];
+    const off = new Set<string>(state.disabledPhotoTags[key] ?? []);
     return {
-      url,
+      key,
+      url: urlByKey.get(key) ?? '',
       tags: analyzed
         ? tagsOf(analyzed).map((tag) => ({ tag, enabled: !off.has(tag) }))
         : [],

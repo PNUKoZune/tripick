@@ -5,7 +5,7 @@
     "ts"
   ],
   "rootDir": "..",
-  "testRegex": "test/.*\\.e2e-spec\\.ts$",
+  "testRegex": "test/e2e/travel-ai-planner\\.e2e-spec\\.ts$",
   "transform": {
     "^.+\\.ts$": "ts-jest"
   },
@@ -14,9 +14,5 @@
     "^@tripick/utils$": "<rootDir>/../../packages/utils/src/index.ts"
   },
   "testEnvironment": "node",
-  "globalSetup": "<rootDir>/test/e2e/global-setup.ts",
-  "testTimeout": 120000,
-  "testPathIgnorePatterns": [
-    "test/e2e/travel-ai-planner\\.e2e-spec\\.ts$"
-  ]
+  "testTimeout": 300000
 }

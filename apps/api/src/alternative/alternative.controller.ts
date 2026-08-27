@@ -1,5 +1,7 @@
 import { Controller, Post, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import { LLM_GENERATION_LIMIT } from '../common/throttle';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserEntity } from '../users/user.entity';
@@ -14,6 +16,7 @@ export class AlternativeController {
   constructor(private readonly replanningService: ReplanningService) {}
 
   @Post('deviation')
+  @Throttle(LLM_GENERATION_LIMIT)
   @ApiOperation({ summary: '경로 이탈 신고 → 재계획 트리거' })
   reportDeviation(@CurrentUser() user: UserEntity, @Body() dto: AlternativeReplanRequestBodyDto) {
     return this.replanningService.enqueue(user.id, {
@@ -23,6 +26,7 @@ export class AlternativeController {
   }
 
   @Post('request')
+  @Throttle(LLM_GENERATION_LIMIT)
   @ApiOperation({ summary: '사용자 재계획 요청 → 재계획 트리거 (기본 manual)' })
   requestReplan(@CurrentUser() user: UserEntity, @Body() dto: AlternativeReplanRequestBodyDto) {
     return this.replanningService.enqueue(user.id, {

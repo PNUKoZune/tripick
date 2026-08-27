@@ -8,16 +8,19 @@ export const ANALYZE_PHOTOS_JOB = 'analyze-photos';
  */
 export const ENQUEUE_TIMEOUT_MS = 10_000;
 
-/** 잡 페이로드 — 이미지 바이트는 Redis 에 싣지 않고 스토리지 키만 넘긴다. */
+/**
+ * 잡 페이로드 — 이미지 바이트는 Redis 에 싣지 않고 스토리지 키만 넘긴다.
+ *
+ * 예전엔 `photoUrls`(식별자 겸 표시용)와 `storageKeys`(원본 읽기용)를 나란히 실었는데,
+ * 사진이 비공개 버킷으로 옮겨져 식별자 자체가 키가 되면서 두 배열이 같아졌다 — 하나로 합쳤다.
+ */
 export interface AnalyzePhotosJobData {
   userId: string;
-  /** 이번에 업로드돼 분석 대상이 되는 사진 (공개 URL) */
-  photoUrls: string[];
-  /** 스토리지에서 원본을 다시 읽기 위한 키. photoUrls 와 같은 순서. */
-  storageKeys: string[];
+  /** 이번 잡이 분석할 사진의 비공개 버킷 키 */
+  photoKeys: string[];
 }
 
 export interface AnalyzePhotosJobResult {
   analyzed: number;
-  photoUrls: string[];
+  photoKeys: string[];
 }

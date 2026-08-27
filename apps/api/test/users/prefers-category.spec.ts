@@ -12,6 +12,7 @@ const service = new UsersService(
   null as any,
   null as any,
   null as any,
+  null as any,
 );
 
 function user(prefs?: Partial<NotificationPreferencesDto>): UserEntity {

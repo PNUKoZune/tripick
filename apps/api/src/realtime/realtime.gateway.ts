@@ -14,6 +14,7 @@ import { Server, Socket } from 'socket.io';
 import type { InboxToastDto, JwtPayload, ReplanResultDto } from '@tripick/types';
 import { TripMembersService } from '../trip-members/trip-members.service';
 import { corsOrigins } from '../common/cors';
+import { JWT_ALGORITHM } from '../common/jwt-secrets';
 
 /** 인증을 통과한 소켓의 client.data 에 담기는 사용자 정보 */
 interface AuthedSocketData {
@@ -62,7 +63,9 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     }
 
     try {
-      const payload = await this.jwtService.verifyAsync<JwtPayload>(token);
+      const payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
+        algorithms: [JWT_ALGORITHM],
+      });
       (client as AuthedSocket).data.user = payload;
       // 인증된 소켓은 자기 사용자 인박스 room 에 자동 합류한다 — 트립 room 과 달리
       // 멤버십 검증이 필요 없고(본인 채널), 새 알림 시 pushInboxInvalidate 로 이 room 에 쏜다.

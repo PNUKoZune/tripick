@@ -1,4 +1,12 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 import {
   NICKNAME_MAX_LENGTH,
@@ -55,9 +63,13 @@ export class EmailSignupBodyDto extends EmailBody implements EmailSignupDto {
 }
 
 export class EmailLoginBodyDto extends EmailBody implements EmailLoginDto {
-  // 로그인은 길이 규칙을 걸지 않는다 — 규칙이 바뀌기 전에 만든 비밀번호도 로그인은 돼야 한다.
+  // 로그인은 하한·조합 규칙을 걸지 않는다 — 규칙이 바뀌기 전에 만든 비밀번호도 로그인은 돼야 한다.
+  // 상한만 둔다: 없으면 본문 한도(100KB)까지 아무 길이나 bcrypt 로 들어간다.
+  // 값은 가입 상한(72)이 아니라 넉넉히 잡는다 — bcrypt 는 앞 72바이트만 쓰므로 그보다 긴
+  // 비밀번호로 만든 계정도 해시는 같다. 72 로 자르면 그런 사용자가 로그인을 못 하게 된다.
   @IsString()
   @IsNotEmpty({ message: '비밀번호를 입력해주세요.' })
+  @MaxLength(1024, { message: '비밀번호가 올바르지 않아요.' })
   password: string;
 }
 
@@ -86,6 +98,13 @@ export class KakaoExchangeBodyDto implements KakaoExchangeDto {
   @IsNotEmpty({ message: '로그인 코드가 없습니다.' })
   @MaxLength(512, { message: '로그인 코드가 올바르지 않습니다.' })
   code: string;
+
+  // 로그인을 시작한 브라우저만 아는 값. 서버가 해시로 대조해 코드를 그 브라우저에 묶는다.
+  // 길이 하한이 곧 추측 저항이라 형식까지 여기서 고정한다(컨트롤러 `isAcceptableBind` 와 같은 규칙).
+  @Transform(trim)
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{32,256}$/, { message: '로그인 요청이 올바르지 않습니다.' })
+  bind: string;
 }
 
 export class RefreshTokenBodyDto {
