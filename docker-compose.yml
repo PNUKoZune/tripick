@@ -1,3 +1,9 @@
+# 로컬 개발 인프라. **포트는 전부 127.0.0.1 에만 바인딩한다** —
+# `"5432:5432"` 는 0.0.0.0 바인딩이라 같은 네트워크(카페·회사 와이파이, WSL 호스트의 다른
+# 기기)의 누구나 접속할 수 있고, 여기 자격증명은 tripick/tripick·minioadmin 이고 Redis 는
+# 비밀번호가 아예 없다. 즉 DB·객체 스토리지·잡 큐가 그대로 열린다.
+# API·웹은 같은 호스트에서 돌므로 루프백으로 충분하다. 다른 기기에서 붙여야 할 때만
+# 그 포트를 일시적으로 열고, 열어 둔 채 커밋하지 말 것.
 services:
   # PostgreSQL + pgvector
   # 반드시 pgvector/pgvector:pg16 사용 (일반 postgres:16 사용 금지)
@@ -10,7 +16,7 @@ services:
       POSTGRES_PASSWORD: tripick
       POSTGRES_DB: tripick
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -26,7 +32,7 @@ services:
     container_name: tripick-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     command: redis-server --save 60 1 --loglevel warning
@@ -46,8 +52,8 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # Web Console
+      - "127.0.0.1:9000:9000"   # S3 API
+      - "127.0.0.1:9001:9001"   # Web Console
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"
@@ -64,8 +70,8 @@ services:
     container_name: tripick-mailpit
     restart: unless-stopped
     ports:
-      - "1025:1025"   # SMTP
-      - "8025:8025"   # Web UI
+      - "127.0.0.1:1025:1025"   # SMTP
+      - "127.0.0.1:8025:8025"   # Web UI
     environment:
       MP_MAX_MESSAGES: 5000
       MP_SMTP_AUTH_ACCEPT_ANY: 1

@@ -16,8 +16,6 @@ import {
   UseInterceptors,
   UploadedFiles,
   ParseFilePipe,
-  MaxFileSizeValidator,
-  FileTypeValidator,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
@@ -37,6 +35,7 @@ import {
 } from '../preferences/photo-taste';
 import { TogglePhotoTagBodyDto } from '../preferences/dto/preference.dto';
 import { VISION_UPLOAD_LIMIT } from '../common/throttle';
+import { ImageFileValidator, extForMime } from '../common/image-upload';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserEntity } from '../users/user.entity';
@@ -49,13 +48,6 @@ type UploadedImageFile = {
   mimetype: string;
   buffer: Buffer;
 };
-
-function extForMime(mime: string): string {
-  if (mime === 'image/jpeg') return 'jpg';
-  if (mime === 'image/png') return 'png';
-  if (mime === 'image/webp') return 'webp';
-  return 'bin';
-}
 
 @ApiTags('PreferenceAnalyzer')
 @ApiBearerAuth()
@@ -82,14 +74,9 @@ export class PreferenceAnalyzerController {
   @UseInterceptors(FilesInterceptor('images', MAX_PREFERENCE_PHOTOS))
   async uploadImages(
     @CurrentUser() user: UserEntity,
-    @UploadedFiles(
-      new ParseFilePipe({
-        validators: [
-          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }),
-          new FileTypeValidator({ fileType: /image\/(jpeg|png|webp)/ }),
-        ],
-      }),
-    )
+    // 크기·mimetype·매직바이트를 한 검증기에서 본다. 예전엔 앵커 없는 정규식이라
+    // `ximage/png` 같은 값도 통과했고, 실제 바이트가 이미지인지는 아무도 확인하지 않았다.
+    @UploadedFiles(new ParseFilePipe({ validators: [new ImageFileValidator()] }))
     files: UploadedImageFile[],
   ): Promise<PreferenceAnalysisJobDto> {
     if (files.length === 0) {

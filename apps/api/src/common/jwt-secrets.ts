@@ -8,6 +8,14 @@ import { ConfigService } from '@nestjs/config';
  * 그 순간 누구나 임의 userId 로 토큰을 위조할 수 있다 — 조용히 넘어가면 안 되는 실패다.
  * 개발에서는 지금까지처럼 폴백으로 그냥 뜬다.
  */
+/**
+ * 서명·검증에 쓰는 유일한 알고리즘. 검증 쪽에 `algorithms` 를 안 주면 jsonwebtoken 이
+ * "이 키로 검증 가능한 아무 알고리즘" 을 받아들인다 — 지금은 키가 문자열이라 HMAC 계열로
+ * 한정돼 실제 우회는 없지만, 키를 비대칭으로 바꾸는 날 알고리즘 혼동(공개키를 HMAC 비밀로
+ * 쓰는 위조)이 조용히 열린다. 값을 한 곳에 못 박아 그 문이 처음부터 없게 한다.
+ */
+export const JWT_ALGORITHM = 'HS256' as const;
+
 const DEV_ACCESS_SECRET = 'tripick-demo-jwt-secret';
 const DEV_REFRESH_SECRET = 'tripick-demo-refresh-secret';
 

@@ -18,7 +18,7 @@ import * as Sentry from '@sentry/nestjs';
 import { UsersService } from '../users/users.service';
 import { UserEntity } from '../users/user.entity';
 import { EmailService } from '../email/email.service';
-import { refreshTokenSecret } from '../common/jwt-secrets';
+import { JWT_ALGORITHM, refreshTokenSecret } from '../common/jwt-secrets';
 import { EmailTokenEntity, type EmailTokenPurpose } from './entities/email-token.entity';
 import { RefreshTokenEntity } from './entities/refresh-token.entity';
 import {
@@ -371,6 +371,7 @@ export class AuthService {
       { sub: userId, jti: generateRandomToken(16) },
       {
         secret: this.refreshSecret,
+        algorithm: JWT_ALGORITHM,
         expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN', '30d'),
       },
     );
@@ -401,6 +402,7 @@ export class AuthService {
     try {
       payload = this.jwtService.verify<{ sub: string }>(refreshToken, {
         secret: this.refreshSecret,
+        algorithms: [JWT_ALGORITHM],
       });
     } catch {
       throw new UnauthorizedException('Invalid refresh token');

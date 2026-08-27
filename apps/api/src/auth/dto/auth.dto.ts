@@ -63,9 +63,13 @@ export class EmailSignupBodyDto extends EmailBody implements EmailSignupDto {
 }
 
 export class EmailLoginBodyDto extends EmailBody implements EmailLoginDto {
-  // 로그인은 길이 규칙을 걸지 않는다 — 규칙이 바뀌기 전에 만든 비밀번호도 로그인은 돼야 한다.
+  // 로그인은 하한·조합 규칙을 걸지 않는다 — 규칙이 바뀌기 전에 만든 비밀번호도 로그인은 돼야 한다.
+  // 상한만 둔다: 없으면 본문 한도(100KB)까지 아무 길이나 bcrypt 로 들어간다.
+  // 값은 가입 상한(72)이 아니라 넉넉히 잡는다 — bcrypt 는 앞 72바이트만 쓰므로 그보다 긴
+  // 비밀번호로 만든 계정도 해시는 같다. 72 로 자르면 그런 사용자가 로그인을 못 하게 된다.
   @IsString()
   @IsNotEmpty({ message: '비밀번호를 입력해주세요.' })
+  @MaxLength(1024, { message: '비밀번호가 올바르지 않아요.' })
   password: string;
 }
 

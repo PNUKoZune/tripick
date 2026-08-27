@@ -174,6 +174,50 @@ describe('Users (e2e)', () => {
       expect(rows).toHaveLength(1);
     });
 
+    /**
+     * 예전엔 `@Body('fcmToken')`·`@Query('fcmToken')` 로 원시 값을 받아 전역
+     * ValidationPipe 를 아예 타지 않았다 — 길이·타입 검사가 없어 아무 값이나 그대로
+     * 저장됐고, 문자열이 아니면 서비스의 `token.trim()` 에서 500 이 났다.
+     */
+    it('rejects a non-string fcm token with 400 instead of crashing', async () => {
+      const uid = await newUser();
+      await http
+        .patch('/users/me/fcm-token')
+        .set('x-test-user-id', uid)
+        .send({ fcmToken: { evil: true } })
+        .expect(400);
+      await http
+        .patch('/users/me/fcm-token')
+        .set('x-test-user-id', uid)
+        .send({ fcmToken: 12345 })
+        .expect(400);
+    });
+
+    it('rejects an absurdly long fcm token', async () => {
+      const uid = await newUser();
+      await http
+        .patch('/users/me/fcm-token')
+        .set('x-test-user-id', uid)
+        .send({ fcmToken: 'a'.repeat(5000) })
+        .expect(400);
+      expect(await fcmTokens.count()).toBeGreaterThanOrEqual(0);
+    });
+
+    it('rejects an unknown platform value', async () => {
+      const uid = await newUser();
+      await http
+        .patch('/users/me/fcm-token')
+        .set('x-test-user-id', uid)
+        .send({ fcmToken: 'valid-looking-token', platform: 'nintendo' })
+        .expect(400);
+      expect(await fcmTokens.findOneBy({ token: 'valid-looking-token' })).toBeNull();
+    });
+
+    it('rejects a delete with no token instead of silently succeeding', async () => {
+      const uid = await newUser();
+      await http.delete('/users/me/fcm-token').set('x-test-user-id', uid).expect(400);
+    });
+
     it('removes the caller’s fcm token on logout', async () => {
       const uid = await newUser();
       await fcmTokens.save(fcmTokens.create({ userId: uid, token: 'logout-token' }));

@@ -11,6 +11,7 @@ import { Repository } from 'typeorm';
 import { randomBytes } from 'node:crypto';
 import { isUniqueViolation } from '../common/db-errors';
 import { StorageService } from '../storage/storage.service';
+import { extForMime, imageUploadRejection } from '../common/image-upload';
 import { FcmTokenService } from '../notification/fcm-token.service';
 import { RefreshTokenEntity } from '../auth/entities/refresh-token.entity';
 import { EmailTokenEntity } from '../auth/entities/email-token.entity';
@@ -29,8 +30,8 @@ import {
   type WithdrawalReasonCode,
 } from '@tripick/types';
 
-const ALLOWED_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
+/** 프로필은 취향 사진(10MB)보다 작게 받는다 — 아바타 한 장에 그 이상은 필요 없다. */
+const MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_REASON_DETAIL_LENGTH = 500;
 
 export type PublicProfile = Omit<UserEntity, 'passwordHash'>;
@@ -322,11 +323,11 @@ export class UsersService {
     if (!this.storage.isReady()) {
       throw new ServiceUnavailableException('스토리지가 설정되지 않았습니다.');
     }
-    if (!ALLOWED_IMAGE_MIME.has(file.mimetype)) {
-      throw new BadRequestException('JPG, PNG, WebP 이미지만 업로드할 수 있어요.');
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      throw new BadRequestException('이미지 크기는 5MB 이하만 업로드할 수 있어요.');
+    // mimetype·크기뿐 아니라 실제 바이트가 그 포맷인지도 본다(공용 규칙).
+    // mimetype 은 클라이언트가 정하는 값인데 그대로 오브젝트 Content-Type 이 된다.
+    const rejection = imageUploadRejection(file, MAX_PROFILE_IMAGE_BYTES);
+    if (rejection) {
+      throw new BadRequestException(rejection);
     }
 
     const user = await this.findById(id);
@@ -480,13 +481,6 @@ function pickKnownPreferences(
 function daysSince(date: Date): number {
   const ageMs = Date.now() - new Date(date).getTime();
   return Math.max(0, Math.floor(ageMs / 86_400_000));
-}
-
-function extForMime(mime: string): string {
-  if (mime === 'image/jpeg') return 'jpg';
-  if (mime === 'image/png') return 'png';
-  if (mime === 'image/webp') return 'webp';
-  return 'bin';
 }
 
 const HANDLE_MAX_LENGTH = 20;

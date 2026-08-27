@@ -58,7 +58,6 @@ type BridgeMessage =
   | { type: 'STORE_REFRESH_TOKEN'; token: string }
   | { type: 'CLEAR_REFRESH_TOKEN' }
   | { type: 'REQUEST_REFRESH_TOKEN'; requestId: string }
-  | { type: 'OPEN_EXTERNAL'; url: string }
   | { type: 'WEB_READY' }
   | { type: 'NAV_STATE'; canGoBack: boolean }
   | { type: 'OVERLAY_STATE'; open: boolean }
@@ -98,6 +97,23 @@ function isTabRootUrl(url: string): boolean {
     const { pathname } = new URL(url);
     const normalized = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
     return TAB_ROOT_PATHS.has(normalized);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 웹뷰 밖(시스템 브라우저·기본 앱)으로 넘겨도 되는 URL 인지.
+ *
+ * 페이지가 시작한 내비게이션은 전부 이 판정을 거친다 — 스킴을 안 보면 `intent://` 나
+ * 남의 앱 딥링크로 임의 앱을 띄우는 통로가 된다. 웹이 실제로 필요한 건 외부 https 링크와
+ * 문의용 `mailto:` 이고, `tel:` 은 같은 성질이라 함께 허용한다.
+ */
+const DELEGATABLE_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:']);
+
+function isDelegatableUrl(url: string): boolean {
+  try {
+    return DELEGATABLE_PROTOCOLS.has(new URL(url).protocol);
   } catch {
     return false;
   }
@@ -649,10 +665,6 @@ export default function App() {
       saveFileToDownloads(msg.requestId, msg.fileName, msg.mimeType, msg.base64);
       return;
     }
-    if (msg.type === 'OPEN_EXTERNAL' && msg.url) {
-      Linking.openURL(msg.url).catch(() => undefined);
-      return;
-    }
     if (msg.type === 'WEB_READY') {
       // 웹이 첫 화면을 그리고 리스너까지 붙인 시점 — 이제 스플래시를 걷어도 빈 화면이 안 보인다.
       setWebPainted(true);
@@ -710,6 +722,10 @@ export default function App() {
           onShouldStartLoadWithRequest={(request) => {
             if (isInternalWebUrl(request.url)) return true;
             if (request.url.startsWith('about:') || request.url === 'about:blank') return true;
+            // 넘길 수 있는 스킴만 넘긴다. 예전엔 URL 을 그대로 openURL 에 흘려서,
+            // 페이지가 만든 `intent://`·앱 딥링크로 임의의 다른 앱을 띄울 수 있었다.
+            // (웹이 실제로 쓰는 건 https 링크와 문의용 mailto 뿐이다)
+            if (!isDelegatableUrl(request.url)) return false;
             Linking.openURL(request.url).catch(() => undefined);
             return false;
           }}
