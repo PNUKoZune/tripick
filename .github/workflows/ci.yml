@@ -48,6 +48,49 @@ jobs:
       - name: 테스트
         run: pnpm turbo run test
 
+  e2e:
+    name: e2e (HTTP 계약 · 인가 경계)
+    runs-on: ubuntu-latest
+
+    # 유닛 테스트가 못 잡는 것을 잡는다 — 컨트롤러 배선, 가드·DTO 가 실제로 걸리는지,
+    # 서비스 생성자가 바뀔 때 모듈 조립이 깨지지 않는지.
+    # 이 잡이 없던 동안 `TripMembersService` 가 RealtimeGateway·InboxService 를 주입받게
+    # 바뀌면서 trip-members 스위트가 DI 실패로 통째로 죽어 있었는데 아무도 몰랐다.
+    services:
+      postgres:
+        # 일반 postgres 이미지는 안 된다 — 스키마에 vector 컬럼이 있다.
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: tripick
+          POSTGRES_PASSWORD: tripick
+          POSTGRES_DB: tripick
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tripick"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # global-setup 이 이 접속으로 붙어 테스트 전용 DB(tripick_test)를 만든다.
+      TEST_ADMIN_DATABASE_URL: postgresql://tripick:tripick@localhost:5432/tripick
+      TEST_DATABASE_URL: postgresql://tripick:tripick@localhost:5432/tripick_test
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # `test:e2e` 는 경량 스위트만 돈다. AppModule 전체 + 로컬 LLM 이 필요한
+      # travel-ai-planner 는 `test:integration` 으로 분리돼 있다(CI 에서 못 돌린다).
+      - name: e2e
+        run: pnpm --filter @tripick/api test:e2e
+
   migrations:
     name: 마이그레이션 (빈 DB → up → down → up)
     runs-on: ubuntu-latest

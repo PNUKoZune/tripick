@@ -22,7 +22,8 @@
     "migration:revert": "pnpm typeorm migration:revert",
     "migration:show": "pnpm typeorm migration:show",
     "test": "jest",
-    "test:e2e": "jest --config test/jest-e2e.json --runInBand --forceExit --silent"
+    "test:e2e": "jest --config test/jest-e2e.json --runInBand --forceExit --silent",
+    "test:integration": "jest --config test/jest-integration.json --runInBand --forceExit"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1073.0",
