@@ -1,0 +1,18 @@
+{
+  "moduleFileExtensions": [
+    "js",
+    "json",
+    "ts"
+  ],
+  "rootDir": "..",
+  "testRegex": "test/e2e/travel-ai-planner\\.e2e-spec\\.ts$",
+  "transform": {
+    "^.+\\.ts$": "ts-jest"
+  },
+  "moduleNameMapper": {
+    "^@tripick/types$": "<rootDir>/../../packages/types/src/index.ts",
+    "^@tripick/utils$": "<rootDir>/../../packages/utils/src/index.ts"
+  },
+  "testEnvironment": "node",
+  "testTimeout": 300000
+}

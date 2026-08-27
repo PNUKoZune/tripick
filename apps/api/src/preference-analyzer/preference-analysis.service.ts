@@ -6,6 +6,7 @@ import type {
   PreferenceAnalysisJobDto,
   PreferenceAnalysisStatus,
   TasteTagDto,
+  PreferencePhotoRefDto,
 } from '@tripick/types';
 import { VisionAnalyzer } from './vision.analyzer';
 import { PreferencesService } from '../preferences/preferences.service';
@@ -38,7 +39,7 @@ export class PreferenceAnalysisService {
    *
    * attempts·backoff 는 AppModule 의 defaultJobOptions 를 그대로 쓴다(재시도 정책 일원화).
    */
-  async enqueue(data: AnalyzePhotosJobData, allPhotoUrls: string[]): Promise<PreferenceAnalysisJobDto> {
+  async enqueue(data: AnalyzePhotosJobData, allPhotoKeys: string[]): Promise<PreferenceAnalysisJobDto> {
     // Redis 가 죽어 있으면 queue.add 는 던지지도 끝나지도 않아 업로드 요청이 그대로 매달린다.
     const job = await withTimeout(
       this.queue.add(ANALYZE_PHOTOS_JOB, data, {
@@ -62,9 +63,20 @@ export class PreferenceAnalysisService {
       jobId: String(job.id),
       status: 'queued',
       analyzed: 0,
-      total: data.photoUrls.length,
-      photoUrls: allPhotoUrls,
+      total: data.photoKeys.length,
+      photos: await this.signPhotos(allPhotoKeys),
     };
+  }
+
+  /**
+   * 키 목록에 표시용 서명 URL 을 붙인다. 서명은 만료되므로 **응답을 만들 때마다** 새로 만든다.
+   * 서명 실패는 목록에서 빼지 않고 빈 URL 로 남긴다 — 사진이 사라진 것처럼 보이면
+   * 사용자가 다시 올려서 중복이 쌓인다.
+   */
+  private async signPhotos(keys: string[]): Promise<PreferencePhotoRefDto[]> {
+    if (keys.length === 0) return [];
+    const urls = await this.storage.signedUrls(keys);
+    return keys.map((key, index) => ({ key, url: urls[index] ?? '' }));
   }
 
   /**
@@ -113,8 +125,8 @@ export class PreferenceAnalysisService {
       jobId: String(job.id),
       status: this.toStatus(state),
       analyzed: progress,
-      total: job.data.photoUrls.length,
-      photoUrls: preference?.photoUrls ?? [],
+      total: job.data.photoKeys.length,
+      photos: await this.signPhotos(preference?.photoKeys ?? []),
       ...(preference ? { tasteTags: preference.tasteTags } : {}),
       ...(state === 'failed' ? { error: job.failedReason ?? '분석에 실패했습니다.' } : {}),
     };
@@ -125,40 +137,37 @@ export class PreferenceAnalysisService {
    * 새로 올라온 사진만 분석하고, 이미 분석해 둔 사진 결과와 합쳐 최종 취향 태그를 다시 만든다.
    */
   async runJob(job: Job<AnalyzePhotosJobData, AnalyzePhotosJobResult>): Promise<AnalyzePhotosJobResult> {
-    const { userId, photoUrls, storageKeys } = job.data;
+    const { userId, photoKeys } = job.data;
 
     // 재시도로 다시 들어온 경우 이미 분석해 둔 사진은 건너뛴다 — 장당 35초라 전량 재분석은 비싸다.
     const before = await this.preferencesService.findByUser(userId);
     const done = before?.photoTags ?? {};
-    const pending = photoUrls
-      .map((url, index) => ({ url, key: storageKeys[index] }))
-      .filter((item): item is { url: string; key: string } => Boolean(item.url && item.key))
-      .filter((item) => !done[item.url]);
+    const pending = photoKeys.filter((key) => Boolean(key) && !done[key]);
 
-    let progress = photoUrls.length - pending.length;
+    let progress = photoKeys.length - pending.length;
     await job.updateProgress(progress);
 
     const analyzed: Record<string, TasteTagDto> = {};
     const failed: string[] = [];
 
-    for (const { url, key } of pending) {
-      const { body, contentType } = await this.storage.getObject(key);
+    for (const key of pending) {
+      const { body, contentType } = await this.storage.getPrivateObject(key);
       const dataUrl = `data:${contentType};base64,${body.toString('base64')}`;
       const result = await this.visionAnalyzer.analyzePhoto(dataUrl);
 
       // 실패는 기록하지 않는다 — 빈 태그로 저장하면 '분석 완료, 취향 없음'과 구분이 안 되고
       // 이후 잡이 이 사진을 건너뛰어 영영 무신호로 남는다.
       if (result.ok) {
-        analyzed[url] = result.tags;
+        analyzed[key] = result.tags;
         progress += 1;
         await job.updateProgress(progress);
       } else {
-        failed.push(url);
+        failed.push(key);
       }
     }
 
     // 성공분은 실패가 섞여 있어도 먼저 반영한다 — 재시도가 남은 사진만 다시 하도록.
-    const livePhotoUrls = await this.persistAnalyzed(userId, analyzed, photoUrls);
+    const livePhotoKeys = await this.persistAnalyzed(userId, analyzed, photoKeys);
 
     if (failed.length > 0) {
       // 마지막 시도까지 실패하면 사용자에게 알리고, 던져서 BullMQ 재시도를 트리거한다.
@@ -175,28 +184,28 @@ export class PreferenceAnalysisService {
       );
     }
 
-    return { analyzed: Object.keys(analyzed).length, photoUrls: livePhotoUrls };
+    return { analyzed: Object.keys(analyzed).length, photoKeys: livePhotoKeys };
   }
 
   /** 분석 결과를 기존 결과와 합쳐 저장하고, 살아있는 사진 목록을 돌려준다. */
   private async persistAnalyzed(
     userId: string,
     analyzed: Record<string, TasteTagDto>,
-    jobPhotoUrls: string[],
+    jobPhotoKeys: string[],
   ): Promise<string[]> {
     const preference = await this.preferencesService.findByUser(userId);
     // 저장된 사진 목록에 없는 결과는 버린다 (분석 중에 삭제된 사진).
-    const livePhotoUrls = preference?.photoUrls ?? jobPhotoUrls;
+    const livePhotoKeys = preference?.photoKeys ?? jobPhotoKeys;
     const livePhotoTags = pruneToPhotos(
       { ...(preference?.photoTags ?? {}), ...analyzed },
-      livePhotoUrls,
+      livePhotoKeys,
     );
-    const disabledPhotoTags = pruneToPhotos(preference?.disabledPhotoTags ?? {}, livePhotoUrls);
+    const disabledPhotoTags = pruneToPhotos(preference?.disabledPhotoTags ?? {}, livePhotoKeys);
 
     // 사용자가 꺼둔 태그는 집계에서 뺀다 — 새 사진을 올려도 기존 선택이 유지되어야 한다.
     const tasteTags = this.visionAnalyzer.aggregate(
       effectivePhotoTags({
-        photoUrls: livePhotoUrls,
+        photoKeys: livePhotoKeys,
         photoTags: livePhotoTags,
         disabledPhotoTags,
       }),
@@ -206,7 +215,7 @@ export class PreferenceAnalysisService {
       photoTags: livePhotoTags,
       disabledPhotoTags,
     });
-    return livePhotoUrls;
+    return livePhotoKeys;
   }
 
   private async currentTasteTags(userId: string): Promise<TasteTagDto> {

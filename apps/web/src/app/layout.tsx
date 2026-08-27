@@ -22,6 +22,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  // 노치·홈 인디케이터 영역까지 화면을 쓰고, 잘리면 안 되는 여백은 CSS 가
+  // `env(safe-area-inset-*)`(globals.css 의 --safe-top/--safe-bottom)로 직접 잡는다.
+  // 이게 없으면 env() 가 항상 0 이라 안전 영역 보정이 통째로 죽는다.
+  viewportFit: 'cover',
   // 브라우저·웹뷰 크롬 색. 단일 값으로 두면 화면이 다크로 넘어가도 상단 바만 흰색으로 남는다.
   // 값은 "광안리의 하루" 팔레트의 --bg (라이트 #F5F7FB / 다크 #0B111E) 와 맞춘다.
   themeColor: [

@@ -1,0 +1,4 @@
+<resources>
+    <!-- 웹 다크 팔레트의 app-bg 토큰과 동일 (#0B111E) -->
+    <color name="window_bg">#0B111E</color>
+</resources>

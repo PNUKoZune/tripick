@@ -112,13 +112,13 @@ iOS 는 반대로 사용 설명 문구가 없으면 접근하는 순간 크래�
 | Geolocation           | web 에서 `REQUEST_LOCATION` 메시지 받으면 `getCurrentPosition` 결과를 web 으로 주입|
 | Android 백버튼        | WebView 히스토리 있으면 `goBack()`, 없으면 OS 기본 동작(앱 종료)                  |
 | 외부 링크             | WebView origin 외 URL 은 `Linking.openURL` 로 시스템 브라우저 위임                |
-| Android geolocation   | `onPermissionRequest` 에서 `request.grant(request.resources)` — Platform 분기로 `androidOnlyProps` spread |
+| Android geolocation   | JS 처리 없음 — 라이브러리 네이티브 `onGeolocationPermissionsShowPrompt` 가 `ACCESS_FINE_LOCATION` 확인·요청 |
 | mixedContent          | `never` — Kakao Maps 는 https 만 요청하므로 안전                                  |
 
 ### 알려진 Fabric 제약
 
 - `decelerationRate` prop 은 RN 0.85 새 아키텍처에서 String→Double 자동 변환이 깨져 있다 → 사용 X (기본값으로 두기)
-- `onPermissionRequest` 는 react-native-webview 13.x 타입 union 에 빠져 있어 `Platform.OS === 'android'` 분기에서 별도 객체로 spread
+- `onPermissionRequest` 는 react-native-webview 13.16.1 의 JS prop 에 **아예 없다** — 넘겨도 호출되지 않는다. 예전엔 여기서 요청 리소스를 통째로 `grant` 했는데, 그 네이티브 콜백이 담당하는 건 geolocation 이 아니라 카메라·마이크·protected media 라 살아 있었다면 페이지 안의 아무 스크립트에나 캡처 권한을 내주는 코드였다. 네이티브 기본 구현이 Android 권한을 정상적으로 확인·요청하므로 prop 은 삭제했다
 
 ## 5. 브리지 메시지 규약
 

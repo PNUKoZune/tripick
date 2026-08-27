@@ -23,7 +23,7 @@ export function ProfileImageMenu({
       label="프로필 사진"
       align="bottom"
       onDismiss={pending ? undefined : onClose}
-      panelClassName="wvr-scope w-full max-w-[400px] overflow-hidden rounded-t-[20px] bg-[color:var(--card,#FFFFFF)] pb-[max(12px,env(safe-area-inset-bottom))] shadow-[0_24px_60px_rgba(15,23,42,0.22)] sm:rounded-[20px] sm:pb-3"
+      panelClassName="wvr-scope w-full max-w-[400px] overflow-hidden rounded-t-[20px] bg-[color:var(--card,#FFFFFF)] pb-[max(12px,var(--safe-bottom))] shadow-[0_24px_60px_rgba(15,23,42,0.22)] sm:rounded-[20px] sm:pb-3"
     >
       <div className="px-5 pb-2 pt-5">
         <h2 className="text-[16px] font-bold text-[color:var(--ink,#191F28)]">프로필 사진</h2>

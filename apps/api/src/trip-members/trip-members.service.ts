@@ -450,14 +450,19 @@ export class TripMembersService {
     const transportMode = this.vote(members, (member) => [member.preferenceTags.transportMode])[0];
     const budget = this.vote(members, (member) => [member.preferenceTags.budgetLevel])[0];
     const memberCount = members.length;
+    // 혼자 가는 여행은 "겹치는" 취향이 없다 — 같은 문구를 쓰면 "1명의 공통 취향" 같은 말이 나온다.
+    const solo = memberCount < 2;
+    const tasteSummary = [food?.label, mood?.label, environment?.label].filter(Boolean).join(' · ');
 
     return {
       title: `${environment?.label ?? '로컬'} 중심 ${food?.label ?? '맛집'} 코스`,
-      summary: `${memberCount}명의 공통 취향은 ${[food?.label, mood?.label, environment?.label]
-        .filter(Boolean)
-        .join(' · ')}입니다.`,
+      summary: solo
+        ? `내 취향은 ${tasteSummary}입니다.`
+        : `${memberCount}명의 공통 취향은 ${tasteSummary}입니다.`,
       reasons: [
-        `${food?.label ?? '식사'} 선호가 가장 많이 겹칩니다.`,
+        solo
+          ? `${food?.label ?? '식사'} 선호를 우선 반영합니다.`
+          : `${food?.label ?? '식사'} 선호가 가장 많이 겹칩니다.`,
         `${transportMode?.label ?? '대중교통'} 기준으로 이동 피로를 낮춥니다.`,
         `예산은 ${budget?.label ?? '중간'} 수준으로 맞춥니다.`,
       ],

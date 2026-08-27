@@ -7,7 +7,9 @@ import { useEffect } from 'react';
 import { updateFcmToken } from '@/entities/user';
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { getReactNativeWebView } from '@/shared/rn-bridge/rn-webview';
+import { isTrustedBridgeOrigin } from '@/shared/rn-bridge/bridge-origin';
 import { isNativeShell } from '@/shared/rn-bridge/native-refresh-token';
+import { setNativeAppVersion } from '@/shared/rn-bridge/native-app-version';
 import { persistSession } from '@/shared/lib/session-token';
 import { queryKeys } from '@/shared/api/query-keys';
 import { routeForNotification } from '@/shared/web-push/route';
@@ -23,7 +25,8 @@ type RnBridgeMessage =
   | { type: 'PUSH_NOTIFICATION'; data?: { data?: Record<string, string> } }
   | { type: 'NOTIFICATION_TAP'; data?: Record<string, string> }
   | { type: 'LOCATION_UPDATE'; lat: number; lng: number; accuracy?: number; timestamp?: number }
-  | { type: 'LOCATION_ERROR'; code: number; message: string };
+  | { type: 'LOCATION_ERROR'; code: number; message: string }
+  | { type: 'APP_VERSION'; version: string };
 
 /**
  * RN WebView → Web 브릿지 수신부.
@@ -41,7 +44,10 @@ export function useRnBridge() {
     if (typeof window === 'undefined') return;
 
     function handle(event: MessageEvent) {
-      // RN postMessage 는 string. 다른 origin/포맷의 메시지는 무시.
+      // 다른 창·프레임이 보낸 메시지는 버린다 — 이 검사가 없으면 우리를 iframe 으로 띄운
+      // 페이지가 FCM_TOKEN 을 던져 피해자 계정에 자기 기기 토큰을 등록시킬 수 있었다.
+      if (!isTrustedBridgeOrigin(event)) return;
+      // RN postMessage 는 string. 다른 포맷의 메시지는 무시.
       if (typeof event.data !== 'string') return;
       let msg: RnBridgeMessage | null = null;
       try {
@@ -64,6 +70,12 @@ export function useRnBridge() {
             clearPendingFcmToken();
           })
           .catch((err) => console.warn('[rn-bridge] fcm-token update failed:', err));
+        return;
+      }
+
+      if (msg.type === 'APP_VERSION' && msg.version) {
+        // 설정 "버전" 이 웹 빌드 버전 대신 설치된 앱 버전을 보여주게 한다.
+        setNativeAppVersion(msg.version);
         return;
       }
 

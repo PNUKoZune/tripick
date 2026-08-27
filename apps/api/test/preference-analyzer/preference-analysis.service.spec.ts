@@ -25,7 +25,8 @@ function makeService(overrides: {
   analyzePhoto?: jest.Mock;
   findByUser?: jest.Mock;
   upsert?: jest.Mock;
-  getObject?: jest.Mock;
+  getPrivateObject?: jest.Mock;
+  signedUrls?: jest.Mock;
   inboxCreate?: jest.Mock;
   queue?: Partial<{ add: jest.Mock; getJob: jest.Mock; getJobs: jest.Mock }>;
 } = {}) {
@@ -38,9 +39,14 @@ function makeService(overrides: {
     upsert: overrides.upsert ?? jest.fn().mockResolvedValue({}),
   };
   const storage = {
-    getObject:
-      overrides.getObject ??
+    getPrivateObject:
+      overrides.getPrivateObject ??
       jest.fn().mockResolvedValue({ body: Buffer.from('img'), contentType: 'image/png' }),
+    // 표시용 서명 URL. 실제 구현처럼 키 순서를 지켜 같은 길이 배열을 돌려준다 —
+    // 길이가 어긋나면 키와 URL 이 잘못 짝지어진다.
+    signedUrls:
+      overrides.signedUrls ??
+      jest.fn(async (keys: string[]) => keys.map((key) => `/storage-private/${key}?sig=x`)),
   };
   // 알림은 InboxService.create 로 발송한다 (구 FCM sendToUser 직접 호출에서 이관).
   const inbox = { create: overrides.inboxCreate ?? jest.fn().mockResolvedValue(undefined) };
@@ -81,38 +87,37 @@ describe('PreferenceAnalysisService.runJob', () => {
     const { service, storage } = makeService({
       analyzePhoto,
       findByUser: jest.fn().mockResolvedValue({
-        photoUrls: ['http://s/old.png', 'http://s/new.png'],
-        photoTags: { 'http://s/old.png': tags({ food: ['korean'], confidence: 0.6 }) },
+        photoKeys: ['preferences/u1/old.png', 'preferences/u1/new.png'],
+        photoTags: { 'preferences/u1/old.png': tags({ food: ['korean'], confidence: 0.6 }) },
       }),
     });
 
     await service.runJob(
       makeJob({
         userId: 'u1',
-        photoUrls: ['http://s/new.png'],
-        storageKeys: ['public/preferences/u1/new.png'],
+        photoKeys: ['preferences/u1/new.png'],
       }),
     );
 
     // 기존 사진은 다시 분석하지 않는다 — 장당 30초가 넘기 때문.
     expect(analyzePhoto).toHaveBeenCalledTimes(1);
-    expect(storage.getObject).toHaveBeenCalledWith('public/preferences/u1/new.png');
+    expect(storage.getPrivateObject).toHaveBeenCalledWith('preferences/u1/new.png');
   });
 
   it('re-aggregates taste tags across old and new photo results', async () => {
     const { service, preferencesService } = makeService({
       analyzePhoto: jest.fn().mockResolvedValue(ok({ food: ['korean'], confidence: 0.9 })),
       findByUser: jest.fn().mockResolvedValue({
-        photoUrls: ['http://s/a.png', 'http://s/b.png', 'http://s/c.png'],
+        photoKeys: ['preferences/u1/a.png', 'preferences/u1/b.png', 'preferences/u1/c.png'],
         photoTags: {
-          'http://s/a.png': tags({ food: ['korean'], mood: ['healing'], confidence: 0.7 }),
-          'http://s/b.png': tags({ food: ['korean'], mood: ['romantic'], confidence: 0.5 }),
+          'preferences/u1/a.png': tags({ food: ['korean'], mood: ['healing'], confidence: 0.7 }),
+          'preferences/u1/b.png': tags({ food: ['korean'], mood: ['romantic'], confidence: 0.5 }),
         },
       }),
     });
 
     await service.runJob(
-      makeJob({ userId: 'u1', photoUrls: ['http://s/c.png'], storageKeys: ['k/c.png'] }),
+      makeJob({ userId: 'u1', photoKeys: ['preferences/u1/c.png'] }),
     );
 
     const [, dto] = preferencesService.upsert.mock.calls[0];
@@ -127,17 +132,17 @@ describe('PreferenceAnalysisService.runJob', () => {
       analyzePhoto: jest.fn().mockResolvedValue(ok({ food: ['cafe'], confidence: 0.8 })),
       // 분석 도중 사용자가 새 사진을 지워 photoUrls 에서 빠진 상황
       findByUser: jest.fn().mockResolvedValue({
-        photoUrls: ['http://s/kept.png'],
-        photoTags: { 'http://s/kept.png': tags({ mood: ['healing'], confidence: 0.5 }) },
+        photoKeys: ['preferences/u1/kept.png'],
+        photoTags: { 'preferences/u1/kept.png': tags({ mood: ['healing'], confidence: 0.5 }) },
       }),
     });
 
     await service.runJob(
-      makeJob({ userId: 'u1', photoUrls: ['http://s/gone.png'], storageKeys: ['k/gone.png'] }),
+      makeJob({ userId: 'u1', photoKeys: ['preferences/u1/gone.png'] }),
     );
 
     const [, dto] = preferencesService.upsert.mock.calls[0];
-    expect(Object.keys(dto.photoTags)).toEqual(['http://s/kept.png']);
+    expect(Object.keys(dto.photoTags)).toEqual(['preferences/u1/kept.png']);
     expect(dto.tasteTags.food).toEqual([]);
   });
 
@@ -147,8 +152,7 @@ describe('PreferenceAnalysisService.runJob', () => {
     });
     const job = makeJob({
       userId: 'u1',
-      photoUrls: ['http://s/1.png', 'http://s/2.png'],
-      storageKeys: ['k/1.png', 'k/2.png'],
+      photoKeys: ['preferences/u1/1.png', 'preferences/u1/2.png'],
     });
 
     await service.runJob(job);
@@ -169,7 +173,7 @@ describe('PreferenceAnalysisService.runJob', () => {
         .mockResolvedValueOnce(failed()),
       findByUser: jest
         .fn()
-        .mockResolvedValue({ photoUrls: ['http://s/1.png', 'http://s/2.png'], photoTags: {} }),
+        .mockResolvedValue({ photoKeys: ['preferences/u1/1.png', 'preferences/u1/2.png'], photoTags: {} }),
       upsert,
     });
 
@@ -177,8 +181,7 @@ describe('PreferenceAnalysisService.runJob', () => {
       service.runJob(
         makeJob({
           userId: 'u1',
-          photoUrls: ['http://s/1.png', 'http://s/2.png'],
-          storageKeys: ['k/1.png', 'k/2.png'],
+          photoKeys: ['preferences/u1/1.png', 'preferences/u1/2.png'],
         }),
       ),
     ).rejects.toThrow(/분석 실패/);
@@ -186,7 +189,7 @@ describe('PreferenceAnalysisService.runJob', () => {
     // 성공분은 저장하되 실패한 사진은 photoTags 에 넣지 않는다 —
     // 빈 결과로 남으면 다음 잡이 건너뛰어 영영 무신호가 된다.
     const [, dto] = upsert.mock.calls[0];
-    expect(Object.keys(dto.photoTags)).toEqual(['http://s/1.png']);
+    expect(Object.keys(dto.photoTags)).toEqual(['preferences/u1/1.png']);
   });
 
   it('skips photos already analyzed by a previous attempt', async () => {
@@ -195,8 +198,8 @@ describe('PreferenceAnalysisService.runJob', () => {
       analyzePhoto,
       // 1번은 이전 시도에서 이미 분석됨
       findByUser: jest.fn().mockResolvedValue({
-        photoUrls: ['http://s/1.png', 'http://s/2.png'],
-        photoTags: { 'http://s/1.png': tags({ food: ['korean'], confidence: 0.7 }) },
+        photoKeys: ['preferences/u1/1.png', 'preferences/u1/2.png'],
+        photoTags: { 'preferences/u1/1.png': tags({ food: ['korean'], confidence: 0.7 }) },
       }),
     });
 
@@ -204,8 +207,7 @@ describe('PreferenceAnalysisService.runJob', () => {
       makeJob(
         {
           userId: 'u1',
-          photoUrls: ['http://s/1.png', 'http://s/2.png'],
-          storageKeys: ['k/1.png', 'k/2.png'],
+          photoKeys: ['preferences/u1/1.png', 'preferences/u1/2.png'],
         },
         1,
       ),
@@ -220,11 +222,11 @@ describe('PreferenceAnalysisService.runJob', () => {
     const build = (attemptsMade: number) =>
       makeService({
         analyzePhoto: jest.fn().mockResolvedValue(failed()),
-        findByUser: jest.fn().mockResolvedValue({ photoUrls: ['http://s/1.png'], photoTags: {} }),
+        findByUser: jest.fn().mockResolvedValue({ photoKeys: ['preferences/u1/1.png'], photoTags: {} }),
         inboxCreate,
       }).service.runJob(
         makeJob(
-          { userId: 'u1', photoUrls: ['http://s/1.png'], storageKeys: ['k/1.png'] },
+          { userId: 'u1', photoKeys: ['preferences/u1/1.png'] },
           attemptsMade,
         ),
       );
@@ -243,12 +245,12 @@ describe('PreferenceAnalysisService.runJob', () => {
     const inboxCreate = jest.fn().mockResolvedValue(undefined);
     const { service } = makeService({
       analyzePhoto: jest.fn().mockResolvedValue(ok({ food: ['cafe'], confidence: 0.8 })),
-      findByUser: jest.fn().mockResolvedValue({ photoUrls: ['http://s/1.png'], photoTags: {} }),
+      findByUser: jest.fn().mockResolvedValue({ photoKeys: ['preferences/u1/1.png'], photoTags: {} }),
       inboxCreate,
     });
 
     await service.runJob(
-      makeJob({ userId: 'u1', photoUrls: ['http://s/1.png'], storageKeys: ['k/1.png'] }),
+      makeJob({ userId: 'u1', photoKeys: ['preferences/u1/1.png'] }),
     );
 
     expect(inboxCreate).toHaveBeenCalledWith(
@@ -264,7 +266,7 @@ describe('PreferenceAnalysisService.enqueue', () => {
     });
 
     const result = await service.enqueue(
-      { userId: 'u1', photoUrls: ['a', 'b'], storageKeys: ['k/a', 'k/b'] },
+      { userId: 'u1', photoKeys: ['preferences/u1/a', 'preferences/u1/b'] },
       ['old', 'a', 'b'],
     );
 
@@ -275,7 +277,7 @@ describe('PreferenceAnalysisService.enqueue', () => {
     const add = jest.fn().mockResolvedValue({ id: 1 });
     const { service } = makeService({ queue: { add } });
 
-    await service.enqueue({ userId: 'u1', photoUrls: ['a'], storageKeys: ['k/a'] }, ['a']);
+    await service.enqueue({ userId: 'u1', photoKeys: ['preferences/u1/a'] }, ['a']);
 
     const [, , opts] = add.mock.calls[0];
     expect(opts).not.toHaveProperty('attempts');
@@ -289,7 +291,7 @@ describe('PreferenceAnalysisService.enqueue', () => {
     });
 
     await expect(
-      service.enqueue({ userId: 'u1', photoUrls: ['a'], storageKeys: ['k/a'] }, ['a']),
+      service.enqueue({ userId: 'u1', photoKeys: ['preferences/u1/a'] }, ['a']),
     ).rejects.toThrow(ServiceUnavailableException);
   }, 15000);
 });
@@ -297,11 +299,11 @@ describe('PreferenceAnalysisService.enqueue', () => {
 describe('PreferenceAnalysisService.getStatus', () => {
   it('maps bullmq states to job status', async () => {
     const { service } = makeService({
-      findByUser: jest.fn().mockResolvedValue({ photoUrls: [], tasteTags: tags() }),
+      findByUser: jest.fn().mockResolvedValue({ photoKeys: [], tasteTags: tags() }),
       queue: {
         getJob: jest.fn().mockResolvedValue({
           id: 'job-1',
-          data: { userId: 'u1', photoUrls: ['a', 'b'] },
+          data: { userId: 'u1', photoKeys: ['a', 'b'] },
           progress: 1,
           getState: jest.fn().mockResolvedValue('active'),
         }),
@@ -320,7 +322,7 @@ describe('PreferenceAnalysisService.getStatus', () => {
       queue: {
         getJob: jest.fn().mockResolvedValue({
           id: 'job-1',
-          data: { userId: 'u1', photoUrls: ['a'] },
+          data: { userId: 'u1', photoKeys: ['a'] },
           progress: 0,
           getState: jest.fn().mockResolvedValue('active'),
         }),
@@ -336,11 +338,11 @@ describe('PreferenceAnalysisService.getStatus', () => {
   it('returns the final taste tags once completed', async () => {
     const finalTags = tags({ food: ['cafe'], confidence: 0.8 });
     const { service } = makeService({
-      findByUser: jest.fn().mockResolvedValue({ photoUrls: ['a'], tasteTags: finalTags }),
+      findByUser: jest.fn().mockResolvedValue({ photoKeys: ['a'], tasteTags: finalTags }),
       queue: {
         getJob: jest.fn().mockResolvedValue({
           id: 'job-1',
-          data: { userId: 'u1', photoUrls: ['a'] },
+          data: { userId: 'u1', photoKeys: ['a'] },
           progress: 1,
           getState: jest.fn().mockResolvedValue('completed'),
         }),
@@ -358,7 +360,7 @@ describe('PreferenceAnalysisService.getStatus', () => {
       queue: {
         getJob: jest.fn().mockResolvedValue({
           id: 'job-1',
-          data: { userId: 'someone-else', photoUrls: ['a'] },
+          data: { userId: 'someone-else', photoKeys: ['a'] },
           getState: jest.fn().mockResolvedValue('active'),
         }),
       },
@@ -375,11 +377,11 @@ describe('PreferenceAnalysisService.getStatus', () => {
 
   it('surfaces the failure reason', async () => {
     const { service } = makeService({
-      findByUser: jest.fn().mockResolvedValue({ photoUrls: [], tasteTags: tags() }),
+      findByUser: jest.fn().mockResolvedValue({ photoKeys: [], tasteTags: tags() }),
       queue: {
         getJob: jest.fn().mockResolvedValue({
           id: 'job-1',
-          data: { userId: 'u1', photoUrls: ['a'] },
+          data: { userId: 'u1', photoKeys: ['a'] },
           progress: 0,
           failedReason: 'storage unreachable',
           getState: jest.fn().mockResolvedValue('failed'),
@@ -397,7 +399,7 @@ describe('PreferenceAnalysisService.findActiveJob', () => {
   function pendingJob(userId: string, id = 'job-live') {
     return {
       id,
-      data: { userId, photoUrls: ['a', 'b'] },
+      data: { userId, photoKeys: ['a', 'b'] },
       progress: 1,
       getState: jest.fn().mockResolvedValue('active'),
     };

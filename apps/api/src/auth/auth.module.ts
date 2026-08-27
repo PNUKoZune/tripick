@@ -12,7 +12,7 @@ import { RefreshTokenEntity } from './entities/refresh-token.entity';
 import { EmailTokenEntity } from './entities/email-token.entity';
 import { UsersModule } from '../users/users.module';
 import { EmailModule } from '../email/email.module';
-import { accessTokenSecret } from '../common/jwt-secrets';
+import { JWT_ALGORITHM, accessTokenSecret } from '../common/jwt-secrets';
 
 @Module({
   imports: [
@@ -24,7 +24,10 @@ import { accessTokenSecret } from '../common/jwt-secrets';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: accessTokenSecret(config),
-        signOptions: { expiresIn: config.get('JWT_EXPIRES_IN', '7d') },
+        signOptions: {
+          algorithm: JWT_ALGORITHM,
+          expiresIn: config.get('JWT_EXPIRES_IN', '7d'),
+        },
       }),
     }),
   ],

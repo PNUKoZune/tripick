@@ -22,10 +22,13 @@
     "migration:revert": "pnpm typeorm migration:revert",
     "migration:show": "pnpm typeorm migration:show",
     "test": "jest",
-    "test:e2e": "jest --config test/jest-e2e.json --runInBand --forceExit --silent"
+    "test:e2e": "jest --config test/jest-e2e.json --runInBand --forceExit --silent",
+    "test:integration": "jest --config test/jest-integration.json --runInBand --forceExit",
+    "migrate:photo-objects": "ts-node -r tsconfig-paths/register src/scripts/migrate-photo-objects.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1073.0",
+    "@aws-sdk/client-s3": "^3.1119.0",
+    "@aws-sdk/s3-request-presigner": "^3.1119.0",
     "@nest-lab/throttler-storage-redis": "^1.2.0",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.1.19",
@@ -44,7 +47,7 @@
     "@tripick/types": "workspace:*",
     "@tripick/utils": "workspace:*",
     "@types/multer": "^2.1.0",
-    "axios": "^1.16.0",
+    "axios": "^1.20.0",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.76.5",
     "class-transformer": "^0.5.1",
@@ -61,7 +64,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "socket.io": "^4.8.3",
-    "typeorm": "^0.3.28"
+    "typeorm": "^0.3.31"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.21",

@@ -5,6 +5,7 @@ import { LuX } from 'react-icons/lu';
 
 import { useBodyScrollLock } from '@/shared/lib/use-body-scroll-lock';
 import { useDismissOnEscape } from '@/shared/lib/use-dismiss-on-escape';
+import { useOverlayBackDismiss } from '@/shared/lib/use-overlay-back-dismiss';
 import { useFocusTrap } from '@/shared/lib/use-focus-trap';
 
 type Props = {
@@ -22,6 +23,7 @@ export function ImageLightbox({ src, label = '이미지 확대 보기', onClose 
   const panelRef = useFocusTrap<HTMLDivElement>();
   useBodyScrollLock();
   useDismissOnEscape(onClose);
+  useOverlayBackDismiss(onClose, true);
 
   // 조상의 transform·filter 에 fixed 오버레이가 갇히지 않게 body 로 포털.
   if (typeof document === 'undefined') return null;

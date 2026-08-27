@@ -16,7 +16,7 @@ function tags(partial: Partial<TasteTagDto> = {}): TasteTagDto {
 describe('effectivePhotoTags', () => {
   it('excludes tags the user turned off', () => {
     const result = effectivePhotoTags({
-      photoUrls: ['a'],
+      photoKeys: ['a'],
       photoTags: { a: tags({ food: ['cafe'], mood: ['healing'], confidence: 0.8 }) },
       disabledPhotoTags: { a: ['healing'] },
     });
@@ -26,7 +26,7 @@ describe('effectivePhotoTags', () => {
 
   it('keeps the analysis result intact so re-enabling restores it', () => {
     const photoTags = { a: tags({ food: ['cafe'], confidence: 0.8 }) };
-    effectivePhotoTags({ photoUrls: ['a'], photoTags, disabledPhotoTags: { a: ['cafe'] } });
+    effectivePhotoTags({ photoKeys: ['a'], photoTags, disabledPhotoTags: { a: ['cafe'] } });
 
     // 원본은 그대로여야 다시 켰을 때 살아난다
     expect(photoTags.a.food).toEqual(['cafe']);
@@ -34,7 +34,7 @@ describe('effectivePhotoTags', () => {
 
   it('turns a photo into a no-signal entry when every tag is off', () => {
     const result = effectivePhotoTags({
-      photoUrls: ['a'],
+      photoKeys: ['a'],
       photoTags: { a: tags({ food: ['cafe'], confidence: 0.8 }) },
       disabledPhotoTags: { a: ['cafe'] },
     });
@@ -44,7 +44,7 @@ describe('effectivePhotoTags', () => {
 
   it('skips photos that are no longer stored', () => {
     const result = effectivePhotoTags({
-      photoUrls: ['a'],
+      photoKeys: ['a'],
       photoTags: { a: tags({ food: ['cafe'] }), gone: tags({ food: ['korean'] }) },
       disabledPhotoTags: {},
     });
@@ -80,16 +80,45 @@ describe('toggleDisabledTag', () => {
 });
 
 describe('buildPhotoTagsView', () => {
+  // 표시용 URL 은 만료되는 서명 URL 이라 DB 에 없다 — 응답을 만들 때마다 주입한다.
+  it('주입된 서명 URL 을 키에 짝지어 내린다', () => {
+    const view = buildPhotoTagsView(
+      { photoKeys: ['k1', 'k2'], photoTags: {}, disabledPhotoTags: {} },
+      new Map([
+        ['k1', '/storage-private/k1?sig=1'],
+        ['k2', '/storage-private/k2?sig=2'],
+      ]),
+    );
+
+    expect(view.map((photo) => [photo.key, photo.url])).toEqual([
+      ['k1', '/storage-private/k1?sig=1'],
+      ['k2', '/storage-private/k2?sig=2'],
+    ]);
+  });
+
+  // 서명 실패를 목록에서 빼면 사진이 사라진 것처럼 보여 사용자가 다시 올려 중복이 쌓인다.
+  it('서명이 없는 키도 목록에 남긴다 (빈 URL)', () => {
+    const view = buildPhotoTagsView(
+      { photoKeys: ['k1', 'k2'], photoTags: {}, disabledPhotoTags: {} },
+      new Map([['k1', '/storage-private/k1?sig=1']]),
+    );
+
+    expect(view).toHaveLength(2);
+    expect(view[1]).toMatchObject({ key: 'k2', url: '' });
+  });
+
   it('reports each analyzed tag with its on/off state', () => {
     const view = buildPhotoTagsView({
-      photoUrls: ['a'],
+      photoKeys: ['a'],
       photoTags: { a: tags({ food: ['cafe'], mood: ['healing'], environment: ['beach'] }) },
       disabledPhotoTags: { a: ['healing'] },
     });
 
     expect(view).toEqual([
       {
-        url: 'a',
+        key: 'a',
+        // 표시용 URL 은 주입받는다 — 안 주면 빈 문자열(이미지만 안 뜨고 태그 편집은 가능).
+        url: '',
         analyzed: true,
         tags: [
           { tag: 'cafe', enabled: true },
@@ -102,23 +131,23 @@ describe('buildPhotoTagsView', () => {
 
   it('returns an empty tag list for a photo with no analysis yet', () => {
     const view = buildPhotoTagsView({
-      photoUrls: ['pending'],
+      photoKeys: ['pending'],
       photoTags: {},
       disabledPhotoTags: {},
     });
 
     // 화면이 "취향 없음" 과 "아직 분석 안 됨" 을 구분해야 해서 analyzed 를 따로 내린다
-    expect(view).toEqual([{ url: 'pending', analyzed: false, tags: [] }]);
+    expect(view).toEqual([{ key: 'pending', url: '', analyzed: false, tags: [] }]);
   });
 
   it('marks an analyzed photo that produced no tags as analyzed', () => {
     const view = buildPhotoTagsView({
-      photoUrls: ['empty'],
+      photoKeys: ['empty'],
       photoTags: { empty: tags() },
       disabledPhotoTags: {},
     });
 
-    expect(view).toEqual([{ url: 'empty', analyzed: true, tags: [] }]);
+    expect(view).toEqual([{ key: 'empty', url: '', analyzed: true, tags: [] }]);
   });
 });
 

@@ -456,7 +456,7 @@ function PlannerContent({
     <div className="wvr-scope min-h-dvh overflow-x-clip bg-[color:var(--bg)]">
       {/* < lg : phone shell (모바일 우선) — 대상 화면(결과) 범위: wvr-scope 로컬 팔레트 */}
       <div
-        className={`wvr-scope ${pageInClass} mx-auto min-h-dvh max-w-[430px] pb-[88px] lg:hidden`}
+        className={`wvr-scope ${pageInClass} mx-auto min-h-dvh max-w-[430px] pb-[calc(168px+var(--fab-reserve)+var(--safe-bottom))] lg:hidden`}
       >
         <PlannerHeader
           title={trip?.title ?? (isResolvingTrip ? '여행 찾는 중' : '여행을 먼저 만들어주세요')}
@@ -470,7 +470,10 @@ function PlannerContent({
         {/* 요약 카드는 모바일에선 "정보" 탭 안으로 넣는다 — 좁은 화면에서 지도·일정보다
             위에 두면 첫 화면이 요약으로 차서 정작 오늘 일정이 스크롤 밖으로 밀린다.
             데스크탑은 사이드바 상단(compact)에 그대로 남는다. */}
-        {trip ? (
+        {/* "지도" 탭은 자기 지도(4:5 + 마커 선택)를 그리므로 상단 미리보기를 걷어낸다 —
+            둘 다 두면 좁은 화면을 같은 지도 두 장이 차지한다. 검색·길찾기 오버레이는
+            그 탭 지도로 옮겨 붙여 기능은 그대로다. */}
+        {tab === 'map' ? null : trip ? (
           <PlannerMap
             placeholder={trip.searchPlaceholder}
             center={mapCenter}
@@ -526,7 +529,13 @@ function PlannerContent({
               </>
             ) : null}
             {tab === 'map' && trip ? (
-              <TripMapPanel trip={trip} items={itemsForDay} onSelectItem={setOpenItem} />
+              <TripMapPanel
+                trip={trip}
+                items={itemsForDay}
+                onSelectItem={setOpenItem}
+                onPickSearchPlace={handlePickSearchPlace}
+                pickPlaceLabel={pickPlaceLabel}
+              />
             ) : null}
             {tab === 'info' && trip ? (
               <>
@@ -549,7 +558,9 @@ function PlannerContent({
               aria-label="AI 재계획"
               onClick={() => openReplan('manual')}
               className={`fixed z-20 flex size-14 items-center justify-center rounded-full text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] active:translate-y-px lg:hidden ${
-                activeTrip ? 'bottom-[152px]' : 'bottom-[96px]'
+                activeTrip
+                  ? 'bottom-[calc(152px+var(--safe-bottom))]'
+                  : 'bottom-[calc(96px+var(--safe-bottom))]'
               }`}
               style={{
                 right: 'max(20px, calc((100vw - 430px) / 2 + 20px))',
@@ -883,7 +894,7 @@ function PlannerContent({
       {/* 알림(날씨·혼잡·미도착) 딥링크로 열린 경우에만 뜨는 비침습 배너.
           두 반응형 레이아웃 공통으로 상단 중앙에 떠 있고, 닫으면 그냥 일정을 본다. */}
       {alertBanner && alertBanner !== 'manual' && trip ? (
-        <div className="fixed left-1/2 top-3 z-40 w-[calc(100%-24px)] max-w-[420px] -translate-x-1/2">
+        <div className="fixed left-1/2 top-[calc(12px+var(--safe-top))] z-40 w-[calc(100%-24px)] max-w-[420px] -translate-x-1/2">
           <div className="flex items-start gap-3 rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] p-3.5 shadow-[var(--shadow-btn)]">
             {(() => {
               const BannerIcon = REPLAN_BANNER_COPY[alertBanner].Icon;

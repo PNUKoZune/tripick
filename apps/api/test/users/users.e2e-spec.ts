@@ -12,6 +12,7 @@ import { UsersService } from '../../src/users/users.service';
 import { FcmTokenEntity } from '../../src/notification/fcm-token.entity';
 import { RefreshTokenEntity } from '../../src/auth/entities/refresh-token.entity';
 import { EmailTokenEntity } from '../../src/auth/entities/email-token.entity';
+import { PreferenceEntity } from '../../src/preferences/preference.entity';
 import { FcmTokenService } from '../../src/notification/fcm-token.service';
 import { StorageService } from '../../src/storage/storage.service';
 import { JwtAuthGuard } from '../../src/auth/guards/jwt-auth.guard';
@@ -24,12 +25,15 @@ describe('Users (e2e)', () => {
   let withdrawals: Repository<WithdrawalReasonEntity>;
   let refreshTokens: Repository<RefreshTokenEntity>;
   let emailTokens: Repository<EmailTokenEntity>;
+  let preferences: Repository<PreferenceEntity>;
   let service: UsersService;
   // 스토리지 미설정 상태를 흉내내 업로드 503 경로를 검증한다.
   const storage = {
     isReady: jest.fn().mockReturnValue(false),
     putObject: jest.fn(),
     deleteObject: jest.fn(),
+    // 취향 사진은 비공개 버킷이라 삭제 경로가 따로다.
+    deletePrivateObject: jest.fn(),
     keyFromPublicUrl: jest.fn().mockReturnValue(null),
   };
 
@@ -41,6 +45,7 @@ describe('Users (e2e)', () => {
         WithdrawalReasonEntity,
         RefreshTokenEntity,
         EmailTokenEntity,
+        PreferenceEntity,
       ],
       controllers: [UsersController],
       providers: [
@@ -56,6 +61,7 @@ describe('Users (e2e)', () => {
     withdrawals = app.get(getRepositoryToken(WithdrawalReasonEntity));
     refreshTokens = app.get(getRepositoryToken(RefreshTokenEntity));
     emailTokens = app.get(getRepositoryToken(EmailTokenEntity));
+    preferences = app.get(getRepositoryToken(PreferenceEntity));
     service = app.get(UsersService);
   });
 
@@ -170,6 +176,50 @@ describe('Users (e2e)', () => {
       expect(rows).toHaveLength(1);
     });
 
+    /**
+     * 예전엔 `@Body('fcmToken')`·`@Query('fcmToken')` 로 원시 값을 받아 전역
+     * ValidationPipe 를 아예 타지 않았다 — 길이·타입 검사가 없어 아무 값이나 그대로
+     * 저장됐고, 문자열이 아니면 서비스의 `token.trim()` 에서 500 이 났다.
+     */
+    it('rejects a non-string fcm token with 400 instead of crashing', async () => {
+      const uid = await newUser();
+      await http
+        .patch('/users/me/fcm-token')
+        .set('x-test-user-id', uid)
+        .send({ fcmToken: { evil: true } })
+        .expect(400);
+      await http
+        .patch('/users/me/fcm-token')
+        .set('x-test-user-id', uid)
+        .send({ fcmToken: 12345 })
+        .expect(400);
+    });
+
+    it('rejects an absurdly long fcm token', async () => {
+      const uid = await newUser();
+      await http
+        .patch('/users/me/fcm-token')
+        .set('x-test-user-id', uid)
+        .send({ fcmToken: 'a'.repeat(5000) })
+        .expect(400);
+      expect(await fcmTokens.count()).toBeGreaterThanOrEqual(0);
+    });
+
+    it('rejects an unknown platform value', async () => {
+      const uid = await newUser();
+      await http
+        .patch('/users/me/fcm-token')
+        .set('x-test-user-id', uid)
+        .send({ fcmToken: 'valid-looking-token', platform: 'nintendo' })
+        .expect(400);
+      expect(await fcmTokens.findOneBy({ token: 'valid-looking-token' })).toBeNull();
+    });
+
+    it('rejects a delete with no token instead of silently succeeding', async () => {
+      const uid = await newUser();
+      await http.delete('/users/me/fcm-token').set('x-test-user-id', uid).expect(400);
+    });
+
     it('removes the caller’s fcm token on logout', async () => {
       const uid = await newUser();
       await fcmTokens.save(fcmTokens.create({ userId: uid, token: 'logout-token' }));
@@ -272,6 +322,76 @@ describe('Users (e2e)', () => {
         .expect(400);
 
       expect(await users.findOneBy({ id: uid })).not.toBeNull();
+    });
+
+    /**
+     * 업로드 이미지는 DB 밖(오브젝트 스토리지)이라 CASCADE 가 닿지 않는다. 안 지우면
+     * 탈퇴한 사용자의 개인 사진이 남는다. 버킷이 갈려 있어 삭제 경로도 둘로 갈린다 —
+     * 취향 사진은 비공개 버킷, 프로필 이미지는 공개 버킷.
+     */
+    it('deletes the uploaded images from both buckets', async () => {
+      const uid = await newUser({ profileImageUrl: '/storage/public/profiles/u/1.jpg' });
+      await preferences.save(
+        preferences.create({
+          userId: uid,
+          // 취향 사진은 값이 곧 비공개 버킷 키다(URL 변환 없음).
+          photoKeys: ['preferences/u/1-0.jpg', 'preferences/u/1-1.jpg'],
+        }),
+      );
+      storage.keyFromPublicUrl.mockImplementation((url: string) =>
+        url.replace('/storage/', ''),
+      );
+      storage.deleteObject.mockResolvedValue(undefined);
+      storage.deletePrivateObject.mockResolvedValue(undefined);
+      storage.deleteObject.mockClear();
+      storage.deletePrivateObject.mockClear();
+
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: '탈퇴' })
+        .expect(204);
+
+      expect(storage.deleteObject.mock.calls.map(([key]: [string]) => key)).toEqual([
+        'public/profiles/u/1.jpg',
+      ]);
+      expect(
+        storage.deletePrivateObject.mock.calls.map(([key]: [string]) => key).sort(),
+      ).toEqual(['preferences/u/1-0.jpg', 'preferences/u/1-1.jpg']);
+      storage.keyFromPublicUrl.mockReturnValue(null);
+    });
+
+    // 카카오 프로필 등 외부 URL 은 우리 버킷이 아니라 지울 대상이 아니다(키 추출이 null).
+    it('leaves external profile images alone', async () => {
+      const uid = await newUser({ profileImageUrl: 'https://k.kakaocdn.net/x/y.jpg' });
+      storage.deleteObject.mockClear();
+
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: '탈퇴' })
+        .expect(204);
+
+      expect(storage.deleteObject).not.toHaveBeenCalled();
+    });
+
+    // 오브젝트 삭제가 실패해도 계정 삭제는 이미 커밋됐다 — 500 을 주면 "탈퇴가 안 됐다"로 읽힌다.
+    it('still completes the withdrawal when object deletion fails', async () => {
+      const uid = await newUser({ profileImageUrl: '/storage/public/profiles/u/9.jpg' });
+      storage.keyFromPublicUrl.mockImplementation((url: string) =>
+        url.replace('/storage/', ''),
+      );
+      storage.deleteObject.mockRejectedValue(new Error('storage down'));
+
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: '탈퇴' })
+        .expect(204);
+
+      expect(await users.findOneBy({ id: uid })).toBeNull();
+      storage.keyFromPublicUrl.mockReturnValue(null);
+      storage.deleteObject.mockResolvedValue(undefined);
     });
 
     it('stores the reason anonymously (no user reference)', async () => {

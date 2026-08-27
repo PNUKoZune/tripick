@@ -90,3 +90,45 @@
 
 - 기존 `travel-ai-planner.e2e-spec.ts` 의 `status: upcoming vs done` 실패 조사 (main-planner status 드리프트 의심)
 - realtime 게이트웨이 인증/인가 e2e, preferences 서비스 CRUD, main-planner 나머지 메서드(swap·reorder·alternatives 등) 커버리지
+
+---
+
+## 9. e2e / integration 갈래 분리 + CI 편입 (2026-08-27, 보안 점검 후속)
+
+### 문제: e2e 가 CI 에 없어서 썩고 있었다
+
+[ci.yml](../../.github/workflows/ci.yml) 이 `pnpm turbo run test`(= `jest`, 유닛)만 돌렸고
+`test:e2e` 는 **별도 스크립트라 한 번도 실행되지 않았다.** 그동안:
+
+- `TripMembersService` 가 `RealtimeGateway`(멤버 제거 시 소켓 축출)와 `InboxService`(초대 알림)를
+  주입받게 바뀌었는데 스펙이 스텁을 안 따라가, **trip-members 스위트 11건이 DI 실패로 통째로 죽어
+  있었다.** 서비스 생성자가 바뀌면 유닛 테스트는 목킹으로 통과해서 아무 신호가 없다
+- 이 스위트가 죽어 있던 동안 "회수된 멤버의 소켓 축출" 은 한 번도 검증되지 않았다 —
+  인가 경계 동작인데 회귀가 조용히 통과할 수 있는 상태였다
+
+### 갈래 분리
+
+| 스크립트 | 대상 | 필요한 것 | CI |
+|---|---|---|---|
+| `test:e2e` | 경량 6 스위트 (trips·users·friends·inbox·trip-members·realtime) | Postgres | ✅ |
+| `test:integration` | `travel-ai-planner.e2e-spec.ts` | AppModule 전체 + Postgres + Redis + **로컬 LLM(:8080)·임베딩(:8081)** | ❌ 로컬 수동 |
+
+travel-ai-planner 는 실제 AI 일정 생성 결과에 단정을 걸어 CI 에서 돌릴 수 없다. LLM 이 없으면
+플래너가 자기 타임아웃(`LLM_PLANNER_TIMEOUT_MS` 90초)을 다 태우고 테스트가 예산을 넘긴다.
+[jest-e2e.json](../../apps/api/test/jest-e2e.json) 의 `testPathIgnorePatterns` 로 빼고
+[jest-integration.json](../../apps/api/test/jest-integration.json) 을 새로 뒀다.
+
+### 부수 효과: 스키마 경합이 사라졌다
+
+분리 전 전체 실행에서 `duplicate key value violates unique constraint "pg_type_typname_nsp_index"`
++ `Unable to connect to the database. Retrying (1)` 이 관측됐다(재시도로 통과해 실패로는 안 잡혔다).
+경량 스위트는 `createE2EApp` 이 `dropSchema: true` 로 같은 `tripick_test` 에 DDL 을 치는데,
+travel-ai-planner 는 **AppModule 의 별도 DataSource**(dev DB, `synchronize`)를 같은 프로세스에서
+띄운다. 분리 후 3연속 실행에서 재현되지 않았다 — 원인이 이 겹침이었을 가능성이 크지만
+단정할 수는 없다. CI 에서 간헐 실패가 보이면 스위트별 DB 분리를 검토할 것.
+
+### 결과
+
+- `test:e2e`: **81 통과** (6 suites) — 3회 연속 재현 확인
+- trip-members 는 11 → **13건** (소켓 축출 2건 신설: 실계정 멤버 축출 + 초안 멤버는 축출 스킵)
+

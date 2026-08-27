@@ -6,6 +6,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { corsOrigins } from './common/cors';
+import { securityHeaders } from './common/security-headers';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -17,7 +18,14 @@ async function bootstrap() {
   app.enableShutdownHooks();
 
   // nginx 등 리버스 프록시 뒤에서 X-Forwarded-For 의 실제 클라이언트 IP 를 신뢰 (레이트리밋 IP 식별용)
-  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.set('trust proxy', 1);
+  // 서버 스택을 광고할 이유가 없다 (Express 기본으로 `X-Powered-By: Express` 가 붙는다).
+  expressApp.disable('x-powered-by');
+
+  // 공통 보안 헤더. 카카오 OAuth 시작·콜백은 API 오리진에서 직접 열리는 문서라
+  // 웹(Next) 쪽 headers() 가 닿지 않는다 — 여기서 따로 씌운다.
+  app.use(securityHeaders());
 
   app.setGlobalPrefix('api/v1');
 

@@ -16,6 +16,7 @@ import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { timingSafeEqual } from 'node:crypto';
 import type { CookieOptions, Request, Response } from 'express';
+import { perMinute } from '../common/throttle';
 import { AuthService, type TokenContext } from './auth.service';
 import { KakaoExchangeService } from './kakao-exchange.service';
 import { EmailSendLimiterService, type MailPurpose } from './email-send-limiter.service';
@@ -31,13 +32,24 @@ import {
   VerifyEmailBodyDto,
 } from './dto/auth.dto';
 
-/** 분당 요청 제한 헬퍼 (ttl 단위 ms) */
-const perMinute = (limit: number) => ({ default: { limit, ttl: 60_000 } });
-
 /** 카카오 로그인 CSRF 방어용 state 를 담는 쿠키. 로그인 시작 → 콜백 한 왕복만 산다. */
 const KAKAO_STATE_COOKIE = 'tripick_kakao_state';
 const KAKAO_RETURN_COOKIE = 'tripick_kakao_return';
+/**
+ * 로그인을 시작한 브라우저가 보낸 bind 비밀. 콜백에서 교환 코드에 옮겨 실어(해시로),
+ * 그 브라우저만 코드를 세션으로 바꿀 수 있게 한다.
+ *
+ * state 와 별개인 이유: state 는 카카오 왕복(시작↔콜백)을 지키고 콜백에서 소비되는데,
+ * 막아야 하는 마지막 홉은 그 뒤의 `POST /auth/kakao/exchange` 다. 교환은 웹 프록시를 거쳐
+ * 오리진이 갈리므로 쿠키가 안 실린다 — 그래서 브라우저 쪽 보관은 웹이 맡고(localStorage),
+ * 서버는 시작 때 받은 값을 이 쿠키로 콜백까지만 들고 간다.
+ */
+const KAKAO_BIND_COOKIE = 'tripick_kakao_bind';
 const KAKAO_STATE_TTL_MS = 10 * 60 * 1000;
+
+/** 웹이 생성하는 bind 비밀(32바이트 base64url = 43자)을 받아들일 범위. */
+const KAKAO_BIND_MIN_LENGTH = 32;
+const KAKAO_BIND_MAX_LENGTH = 256;
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -116,11 +128,28 @@ export class AuthController {
 
   @Get('kakao')
   @ApiOperation({ summary: '카카오 OAuth 로그인 리디렉트' })
-  kakaoLogin(@Query('returnTo') returnTo: string | undefined, @Res() res: Response) {
+  kakaoLogin(
+    @Query('returnTo') returnTo: string | undefined,
+    @Query('bind') bind: string | undefined,
+    @Res() res: Response,
+  ) {
+    // bind 가 없으면 어차피 교환에서 막힌다 — 카카오 동의까지 걷게 하지 말고 여기서 끊는다.
+    // (구버전 웹 번들이 배포 순서 때문에 잠깐 이 경로로 올 수 있다)
+    if (!isAcceptableBind(bind)) {
+      const message = '로그인 요청이 올바르지 않습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.';
+      // 앱에서 시작했으면 시스템 브라우저에 안내를 가두지 말고 앱으로 돌려보낸다.
+      res.redirect(
+        returnTo === 'android'
+          ? this.authService.getAndroidKakaoErrorUrl(message)
+          : this.authService.getWebKakaoErrorUrl(message),
+      );
+      return;
+    }
     const { authorizeUrl, state } = this.authService.startKakaoAuth();
     // state 를 브라우저에 묶어 둔다. httpOnly 라 스크립트가 못 읽고, SameSite=Lax 여도
     // 카카오에서 돌아오는 건 top-level GET 이라 콜백에 정상적으로 실려 온다.
     res.cookie(KAKAO_STATE_COOKIE, state, this.stateCookieOptions());
+    res.cookie(KAKAO_BIND_COOKIE, bind, this.stateCookieOptions());
     if (returnTo === 'android') {
       res.cookie(KAKAO_RETURN_COOKIE, 'android', this.stateCookieOptions());
     } else {
@@ -147,8 +176,10 @@ export class AuthController {
     const wantsJson = format === 'json';
     // state 는 한 번 쓰고 버린다 — 성공이든 실패든 먼저 지워 재사용을 막는다.
     const expectedState = readCookie(req, KAKAO_STATE_COOKIE);
+    const bindSecret = readCookie(req, KAKAO_BIND_COOKIE);
     const returnTo = readCookie(req, KAKAO_RETURN_COOKIE);
     res.clearCookie(KAKAO_STATE_COOKIE, this.stateCookieOptions());
+    res.clearCookie(KAKAO_BIND_COOKIE, this.stateCookieOptions());
     res.clearCookie(KAKAO_RETURN_COOKIE, this.stateCookieOptions());
 
     if (!code) {
@@ -173,10 +204,23 @@ export class AuthController {
       return undefined;
     }
 
+    // 교환 코드를 발급할 수 없는 상태(bind 소실)에서 로그인을 진행하면 코드만 떠돌게 된다.
+    // `format=json` 은 세션을 요청자에게 바로 돌려주므로(코드 없음) bind 가 필요 없다.
+    const boundSecret = bindSecret ?? '';
+    if (!wantsJson && !isAcceptableBind(boundSecret)) {
+      const message = '로그인 요청이 만료됐거나 유효하지 않습니다. 다시 시도해주세요.';
+      res.redirect(
+        returnTo === 'android'
+          ? this.authService.getAndroidKakaoErrorUrl(message)
+          : this.authService.getWebKakaoErrorUrl(message),
+      );
+      return undefined;
+    }
+
     try {
       const session = await this.authService.loginWithKakao(code, this.tokenContext(req));
       if (wantsJson) return session;
-      const exchangeCode = await this.kakaoExchange.issue(session);
+      const exchangeCode = await this.kakaoExchange.issue(session, boundSecret);
       res.redirect(
         returnTo === 'android'
           ? this.authService.getAndroidKakaoSuccessUrl(exchangeCode)
@@ -201,7 +245,7 @@ export class AuthController {
   @Throttle(perMinute(20))
   @ApiOperation({ summary: '카카오 콜백 1회용 코드 → 세션 교환' })
   kakaoExchangeCode(@Body() dto: KakaoExchangeBodyDto) {
-    return this.kakaoExchange.consume(dto.code);
+    return this.kakaoExchange.consume(dto.code, dto.bind);
   }
 
   // ─── 토큰 ──────────────────────────────────────────────────
@@ -267,6 +311,16 @@ function readCookie(req: Request, name: string): string | undefined {
     return decodeURIComponent(part.slice(index + 1).trim());
   }
   return undefined;
+}
+
+/**
+ * bind 비밀로 받아들일 형태인지. 길이 하한이 곧 추측 저항이라 짧은 값은 거부한다 —
+ * 클라이언트가 정하는 값이므로 "보냈다"만 확인하면 `bind=1` 로도 통과한다.
+ */
+function isAcceptableBind(value: string | undefined): value is string {
+  const bind = (value ?? '').trim();
+  if (bind.length < KAKAO_BIND_MIN_LENGTH || bind.length > KAKAO_BIND_MAX_LENGTH) return false;
+  return /^[A-Za-z0-9_-]+$/.test(bind);
 }
 
 function matchesState(expected: string | undefined, received: string | undefined): boolean {
