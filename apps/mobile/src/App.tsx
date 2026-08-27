@@ -58,7 +58,14 @@ type BridgeMessage =
   | { type: 'OPEN_EXTERNAL'; url: string }
   | { type: 'WEB_READY' }
   | { type: 'NAV_STATE'; canGoBack: boolean }
-  | { type: 'OVERLAY_STATE'; open: boolean };
+  | { type: 'OVERLAY_STATE'; open: boolean }
+  | {
+      type: 'SAVE_FILE';
+      requestId: string;
+      fileName: string;
+      mimeType: string;
+      base64: string;
+    };
 
 const PRODUCTION_WEB_APP_URL = 'https://tripick.place';
 const WEB_APP_HOST = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
@@ -129,6 +136,14 @@ function getKakaoCallbackUrl(url: string): string | null {
 // iOS 는 모듈이 없어 undefined → watchPosition 폴백을 사용한다.
 type LocationTrackingNative = { start(): void; stop(): void };
 const LocationTracking = (NativeModules.LocationTracking ?? null) as LocationTrackingNative | null;
+
+// Android 전용 파일 저장 네이티브 모듈. 웹의 "이미지·PDF 저장" 은 data: URI 를 <a download> 로
+// 흘리는데, Android WebView 의 다운로드 리스너는 http/https 만 받아 조용히 버린다
+// ("Can only download HTTP/HTTPS URIs"). 그래서 base64 를 브리지로 받아 네이티브가 저장한다.
+type FileSaveNative = {
+  saveBase64(fileName: string, mimeType: string, base64: string): Promise<string>;
+};
+const FileSave = (NativeModules.TripickFileSave ?? null) as FileSaveNative | null;
 const LOCATION_EVENT = 'TripickLocationUpdate';
 const LOCATION_ERROR_EVENT = 'TripickLocationError';
 // 서버 위치 보고 최소 간격(ms). 미도착 판정은 분 단위라 과보고를 막는다(웹 스로틀과 동일).
@@ -504,6 +519,29 @@ export default function App() {
     postToWeb({ type: 'NOTIFICATION_TAP', data: normalizeTapData(data) });
   }
 
+  // 웹이 만든 이미지·PDF(base64)를 네이티브가 다운로드 폴더에 저장한다.
+  // 결과는 requestId 를 실어 돌려줘, 웹이 스피너를 내리고 실패만 자기 UI 로 알린다.
+  function saveFileToDownloads(
+    requestId: string,
+    fileName: string,
+    mimeType: string,
+    base64: string,
+  ) {
+    if (!FileSave) {
+      postToWeb({ type: 'SAVE_FILE_RESULT', requestId, ok: false });
+      return;
+    }
+    FileSave.saveBase64(fileName, mimeType || 'application/octet-stream', base64)
+      .then(() => {
+        ToastAndroid.show(`다운로드 폴더에 ${fileName} 저장했어요`, ToastAndroid.SHORT);
+        postToWeb({ type: 'SAVE_FILE_RESULT', requestId, ok: true });
+      })
+      .catch((err) => {
+        console.warn('[TriPick] 파일 저장 실패:', err);
+        postToWeb({ type: 'SAVE_FILE_RESULT', requestId, ok: false });
+      });
+  }
+
   function handleMessage(event: WebViewMessageEvent) {
     let msg: BridgeMessage | null = null;
     try {
@@ -557,6 +595,10 @@ export default function App() {
     }
     if (msg.type === 'OVERLAY_STATE') {
       overlayOpenRef.current = msg.open === true;
+      return;
+    }
+    if (msg.type === 'SAVE_FILE' && msg.requestId && msg.fileName && msg.base64) {
+      saveFileToDownloads(msg.requestId, msg.fileName, msg.mimeType, msg.base64);
       return;
     }
     if (msg.type === 'OPEN_EXTERNAL' && msg.url) {

@@ -1,3 +1,5 @@
+import { saveDataUrl } from './save-file';
+
 /**
  * html-to-image(약 190KB) · jspdf(약 610KB + canvg 약 150KB)는 "이미지/PDF 로 저장"을
  * 실제로 누를 때만 필요한데, 정적 import 면 공유 시트를 품은 planner 첫 로드에 통째로
@@ -21,7 +23,7 @@ async function renderPng(
 /** DOM 노드를 PNG 이미지로 저장 */
 export async function downloadNodeAsPng(node: HTMLElement, filename: string): Promise<void> {
   const { dataUrl } = await renderPng(node);
-  triggerDownload(dataUrl, filename);
+  await saveDataUrl(dataUrl, filename, 'image/png');
 }
 
 /** DOM 노드를 단일 페이지 PDF 로 저장 (카드 비율에 맞춘 한 장) */
@@ -34,14 +36,6 @@ export async function downloadNodeAsPdf(node: HTMLElement, filename: string): Pr
     format: [width, height],
   });
   pdf.addImage(dataUrl, 'PNG', 0, 0, width, height);
-  pdf.save(filename);
-}
-
-function triggerDownload(dataUrl: string, filename: string): void {
-  const link = document.createElement('a');
-  link.href = dataUrl;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+  // jsPDF 의 save() 도 결국 <a download> 라 앱 웹뷰에선 버려진다 — dataURL 로 뽑아 같은 경로로 보낸다.
+  await saveDataUrl(pdf.output('datauristring'), filename, 'application/pdf');
 }
