@@ -4,6 +4,11 @@
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
         <!-- Customize your theme here. -->
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        <!-- targetSdk 35+ 는 edge-to-edge 강제라 시스템 바가 투명하게 창 위에 얹힌다.
+             바 뒤는 창 배경이 그대로 보이므로 웹 배경색과 맞춰 둔다. -->
+        <item name="android:windowBackground">@color/window_bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 
 </resources>

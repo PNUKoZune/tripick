@@ -12,7 +12,7 @@ export function ResetPasswordView() {
 
   return (
     <AppFrame showNav={false} themed>
-      <div className="mx-auto flex min-h-dvh w-full max-w-[440px] flex-col px-5 pb-10 pt-12">
+      <div className="mx-auto flex min-h-dvh w-full max-w-[440px] flex-col px-5 pb-[calc(40px+var(--safe-bottom))] pt-[calc(48px+var(--safe-top))]">
         <header className="mb-8">
           <div className="text-[13px] font-extrabold text-[color:var(--primary)]">TriPick</div>
           <h1 className="mt-2 text-[26px] font-bold text-[color:var(--ink)]">새 비밀번호 설정</h1>

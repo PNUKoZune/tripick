@@ -50,9 +50,9 @@ export class PreferenceEntity {
   @Column({ nullable: true })
   embeddingId?: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 }

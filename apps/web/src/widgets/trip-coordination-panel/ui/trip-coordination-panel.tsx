@@ -74,11 +74,18 @@ export function TripCoordinationPanel({ tripId }: Props) {
 
       <section className="rounded-[20px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card,#FFFFFF)] p-4">
         <h2 className="text-[15px] font-bold text-[color:var(--ink,#191F28)]">취향 비교</h2>
-        <div className="mt-3 divide-y divide-[color:var(--card-soft,#F2F4F6)]">
-          <VoteGroup title="식사" votes={data.consensus.food} />
-          <VoteGroup title="관광" votes={data.consensus.mood} />
-          <VoteGroup title="선호 환경" votes={data.consensus.environment} />
-        </div>
+        {/* 멤버가 나뿐이면 모든 막대가 100% 로 꽉 차 비교처럼 안 읽힌다 — 안내 한 줄로 대체. */}
+        {data.members.length < 2 ? (
+          <p className="mt-2 text-[13px] leading-[20px] text-[color:var(--ink-faint,#8B95A1)]">
+            아직 나 혼자예요. 멤버를 초대하면 취향이 어디서 갈리는지 여기서 비교해 드려요.
+          </p>
+        ) : (
+          <div className="mt-3 divide-y divide-[color:var(--card-soft,#F2F4F6)]">
+            <VoteGroup title="식사" votes={data.consensus.food} />
+            <VoteGroup title="관광" votes={data.consensus.mood} />
+            <VoteGroup title="선호 환경" votes={data.consensus.environment} />
+          </div>
+        )}
       </section>
 
       <section className="rounded-[20px] border border-[color:var(--primary,#BFD7FF)] bg-[color:var(--primary-tint,#EAF2FF)] p-4">

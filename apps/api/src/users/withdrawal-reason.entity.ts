@@ -23,6 +23,6 @@ export class WithdrawalReasonEntity {
   @Column({ type: 'int' })
   accountAgeDays: number;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 }

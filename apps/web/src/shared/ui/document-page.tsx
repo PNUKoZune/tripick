@@ -30,11 +30,14 @@ export function DocumentPageShell({
     <AppFrame themed>
       {/* 설정에서 들어오는 문서 페이지라 설정 화면과 같은 팔레트를 로컬 스코프로 적용한다. */}
       <header className="px-4 pt-5 lg:border-b lg:border-[color:var(--line)] lg:bg-[color:var(--card)] lg:px-0 lg:pt-0">
-        <div className="mx-auto flex w-full max-w-[1160px] items-center gap-2 pb-3 lg:gap-3 lg:px-8 lg:py-4 xl:px-10">
+        {/* 모바일은 제목 줄에 뒤로가기를 맞춘다 — items-center 로 두면 제목+부제 블록 전체의
+            가운데라 화살표가 부제 옆으로 내려와 어긋나 보인다. 36px 버튼을 30px 제목 줄에
+            맞추는 보정이 -3px. 데스크탑은 라벨+제목 2줄이라 기존대로 가운데 정렬. */}
+        <div className="mx-auto flex w-full max-w-[1160px] items-start gap-2 pb-3 lg:items-center lg:gap-3 lg:px-8 lg:py-4 xl:px-10">
           <Link
             href={backHref}
             aria-label="뒤로"
-            className="flex size-9 shrink-0 items-center justify-center rounded-full text-[color:var(--ink)] hover:bg-[color:var(--card-soft)] lg:size-auto lg:gap-1 lg:rounded-[12px] lg:border lg:border-[color:var(--line)] lg:bg-[color:var(--card)] lg:px-3 lg:py-2 lg:text-[13px] lg:font-semibold lg:text-[color:var(--ink-sub)] lg:hover:bg-[color:var(--card-soft)] lg:hover:text-[color:var(--ink)]"
+            className="-mt-[3px] flex size-9 shrink-0 items-center justify-center rounded-full lg:mt-0 text-[color:var(--ink)] hover:bg-[color:var(--card-soft)] lg:size-auto lg:gap-1 lg:rounded-[12px] lg:border lg:border-[color:var(--line)] lg:bg-[color:var(--card)] lg:px-3 lg:py-2 lg:text-[13px] lg:font-semibold lg:text-[color:var(--ink-sub)] lg:hover:bg-[color:var(--card-soft)] lg:hover:text-[color:var(--ink)]"
           >
             <LuChevronLeft className="size-5 lg:size-4" aria-hidden />
             <span className="hidden lg:inline">{backLabel}</span>

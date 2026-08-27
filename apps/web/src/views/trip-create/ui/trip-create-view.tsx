@@ -435,7 +435,7 @@ function TripCreateContent({
     <AppFrame themed>
       <div className="wvr-scope">
         {/* 헤더: 모바일 = 뒤로 + 작은 제목 / 데스크탑 = 뒤로 + 라벨/제목 + 우측 CTA */}
-        <header className="px-4 pt-5 lg:border-b lg:border-[color:var(--line)] lg:bg-[color:var(--card)] lg:px-0 lg:pt-0">
+        <header className="px-4 pt-[calc(20px+var(--safe-top))] lg:border-b lg:border-[color:var(--line)] lg:bg-[color:var(--card)] lg:px-0 lg:pt-0">
           <div className="mx-auto flex w-full max-w-[1160px] items-center justify-between gap-3 pb-3 lg:gap-6 lg:px-8 lg:py-4 xl:px-10">
             <div className="flex min-w-0 flex-1 items-center gap-2 lg:gap-3">
               <Link
@@ -492,7 +492,7 @@ function TripCreateContent({
         </div>
 
         {/* 모바일 sticky CTA: bottom nav 바로 위 (nav 높이 = pt-1.5 6px + grid 66px + safe-area pb) */}
-        <div className="fixed inset-x-0 bottom-[calc(72px+max(10px,env(safe-area-inset-bottom)))] z-20 mx-auto max-w-[430px] border-t border-[color:var(--line)] bg-[color:var(--card)] px-5 py-3 lg:hidden">
+        <div className="fixed inset-x-0 bottom-[calc(72px+max(10px,var(--safe-bottom)))] z-20 mx-auto max-w-[430px] border-t border-[color:var(--line)] bg-[color:var(--card)] px-5 py-3 lg:hidden">
           <Button
             size="lg"
             fullWidth

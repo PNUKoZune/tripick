@@ -92,7 +92,7 @@ export function ItemEditorSheet({
       label={mode === 'add' ? '일정 추가' : '일정 수정'}
       themed
     >
-      <div className="px-5 pb-6 pt-2">
+      <div className="px-5 pb-1 pt-2">
         <h2 className="text-[18px] font-bold text-[color:var(--ink)]">
           {mode === 'add' ? '일정 추가' : '일정 수정'}
         </h2>
@@ -200,7 +200,9 @@ export function ItemEditorSheet({
           </div>
         ) : null}
 
-        <div className="mt-5 flex gap-2">
+        {/* 폼이 시트 높이(70vh)보다 길어 열자마자 버튼이 화면 밖에 있었다 —
+            스크롤 영역 바닥에 붙여 두면 어디까지 내려왔든 취소·저장이 늘 보인다. */}
+        <div className="sticky bottom-0 z-10 -mx-5 mt-5 flex gap-2 border-t border-[color:var(--line)] bg-[color:var(--card)] px-5 pb-1 pt-3">
           <Button
             variant="secondary"
             size="lg"

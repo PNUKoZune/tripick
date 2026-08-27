@@ -105,7 +105,7 @@ export function AppFrame({
     <div
       className={`min-h-dvh overflow-x-clip bg-[color:var(--app-bg)] ${themed ? 'wvr-scope' : ''}`}
     >
-      <div className="mx-auto w-full max-w-[430px] bg-[color:var(--app-surface)] pb-[88px] lg:grid lg:max-w-[1440px] lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:bg-transparent lg:px-6 lg:pb-0">
+      <div className="mx-auto w-full max-w-[430px] bg-[color:var(--app-surface)] pb-[calc(88px+var(--fab-reserve)+var(--safe-bottom))] lg:grid lg:max-w-[1440px] lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-6 lg:bg-transparent lg:px-6 lg:pb-0">
         <AppDesktopNavigation />
         {/* 본문만 등장 모션 — 탭바·사이드 네비는 애니메이션 없이 그려 셸이 고정된 것처럼 보이게 한다 */}
         <div
@@ -138,7 +138,7 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <header className="px-4 pt-5 lg:border-b lg:border-[color:var(--line-strong)] lg:bg-[color:var(--app-surface)] lg:px-0 lg:pt-0">
+    <header className="px-4 pt-[calc(20px+var(--safe-top))] lg:border-b lg:border-[color:var(--line-strong)] lg:bg-[color:var(--app-surface)] lg:px-0 lg:pt-0">
       <div className="mx-auto flex w-full max-w-[1160px] items-center justify-between gap-3 pb-3 lg:gap-6 lg:px-8 lg:py-4 xl:px-10">
         <div className="min-w-0 flex-1">
           {/* 색은 전역 토큰으로 — 라이트 값은 그대로고, .wvr-scope 안에서 렌더될 때만
@@ -185,7 +185,7 @@ export function AppBottomNavigation({ className = '' }: { className?: string }) 
   return (
     <nav
       aria-label="하단 탭"
-      className={`fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 rounded-t-[20px] border-t border-[color:var(--line-strong)] bg-[color:var(--app-surface)]/85 px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_28px_-14px_rgba(25,31,40,0.16)] backdrop-blur-xl ${className}`}
+      className={`fixed bottom-0 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 rounded-t-[20px] border-t border-[color:var(--line-strong)] bg-[color:var(--app-surface)]/85 px-2 pb-[max(10px,var(--safe-bottom))] pt-2 shadow-[0_-10px_28px_-14px_rgba(25,31,40,0.16)] backdrop-blur-xl ${className}`}
     >
       <div className="grid h-[62px] grid-cols-5 items-stretch">
         {NAV_ITEMS.map((item) => {

@@ -29,9 +29,9 @@ export class FcmTokenEntity {
   @Column({ type: 'varchar', nullable: true })
   platform?: string | null;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 }

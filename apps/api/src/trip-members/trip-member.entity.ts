@@ -57,9 +57,9 @@ export class TripMemberEntity {
   @Column({ type: 'jsonb', default: '{}' })
   preferenceTags: TripMemberPreferenceDto;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 }

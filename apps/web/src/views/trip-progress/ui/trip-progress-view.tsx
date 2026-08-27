@@ -105,7 +105,7 @@ function TripProgressContent() {
         <div
           className={`${pageInClass} mx-auto flex h-dvh max-w-[430px] flex-col overflow-hidden bg-[color:var(--card)]`}
         >
-          <header className="flex shrink-0 items-center justify-between border-b border-[color:var(--line)] px-5 py-4">
+          <header className="flex shrink-0 items-center justify-between border-b border-[color:var(--line)] px-5 pb-4 pt-[calc(16px+var(--safe-top))]">
             <div>
               <div className="text-[12px] font-bold tracking-wide text-[color:var(--primary)]">
                 여행 중
@@ -135,7 +135,7 @@ function TripProgressContent() {
             />
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 py-5 pb-[104px]">
+          <div className="flex-1 overflow-y-auto px-4 py-5 pb-[calc(104px+var(--safe-bottom))]">
             <LocationPermissionBanner permission={permission} />
             <NextStopBar
               item={nextItem}
@@ -240,9 +240,9 @@ function TripProgressEmpty({
   return (
     <div className="wvr-scope min-h-dvh bg-[color:var(--bg)]">
       <div
-        className={`${pageInClass} mx-auto min-h-dvh max-w-[430px] bg-[color:var(--card)] pb-[88px]`}
+        className={`${pageInClass} mx-auto min-h-dvh max-w-[430px] bg-[color:var(--card)] pb-[calc(88px+var(--safe-bottom))]`}
       >
-        <header className="px-5 pb-4 pt-8">
+        <header className="px-5 pb-4 pt-[calc(32px+var(--safe-top))]">
           <div className="text-[12px] font-bold tracking-wide text-[color:var(--primary)]">
             여행 중
           </div>

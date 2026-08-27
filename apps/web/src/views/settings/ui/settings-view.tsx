@@ -12,11 +12,14 @@ import { SignOutButton } from '@/features/sign-out';
 import { NotificationPreferencesList } from '@/features/update-notification-preferences';
 import { queryKeys } from '@/shared/api/query-keys';
 import { firstErrorMessage } from '@/shared/lib';
+import { useNativeAppVersion } from '@/shared/rn-bridge/native-app-version';
 import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
 import { SettingsProfileHero } from '@/widgets/settings-profile-hero';
 
 // next.config 가 package.json version 을 주입한다(단일 출처). 빌드 시 인라인.
-const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0';
+// 앱 안에서는 이 값 대신 셸이 알려 준 설치 버전을 쓴다 — 웹 배포와 앱 릴리스 주기가 달라
+// 스토어 버전과 어긋난 숫자가 보이던 문제.
+const WEB_BUILD_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0';
 
 export function SettingsView() {
   return (
@@ -27,6 +30,7 @@ export function SettingsView() {
 }
 
 function SettingsContent() {
+  const nativeAppVersion = useNativeAppVersion();
   const {
     data: me,
     error,
@@ -82,7 +86,7 @@ function SettingsContent() {
           </Section>
 
           <Section title="앱 정보">
-            <InfoRow label="버전" value={APP_VERSION} />
+            <InfoRow label="버전" value={nativeAppVersion ?? WEB_BUILD_VERSION} />
             <InfoRow
               label="라이선스"
               value={

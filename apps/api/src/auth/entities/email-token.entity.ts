@@ -60,6 +60,6 @@ export class EmailTokenEntity {
   @Column({ type: 'timestamptz', nullable: true })
   consumedAt?: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ComponentProps } from 'react';
 import type { PlannerItineraryItemDto, PlannerMapMarkerDto, PlannerTripDto } from '@tripick/types';
 
 import { ChangeScheduleButton } from '@/shared/ui';
@@ -10,9 +10,18 @@ type Props = {
   trip: PlannerTripDto;
   items: PlannerItineraryItemDto[];
   onSelectItem: (item: PlannerItineraryItemDto) => void;
+  /** 지도 검색으로 고른 장소를 일정에 반영. 이 탭이 화면의 유일한 지도라 검색·길찾기도 여기 붙는다. */
+  onPickSearchPlace?: ComponentProps<typeof PlannerMap>['onPickSearchPlace'];
+  pickPlaceLabel?: string;
 };
 
-export function TripMapPanel({ trip, items, onSelectItem }: Props) {
+export function TripMapPanel({
+  trip,
+  items,
+  onSelectItem,
+  onPickSearchPlace,
+  pickPlaceLabel,
+}: Props) {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(items[0]?.id ?? null);
 
   // 현재 day 의 itemId 집합과 마커를 교차해 day 마커만 표시
@@ -47,8 +56,9 @@ export function TripMapPanel({ trip, items, onSelectItem }: Props) {
           markers={dayMarkers}
           selectedMarkerId={selectedMarkerId}
           showCurrentDot={false}
-          showSearch={false}
           aspect="aspect-[4/5]"
+          {...(onPickSearchPlace ? { onPickSearchPlace } : {})}
+          {...(pickPlaceLabel ? { pickPlaceLabel } : {})}
           onMarkerClick={(marker) => {
             if (marker.itemId) setSelectedItemId(marker.itemId);
           }}

@@ -54,8 +54,8 @@ export function SharedTripView({ token }: { token: string }) {
 
   return (
     <div className="min-h-dvh bg-[#F7F8FA]">
-      <div className="mx-auto min-h-dvh max-w-[480px] bg-white pb-8">
-        <header className="border-b border-[#E5E8EB] px-5 pb-4 pt-6">
+      <div className="mx-auto min-h-dvh max-w-[480px] bg-white pb-[calc(32px+var(--safe-bottom))]">
+        <header className="border-b border-[#E5E8EB] px-5 pb-4 pt-[calc(24px+var(--safe-top))]">
           <div className="text-[12px] font-bold tracking-wide text-[#3182F6]">TRIPICK · 공유된 일정</div>
           <h1 className="mt-1 text-[22px] font-bold leading-[30px] text-[#191F28]">{data.title}</h1>
           <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 text-[13px] text-[#6B7684]">

@@ -64,6 +64,6 @@ export class ScheduleChangeProposalEntity {
   @Column({ type: 'timestamptz', nullable: true })
   resolvedAt: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 }

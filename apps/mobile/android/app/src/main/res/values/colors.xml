@@ -1,3 +1,6 @@
 <resources>
     <color name="ic_launcher_background">#2E6BE6</color>
+    <!-- 시스템 바 뒤로 비치는 창 배경. 웹 팔레트의 app-bg 토큰(라이트 #F2F4F6)과 같은 값이라
+         상태바·내비바 영역이 웹 화면과 이어져 보인다. 다크 값은 values-night. -->
+    <color name="window_bg">#F2F4F6</color>
 </resources>

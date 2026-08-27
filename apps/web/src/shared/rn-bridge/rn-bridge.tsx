@@ -8,6 +8,7 @@ import { updateFcmToken } from '@/entities/user';
 import { getStoredSession } from '@/entities/session/model/session-storage';
 import { getReactNativeWebView } from '@/shared/rn-bridge/rn-webview';
 import { isNativeShell } from '@/shared/rn-bridge/native-refresh-token';
+import { setNativeAppVersion } from '@/shared/rn-bridge/native-app-version';
 import { persistSession } from '@/shared/lib/session-token';
 import { queryKeys } from '@/shared/api/query-keys';
 import { routeForNotification } from '@/shared/web-push/route';
@@ -23,7 +24,8 @@ type RnBridgeMessage =
   | { type: 'PUSH_NOTIFICATION'; data?: { data?: Record<string, string> } }
   | { type: 'NOTIFICATION_TAP'; data?: Record<string, string> }
   | { type: 'LOCATION_UPDATE'; lat: number; lng: number; accuracy?: number; timestamp?: number }
-  | { type: 'LOCATION_ERROR'; code: number; message: string };
+  | { type: 'LOCATION_ERROR'; code: number; message: string }
+  | { type: 'APP_VERSION'; version: string };
 
 /**
  * RN WebView → Web 브릿지 수신부.
@@ -64,6 +66,12 @@ export function useRnBridge() {
             clearPendingFcmToken();
           })
           .catch((err) => console.warn('[rn-bridge] fcm-token update failed:', err));
+        return;
+      }
+
+      if (msg.type === 'APP_VERSION' && msg.version) {
+        // 설정 "버전" 이 웹 빌드 버전 대신 설치된 앱 버전을 보여주게 한다.
+        setNativeAppVersion(msg.version);
         return;
       }
 
