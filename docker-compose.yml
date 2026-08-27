@@ -78,6 +78,8 @@ services:
       MP_SMTP_AUTH_ALLOW_INSECURE: 1
 
   # MinIO 버킷 초기화
+  # 버킷 2개다 — 공개 여부를 **버킷**이 가른다(R2 는 프리픽스 정책이 없고, 커스텀 도메인이
+  # 붙은 버킷은 키를 아는 사람이 전체를 읽는다). tripick-private 에는 익명 정책을 주지 않는다.
   minio-init:
     image: minio/mc:latest
     container_name: tripick-minio-init
@@ -89,7 +91,8 @@ services:
         mc alias set local http://minio:9000 minioadmin minioadmin;
         mc mb --ignore-existing local/tripick;
         mc anonymous set download local/tripick/public;
-        echo 'MinIO bucket initialized';
+        mc mb --ignore-existing local/tripick-private;
+        echo 'MinIO buckets initialized (tripick=public prefix, tripick-private=no anonymous)';
       "
     restart: "no"
 

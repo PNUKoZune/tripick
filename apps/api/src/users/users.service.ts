@@ -408,7 +408,7 @@ export class UsersService {
    */
   private async removeUser(user: UserEntity): Promise<void> {
     // 행이 사라지면 키를 알 방법이 없으므로 DB 삭제 **전에** 읽어 둔다.
-    const storageKeys = await this.uploadedStorageKeys(user);
+    const { publicKeys, privateKeys } = await this.uploadedStorageKeys(user);
     await this.fcmTokens.removeAllForUser(user.id);
     await this.refreshTokens.delete({ userId: user.id });
     await this.emailTokens.delete({ userId: user.id });
@@ -417,16 +417,18 @@ export class UsersService {
     // 500 을 돌려주면 "탈퇴가 안 됐다"고 읽힌다. `allSettled` 로 여기서 직접 막는다:
     // deleteObject 가 지금은 스스로 삼키지만, 그 구현에 기대면 나중에 던지도록 바뀔 때
     // 탈퇴 응답이 조용히 500 이 된다.
-    const results = await Promise.allSettled(
-      storageKeys.map((key) => this.storage.deleteObject(key)),
-    );
+    const results = await Promise.allSettled([
+      ...publicKeys.map((key) => this.storage.deleteObject(key)),
+      ...privateKeys.map((key) => this.storage.deletePrivateObject(key)),
+    ]);
     for (const result of results) {
       if (result.status === 'rejected') {
         this.logger.warn(`탈퇴 정리 중 오브젝트 삭제 실패 (user=${user.id}): ${String(result.reason)}`);
       }
     }
-    if (storageKeys.length > 0) {
-      this.logger.log(`탈퇴 정리: 업로드 이미지 ${storageKeys.length}건 삭제 (user=${user.id})`);
+    const total = publicKeys.length + privateKeys.length;
+    if (total > 0) {
+      this.logger.log(`탈퇴 정리: 업로드 이미지 ${total}건 삭제 (user=${user.id})`);
     }
   }
 
@@ -434,14 +436,17 @@ export class UsersService {
    * 이 사용자가 올려 우리 스토리지에 있는 오브젝트 키 전체.
    * 카카오 프로필처럼 외부 URL 은 `keyFromPublicUrl` 이 null 을 주므로 자연히 빠진다.
    */
-  private async uploadedStorageKeys(user: UserEntity): Promise<string[]> {
+  private async uploadedStorageKeys(
+    user: UserEntity,
+  ): Promise<{ publicKeys: string[]; privateKeys: string[] }> {
     const preference = await this.preferences.findOne({ where: { userId: user.id } });
-    const urls = [...(preference?.photoUrls ?? [])];
-    if (user.profileImageUrl) urls.push(user.profileImageUrl);
-    const keys = urls
-      .map((url) => this.storage.keyFromPublicUrl(url))
-      .filter((key): key is string => Boolean(key));
-    return [...new Set(keys)];
+    // 취향 사진은 비공개 버킷의 키가 그대로 저장돼 있다(URL 변환 불필요).
+    const privateKeys = [...new Set(preference?.photoKeys ?? [])];
+    // 프로필 이미지는 공개 버킷이고 값이 URL 이다. 카카오 등 외부 URL 은 null 이라 빠진다.
+    const profileKey = user.profileImageUrl
+      ? this.storage.keyFromPublicUrl(user.profileImageUrl)
+      : null;
+    return { publicKeys: profileKey ? [profileKey] : [], privateKeys };
   }
 
   /** 사유 적재는 탈퇴 자체를 막지 않는다 — 실패하면 로그만 남긴다(계정은 이미 삭제됨). */

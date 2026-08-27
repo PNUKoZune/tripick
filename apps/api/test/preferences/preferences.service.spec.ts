@@ -104,21 +104,21 @@ describe('PreferencesService.getPreferenceVector', () => {
   });
 });
 
-describe('PreferencesService.setPhotoUrls', () => {
+describe('PreferencesService.setPhotoKeys', () => {
   it('취향 행이 없으면 기본값으로 새로 만들고 재임베딩하지 않는다', async () => {
     const { service, repo, embeddings } = makeService(null);
 
-    const saved = await service.setPhotoUrls('u1', ['a.jpg', 'b.jpg']);
+    const saved = await service.setPhotoKeys('u1', ['a.jpg', 'b.jpg']);
 
     expect(repo.create).toHaveBeenCalled();
-    expect(saved.photoUrls).toEqual(['a.jpg', 'b.jpg']);
+    expect(saved.photoKeys).toEqual(['a.jpg', 'b.jpg']);
     // 태그가 바뀌지 않았으므로 원격 임베딩 호출은 건너뛴다.
     expect(embeddings.embed).not.toHaveBeenCalled();
   });
 
   it('남지 않은 사진의 photoTags·disabledPhotoTags 를 함께 정리한다', async () => {
     const stored: Partial<PreferenceEntity> = {
-      photoUrls: ['a.jpg', 'b.jpg'],
+      photoKeys: ['a.jpg', 'b.jpg'],
       photoTags: {
         'a.jpg': { food: ['cafe'], mood: [], environment: [], confidence: 0.8 },
         'b.jpg': { food: ['korean'], mood: [], environment: [], confidence: 0.8 },
@@ -127,9 +127,9 @@ describe('PreferencesService.setPhotoUrls', () => {
     };
     const { service } = makeService(stored);
 
-    const saved = await service.setPhotoUrls('u1', ['a.jpg']);
+    const saved = await service.setPhotoKeys('u1', ['a.jpg']);
 
-    expect(saved.photoUrls).toEqual(['a.jpg']);
+    expect(saved.photoKeys).toEqual(['a.jpg']);
     expect(Object.keys(saved.photoTags ?? {})).toEqual(['a.jpg']);
     expect(saved.disabledPhotoTags).toEqual({});
   });

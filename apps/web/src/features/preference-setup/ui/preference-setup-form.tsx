@@ -18,6 +18,7 @@ import {
   MAX_PREFERENCE_PHOTOS,
   MAX_PREFERENCE_UPLOAD,
   type PreferenceAnalysisJobDto,
+  type PreferencePhotoRefDto,
   type PreferencePhotoTagsDto,
   type TasteTagDto,
   type TasteTagValue,
@@ -78,8 +79,9 @@ export function PreferenceSetupForm() {
   const [photos, setPhotos] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [analyzedTags, setAnalyzedTags] = useState<TasteTagDto | null>(null);
-  // 서버(Object Storage)에 저장된 취향 사진 URL
-  const [savedPhotoUrls, setSavedPhotoUrls] = useState<string[]>([]);
+  // 서버에 저장된 취향 사진. `key` 가 식별자(삭제·태그 토글), `url` 은 표시용 서명 URL 이고
+  // 15분 뒤 만료된다 — 그래서 이 값을 오래 들고 있지 않고 쿼리를 다시 받아 갱신한다.
+  const [savedPhotos, setSavedPhotos] = useState<PreferencePhotoRefDto[]>([]);
   // 추가/삭제 후 아직 분석에 반영되지 않은 사진이 있는지
   const [photosDirty, setPhotosDirty] = useState(false);
   // 확대 보기(라이트박스)로 띄운 이미지 URL. null 이면 닫힘.
@@ -119,7 +121,7 @@ export function PreferenceSetupForm() {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 서버 취향 데이터로 폼을 1회 하이드레이트
       setAnalyzedTags(tags);
     }
-    setSavedPhotoUrls(preferenceQuery.data.photoUrls ?? []);
+    setSavedPhotos(preferenceQuery.data.photos ?? []);
   }, [preferenceQuery.data]);
 
   useEffect(() => {
@@ -181,7 +183,7 @@ export function PreferenceSetupForm() {
     }
     if (analysisJob.status !== 'completed') return;
 
-    setSavedPhotoUrls(analysisJob.photoUrls);
+    setSavedPhotos(analysisJob.photos);
     const tags = analysisJob.tasteTags;
     if (tags) setAnalyzedTags(tags);
     const count = tags ? tags.food.length + tags.mood.length + tags.environment.length : 0;
@@ -228,7 +230,7 @@ export function PreferenceSetupForm() {
   }, [preferenceQuery.error]);
 
   // 저장된 사진을 뺀 잔여 슬롯. 0 이면 기존 사진을 지워야 더 올릴 수 있다.
-  const photoAllowance = Math.max(0, MAX_PREFERENCE_PHOTOS - savedPhotoUrls.length);
+  const photoAllowance = Math.max(0, MAX_PREFERENCE_PHOTOS - savedPhotos.length);
 
   const ready = form.likedThemes.length > 0 && form.wakeTime !== form.sleepTime;
 
@@ -250,9 +252,9 @@ export function PreferenceSetupForm() {
   // 목업 pick-grid 는 3열 · 2행(6칸)을 늘 채운다 — 남는 칸은 "디자인된 여백"(빈 슬롯).
   // 그리드에는 이미 반영된 사진(저장본)과 아직 분석 전인 사진(선택본)을 함께 올린다.
   const canAddMore = photos.length < Math.min(MAX_PREFERENCE_UPLOAD, photoAllowance);
-  const showMoodSwatches = previews.length === 0 && savedPhotoUrls.length === 0;
+  const showMoodSwatches = previews.length === 0 && savedPhotos.length === 0;
   const filledTiles =
-    savedPhotoUrls.length + previews.length + (canAddMore ? 1 : 0) + (showMoodSwatches ? 2 : 0);
+    savedPhotos.length + previews.length + (canAddMore ? 1 : 0) + (showMoodSwatches ? 2 : 0);
   // 빈 슬롯은 실제로 더 올릴 수 있는 만큼만 그린다(총 10장 상한을 넘겨 기대를 주지 않도록).
   const ghostSlots = canAddMore
     ? Math.min(Math.max(0, 6 - filledTiles), Math.max(0, photoAllowance - photos.length - 1))
@@ -307,7 +309,7 @@ export function PreferenceSetupForm() {
     onSuccess: (job) => {
       setHasSession(true);
       // 사진은 이미 서버에 보관됐고, 태그 분석만 잡에서 이어진다.
-      setSavedPhotoUrls(job.photoUrls);
+      setSavedPhotos(job.photos);
       setPhotos([]);
       setPhotosDirty(false);
       rememberAnalysisJob(job.jobId);
@@ -363,7 +365,7 @@ export function PreferenceSetupForm() {
   });
 
   const togglePhotoTagMutation = useMutation({
-    mutationFn: async (input: { url: string; tag: TasteTagValue; enabled: boolean }) => {
+    mutationFn: async (input: { key: string; tag: TasteTagValue; enabled: boolean }) => {
       const session = requireSession();
       return togglePreferencePhotoTag(session.tokens.accessToken, input);
     },
@@ -383,12 +385,13 @@ export function PreferenceSetupForm() {
   });
 
   const deletePhotoMutation = useMutation({
-    mutationFn: async (url: string) => {
+    mutationFn: async (key: string) => {
       const session = requireSession();
-      return deletePreferencePhoto(session.tokens.accessToken, url);
+      return deletePreferencePhoto(session.tokens.accessToken, key);
     },
     onSuccess: (result) => {
-      setSavedPhotoUrls(result.photoUrls);
+      // 응답의 `photos` 가 키·표시 URL·태그를 함께 들고 온다(예전엔 두 배열을 짝지어야 했다).
+      setSavedPhotos(result.photos.map(({ key, url }) => ({ key, url })));
       // 남은 사진으로 태그가 다시 집계되므로 화면 태그도 갱신한다.
       if (result.tasteTags) setAnalyzedTags(result.tasteTags);
       queryClient.setQueryData(queryKeys.preferences.photoTags, result.photos);
@@ -403,8 +406,8 @@ export function PreferenceSetupForm() {
     },
   });
 
-  const photoTagsByUrl = useMemo(
-    () => new Map((photoTagsQuery.data ?? []).map((photo) => [photo.url, photo])),
+  const photoTagsByKey = useMemo(
+    () => new Map((photoTagsQuery.data ?? []).map((photo) => [photo.key, photo])),
     [photoTagsQuery.data],
   );
 
@@ -582,9 +585,9 @@ export function PreferenceSetupForm() {
         >
           <div className="grid grid-cols-3 gap-2.5" role="group" aria-label="고른 사진">
             {/* 이미 분석에 반영된 사진 — 지우기·태그 조정은 아래 분석 결과 카드에서 한다. */}
-            {savedPhotoUrls.map((url) => (
+            {savedPhotos.map(({ key, url }) => (
               <button
-                key={url}
+                key={key}
                 type="button"
                 onClick={() => setLightboxUrl(url)}
                 aria-label="사진 크게 보기"
@@ -669,11 +672,11 @@ export function PreferenceSetupForm() {
           </p>
         </div>
 
-        {photos.length > 0 || savedPhotoUrls.length > 0 ? (
+        {photos.length > 0 || savedPhotos.length > 0 ? (
           <p className="mt-3 flex items-baseline justify-between gap-2 px-0.5 text-[13px] text-[color:var(--ink-sub)]">
             <span>
               <strong className="font-bold text-[color:var(--ink)]">
-                {savedPhotoUrls.length + photos.length}장
+                {savedPhotos.length + photos.length}장
               </strong>{' '}
               골랐어요
               {photos.length > 0 ? ` · ${photos.length}장은 아직 분석 전이에요` : ''}
@@ -681,7 +684,7 @@ export function PreferenceSetupForm() {
             {/* 숫자만 mono — 한글까지 mono 로 두면 폴백 폰트에서 자간이 깨진다. */}
             <span className="shrink-0 text-[12px] text-[color:var(--ink-faint)]">
               <span className="font-mono tracking-[0.04em]">
-                {savedPhotoUrls.length + photos.length}
+                {savedPhotos.length + photos.length}
               </span>{' '}
               / 최대 <span className="font-mono tracking-[0.04em]">{MAX_PREFERENCE_PHOTOS}</span>
             </span>
@@ -712,7 +715,7 @@ export function PreferenceSetupForm() {
       </SetupBlock>
 
       {/* 분석 결과 카드 — 목업 .result-card(완료 칩 · 겹친 썸네일 · 태그 그룹 · 정정 힌트) */}
-      {savedPhotoUrls.length > 0 || analyzedTags ? (
+      {savedPhotos.length > 0 || analyzedTags ? (
         <section className="wvr-rise wvr-rise-2 rounded-[20px] border border-[color:var(--line)] bg-[color:var(--card)] p-5 shadow-[var(--shadow-card)]">
           <span className="inline-flex items-center gap-1.5 rounded-[8px] bg-[color:var(--primary-tint)] px-2 py-1 text-[11px] font-bold text-[color:var(--primary)]">
             <LuCheck className="size-3" aria-hidden />
@@ -722,11 +725,11 @@ export function PreferenceSetupForm() {
             사진에서 이런 취향을 읽었어요
           </h2>
 
-          {savedPhotoUrls.length > 0 ? (
+          {savedPhotos.length > 0 ? (
             <div className="mt-3.5 flex items-center">
-              {savedPhotoUrls.slice(0, 6).map((url, index) => (
+              {savedPhotos.slice(0, 6).map(({ key, url }, index) => (
                 <span
-                  key={url}
+                  key={key}
                   className={`size-10 shrink-0 overflow-hidden rounded-[12px] border-2 border-[color:var(--card)] shadow-[0_0_0_1px_var(--line)] ${
                     index > 0 ? '-ml-2.5' : ''
                   }`}
@@ -736,7 +739,7 @@ export function PreferenceSetupForm() {
                 </span>
               ))}
               <span className="ml-3 text-[12.5px] text-[color:var(--ink-faint)]">
-                고른 사진 {savedPhotoUrls.length}장
+                고른 사진 {savedPhotos.length}장
               </span>
             </div>
           ) : null}
@@ -766,17 +769,17 @@ export function PreferenceSetupForm() {
             </div>
           ) : null}
 
-          {savedPhotoUrls.length > 0 ? (
+          {savedPhotos.length > 0 ? (
             <div className="mt-4 border-t border-dashed border-[color:var(--line)] pt-4">
               <div className="mb-2 text-[12px] font-semibold text-[color:var(--ink-faint)]">
-                저장된 사진 {savedPhotoUrls.length}장 · 태그를 눌러 켜고 끌 수 있어요
+                저장된 사진 {savedPhotos.length}장 · 태그를 눌러 켜고 끌 수 있어요
               </div>
               <ul className="space-y-2">
-                {savedPhotoUrls.map((url) => {
-                  const photo = photoTagsByUrl.get(url);
+                {savedPhotos.map(({ key, url }) => {
+                  const photo = photoTagsByKey.get(key);
                   return (
                     <SavedPhotoRow
-                      key={url}
+                      key={key}
                       url={url}
                       tags={photo?.tags ?? []}
                       // 아직 분석되지 않은 사진은 "취향 없음" 이 아니라 그렇게 보여야 한다.
@@ -790,9 +793,9 @@ export function PreferenceSetupForm() {
                       }
                       busy={togglePhotoTagMutation.isPending || deletePhotoMutation.isPending}
                       onToggle={(tag, enabled) =>
-                        togglePhotoTagMutation.mutate({ url, tag, enabled })
+                        togglePhotoTagMutation.mutate({ key, tag, enabled })
                       }
-                      onDelete={() => deletePhotoMutation.mutate(url)}
+                      onDelete={() => deletePhotoMutation.mutate(key)}
                       onZoom={() => setLightboxUrl(url)}
                     />
                   );
@@ -906,7 +909,7 @@ export function PreferenceSetupForm() {
     if (valid.length === 0) return;
 
     // 한 번에 3장, 저장된 사진까지 합쳐 총 10장을 넘길 수 없다.
-    const remainingTotal = Math.max(0, MAX_PREFERENCE_PHOTOS - savedPhotoUrls.length);
+    const remainingTotal = Math.max(0, MAX_PREFERENCE_PHOTOS - savedPhotos.length);
     const allowance = Math.min(MAX_PREFERENCE_UPLOAD, remainingTotal);
     setPhotos((current) => {
       const merged = [...current, ...valid].slice(0, allowance);

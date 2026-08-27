@@ -108,11 +108,11 @@ export interface PreferenceDto {
   userId: string;
   tasteTags: TasteTagDto;
   profile?: PreferenceProfileDto;
-  /** 사용자가 올린 취향 원본 사진 URL (Object Storage) */
-  photoUrls?: string[];
-  /** 사진별 분석 결과 (key = 사진 URL). 사진 추가·삭제 시 재집계에 쓰인다. */
+  /** 사용자가 올린 취향 사진 (비공개 버킷 키 + 만료되는 표시용 URL) */
+  photos?: PreferencePhotoRefDto[];
+  /** 사진별 분석 결과 (key = 스토리지 키). 사진 추가·삭제 시 재집계에 쓰인다. */
   photoTags?: Record<string, TasteTagDto>;
-  /** 사용자가 끈 사진별 태그 (key = 사진 URL). 분석 결과는 그대로 두고 집계에서만 제외한다. */
+  /** 사용자가 끈 사진별 태그 (key = 스토리지 키). 분석 결과는 그대로 두고 집계에서만 제외한다. */
   disabledPhotoTags?: Record<string, TasteTagValue[]>;
   /** pgvector 임베딩 ID 참조 */
   embeddingId?: string;
@@ -138,25 +138,43 @@ export interface PreferenceProfileDto {
 export interface UpdatePreferenceDto {
   tasteTags: Partial<TasteTagDto>;
   profile?: Partial<PreferenceProfileDto>;
-  /** 지정 시 취향 사진 URL 을 통째로 교체 */
-  photoUrls?: string[];
-  /** 지정 시 사진별 분석 결과를 통째로 교체 (key = 사진 URL) */
+  /** 지정 시 취향 사진 키 목록을 통째로 교체 */
+  photoKeys?: string[];
+  /** 지정 시 사진별 분석 결과를 통째로 교체 (key = 스토리지 키) */
   photoTags?: Record<string, TasteTagDto>;
-  /** 지정 시 사진별 비활성 태그 목록을 통째로 교체 (key = 사진 URL) */
+  /** 지정 시 사진별 비활성 태그 목록을 통째로 교체 (key = 스토리지 키) */
   disabledPhotoTags?: Record<string, TasteTagValue[]>;
 }
 
 /** 특정 사진에서 추출된 특정 태그를 켜고 끈다. */
 export interface TogglePhotoTagDto {
-  /** 대상 사진 URL */
-  url: string;
+  /** 대상 사진의 스토리지 키. 표시용 서명 URL 은 만료되므로 식별자로 쓸 수 없다. */
+  key: string;
   tag: TasteTagValue;
   /** true = 집계에 반영, false = 제외 */
   enabled: boolean;
 }
 
+/**
+ * 취향 사진 한 장을 가리키는 값.
+ *
+ * `key` 가 **정본 식별자**다(스토리지 키). 예전에는 공개 URL 문자열이 식별자 겸 표시용이었는데,
+ * 비공개 버킷으로 옮기면서 표시용 URL 이 **만료되는 서명 URL** 이 됐다 — 매번 값이 바뀌므로
+ * 식별자로 쓸 수 없다(태그 매핑이 끊긴다). 삭제·태그 토글은 `key` 로 지목한다.
+ *
+ * `url` 은 표시용이고 15분 뒤 만료된다. 만료 후에도 화면에 남아 있으면 이미지가 깨지므로
+ * 클라이언트는 이 목록을 그보다 짧은 주기로 다시 받아야 한다.
+ */
+export interface PreferencePhotoRefDto {
+  key: string;
+  url: string;
+}
+
 /** 사진 한 장과 그 사진에서 뽑힌 태그의 on/off 상태. */
 export interface PreferencePhotoTagsDto {
+  /** 정본 식별자(스토리지 키). 토글·삭제가 이 값을 보낸다. */
+  key: string;
+  /** 표시용 서명 URL. 만료되므로 저장하지 말 것. */
   url: string;
   tags: Array<{ tag: TasteTagValue; enabled: boolean }>;
   /**
@@ -184,10 +202,10 @@ export interface PreferenceAnalysisJobDto {
   /** 완료 시에만 채워지는 최종 취향 태그 */
   tasteTags?: TasteTagDto;
   /**
-   * 보관 중인 전체 사진 URL. **완료 시에만 채워진다** —
+   * 보관 중인 전체 사진(키 + 표시용 서명 URL). **완료 시에만 채워진다** —
    * 진행 중에는 조회할 이유가 없어 빈 배열이다(폴링마다 DB 를 보지 않기 위해).
    */
-  photoUrls: string[];
+  photos: PreferencePhotoRefDto[];
   /** 실패 사유 (status=failed) */
   error?: string;
 }

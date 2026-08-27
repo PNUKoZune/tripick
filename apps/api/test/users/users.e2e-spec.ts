@@ -32,6 +32,8 @@ describe('Users (e2e)', () => {
     isReady: jest.fn().mockReturnValue(false),
     putObject: jest.fn(),
     deleteObject: jest.fn(),
+    // 취향 사진은 비공개 버킷이라 삭제 경로가 따로다.
+    deletePrivateObject: jest.fn(),
     keyFromPublicUrl: jest.fn().mockReturnValue(null),
   };
 
@@ -323,25 +325,26 @@ describe('Users (e2e)', () => {
     });
 
     /**
-     * 취향 사진·프로필 이미지는 익명 다운로드가 열린 `public/` 프리픽스에 있고 DB 밖이라
-     * CASCADE 가 닿지 않는다. 안 지우면 탈퇴한 사용자의 개인 사진이 URL 만으로 계속 열린다.
+     * 업로드 이미지는 DB 밖(오브젝트 스토리지)이라 CASCADE 가 닿지 않는다. 안 지우면
+     * 탈퇴한 사용자의 개인 사진이 남는다. 버킷이 갈려 있어 삭제 경로도 둘로 갈린다 —
+     * 취향 사진은 비공개 버킷, 프로필 이미지는 공개 버킷.
      */
-    it('deletes the uploaded images from storage', async () => {
+    it('deletes the uploaded images from both buckets', async () => {
       const uid = await newUser({ profileImageUrl: '/storage/public/profiles/u/1.jpg' });
       await preferences.save(
         preferences.create({
           userId: uid,
-          photoUrls: [
-            '/storage/public/preferences/u/1-0.jpg',
-            '/storage/public/preferences/u/1-1.jpg',
-          ],
+          // 취향 사진은 값이 곧 비공개 버킷 키다(URL 변환 없음).
+          photoKeys: ['preferences/u/1-0.jpg', 'preferences/u/1-1.jpg'],
         }),
       );
       storage.keyFromPublicUrl.mockImplementation((url: string) =>
         url.replace('/storage/', ''),
       );
       storage.deleteObject.mockResolvedValue(undefined);
+      storage.deletePrivateObject.mockResolvedValue(undefined);
       storage.deleteObject.mockClear();
+      storage.deletePrivateObject.mockClear();
 
       await http
         .post('/users/me/withdrawal')
@@ -349,12 +352,12 @@ describe('Users (e2e)', () => {
         .send({ confirmation: '탈퇴' })
         .expect(204);
 
-      const deleted = storage.deleteObject.mock.calls.map(([key]: [string]) => key).sort();
-      expect(deleted).toEqual([
-        'public/preferences/u/1-0.jpg',
-        'public/preferences/u/1-1.jpg',
+      expect(storage.deleteObject.mock.calls.map(([key]: [string]) => key)).toEqual([
         'public/profiles/u/1.jpg',
       ]);
+      expect(
+        storage.deletePrivateObject.mock.calls.map(([key]: [string]) => key).sort(),
+      ).toEqual(['preferences/u/1-0.jpg', 'preferences/u/1-1.jpg']);
       storage.keyFromPublicUrl.mockReturnValue(null);
     });
 

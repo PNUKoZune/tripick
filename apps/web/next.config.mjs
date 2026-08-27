@@ -10,6 +10,12 @@ const backendOrigin = process.env.TRIPICK_API_ORIGIN ?? 'http://127.0.0.1:4000';
 // 웹뷰에서 기기 자신을 가리켜 이미지가 안 떴다. 라이브(R2)는 STORAGE_PUBLIC_URL 을 절대 URL 로
 // 두면 이 프록시가 안 쓰인다.
 const storageOrigin = process.env.TRIPICK_STORAGE_ORIGIN ?? 'http://127.0.0.1:9000/tripick';
+// 취향 사진은 **비공개 버킷**에 있어 서명 URL 로만 읽힌다. 공개 프록시와 목적지 버킷이 달라
+// 경로를 따로 둔다. API 의 `PRIVATE_PROXY_PATH` 와 짝이므로 한쪽만 바꾸면 이미지가 404 난다.
+// ⚠️ host 가 API 의 STORAGE_ENDPOINT 와 정확히 같아야 한다 — SigV4 가 host 를 서명에 포함해서
+// (`X-Amz-SignedHeaders=host`) 다르면 403 SignatureDoesNotMatch 가 난다.
+const privateStorageOrigin =
+  process.env.TRIPICK_PRIVATE_STORAGE_ORIGIN ?? 'http://127.0.0.1:9000/tripick-private';
 
 const nextConfig = {
   transpilePackages: ['@tripick/types'],
@@ -63,6 +69,10 @@ const nextConfig = {
       {
         source: '/storage/:path*',
         destination: `${storageOrigin}/:path*`,
+      },
+      {
+        source: '/storage-private/:path*',
+        destination: `${privateStorageOrigin}/:path*`,
       },
     ];
   },

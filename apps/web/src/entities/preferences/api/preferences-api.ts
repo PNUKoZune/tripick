@@ -84,13 +84,15 @@ export function getPreferenceAnalysisJob(token: string, jobId: string) {
   return api.get<PreferenceAnalysisJobDto>(`/preference-analyzer/jobs/${jobId}`, token);
 }
 
-/** 저장된 취향 사진 한 장을 삭제한다 (스토리지 원본 + URL 제거 + 태그 재집계). */
-export function deletePreferencePhoto(token: string, url: string) {
+/**
+ * 저장된 취향 사진 한 장을 삭제한다 (스토리지 원본 + 키 제거 + 태그 재집계).
+ * 지목은 **스토리지 키**로 한다 — 표시용 URL 은 만료되는 서명 URL 이라 식별자가 못 된다.
+ */
+export function deletePreferencePhoto(token: string, key: string) {
   return api.delete<{
-    photoUrls: string[];
     tasteTags?: TasteTagDto;
     photos: PreferencePhotoTagsDto[];
-  }>(`/preference-analyzer/photos?url=${encodeURIComponent(url)}`, token);
+  }>(`/preference-analyzer/photos?key=${encodeURIComponent(key)}`, token);
 }
 
 /** 사진별로 어떤 태그가 나왔고 켜져 있는지 조회한다. */
@@ -104,7 +106,7 @@ export function getPreferencePhotoTags(token: string) {
  */
 export function togglePreferencePhotoTag(
   token: string,
-  input: { url: string; tag: TasteTagValue; enabled: boolean },
+  input: { key: string; tag: TasteTagValue; enabled: boolean },
 ) {
   return api.patch<{ tasteTags: TasteTagDto; photos: PreferencePhotoTagsDto[] }>(
     '/preference-analyzer/photos/tags',

@@ -109,6 +109,7 @@
 - [ops/deployment-railway-vercel-runpod.md](ops/deployment-railway-vercel-runpod.md) — 배포(Railway · Vercel · RunPod)
 - [ops/production-ai-long-term-readiness.md](ops/production-ai-long-term-readiness.md) — production AI 장기 운영 준비
 - [ops/test-coverage-expansion-v1.md](ops/test-coverage-expansion-v1.md) — API 테스트 커버리지 확장
+- [ops/preference-photo-private-bucket-v1.md](ops/preference-photo-private-bucket-v1.md) — 취향 사진을 비공개 버킷 + 15분 서명 URL 로. R2 는 프리픽스 정책이 없고 presigned 는 커스텀 도메인에서 안 된다, 배포는 오브젝트 이전 → DB 마이그레이션 순서
 - [ops/dependency-audit-overrides-v1.md](ops/dependency-audit-overrides-v1.md) — pnpm audit 84→2건. override 타깃은 캐럿으로 메이저 고정(열어 두면 babel 8 이 올라와 RN 이 깨진다), 셀렉터는 취약 범위로 좁힐 것
 - [ops/eslint-flat-config-v1.md](ops/eslint-flat-config-v1.md) — ESLint 9 flat config 워크스페이스 세팅 + react-hooks 오류 해소
 - [ops/production-catalog-reingest-v1.md](ops/production-catalog-reingest-v1.md) — 프로덕션 카탈로그 재적재(6,473→71,684행). 적재량이 인지도 커버리지 게이트를 뒤집는다, 병목은 DB 왕복
