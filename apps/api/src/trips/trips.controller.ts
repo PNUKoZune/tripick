@@ -11,6 +11,8 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import { LLM_GENERATION_LIMIT } from '../common/throttle';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserEntity } from '../users/user.entity';
@@ -37,6 +39,8 @@ export class TripsController {
   }
 
   @Post()
+  // 생성 한 건이 일정 전체를 LLM 으로 만든다 — 전역 120/분 안에서도 GPU·외부 쿼터가 녹는다.
+  @Throttle(LLM_GENERATION_LIMIT)
   @ApiOperation({ summary: '여행 생성 (일정 자동 생성 트리거)' })
   create(@CurrentUser() user: UserEntity, @Body() dto: CreateTripBodyDto) {
     return this.tripsService.create(user.id, dto);

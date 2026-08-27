@@ -12,6 +12,7 @@ import { UsersService } from '../../src/users/users.service';
 import { FcmTokenEntity } from '../../src/notification/fcm-token.entity';
 import { RefreshTokenEntity } from '../../src/auth/entities/refresh-token.entity';
 import { EmailTokenEntity } from '../../src/auth/entities/email-token.entity';
+import { PreferenceEntity } from '../../src/preferences/preference.entity';
 import { FcmTokenService } from '../../src/notification/fcm-token.service';
 import { StorageService } from '../../src/storage/storage.service';
 import { JwtAuthGuard } from '../../src/auth/guards/jwt-auth.guard';
@@ -24,6 +25,7 @@ describe('Users (e2e)', () => {
   let withdrawals: Repository<WithdrawalReasonEntity>;
   let refreshTokens: Repository<RefreshTokenEntity>;
   let emailTokens: Repository<EmailTokenEntity>;
+  let preferences: Repository<PreferenceEntity>;
   let service: UsersService;
   // 스토리지 미설정 상태를 흉내내 업로드 503 경로를 검증한다.
   const storage = {
@@ -41,6 +43,7 @@ describe('Users (e2e)', () => {
         WithdrawalReasonEntity,
         RefreshTokenEntity,
         EmailTokenEntity,
+        PreferenceEntity,
       ],
       controllers: [UsersController],
       providers: [
@@ -56,6 +59,7 @@ describe('Users (e2e)', () => {
     withdrawals = app.get(getRepositoryToken(WithdrawalReasonEntity));
     refreshTokens = app.get(getRepositoryToken(RefreshTokenEntity));
     emailTokens = app.get(getRepositoryToken(EmailTokenEntity));
+    preferences = app.get(getRepositoryToken(PreferenceEntity));
     service = app.get(UsersService);
   });
 
@@ -272,6 +276,75 @@ describe('Users (e2e)', () => {
         .expect(400);
 
       expect(await users.findOneBy({ id: uid })).not.toBeNull();
+    });
+
+    /**
+     * 취향 사진·프로필 이미지는 익명 다운로드가 열린 `public/` 프리픽스에 있고 DB 밖이라
+     * CASCADE 가 닿지 않는다. 안 지우면 탈퇴한 사용자의 개인 사진이 URL 만으로 계속 열린다.
+     */
+    it('deletes the uploaded images from storage', async () => {
+      const uid = await newUser({ profileImageUrl: '/storage/public/profiles/u/1.jpg' });
+      await preferences.save(
+        preferences.create({
+          userId: uid,
+          photoUrls: [
+            '/storage/public/preferences/u/1-0.jpg',
+            '/storage/public/preferences/u/1-1.jpg',
+          ],
+        }),
+      );
+      storage.keyFromPublicUrl.mockImplementation((url: string) =>
+        url.replace('/storage/', ''),
+      );
+      storage.deleteObject.mockResolvedValue(undefined);
+      storage.deleteObject.mockClear();
+
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: '탈퇴' })
+        .expect(204);
+
+      const deleted = storage.deleteObject.mock.calls.map(([key]: [string]) => key).sort();
+      expect(deleted).toEqual([
+        'public/preferences/u/1-0.jpg',
+        'public/preferences/u/1-1.jpg',
+        'public/profiles/u/1.jpg',
+      ]);
+      storage.keyFromPublicUrl.mockReturnValue(null);
+    });
+
+    // 카카오 프로필 등 외부 URL 은 우리 버킷이 아니라 지울 대상이 아니다(키 추출이 null).
+    it('leaves external profile images alone', async () => {
+      const uid = await newUser({ profileImageUrl: 'https://k.kakaocdn.net/x/y.jpg' });
+      storage.deleteObject.mockClear();
+
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: '탈퇴' })
+        .expect(204);
+
+      expect(storage.deleteObject).not.toHaveBeenCalled();
+    });
+
+    // 오브젝트 삭제가 실패해도 계정 삭제는 이미 커밋됐다 — 500 을 주면 "탈퇴가 안 됐다"로 읽힌다.
+    it('still completes the withdrawal when object deletion fails', async () => {
+      const uid = await newUser({ profileImageUrl: '/storage/public/profiles/u/9.jpg' });
+      storage.keyFromPublicUrl.mockImplementation((url: string) =>
+        url.replace('/storage/', ''),
+      );
+      storage.deleteObject.mockRejectedValue(new Error('storage down'));
+
+      await http
+        .post('/users/me/withdrawal')
+        .set('x-test-user-id', uid)
+        .send({ confirmation: '탈퇴' })
+        .expect(204);
+
+      expect(await users.findOneBy({ id: uid })).toBeNull();
+      storage.keyFromPublicUrl.mockReturnValue(null);
+      storage.deleteObject.mockResolvedValue(undefined);
     });
 
     it('stores the reason anonymously (no user reference)', async () => {

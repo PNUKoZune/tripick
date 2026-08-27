@@ -20,6 +20,7 @@ import {
   FileTypeValidator,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import {
   MAX_PREFERENCE_PHOTOS,
@@ -35,6 +36,7 @@ import {
   toggleDisabledTag,
 } from '../preferences/photo-taste';
 import { TogglePhotoTagBodyDto } from '../preferences/dto/preference.dto';
+import { VISION_UPLOAD_LIMIT } from '../common/throttle';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserEntity } from '../users/user.entity';
@@ -69,6 +71,8 @@ export class PreferenceAnalyzerController {
 
   @Post('upload')
   @HttpCode(HttpStatus.ACCEPTED)
+  // 1회 업로드가 사진 3장(각 10MB) + vision 추론 3건이다. 전역 120/분으로는 못 막는다.
+  @Throttle(VISION_UPLOAD_LIMIT)
   @ApiOperation({
     summary: `취향 이미지 업로드 → 분석 잡 등록 (한 번에 ${MAX_PREFERENCE_UPLOAD}장, 총 ${MAX_PREFERENCE_PHOTOS}장)`,
   })
@@ -148,6 +152,7 @@ export class PreferenceAnalyzerController {
 
   @Post('reanalyze')
   @HttpCode(HttpStatus.ACCEPTED)
+  @Throttle(VISION_UPLOAD_LIMIT)
   @ApiOperation({
     summary: '보관 중인 사진 중 아직 분석되지 않은 것만 다시 분석 (새 업로드 없이)',
   })

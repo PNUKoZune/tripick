@@ -16,6 +16,7 @@ import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { timingSafeEqual } from 'node:crypto';
 import type { CookieOptions, Request, Response } from 'express';
+import { perMinute } from '../common/throttle';
 import { AuthService, type TokenContext } from './auth.service';
 import { KakaoExchangeService } from './kakao-exchange.service';
 import { EmailSendLimiterService, type MailPurpose } from './email-send-limiter.service';
@@ -30,9 +31,6 @@ import {
   ResetPasswordBodyDto,
   VerifyEmailBodyDto,
 } from './dto/auth.dto';
-
-/** 분당 요청 제한 헬퍼 (ttl 단위 ms) */
-const perMinute = (limit: number) => ({ default: { limit, ttl: 60_000 } });
 
 /** 카카오 로그인 CSRF 방어용 state 를 담는 쿠키. 로그인 시작 → 콜백 한 왕복만 산다. */
 const KAKAO_STATE_COOKIE = 'tripick_kakao_state';

@@ -14,6 +14,7 @@ import { StorageService } from '../storage/storage.service';
 import { FcmTokenService } from '../notification/fcm-token.service';
 import { RefreshTokenEntity } from '../auth/entities/refresh-token.entity';
 import { EmailTokenEntity } from '../auth/entities/email-token.entity';
+import { PreferenceEntity } from '../preferences/preference.entity';
 import { UserEntity } from './user.entity';
 import { WithdrawalReasonEntity } from './withdrawal-reason.entity';
 import { WithdrawUserDto } from './dto/withdraw-user.dto';
@@ -47,6 +48,8 @@ export class UsersService {
     private readonly refreshTokens: Repository<RefreshTokenEntity>,
     @InjectRepository(EmailTokenEntity)
     private readonly emailTokens: Repository<EmailTokenEntity>,
+    @InjectRepository(PreferenceEntity)
+    private readonly preferences: Repository<PreferenceEntity>,
     private readonly storage: StorageService,
     private readonly fcmTokens: FcmTokenService,
   ) {}
@@ -396,12 +399,48 @@ export class UsersService {
    * 계정 + 세션 흔적 삭제. FK cascade 가 걸린 테이블은 자동으로 지워지지만, FK 없이 userId
    * 컬럼만 가진 테이블(fcm_tokens·refresh_tokens·email_tokens)은 여기서 직접 지운다 —
    * 특히 refresh 토큰이 남으면 탈퇴 후에도 /auth/refresh 가 계속 새 토큰을 발급한다.
+   *
+   * 업로드한 이미지도 함께 지운다. DB 밖(오브젝트 스토리지)이라 CASCADE 가 닿지 않고,
+   * 키가 익명 다운로드가 허용된 `public/` 프리픽스에 있어 그대로 두면 **탈퇴한 사용자의
+   * 취향 사진·프로필 이미지가 URL 만으로 계속 열린다.** 계정을 지운 뒤 남는 개인 사진은
+   * 삭제 요청을 이행하지 않은 것과 같다.
    */
   private async removeUser(user: UserEntity): Promise<void> {
+    // 행이 사라지면 키를 알 방법이 없으므로 DB 삭제 **전에** 읽어 둔다.
+    const storageKeys = await this.uploadedStorageKeys(user);
     await this.fcmTokens.removeAllForUser(user.id);
     await this.refreshTokens.delete({ userId: user.id });
     await this.emailTokens.delete({ userId: user.id });
     await this.repo.remove(user);
+    // 오브젝트 삭제 실패로 탈퇴를 되돌리지는 않는다 — 계정은 이미 지워졌고, 사용자에게
+    // 500 을 돌려주면 "탈퇴가 안 됐다"고 읽힌다. `allSettled` 로 여기서 직접 막는다:
+    // deleteObject 가 지금은 스스로 삼키지만, 그 구현에 기대면 나중에 던지도록 바뀔 때
+    // 탈퇴 응답이 조용히 500 이 된다.
+    const results = await Promise.allSettled(
+      storageKeys.map((key) => this.storage.deleteObject(key)),
+    );
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        this.logger.warn(`탈퇴 정리 중 오브젝트 삭제 실패 (user=${user.id}): ${String(result.reason)}`);
+      }
+    }
+    if (storageKeys.length > 0) {
+      this.logger.log(`탈퇴 정리: 업로드 이미지 ${storageKeys.length}건 삭제 (user=${user.id})`);
+    }
+  }
+
+  /**
+   * 이 사용자가 올려 우리 스토리지에 있는 오브젝트 키 전체.
+   * 카카오 프로필처럼 외부 URL 은 `keyFromPublicUrl` 이 null 을 주므로 자연히 빠진다.
+   */
+  private async uploadedStorageKeys(user: UserEntity): Promise<string[]> {
+    const preference = await this.preferences.findOne({ where: { userId: user.id } });
+    const urls = [...(preference?.photoUrls ?? [])];
+    if (user.profileImageUrl) urls.push(user.profileImageUrl);
+    const keys = urls
+      .map((url) => this.storage.keyFromPublicUrl(url))
+      .filter((key): key is string => Boolean(key));
+    return [...new Set(keys)];
   }
 
   /** 사유 적재는 탈퇴 자체를 막지 않는다 — 실패하면 로그만 남긴다(계정은 이미 삭제됨). */

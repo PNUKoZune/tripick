@@ -140,8 +140,6 @@ function getKakaoCallbackUrl(url: string): string | null {
   }
 }
 
-// react-native-webview 13.x 타입 union 에서 Android 전용 onPermissionRequest 가 빠져있다.
-// Platform 분기로 prop 을 객체에 모아 spread 하면 타입 충돌 없이 안드로이드에만 적용된다.
 // Android 전용 백그라운드 위치 추적 네이티브 모듈 (foreground service).
 // iOS 는 모듈이 없어 undefined → watchPosition 폴백을 사용한다.
 type LocationTrackingNative = { start(): void; stop(): void };
@@ -168,14 +166,6 @@ const LOCATION_REPORT_THROTTLE_MS = 60_000;
 // WebView localStorage 에 두던 장수 자격증명을 여기로 옮겨 검사·탈취 노출면을 줄인다.
 const REFRESH_TOKEN_SERVICE = 'place.tripick.refreshToken';
 const REFRESH_TOKEN_ACCOUNT = 'refreshToken';
-
-const androidOnlyProps =
-  Platform.OS === 'android'
-    ? {
-        onPermissionRequest: (request: { grant: (r: string[]) => void; resources: string[] }) =>
-          request.grant(request.resources),
-      }
-    : {};
 
 export default function App() {
   // 시스템 바 아이콘·셸 배경을 웹 팔레트(--app-bg)와 같은 명암으로 맞춘다.
@@ -708,9 +698,14 @@ export default function App() {
           allowsBackForwardNavigationGestures
           // 사진은 <input type=file> → 네이티브 파일 선택 시트로만 올린다(getUserMedia 미사용)
           mediaPlaybackRequiresUserAction={false}
-          // Geolocation + Android 전용 권한 brige
+          // geolocation 권한은 JS 에서 손댈 게 없다 — 라이브러리 네이티브(RNCWebChromeClient)의
+          // onGeolocationPermissionsShowPrompt 가 ACCESS_FINE_LOCATION 을 직접 확인·요청한다.
+          // 예전엔 `onPermissionRequest` 로 요청 리소스를 통째로 grant 했는데, 그 이름은
+          // react-native-webview 13.16.1 의 JS prop 에 아예 없어 호출되지 않는 죽은 코드였다.
+          // 게다가 그 네이티브 콜백이 담당하는 건 geolocation 이 아니라 카메라·마이크·
+          // protected media 라, 살아 있었다면 페이지 안의 아무 스크립트에나 캡처 권한을
+          // 내주는 코드였다 — 되살리지 말 것.
           geolocationEnabled
-          {...androidOnlyProps}
           // 외부 도메인 진입 차단 → 시스템 브라우저로 위임
           onShouldStartLoadWithRequest={(request) => {
             if (isInternalWebUrl(request.url)) return true;
