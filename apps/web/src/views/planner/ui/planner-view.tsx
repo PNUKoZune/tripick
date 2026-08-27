@@ -470,7 +470,10 @@ function PlannerContent({
         {/* 요약 카드는 모바일에선 "정보" 탭 안으로 넣는다 — 좁은 화면에서 지도·일정보다
             위에 두면 첫 화면이 요약으로 차서 정작 오늘 일정이 스크롤 밖으로 밀린다.
             데스크탑은 사이드바 상단(compact)에 그대로 남는다. */}
-        {trip ? (
+        {/* "지도" 탭은 자기 지도(4:5 + 마커 선택)를 그리므로 상단 미리보기를 걷어낸다 —
+            둘 다 두면 좁은 화면을 같은 지도 두 장이 차지한다. 검색·길찾기 오버레이는
+            그 탭 지도로 옮겨 붙여 기능은 그대로다. */}
+        {tab === 'map' ? null : trip ? (
           <PlannerMap
             placeholder={trip.searchPlaceholder}
             center={mapCenter}
@@ -526,7 +529,13 @@ function PlannerContent({
               </>
             ) : null}
             {tab === 'map' && trip ? (
-              <TripMapPanel trip={trip} items={itemsForDay} onSelectItem={setOpenItem} />
+              <TripMapPanel
+                trip={trip}
+                items={itemsForDay}
+                onSelectItem={setOpenItem}
+                onPickSearchPlace={handlePickSearchPlace}
+                pickPlaceLabel={pickPlaceLabel}
+              />
             ) : null}
             {tab === 'info' && trip ? (
               <>
