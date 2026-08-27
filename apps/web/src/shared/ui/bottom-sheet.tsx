@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { useBodyScrollLock } from '@/shared/lib/use-body-scroll-lock';
 import { usePrefersReducedMotion } from '@/shared/lib/use-prefers-reduced-motion';
 import { useDismissOnEscape } from '@/shared/lib/use-dismiss-on-escape';
+import { useOverlayBackDismiss } from '@/shared/lib/use-overlay-back-dismiss';
 import { useFocusTrap } from '@/shared/lib/use-focus-trap';
 
 type Phase = 'closed' | 'opening' | 'open' | 'closing';
@@ -97,6 +98,8 @@ export function BottomSheet({ open, onClose, children, label, topSlot, themed = 
   const mounted = phase !== 'closed';
   useBodyScrollLock(mounted);
   useDismissOnEscape(onClose, mounted);
+  // 닫히는 중(open=false)엔 등록하지 않는다 — 이미 닫히는 시트가 뒤로가기를 한 번 더 먹으면 안 된다.
+  useOverlayBackDismiss(onClose, open);
 
   if (phase === 'closed') return null;
 

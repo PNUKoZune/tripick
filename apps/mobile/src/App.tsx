@@ -57,7 +57,8 @@ type BridgeMessage =
   | { type: 'REQUEST_REFRESH_TOKEN'; requestId: string }
   | { type: 'OPEN_EXTERNAL'; url: string }
   | { type: 'WEB_READY' }
-  | { type: 'NAV_STATE'; canGoBack: boolean };
+  | { type: 'NAV_STATE'; canGoBack: boolean }
+  | { type: 'OVERLAY_STATE'; open: boolean };
 
 const PRODUCTION_WEB_APP_URL = 'https://tripick.place';
 const WEB_APP_HOST = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
@@ -171,6 +172,8 @@ export default function App() {
   const [isTabRoot, setIsTabRoot] = useState(false);
   // 종료 확인이 무장된 시각(epoch ms). 타이머 없이 시간만 비교해 두 번째 입력을 판정한다.
   const exitArmedUntilRef = useRef(0);
+  // 웹이 바텀시트·모달을 띄우고 있는지. 떠 있으면 뒤로가기를 히스토리·종료가 아니라 "시트 닫기" 로 돌린다.
+  const overlayOpenRef = useRef(false);
   const [webViewKey, setWebViewKey] = useState(0);
   const [webViewUri, setWebViewUri] = useState(`${WEB_APP_URL}${ENTRY_PATH}`);
   const [initialLoadFailed, setInitialLoadFailed] = useState(false);
@@ -211,6 +214,15 @@ export default function App() {
   useEffect(() => {
     if (Platform.OS !== 'android') return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      // 시트·모달이 떠 있으면 그것부터 닫는다. 네이티브는 웹이 무엇을 띄웠는지 모르므로
+      // 웹이 알려 준 상태(OVERLAY_STATE)를 보고 웹의 닫기 함수를 부른다 — 이게 없으면
+      // 탭 루트에선 시트를 열어 둔 채 종료 확인이 뜨고, 그 밖에선 화면만 빠져나간다.
+      if (overlayOpenRef.current) {
+        webViewRef.current?.injectJavaScript(
+          'window.__tripickBack && window.__tripickBack(); true;',
+        );
+        return true;
+      }
       if (canGoBack && !isTabRoot) {
         webViewRef.current?.goBack();
         return true;
@@ -543,6 +555,10 @@ export default function App() {
         .catch(() => postToWeb({ type: 'REFRESH_TOKEN', requestId, token: null }));
       return;
     }
+    if (msg.type === 'OVERLAY_STATE') {
+      overlayOpenRef.current = msg.open === true;
+      return;
+    }
     if (msg.type === 'OPEN_EXTERNAL' && msg.url) {
       Linking.openURL(msg.url).catch(() => undefined);
       return;
@@ -598,6 +614,8 @@ export default function App() {
           console.log('[TriPick] WebView URL:', state.url);
           setCanGoBack(state.canGoBack);
           setIsTabRoot(isTabRootUrl(state.url));
+          // 페이지가 바뀌면 열려 있던 시트도 함께 사라진다 — 웹의 알림을 못 받는 경우에 대비해 여기서도 내린다.
+          overlayOpenRef.current = false;
           // 화면이 바뀌면 직전 화면에서 켜 둔 종료 확인은 무효 — 탭을 옮긴 직후의 뒤로가기가
           // 곧장 종료로 이어지지 않게 한다.
           exitArmedUntilRef.current = 0;

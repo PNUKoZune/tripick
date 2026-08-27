@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 
 import { useBodyScrollLock } from '@/shared/lib/use-body-scroll-lock';
 import { useDismissOnEscape } from '@/shared/lib/use-dismiss-on-escape';
+import { useOverlayBackDismiss } from '@/shared/lib/use-overlay-back-dismiss';
 import { useFocusTrap } from '@/shared/lib/use-focus-trap';
 
 type Props = {
@@ -51,6 +52,8 @@ export function ModalShell({
 
   useBodyScrollLock();
   useDismissOnEscape(onDismiss);
+  // 퇴장 프레임(closing)엔 등록 해제 — 이미 닫히는 모달이 뒤로가기를 한 번 더 먹지 않게.
+  useOverlayBackDismiss(onDismiss, !closing);
 
   // 조상의 transform·filter 에 fixed 오버레이가 갇히지 않게 body 로 포털.
   // 모달은 사용자 상호작용(마운트=열림)으로만 뜨므로 SSR 시점엔 렌더되지 않지만, 방어적으로 가드한다.
