@@ -5,10 +5,17 @@
  * 프리픽스 단위 접근 정책이 없다 — 즉 키를 아는 사람은 버킷 전체를 읽는다. 개인 취향 사진이
  * 영구 공개 URL 로 열려 있던 상태를 닫는 것이 이 이전의 목적이다.
  *
- * 순서가 중요하다:
- *   1) 이 스크립트 (오브젝트 복사 → 검증 → 원본 삭제)
- *   2) `pnpm migration:run` (DB 의 식별자 URL → 키)
- * 반대로 하면 DB 는 새 위치를 가리키는데 오브젝트가 아직 옛 위치에 있어 사진이 깨진다.
+ * 라이브에 트래픽이 있으면 **두 번에 걸쳐** 돌린다:
+ *
+ *   1) `--apply --keep-source`  — 비공개 버킷에 복사하고 **원본은 남긴다.**
+ *      구버전 코드가 아직 공개 URL 로 사진을 읽고 있으므로, 여기서 원본을 지우면
+ *      배포 전까지 모든 사용자의 사진이 404 로 깨진다
+ *   2) (배포) API 부팅 시 `migrationsRun` 이 DB 식별자를 키로 바꾼다
+ *   3) `--apply`  — 원본 삭제. **이 단계가 실제로 노출을 닫는다.** 그때까지 사진은 옛
+ *      공개 URL 로 계속 열려 있다
+ *
+ * 트래픽이 없으면 1·3 을 한 번에(`--apply`) 해도 된다. 어느 쪽이든 **DB 마이그레이션보다
+ * 복사가 먼저**여야 한다 — 반대면 DB 는 새 위치를 가리키는데 오브젝트가 옛 위치에 있다.
  *
  * 실행:
  *   pnpm --filter @tripick/api migrate:photo-objects            # dry-run (기본)
@@ -76,6 +83,7 @@ async function main(): Promise<void> {
 
   let moved = 0;
   let skipped = 0;
+  let deleted = 0;
   let failed = 0;
 
   for (const sourceKey of keys) {
@@ -116,13 +124,21 @@ async function main(): Promise<void> {
         continue;
       }
       await client.send(new DeleteObjectCommand({ Bucket: from.bucket, Key: sourceKey }));
+      deleted += 1;
     }
   }
 
+  // 원본 삭제 건수를 따로 찍는다. 2회차(이미 복사됨 + 원본 삭제)에서 "건너뜀"만 보이면
+  // 파괴적 단계가 아무 일도 안 한 것처럼 읽힌다.
   console.log(
-    `완료 — 이동 ${moved}건, 이미 있어 건너뜀 ${skipped}건, 실패 ${failed}건` +
-      `${KEEP_SOURCE ? ' (원본 보존)' : ''}`,
+    `완료 — 복사 ${moved}건, 이미 있어 복사 건너뜀 ${skipped}건, ` +
+      `원본 삭제 ${deleted}건, 실패 ${failed}건${KEEP_SOURCE ? ' (원본 보존 모드)' : ''}`,
   );
+  if (KEEP_SOURCE) {
+    console.log(
+      '⚠️ 원본이 공개 버킷에 남아 있다 — 배포 후 --keep-source 없이 다시 돌려야 노출이 닫힌다.',
+    );
+  }
   if (!APPLY) {
     console.log('dry-run 이었다. 실제로 옮기려면 --apply 를 붙일 것.');
   } else if (failed === 0) {

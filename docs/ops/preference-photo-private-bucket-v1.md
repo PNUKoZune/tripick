@@ -103,22 +103,46 @@ SigV4 는 host 를 서명에 포함한다(`X-Amz-SignedHeaders=host`). 실측 �
 
 ## 배포 순서 (틀리면 사진이 깨진다)
 
+### 어디서 무엇이 도는가
+
+| 단계 | 실행 위치 | main 반영 필요? |
+|---|---|---|
+| 오브젝트 이전 (`migrate:photo-objects`) | **로컬**에서 프로덕션 R2 자격증명으로 | ❌ R2 의 S3 API 만 쓴다 — 서버·DB 를 거치지 않는다 |
+| DB 식별자 변환 | API 부팅 시 **자동** (`migrationsRun: !isDevelopment`) | ✅ 배포되면서 적용된다 |
+| 새 코드(서명 URL) | Railway(API) · Vercel(web) | ✅ |
+
+즉 **오브젝트 이전은 배포와 무관하게 먼저 돌릴 수 있다.** DB 변환은 따로 실행할 필요가
+없다 — API 가 부팅하며 알아서 적용한다(오히려 수동으로 먼저 돌리면 아래 순서가 깨진다).
+
+### 라이브 트래픽이 있을 때 (무중단)
+
 ```bash
-# 0) R2: tripick-private 버킷 생성. 커스텀 도메인 X, r2.dev X
-#    Railway/Vercel 환경변수에 STORAGE_PRIVATE_BUCKET 추가
+# 0) R2: tripick-private 생성 (커스텀 도메인 X, r2.dev X)
+#    Railway 에 STORAGE_PRIVATE_BUCKET 추가 — **배포 전에** 넣는다.
+#    없으면 DB 는 키로 바뀌는데 서명을 못 만들어 사진이 전부 안 뜬다.
 
-# 1) 오브젝트 이전 (먼저!)  — dry-run 으로 대상 확인 후 apply
-pnpm --filter @tripick/api migrate:photo-objects            # dry-run
+# 1) 로컬에서 복사만 (원본 유지) — 구버전 코드가 아직 공개 URL 로 읽고 있다
+pnpm --filter @tripick/api migrate:photo-objects                          # dry-run
+pnpm --filter @tripick/api migrate:photo-objects -- --apply --keep-source
+
+# 2) develop → main PR 머지 → Railway 배포
+#    부팅 시 migrationsRun 이 DB 식별자를 키로 바꾼다. 오브젝트가 이미 비공개 버킷에
+#    있으므로 새 코드가 바로 정상 동작한다.
+# 3) Vercel web 배포 — 계약이 함께 바뀌므로 API 와 가까이 배포한다.
+#    어긋난 동안은 취향 화면 사진만 안 보인다(데이터 손실 없음).
+
+# 4) 확인 후 원본 삭제 — **이 단계가 실제로 노출을 닫는다**
 pnpm --filter @tripick/api migrate:photo-objects -- --apply
-
-# 2) DB 식별자 URL → 키
-pnpm --filter @tripick/api migration:run
-
-# 3) API·web 배포
 ```
 
-**순서가 반대면** DB 는 새 위치를 가리키는데 오브젝트가 아직 옛 위치에 있어 사진이 전부
-깨진다. 스크립트는 멱등하고(이미 옮겨진 건 건너뜀) 복사 검증 후에만 원본을 지운다.
+⚠️ **4번을 하기 전까지 사진은 옛 공개 URL 로 계속 열려 있다.** 1번만 하고 끝내면 보안상
+달라진 게 없다.
+
+1번에서 `--keep-source` 를 빼면 구버전 코드가 살아 있는 동안 모든 사용자의 사진이 404 로
+깨진다. 트래픽이 없는 시간대라면 1·4 를 한 번에(`--apply`) 해도 된다.
+
+스크립트는 멱등하다 — 이미 복사된 건 복사를 건너뛰고, 복사를 확인한 뒤에만 원본을 지운다.
+2회차 실행의 로그는 `복사 건너뜀 N건, 원본 삭제 N건` 으로 삭제 건수를 따로 찍는다.
 
 되돌리기: `migrate:photo-objects -- --apply --revert` → `migration:run` 대신
 `migration:revert`. 단 절대 URL 이었던 값은 상대경로(`/storage/public/...`)로 복원된다 —
