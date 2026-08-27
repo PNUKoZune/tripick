@@ -6,6 +6,7 @@ import {
   Pressable,
   StatusBar,
   StyleSheet,
+  ToastAndroid,
   Text,
   View,
   Linking,
@@ -68,6 +69,21 @@ const WEB_APP_ORIGIN = new URL(WEB_APP_URL).origin;
 const PRODUCTION_WEB_APP_ORIGIN = new URL(PRODUCTION_WEB_APP_URL).origin;
 const KAKAO_CALLBACK_PATH = '/auth/kakao/callback';
 const KAKAO_APP_LINK_PROTOCOL = 'tripick:';
+
+// 하단 탭 5개의 루트 경로 (web `NAV_ITEMS` 와 같은 목록). `/trips` 는 `/` 와 같은 화면이라 함께 본다.
+const TAB_ROOT_PATHS = new Set(['/', '/trips', '/preferences', '/friends', '/inbox', '/settings']);
+// "한 번 더 누르면 종료" 유효 시간. ToastAndroid.SHORT(약 2초) 와 맞춰 토스트가 떠 있는 동안만 무장한다.
+const EXIT_CONFIRM_WINDOW_MS = 2000;
+
+function isTabRootUrl(url: string): boolean {
+  try {
+    const { pathname } = new URL(url);
+    const normalized = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+    return TAB_ROOT_PATHS.has(normalized);
+  } catch {
+    return false;
+  }
+}
 
 function isInternalWebUrl(url: string): boolean {
   try {
@@ -151,6 +167,10 @@ export default function App() {
   const handledDeepLinkRef = useRef<string | null>(null);
   const hasLoadedOnceRef = useRef(false);
   const [canGoBack, setCanGoBack] = useState(false);
+  // 하단 탭 루트에 있는지 — 뒤로가기를 히스토리 이동 대신 "종료 확인" 으로 돌리는 기준.
+  const [isTabRoot, setIsTabRoot] = useState(false);
+  // 종료 확인이 무장된 시각(epoch ms). 타이머 없이 시간만 비교해 두 번째 입력을 판정한다.
+  const exitArmedUntilRef = useRef(0);
   const [webViewKey, setWebViewKey] = useState(0);
   const [webViewUri, setWebViewUri] = useState(`${WEB_APP_URL}${ENTRY_PATH}`);
   const [initialLoadFailed, setInitialLoadFailed] = useState(false);
@@ -183,18 +203,26 @@ export default function App() {
     return () => subscription.remove();
   }, [handleIncomingUrl]);
 
-  // Android 하드웨어 백버튼 → WebView 히스토리 이동 (없으면 앱 종료)
+  // Android 하드웨어 백버튼 → WebView 히스토리 이동, 종료 지점에선 "한 번 더 누르면 종료".
+  //
+  // 탭 루트에서 히스토리를 계속 되짚지 않는 이유 — 탭 이동도 웹 히스토리에 쌓이므로 그대로 두면
+  // 뒤로가기가 방문한 탭들을 거꾸로 훑는다. 하단 탭이 있는 앱에서 기대되는 동작은 "탭 루트면 종료" 다.
+  // 히스토리가 아예 없는 화면(딥링크 진입 등)도 같은 확인을 거쳐 오조작 종료를 막는다.
   useEffect(() => {
     if (Platform.OS !== 'android') return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (canGoBack) {
+      if (canGoBack && !isTabRoot) {
         webViewRef.current?.goBack();
         return true;
       }
-      return false;
+      // 무장 중(=토스트가 떠 있는 동안)의 두 번째 입력만 미소비로 흘려 Activity 를 끝낸다.
+      if (Date.now() < exitArmedUntilRef.current) return false;
+      exitArmedUntilRef.current = Date.now() + EXIT_CONFIRM_WINDOW_MS;
+      ToastAndroid.show('한 번 더 누르면 종료됩니다', ToastAndroid.SHORT);
+      return true;
     });
     return () => sub.remove();
-  }, [canGoBack]);
+  }, [canGoBack, isTabRoot]);
 
   const requestPermissions = useCallback(async () => {
     if (Platform.OS !== 'android') return;
@@ -569,6 +597,10 @@ export default function App() {
         onNavigationStateChange={(state) => {
           console.log('[TriPick] WebView URL:', state.url);
           setCanGoBack(state.canGoBack);
+          setIsTabRoot(isTabRootUrl(state.url));
+          // 화면이 바뀌면 직전 화면에서 켜 둔 종료 확인은 무효 — 탭을 옮긴 직후의 뒤로가기가
+          // 곧장 종료로 이어지지 않게 한다.
+          exitArmedUntilRef.current = 0;
         }}
         onLoad={() => {
           hasLoadedOnceRef.current = true;
