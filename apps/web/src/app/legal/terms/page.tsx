@@ -6,6 +6,11 @@ export const metadata: Metadata = {
   title: '이용약관 · TriPick',
 };
 
-export default function Page() {
-  return <LegalTermsView />;
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string }>;
+}) {
+  const { from } = await searchParams;
+  return <LegalTermsView from={from} />;
 }

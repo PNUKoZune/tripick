@@ -4,6 +4,7 @@ import type {
   EmailLoginDto,
   EmailSignupDto,
   KakaoAuthStatusDto,
+  KakaoExchangeResultDto,
   LoginResponseDto,
 } from '@tripick/types';
 import { api, apiUrl } from '@/shared/api/client';
@@ -75,15 +76,40 @@ export async function redirectToKakao(): Promise<void> {
 }
 
 /**
- * 콜백 URL 의 1회용 코드를 실제 세션으로 바꾼다. 코드는 서버에서 즉시 소비된다.
+ * 콜백 URL 의 1회용 코드를 교환한다. 코드는 서버에서 즉시 소비된다.
  *
  * 시작 때 보관한 bind 비밀을 같이 제시한다 — 서버가 코드에 실린 해시와 대조하므로,
- * 남이 링크·딥링크로 던진 코드는 여기서 떨어진다. 성공·실패 모두 1회용이라 바로 비운다.
+ * 남이 링크·딥링크로 던진 코드는 여기서 떨어진다.
+ *
+ * 기존 회원이면 세션이 바로 나오지만, **처음 오는 사람은 아직 계정이 없다** — 서버가
+ * 약관 동의를 받아 오라며 `consent_required` 를 준다. 그 경우 bind 를 지우지 않는다:
+ * 동의 후 {@link completeKakaoSignup} 이 같은 bind 로 한 번 더 서버를 불러야 한다.
  */
-export async function exchangeKakaoCode(code: string): Promise<LoginResponseDto> {
+export async function exchangeKakaoCode(code: string): Promise<KakaoExchangeResultDto> {
+  const bind = readKakaoBind();
+  let keepBind = false;
+  try {
+    const result = await api.post<KakaoExchangeResultDto>('/auth/kakao/exchange', { code, bind });
+    if (result.status === 'consent_required') {
+      keepBind = true;
+      return result;
+    }
+    storeSession(result.session);
+    void flushPendingFcmToken();
+    return result;
+  } finally {
+    if (!keepBind) clearKakaoBind();
+  }
+}
+
+/** 약관 동의를 마친 카카오 신규 가입 완료. 여기서 비로소 계정이 만들어진다. */
+export async function completeKakaoSignup(consentCode: string): Promise<LoginResponseDto> {
   const bind = readKakaoBind();
   try {
-    const session = await api.post<LoginResponseDto>('/auth/kakao/exchange', { code, bind });
+    const session = await api.post<LoginResponseDto>('/auth/kakao/signup', {
+      code: consentCode,
+      bind,
+    });
     storeSession(session);
     void flushPendingFcmToken();
     return session;

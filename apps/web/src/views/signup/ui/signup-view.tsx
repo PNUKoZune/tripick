@@ -7,6 +7,7 @@ import { GuestGuard } from '@/entities/session';
 import { resendVerification } from '@/entities/session/api/auth-api';
 import { EmailSignupForm } from '@/features/email-signup';
 import { useRetryCountdown } from '@/shared/lib';
+import { LegalConsentStep } from '@/shared/ui';
 import { AppFrame } from '@/shared/ui/app-frame';
 import { useMutation } from '@tanstack/react-query';
 
@@ -19,6 +20,9 @@ export function SignupView() {
 }
 
 function SignupContent() {
+  // 약관 동의가 가입 계약의 성립 요건이라(이용약관 제5조) 입력 폼보다 앞에 둔다.
+  // 카카오도 같은 화면(LegalConsentStep)을 쓰되, 그쪽은 카카오 인증에서 돌아온 뒤에 뜬다.
+  const [agreed, setAgreed] = useState(false);
   const [sentEmail, setSentEmail] = useState<string | null>(null);
   const resendMutation = useMutation({
     mutationFn: (email: string) => resendVerification(email),
@@ -35,7 +39,9 @@ function SignupContent() {
           <div className="text-[13px] font-extrabold text-[color:var(--primary)]">TriPick</div>
           <h1 className="mt-2 text-[26px] font-bold text-[color:var(--ink)]">회원가입</h1>
           <p className="mt-1 text-[13px] text-[color:var(--ink-sub)]">
-            이메일로 가입하고 인증 메일을 확인하면 시작할 수 있어요.
+            {agreed || sentEmail
+              ? '이메일로 가입하고 인증 메일을 확인하면 시작할 수 있어요.'
+              : '약관에 동의하면 가입 정보를 입력할 수 있어요.'}
           </p>
         </header>
 
@@ -77,7 +83,11 @@ function SignupContent() {
           </div>
         ) : (
           <>
-            <EmailSignupForm onSent={setSentEmail} />
+            {agreed ? (
+              <EmailSignupForm onSent={setSentEmail} />
+            ) : (
+              <LegalConsentStep from="signup" onAgree={() => setAgreed(true)} />
+            )}
             <div className="mt-6 text-center text-[13px] text-[color:var(--ink-sub)]">
               이미 계정이 있나요?{' '}
               <Link href="/login" className="font-semibold text-[color:var(--primary)] hover:underline">

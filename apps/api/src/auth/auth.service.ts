@@ -305,9 +305,38 @@ export class AuthService {
     return { clientId, redirectUri };
   }
 
-  async loginWithKakao(code: string, ctx: TokenContext = {}): Promise<LoginResponseDto> {
+  /**
+   * 인가 코드로 카카오 프로필을 받아, **이미 계정이 있으면** 로그인시키고 **처음이면**
+   * 계정을 만들지 않은 채 프로필만 돌려준다. 신규 가입은 약관 동의를 받은 뒤
+   * {@link completeKakaoSignup} 에서 이뤄진다 — 동의 화면을 닫고 떠난 사람의 계정이
+   * 남지 않게 하려면 여기서 만들면 안 된다.
+   */
+  async resolveKakaoLogin(
+    code: string,
+    ctx: TokenContext = {},
+  ): Promise<
+    { kind: 'session'; session: LoginResponseDto } | { kind: 'consent'; profile: KakaoProfile }
+  > {
     const kakaoToken = await this.getKakaoToken(code);
     const profile = await this.getKakaoProfile(kakaoToken);
+    if (!(await this.usersService.existsForKakao(profile))) {
+      return { kind: 'consent', profile };
+    }
+    return { kind: 'session', session: await this.signInWithKakaoProfile(profile, ctx) };
+  }
+
+  /** 약관 동의를 마친 카카오 프로필로 계정을 만들고 로그인시킨다. */
+  async completeKakaoSignup(
+    profile: KakaoProfile,
+    ctx: TokenContext = {},
+  ): Promise<LoginResponseDto> {
+    return this.signInWithKakaoProfile(profile, ctx);
+  }
+
+  private async signInWithKakaoProfile(
+    profile: KakaoProfile,
+    ctx: TokenContext,
+  ): Promise<LoginResponseDto> {
     const user = await this.usersService.findOrCreateByKakao(profile);
     // 카카오 로그인은 이메일 소유를 증명하고 계정을 인증 상태로 만든다(같은 이메일의 미인증
     // 가입은 여기서 merge 된다). 그때 대기 중이던 가입 신청 토큰을 남겨 두면, 그 토큰을 쥔

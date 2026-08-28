@@ -10,8 +10,10 @@ import {
   Query,
   Req,
   Res,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { KakaoExchangeResultDto, LoginResponseDto } from '@tripick/types';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { timingSafeEqual } from 'node:crypto';
@@ -218,9 +220,21 @@ export class AuthController {
     }
 
     try {
-      const session = await this.authService.loginWithKakao(code, this.tokenContext(req));
-      if (wantsJson) return session;
-      const exchangeCode = await this.kakaoExchange.issue(session, boundSecret);
+      const resolved = await this.authService.resolveKakaoLogin(code, this.tokenContext(req));
+      if (wantsJson) {
+        // 브라우저가 아닌 디버그 경로라 동의 화면을 띄울 데가 없다 — 여기서는 예전처럼
+        // 곧바로 계정을 만들어 세션을 돌려준다. 사람이 타는 가입 경로가 아니다.
+        return resolved.kind === 'session'
+          ? resolved.session
+          : await this.authService.completeKakaoSignup(resolved.profile, this.tokenContext(req));
+      }
+      // 신규 가입자는 계정 대신 대기표만 발급한다. 동의 화면에서 `POST /auth/kakao/signup`
+      // 으로 돌아와야 계정이 생긴다. URL 모양은 기존과 같아서(코드 하나) 웹은 교환 응답으로
+      // 둘을 구분한다.
+      const exchangeCode =
+        resolved.kind === 'session'
+          ? await this.kakaoExchange.issue(resolved.session, boundSecret)
+          : await this.kakaoExchange.issueSignupTicket(resolved.profile, boundSecret);
       res.redirect(
         returnTo === 'android'
           ? this.authService.getAndroidKakaoSuccessUrl(exchangeCode)
@@ -243,9 +257,37 @@ export class AuthController {
   @Post('kakao/exchange')
   @HttpCode(HttpStatus.OK)
   @Throttle(perMinute(20))
-  @ApiOperation({ summary: '카카오 콜백 1회용 코드 → 세션 교환' })
-  kakaoExchangeCode(@Body() dto: KakaoExchangeBodyDto) {
-    return this.kakaoExchange.consume(dto.code, dto.bind);
+  @ApiOperation({ summary: '카카오 콜백 1회용 코드 → 세션 또는 약관 동의 요구' })
+  async kakaoExchangeCode(@Body() dto: KakaoExchangeBodyDto): Promise<KakaoExchangeResultDto> {
+    // 코드가 어느 통에 들어 있는지로 기존 회원/신규 가입자가 갈린다. 세션 통을 먼저 보고,
+    // 없으면 가입 대기표를 본다 — 둘 다 없으면 대기표 쪽 만료 메시지가 나간다.
+    try {
+      return { status: 'ok', session: await this.kakaoExchange.consume(dto.code, dto.bind) };
+    } catch (error) {
+      if (!(error instanceof UnauthorizedException)) throw error;
+      const profile = await this.kakaoExchange.consumeSignupTicket(dto.code, dto.bind);
+      // 동의 화면이 되돌려줄 코드를 새로 끊는다(방금 소비했으므로). 이 코드가 곧 "이 사람은
+      // 카카오 인증을 통과했다"는 증거라 bind 는 같은 브라우저 것으로 다시 묶인다.
+      const consentCode = await this.kakaoExchange.issueSignupTicket(profile, dto.bind);
+      return {
+        status: 'consent_required',
+        consentCode,
+        ...(profile.nickname ? { nickname: profile.nickname } : {}),
+        ...(profile.email ? { email: profile.email } : {}),
+      };
+    }
+  }
+
+  @Post('kakao/signup')
+  @HttpCode(HttpStatus.OK)
+  @Throttle(perMinute(10))
+  @ApiOperation({ summary: '약관 동의 후 카카오 신규 가입 완료' })
+  async kakaoSignup(
+    @Body() dto: KakaoExchangeBodyDto,
+    @Req() req: Request,
+  ): Promise<LoginResponseDto> {
+    const profile = await this.kakaoExchange.consumeSignupTicket(dto.code, dto.bind);
+    return this.authService.completeKakaoSignup(profile, this.tokenContext(req));
   }
 
   // ─── 토큰 ──────────────────────────────────────────────────

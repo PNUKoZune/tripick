@@ -8,6 +8,7 @@ import {
   DocumentSection,
 } from '@/shared/ui/document-page';
 import { SUPPORT_EMAIL } from '@/shared/config/contact';
+import { resolveDocumentBack } from '@/shared/lib/document-back';
 
 const FAQ = [
   {
@@ -48,12 +49,16 @@ const FAQ = [
   },
 ];
 
-export function SupportView() {
+export function SupportView({ from }: { from?: string | undefined }) {
+  const back = resolveDocumentBack(from);
+  const query = from ? `?from=${encodeURIComponent(from)}` : '';
   return (
     <DocumentPageShell
       label="고객센터"
       title="고객센터"
       description="궁금한 점이나 불편한 점을 알려주세요."
+      backHref={back.href}
+      backLabel={back.label}
     >
       <DocumentSection heading="문의하기">
         <DocumentParagraph>
@@ -101,14 +106,14 @@ export function SupportView() {
         <DocumentParagraph>
           개인정보 열람·정정·삭제 요청이나 처리 정지 요구는{' '}
           <Link
-            href="/legal/privacy"
+            href={`/legal/privacy${query}`}
             className="font-semibold text-[color:var(--primary)] hover:underline"
           >
             개인정보처리방침
           </Link>
           의 개인정보 보호책임자 연락처로 보내주세요. 서비스 이용 조건은{' '}
           <Link
-            href="/legal/terms"
+            href={`/legal/terms${query}`}
             className="font-semibold text-[color:var(--primary)] hover:underline"
           >
             이용약관

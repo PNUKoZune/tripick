@@ -7,10 +7,20 @@ import {
   DocumentSection,
 } from '@/shared/ui/document-page';
 import { LEGAL_UPDATED_AT, SUPPORT_EMAIL } from '@/shared/config/contact';
+import { resolveDocumentBack } from '@/shared/lib/document-back';
 
-export function LegalTermsView() {
+export function LegalTermsView({ from }: { from?: string | undefined }) {
+  const back = resolveDocumentBack(from);
+  // 문서끼리 오갈 때도 진입점을 잃지 않게 `from` 을 그대로 넘긴다.
+  const query = from ? `?from=${encodeURIComponent(from)}` : '';
   return (
-    <DocumentPageShell label="이용약관" title="이용약관" description={`시행일 ${LEGAL_UPDATED_AT}`}>
+    <DocumentPageShell
+      label="이용약관"
+      title="이용약관"
+      description={`시행일 ${LEGAL_UPDATED_AT}`}
+      backHref={back.href}
+      backLabel={back.label}
+    >
       <DocumentSection heading="제1조 (목적)">
         <DocumentParagraph>
           본 약관은 트리픽(TriPick, 이하 &quot;서비스&quot;)이 제공하는 AI 여행 일정 추천 및 관련
@@ -115,7 +125,7 @@ export function LegalTermsView() {
         <DocumentParagraph>
           서비스는 회원의 개인정보를 관련 법령과{' '}
           <Link
-            href="/legal/privacy"
+            href={`/legal/privacy${query}`}
             className="font-semibold text-[color:var(--primary)] hover:underline"
           >
             개인정보처리방침
@@ -154,7 +164,7 @@ export function LegalTermsView() {
         <DocumentParagraph>
           서비스 이용과 관련한 문의는{' '}
           <Link
-            href="/support"
+            href={`/support${query}`}
             className="font-semibold text-[color:var(--primary)] hover:underline"
           >
             고객센터

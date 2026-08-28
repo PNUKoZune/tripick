@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 
-import { HttpException } from '@nestjs/common';
+import { HttpException, UnauthorizedException } from '@nestjs/common';
 import { AuthController } from '../../src/auth/auth.controller';
 
 function makeController(consume = jest.fn().mockResolvedValue({ allowed: true, retryAfter: 0 })) {
@@ -14,7 +14,10 @@ function makeController(consume = jest.fn().mockResolvedValue({ allowed: true, r
         authorizeUrl: 'https://kauth.kakao.com/oauth/authorize',
         state: 'state-1',
       }),
-    loginWithKakao: jest.fn().mockResolvedValue({ tokens: {}, user: {} }),
+    resolveKakaoLogin: jest
+      .fn()
+      .mockResolvedValue({ kind: 'session', session: { tokens: {}, user: {} } }),
+    completeKakaoSignup: jest.fn().mockResolvedValue({ tokens: {}, user: {} }),
     getWebKakaoSuccessUrl: jest.fn((code: string) => `https://tripick.place/callback#${code}`),
     getWebKakaoErrorUrl: jest.fn((message: string) => `https://tripick.place/error?m=${message}`),
     getAndroidKakaoSuccessUrl: jest.fn((code: string) => `intent://success?code=${code}`),
@@ -23,6 +26,8 @@ function makeController(consume = jest.fn().mockResolvedValue({ allowed: true, r
   const kakaoExchange = {
     issue: jest.fn().mockResolvedValue('exchange-1'),
     consume: jest.fn(),
+    issueSignupTicket: jest.fn().mockResolvedValue('signup-ticket-1'),
+    consumeSignupTicket: jest.fn(),
   };
   const controller = new AuthController(
     authService as any,
@@ -150,5 +155,68 @@ describe('AuthController — 카카오 교환 코드 브라우저 바인딩', ()
     await controller.kakaoExchangeCode({ code: 'exchange-1', bind: BIND } as any);
 
     expect(kakaoExchange.consume).toHaveBeenCalledWith('exchange-1', BIND);
+  });
+});
+
+/**
+ * 처음 오는 카카오 사용자는 약관 동의를 받기 전에는 계정이 생기면 안 된다
+ * (이용약관 제5조 — 동의가 가입 성립 요건). 콜백은 세션이 아니라 대기표만 끊고,
+ * 계정은 동의 화면이 되돌아오는 `kakao/signup` 에서 만들어진다.
+ */
+describe('AuthController — 카카오 신규 가입 약관 동의', () => {
+  const cookieReq = {
+    headers: { cookie: `tripick_kakao_state=state-1; tripick_kakao_bind=${BIND}` },
+  } as any;
+
+  it('신규 프로필이면 세션 코드가 아니라 가입 대기표를 발급한다', async () => {
+    const { controller, authService, kakaoExchange, res } = makeController();
+    authService.resolveKakaoLogin.mockResolvedValue({
+      kind: 'consent',
+      profile: { id: '77', nickname: '카카오' },
+    });
+
+    await controller.kakaoCallback('kakao-code', 'state-1', undefined, cookieReq, res);
+
+    expect(kakaoExchange.issue).not.toHaveBeenCalled();
+    expect(kakaoExchange.issueSignupTicket).toHaveBeenCalledWith(
+      expect.objectContaining({ id: '77' }),
+      BIND,
+    );
+  });
+
+  it('교환에서 세션 코드가 아니면 동의 요구로 응답한다', async () => {
+    const { controller, kakaoExchange } = makeController();
+    kakaoExchange.consume.mockRejectedValue(new UnauthorizedException('없음'));
+    kakaoExchange.consumeSignupTicket.mockResolvedValue({
+      id: '77',
+      nickname: '카카오',
+      email: 'a@b.com',
+    });
+
+    const result = await controller.kakaoExchangeCode({ code: 'ticket-1', bind: BIND } as any);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'consent_required',
+        consentCode: 'signup-ticket-1',
+        nickname: '카카오',
+        email: 'a@b.com',
+      }),
+    );
+  });
+
+  it('동의 완료 요청에서만 계정을 만든다', async () => {
+    const { controller, authService, kakaoExchange } = makeController();
+    kakaoExchange.consumeSignupTicket.mockResolvedValue({ id: '77', nickname: '카카오' });
+
+    await controller.kakaoSignup({ code: 'signup-ticket-1', bind: BIND } as any, {
+      headers: {},
+    } as any);
+
+    expect(kakaoExchange.consumeSignupTicket).toHaveBeenCalledWith('signup-ticket-1', BIND);
+    expect(authService.completeKakaoSignup).toHaveBeenCalledWith(
+      expect.objectContaining({ id: '77' }),
+      expect.anything(),
+    );
   });
 });

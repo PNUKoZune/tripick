@@ -75,6 +75,7 @@ function createHarness(configOverrides: Record<string, string> = {}) {
     markEmailVerified: jest.fn(),
     setPassword: jest.fn(),
     findOrCreateByKakao: jest.fn(),
+    existsForKakao: jest.fn().mockResolvedValue(true),
   };
   const jwtService = {
     signAsync: jest.fn(
@@ -742,10 +743,43 @@ describe('AuthService — kakao login', () => {
       user({ id: 'u1', email: 'a@b.com', kakaoId: '77', emailVerifiedAt: new Date() }),
     );
 
-    await service.loginWithKakao('code');
+    await service.resolveKakaoLogin('code');
 
     expect(expiredTokenTargets()).toContainEqual(
       expect.objectContaining({ userId: 'u1', purpose: 'verify_email' }),
     );
+  });
+
+  /**
+   * 약관 동의 전에 계정이 생기면, 동의 화면을 닫고 떠난 사람의 계정이 그대로 남는다
+   * (이용약관 제5조는 동의를 가입 성립 요건으로 둔다). 그래서 처음 오는 카카오 프로필은
+   * 계정을 만들지 않고 프로필만 돌려줘야 한다.
+   */
+  it('does not create an account for a first-time kakao profile — consent comes first', async () => {
+    const { service, usersService } = createHarness({
+      KAKAO_REST_API_KEY: 'key',
+      KAKAO_CALLBACK_URL: 'http://localhost:4000/api/v1/auth/kakao/callback',
+    });
+    usersService.existsForKakao.mockResolvedValue(false);
+
+    const resolved = await service.resolveKakaoLogin('code');
+
+    expect(resolved.kind).toBe('consent');
+    expect(usersService.findOrCreateByKakao).not.toHaveBeenCalled();
+  });
+
+  it('creates the account once consent is done', async () => {
+    const { service, usersService } = createHarness({
+      KAKAO_REST_API_KEY: 'key',
+      KAKAO_CALLBACK_URL: 'http://localhost:4000/api/v1/auth/kakao/callback',
+    });
+    usersService.findOrCreateByKakao.mockResolvedValue(user({ id: 'u2', kakaoId: '77' }));
+
+    const session = await service.completeKakaoSignup({ id: '77', nickname: '카카오' });
+
+    expect(usersService.findOrCreateByKakao).toHaveBeenCalledWith(
+      expect.objectContaining({ id: '77' }),
+    );
+    expect(session.user.id).toBe('u2');
   });
 });

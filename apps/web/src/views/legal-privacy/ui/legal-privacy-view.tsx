@@ -5,6 +5,7 @@ import {
   DocumentSection,
 } from '@/shared/ui/document-page';
 import { LEGAL_UPDATED_AT, PRIVACY_EMAIL } from '@/shared/config/contact';
+import { resolveDocumentBack } from '@/shared/lib/document-back';
 
 /** 미도착 판정용 위치 캐시 TTL. 서버 `arrival-alert.constants.ts` 의 LOCATION_TTL_SEC 과 같은 값. */
 const LOCATION_TTL_LABEL = '15분';
@@ -20,12 +21,15 @@ function MailLink() {
   );
 }
 
-export function LegalPrivacyView() {
+export function LegalPrivacyView({ from }: { from?: string | undefined }) {
+  const back = resolveDocumentBack(from);
   return (
     <DocumentPageShell
       label="개인정보처리방침"
       title="개인정보처리방침"
       description={`시행일 ${LEGAL_UPDATED_AT}`}
+      backHref={back.href}
+      backLabel={back.label}
     >
       <DocumentSection>
         <DocumentParagraph>
