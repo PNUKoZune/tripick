@@ -56,7 +56,7 @@ export function KakaoCallbackView() {
       <section className="flex min-h-screen items-center justify-center px-5">
         <section className="w-full max-w-[360px]">
           <div className="text-[13px] font-extrabold leading-5 text-[color:var(--blue-600)]">
-            Tripick
+            TriPick
           </div>
           <h1 className="mt-3 text-[30px] font-extrabold leading-9">
             {state.status === 'checking' ? '로그인 확인 중' : '로그인을 완료하지 못했어요'}

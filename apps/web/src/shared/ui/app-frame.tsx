@@ -122,7 +122,7 @@ export function AppFrame({
 /**
  * 페이지 헤더. 모바일/데스크탑 자동 분기.
  * - mobile: 20px bold 제목 + 부가 설명(선택) + 우측 액션(선택)
- * - desktop: 12px "Tripick · {label}" 라벨(선택) + 22px 제목 + 부가 설명(선택) + 우측 액션
+ * - desktop: 12px "TriPick · {label}" 라벨(선택) + 22px 제목 + 부가 설명(선택) + 우측 액션
  */
 export function PageHeader({
   title,
@@ -132,7 +132,7 @@ export function PageHeader({
 }: {
   title: string;
   description?: string;
-  /** 데스크탑 전용 'Tripick · X' 작은 라벨 */
+  /** 데스크탑 전용 'TriPick · X' 작은 라벨 */
   label?: string;
   /** 헤더 우측 액션 (배지·버튼 등) */
   action?: ReactNode;
@@ -145,7 +145,7 @@ export function PageHeader({
               그 스코프의 다크 값을 상속받아 제목이 배경에 묻히지 않는다. */}
           {label ? (
             <div className="hidden text-[12px] font-semibold tracking-wide text-[color:var(--blue-600)] lg:block">
-              Tripick · {label}
+              TriPick · {label}
             </div>
           ) : null}
           <h1 className="text-[20px] font-bold text-[color:var(--text-primary)] lg:mt-0.5 lg:text-[22px] lg:leading-[30px]">
@@ -262,7 +262,7 @@ export function AppDesktopNavigation() {
           href="/"
           className="text-[24px] font-extrabold leading-8 text-[color:var(--blue-600)]"
         >
-          Tripick
+          TriPick
         </Link>
         <nav aria-label="데스크탑 내비게이션" className="mt-8 space-y-1">
           {NAV_ITEMS.map((item) => {
