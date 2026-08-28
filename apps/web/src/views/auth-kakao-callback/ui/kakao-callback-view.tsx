@@ -125,7 +125,6 @@ export function KakaoCallbackView() {
           </header>
 
           <LegalConsentStep
-            from="kakao"
             submitLabel="동의하고 가입 완료"
             pending={submitting}
             error={consentError}

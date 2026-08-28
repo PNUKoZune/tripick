@@ -6,11 +6,6 @@ export const metadata: Metadata = {
   title: '고객센터 · TriPick',
 };
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: Promise<{ from?: string }>;
-}) {
-  const { from } = await searchParams;
-  return <SupportView from={from} />;
+export default function Page() {
+  return <SupportView />;
 }

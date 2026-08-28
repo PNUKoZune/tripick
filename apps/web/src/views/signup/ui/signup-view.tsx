@@ -86,7 +86,7 @@ function SignupContent() {
             {agreed ? (
               <EmailSignupForm onSent={setSentEmail} />
             ) : (
-              <LegalConsentStep from="signup" onAgree={() => setAgreed(true)} />
+              <LegalConsentStep onAgree={() => setAgreed(true)} />
             )}
             <div className="mt-6 text-center text-[13px] text-[color:var(--ink-sub)]">
               이미 계정이 있나요?{' '}

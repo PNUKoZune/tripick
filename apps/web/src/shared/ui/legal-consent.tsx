@@ -1,10 +1,10 @@
 'use client';
 
-import Link from 'next/link';
 import { useState } from 'react';
 import { LuCheck, LuChevronRight } from 'react-icons/lu';
 
 import { Button } from './button';
+import { LegalDocumentModal, type LegalDocumentKind } from './legal/legal-document-modal';
 
 /**
  * 가입 경로가 공유하는 약관 동의 화면.
@@ -15,30 +15,27 @@ import { Button } from './button';
  * - 카카오: 카카오 인증에서 돌아온 뒤 이 화면을 띄우고, 동의해야 서버가 계정을 만든다
  *   (동의 없이 떠나면 계정이 아예 생기지 않는다 — `POST /auth/kakao/signup`).
  *
- * ⚠️ 문서 링크에 `target="_blank"` 를 쓰지 않는다. RN 웹뷰(Android)는
- * `setSupportMultipleWindows` 가 기본 true 인데 셸에 `onOpenWindow` 핸들러가 없어,
- * 새 창 요청이 화면에 붙지 않는 WebView 로 들어가 **아무 일도 일어나지 않는다.**
- * 같은 탭으로 이동하고 `?from=` 으로 돌아올 곳을 넘긴다(`shared/lib/document-back`).
+ * ⚠️ 전문은 **모달**로 띄운다. 페이지로 넘기면 입력하던 가입 폼이나 카카오 가입 코드가
+ * 화면과 함께 날아가고, 새 탭도 답이 아니다 — RN 웹뷰(Android)는
+ * `setSupportMultipleWindows` 가 기본 true 인데 셸에 `onOpenWindow` 핸들러가 없어
+ * 새 창 요청이 화면에 붙지 않는다(죽은 링크).
  */
 
 /** 필수 동의 항목. 선택 동의(마케팅 등)는 아직 없다 — 생기면 required:false 로 여기에 붙인다. */
 const ITEMS = [
-  { key: 'terms', label: '이용약관', href: '/legal/terms' },
-  { key: 'privacy', label: '개인정보처리방침', href: '/legal/privacy' },
-] as const;
+  { key: 'terms', label: '이용약관' },
+  { key: 'privacy', label: '개인정보처리방침' },
+] as const satisfies readonly { key: LegalDocumentKind; label: string }[];
 
 type ItemKey = (typeof ITEMS)[number]['key'];
 
 export function LegalConsentStep({
-  from,
   submitLabel = '동의하고 계속',
   pending = false,
   error,
   onAgree,
   footer,
 }: {
-  /** 문서에서 돌아올 곳. 'signup' | 'login' | 'start' | 'kakao' */
-  from: string;
   submitLabel?: string;
   pending?: boolean;
   error?: string | null;
@@ -50,6 +47,7 @@ export function LegalConsentStep({
     terms: false,
     privacy: false,
   });
+  const [openDoc, setOpenDoc] = useState<LegalDocumentKind | null>(null);
   const allChecked = ITEMS.every((item) => checked[item.key]);
 
   function toggleAll() {
@@ -83,14 +81,16 @@ export function LegalConsentStep({
                   <span className="font-bold text-[color:var(--ink)]">(필수)</span> {item.label}
                 </span>
               </button>
-              <Link
-                href={`${item.href}?from=${from}`}
+              <button
+                type="button"
+                onClick={() => setOpenDoc(item.key)}
                 aria-label={`${item.label} 전문 보기`}
+                aria-haspopup="dialog"
                 className="flex h-11 shrink-0 items-center gap-0.5 pl-1 pr-3 text-[13px] font-semibold text-[color:var(--ink-faint)] hover:text-[color:var(--ink)]"
               >
                 보기
                 <LuChevronRight className="size-4" aria-hidden />
-              </Link>
+              </button>
             </div>
           ))}
         </div>
@@ -102,17 +102,13 @@ export function LegalConsentStep({
         </p>
       ) : null}
 
-      <Button
-        type="button"
-        size="md"
-        fullWidth
-        disabled={!allChecked || pending}
-        onClick={onAgree}
-      >
+      <Button type="button" size="md" fullWidth disabled={!allChecked || pending} onClick={onAgree}>
         {pending ? '처리 중…' : submitLabel}
       </Button>
 
       {footer}
+
+      {openDoc ? <LegalDocumentModal doc={openDoc} onClose={() => setOpenDoc(null)} /> : null}
     </div>
   );
 }
