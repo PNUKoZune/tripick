@@ -201,83 +201,84 @@ nextjs-portal {
   --shadow-btn: 0 10px 22px rgba(46, 107, 230, 0.28);
 }
 
-/* 다크 — 시스템 선호도 자동 감지만(사용자 확정: 뷰어 토글 UI·data-theme 훅 없음) */
-@media (prefers-color-scheme: dark) {
-  .wvr-scope {
-    color-scheme: dark;
+/* 다크 팔레트. 셀렉터 훅은 해석이 끝난 `data-theme` 하나다 — 시스템 추종 여부는
+   앱 부팅 스크립트(shared/theme)가 판정해 이 속성에 light|dark 로 써 넣는다.
+   `@media (prefers-color-scheme: dark)` 와 `[data-theme='dark']` 두 갈래로 두면
+   이 80줄짜리 토큰 블록을 두 벌 관리해야 해서, 판정을 JS 한 곳으로 모았다. */
+:root[data-theme='dark'] .wvr-scope {
+  color-scheme: dark;
 
-    /* 전역 토큰 섀도잉: :root 의 라이트 전용 토큰(--text-*, --app-*, --blue-* 등)을
-       참조하는 shared/ui 컴포넌트(TimeField·SegmentToggle·헤더 등)가 wvr 화면 안에서
-       렌더될 때만 다크 값을 상속받도록 스코프 내부에서 덮어쓴다. :root 자체와
-       비대상 화면은 변경되지 않음(REQ-WVR-004 로컬 스코프 결정 준수). */
-    --app-bg: #0b111e;
-    --app-surface: #131b2c;
-    --soft-bg: #172136;
-    --pressed-bg: #1b2740;
-    --line-strong: rgba(233, 238, 249, 0.18);
-    --text-primary: #e9eef9;
-    --text-secondary: #a3aec6;
-    --text-tertiary: #75809a;
-    --blue-50: #1b2a4a;
-    --blue-100: #21335a;
-    --blue-500: #7ca5fc;
-    --blue-600: #3b76f0;
-    --blue-700: #2e63d6;
-    --blue-800: #9dbcff;
+  /* 전역 토큰 섀도잉: :root 의 라이트 전용 토큰(--text-*, --app-*, --blue-* 등)을
+     참조하는 shared/ui 컴포넌트(TimeField·SegmentToggle·헤더 등)가 wvr 화면 안에서
+     렌더될 때만 다크 값을 상속받도록 스코프 내부에서 덮어쓴다. :root 자체와
+     비대상 화면은 변경되지 않음(REQ-WVR-004 로컬 스코프 결정 준수). */
+  --app-bg: #0b111e;
+  --app-surface: #131b2c;
+  --soft-bg: #172136;
+  --pressed-bg: #1b2740;
+  --line-strong: rgba(233, 238, 249, 0.18);
+  --text-primary: #e9eef9;
+  --text-secondary: #a3aec6;
+  --text-tertiary: #75809a;
+  --blue-50: #1b2a4a;
+  --blue-100: #21335a;
+  --blue-500: #7ca5fc;
+  --blue-600: #3b76f0;
+  --blue-700: #2e63d6;
+  --blue-800: #9dbcff;
 
-    --bg: #0b111e;
-    --card: #131b2c;
-    --card-soft: #172136;
-    --ink: #e9eef9;
-    --ink-sub: #a3aec6;
-    --ink-faint: #75809a;
-    --line: #263149;
-    --line-dot: #34405c;
+  --bg: #0b111e;
+  --card: #131b2c;
+  --card-soft: #172136;
+  --ink: #e9eef9;
+  --ink-sub: #a3aec6;
+  --ink-faint: #75809a;
+  --line: #263149;
+  --line-dot: #34405c;
 
-    --primary: #7ca5fc;
-    --primary-deep: #9dbcff;
-    --primary-tint: #1b2a4a;
-    --btn-bg: #3b76f0;
-    --btn-bg-press: #2e63d6;
-    --btn-text: #ffffff;
-    --ring: rgba(124, 165, 252, 0.4);
+  --primary: #7ca5fc;
+  --primary-deep: #9dbcff;
+  --primary-tint: #1b2a4a;
+  --btn-bg: #3b76f0;
+  --btn-bg-press: #2e63d6;
+  --btn-text: #ffffff;
+  --ring: rgba(124, 165, 252, 0.4);
 
-    --accent: #ff9b70;
-    --accent-deep: #ffad88;
-    --accent-tint: #33231c;
-    --hl: #4a2f20;
+  --accent: #ff9b70;
+  --accent-deep: #ffad88;
+  --accent-tint: #33231c;
+  --hl: #4a2f20;
 
-    --danger: #ff6b76;
-    --danger-tint: #3a1519;
-    --danger-border: #5c2229;
-    /* 다크는 면 색을 그대로 두고 글자를 뒤집는다 — 어두운 바탕에서 빨강을 더 눌러
-       버리면 버튼이 죽어 보이고, 흰 글자로는 2.8:1 밖에 안 나온다. 어두운 잉크를
-       얹으면 같은 빨강으로 6.6:1. */
-    --danger-deep: #ff6b76;
-    --danger-on: #2b0b0f;
-    --ok: #4caf7d;
+  --danger: #ff6b76;
+  --danger-tint: #3a1519;
+  --danger-border: #5c2229;
+  /* 다크는 면 색을 그대로 두고 글자를 뒤집는다 — 어두운 바탕에서 빨강을 더 눌러
+     버리면 버튼이 죽어 보이고, 흰 글자로는 2.8:1 밖에 안 나온다. 어두운 잉크를
+     얹으면 같은 빨강으로 6.6:1. */
+  --danger-deep: #ff6b76;
+  --danger-on: #2b0b0f;
+  --ok: #4caf7d;
 
-    --t-morning: #8fbcff;
-    --t-noon: #5b8def;
-    --t-gold: #ffc46b;
-    --t-dusk: #ff8a5c;
+  --t-morning: #8fbcff;
+  --t-noon: #5b8def;
+  --t-gold: #ffc46b;
+  --t-dusk: #ff8a5c;
 
-    --sky-top: #0b152c;
-    --sky-glow: #543246;
-    --sun: #ffa97e;
-    --sun-halo: rgba(255, 169, 126, 0.26);
-    --sea-1: #223b69;
-    --sea-2: #1a2e54;
-    --sea-3: #12203d;
-    --sil: #070d1c;
-    --bridge: #0a1322;
-    --lights: #ffc49a;
-    --star: rgba(255, 255, 255, 0.55);
-    --glass: rgba(9, 14, 26, 0.74);
+  --sky-top: #0b152c;
+  --sky-glow: #543246;
+  --sun: #ffa97e;
+  --sun-halo: rgba(255, 169, 126, 0.26);
+  --sea-1: #223b69;
+  --sea-2: #1a2e54;
+  --sea-3: #12203d;
+  --sil: #070d1c;
+  --bridge: #0a1322;
+  --lights: #ffc49a;
+  --star: rgba(255, 255, 255, 0.55);
+  --glass: rgba(9, 14, 26, 0.74);
 
-    --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.3);
-    --shadow-btn: 0 10px 22px rgba(20, 50, 120, 0.5);
-  }
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow-btn: 0 10px 22px rgba(20, 50, 120, 0.5);
 }
 
 /* 스코프 기본 면. `@layer base` 에 둬야 하는 이유 — 이 파일의 규칙은 레이어 밖이라

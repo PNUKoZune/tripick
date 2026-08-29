@@ -9,6 +9,7 @@ import { SessionGuard } from '@/entities/session';
 import { fetchMe } from '@/entities/user';
 import { DeleteAccountButton } from '@/features/delete-account';
 import { SignOutButton } from '@/features/sign-out';
+import { ThemeSwitch } from '@/features/switch-theme';
 import { NotificationPreferencesList } from '@/features/update-notification-preferences';
 import { queryKeys } from '@/shared/api/query-keys';
 import { firstErrorMessage } from '@/shared/lib';
@@ -77,6 +78,15 @@ function SettingsContent() {
             description="끄면 인박스와 푸시 모두 받지 않아요. 친구 요청은 친구 페이지에선 계속 보여요."
           >
             <NotificationPreferencesList me={me} onError={setError('notifications')} />
+          </Section>
+
+          <Section
+            title="화면 테마"
+            description="시스템 설정을 따르거나 밝기를 직접 고를 수 있어요."
+          >
+            <div className="p-1">
+              <ThemeSwitch />
+            </div>
           </Section>
 
           <Section title="약관 및 정책">
