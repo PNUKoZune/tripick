@@ -24,6 +24,13 @@ type Props = {
   selectedMarkerId?: string | null;
   onMarkerClick?: (marker: PlannerMapMarkerDto) => void;
   showSearch?: boolean;
+  /**
+   * 마커 전체가 보이도록 시야를 맞춘다 (center·level 은 무시).
+   * 서버 `mapCenter` 는 여행 전체 항목의 좌표 평균이라 특정 일차 마커가 화면 밖으로
+   * 밀린다 — 목록으로 보고 있는 일차를 지도로도 그대로 보여주려면 이쪽을 쓴다.
+   * 특정 마커에 초점을 맞춘 동안에는 false 로 내려 center 가 이기게 한다.
+   */
+  fitMarkers?: boolean;
   /** 값이 바뀔 때마다 현재 center 로 부드럽게 재이동한다 (현재 위치 버튼 등) */
   recenterKey?: number;
   /** 지정 시, 검색으로 고른 장소를 일정에 반영하는 액션 버튼을 노출한다 */
@@ -58,6 +65,15 @@ const selectedStyle = {
   label: 'bg-[#1B64DA] text-white border-[#1B64DA]',
 };
 
+/** 마커 1곳만 맞출 때의 확대 레벨 (setBounds 는 한 점이면 최대 확대로 붙는다) */
+const SINGLE_MARKER_LEVEL = 4;
+
+/**
+ * fitMarkers 여백(px). 위는 검색·길찾기 오버레이(h-9 + pt-3)에 가리지 않도록 넉넉히,
+ * 아래는 마커 아래 라벨이 잘리지 않도록 준다.
+ */
+const FIT_PADDING = { top: 64, side: 60, bottom: 52 };
+
 export function PlannerMap({
   placeholder,
   center,
@@ -68,6 +84,7 @@ export function PlannerMap({
   selectedMarkerId = null,
   onMarkerClick,
   showSearch = true,
+  fitMarkers = false,
   recenterKey,
   onPickSearchPlace,
   pickPlaceLabel = '이 장소로 일정 변경',
@@ -130,28 +147,59 @@ export function PlannerMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 마커 좌표 집합 — 배열 자체는 매 렌더 새 객체라 시야 재계산 트리거로는 좌표 키를 쓴다
+  const markerBoundsKey = markers.map((marker) => `${marker.lat},${marker.lng}`).join('|');
+
+  // 지도 시야를 규칙 하나로 적용한다 — fitMarkers 면 마커 전체가 보이도록, 아니면 center 로.
+  // 리사이즈·center 변경 양쪽이 같은 규칙을 써야 해서 ref 로 최신 함수를 들고 있는다.
+  const applyViewRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    applyViewRef.current = () => {
+      const maps = window.kakao?.maps;
+      const map = mapRef.current;
+      if (!maps || !map) return;
+      const first = markers[0];
+      if (fitMarkers && first) {
+        if (markers.length === 1) {
+          map.setLevel(SINGLE_MARKER_LEVEL);
+          map.setCenter(new maps.LatLng(first.lat, first.lng));
+          return;
+        }
+        const bounds = new maps.LatLngBounds();
+        markers.forEach((marker) => bounds.extend(new maps.LatLng(marker.lat, marker.lng)));
+        map.setBounds(
+          bounds,
+          FIT_PADDING.top,
+          FIT_PADDING.side,
+          FIT_PADDING.bottom,
+          FIT_PADDING.side,
+        );
+        return;
+      }
+      map.setLevel(center.level);
+      map.setCenter(new maps.LatLng(center.lat, center.lng));
+    };
+  });
+
   // 컨테이너 리사이즈 시 relayout 호출 — 부모 높이가 늦게 결정되거나 분할 패널이 바뀔 때 필요
   useEffect(() => {
-    if (!sdkReady || !containerRef.current || !window.kakao?.maps) return;
+    if (!sdkReady || !containerRef.current) return;
     const map = mapRef.current;
     if (!map) return;
-    const maps = window.kakao.maps;
     const observer = new ResizeObserver(() => {
       map.relayout();
-      map.setCenter(new maps.LatLng(center.lat, center.lng));
+      applyViewRef.current();
     });
     observer.observe(containerRef.current);
     return () => observer.disconnect();
-  }, [sdkReady, center.lat, center.lng]);
+  }, [sdkReady]);
 
-  // center / level 변경 시 이동
+  // center / level / 마커 집합 변경 시 시야 재적용
   useEffect(() => {
-    if (!sdkReady || !mapRef.current || !window.kakao?.maps) return;
-    const maps = window.kakao.maps;
-    mapRef.current.setCenter(new maps.LatLng(center.lat, center.lng));
-    mapRef.current.setLevel(center.level);
+    if (!sdkReady || !mapRef.current) return;
     mapRef.current.relayout();
-  }, [sdkReady, center.lat, center.lng, center.level]);
+    applyViewRef.current();
+  }, [sdkReady, fitMarkers, markerBoundsKey, center.lat, center.lng, center.level]);
 
   // 현재 위치 버튼 등으로 재이동 요청 (같은 center 라도 매번 panTo)
   useEffect(() => {

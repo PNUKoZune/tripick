@@ -54,6 +54,7 @@ export function TripMapPanel({
           placeholder={trip.searchPlaceholder}
           center={center}
           markers={dayMarkers}
+          fitMarkers={!selectedMarkerId}
           selectedMarkerId={selectedMarkerId}
           showCurrentDot={false}
           aspect="aspect-[4/5]"

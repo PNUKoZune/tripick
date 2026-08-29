@@ -77,6 +77,7 @@ export function SharedTripView({ token }: { token: string }) {
           placeholder={`${data.destination} 장소`}
           center={mapCenter}
           markers={dayMarkers}
+          fitMarkers={!focusedMarker}
           selectedMarkerId={focusedMarker?.id ?? null}
           showCurrentDot={false}
           showSearch={false}
