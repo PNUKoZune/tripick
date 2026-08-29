@@ -73,10 +73,9 @@ function SettingsContent() {
             <SettingsProfileHero me={me} loading={isLoading} onError={setError('profile')} />
           </section>
 
-          <Section
-            title="알림 설정"
-            description="끄면 인박스와 푸시 모두 받지 않아요. 친구 요청은 친구 페이지에선 계속 보여요."
-          >
+          {/* 설명은 목록 첫 줄의 "모든 알림" 행이 직접 달고 있다 — 같은 문장을 섹션 헤더에도
+              두면 두 줄이 겹쳐 읽힌다. */}
+          <Section title="알림 설정">
             <NotificationPreferencesList me={me} onError={setError('notifications')} />
           </Section>
 
