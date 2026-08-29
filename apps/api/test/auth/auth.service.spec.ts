@@ -549,7 +549,7 @@ describe('AuthService — logout & kakao status', () => {
 
   it('builds an Android package-scoped intent callback with a web fallback', () => {
     const { service } = createHarness({ WEB_APP_URL: 'https://tripick.place' });
-    const intent = service.getAndroidKakaoSuccessUrl('exchange-code-123');
+    const intent = service.getKakaoSuccessUrl('exchange-code-123', 'android');
 
     expect(intent).toContain('intent://auth/kakao/callback?code=exchange-code-123');
     expect(intent).toContain('scheme=tripick');
@@ -558,6 +558,19 @@ describe('AuthService — logout & kakao status', () => {
       `S.browser_fallback_url=${encodeURIComponent(
         'https://tripick.place/auth/kakao/callback#code=exchange-code-123',
       )}`,
+    );
+  });
+
+  // iOS 에는 `intent://` 가 없다. 셸의 인증 세션이 가로챌 커스텀 스킴을 그대로 돌려줘야 한다.
+  it('builds a custom-scheme callback for iOS', () => {
+    const { service } = createHarness({ WEB_APP_URL: 'https://tripick.place' });
+
+    expect(service.getKakaoSuccessUrl('exchange-code-123', 'ios')).toBe(
+      'tripick://auth/kakao/callback?code=exchange-code-123',
+    );
+    // 공백이 `+` 로 나가는 form 인코딩이다 — 앱 셸의 URLSearchParams 가 같은 규칙으로 되돌린다.
+    expect(service.getKakaoErrorUrl('로그인 실패', 'ios')).toBe(
+      `tripick://auth/kakao/callback?${new URLSearchParams({ error: '로그인 실패' }).toString()}`,
     );
   });
 

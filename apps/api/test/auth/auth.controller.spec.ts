@@ -18,10 +18,16 @@ function makeController(consume = jest.fn().mockResolvedValue({ allowed: true, r
       .fn()
       .mockResolvedValue({ kind: 'session', session: { tokens: {}, user: {} } }),
     completeKakaoSignup: jest.fn().mockResolvedValue({ tokens: {}, user: {} }),
-    getWebKakaoSuccessUrl: jest.fn((code: string) => `https://tripick.place/callback#${code}`),
-    getWebKakaoErrorUrl: jest.fn((message: string) => `https://tripick.place/error?m=${message}`),
-    getAndroidKakaoSuccessUrl: jest.fn((code: string) => `intent://success?code=${code}`),
-    getAndroidKakaoErrorUrl: jest.fn((message: string) => `intent://error?message=${message}`),
+    getKakaoSuccessUrl: jest.fn(
+      (code: string, target = 'web') =>
+        target === 'web' ? `https://tripick.place/callback#${code}` : `${target}://success?code=${code}`,
+    ),
+    getKakaoErrorUrl: jest.fn(
+      (message: string, target = 'web') =>
+        target === 'web'
+          ? `https://tripick.place/error?m=${message}`
+          : `${target}://error?message=${message}`,
+    ),
   };
   const kakaoExchange = {
     issue: jest.fn().mockResolvedValue('exchange-1'),
@@ -100,8 +106,36 @@ describe('AuthController — Android Kakao 복귀', () => {
 
     await controller.kakaoCallback('kakao-code', 'state-1', undefined, req, res);
 
-    expect(authService.getAndroidKakaoSuccessUrl).toHaveBeenCalledWith('exchange-1');
-    expect(res.redirect).toHaveBeenCalledWith('intent://success?code=exchange-1');
+    expect(authService.getKakaoSuccessUrl).toHaveBeenCalledWith('exchange-1', 'android');
+    expect(res.redirect).toHaveBeenCalledWith('android://success?code=exchange-1');
+  });
+
+  // iOS 는 `intent://` 가 없어 커스텀 스킴으로 돌아온다 — 셸의 인증 세션이 그 스킴을 가로챈다.
+  it('redirects a completed iOS login back to the app scheme', async () => {
+    const { controller, authService, res } = makeController();
+    const req = {
+      headers: {
+        cookie: `tripick_kakao_state=state-1; tripick_kakao_bind=${BIND}; tripick_kakao_return=ios`,
+      },
+    } as any;
+
+    await controller.kakaoCallback('kakao-code', 'state-1', undefined, req, res);
+
+    expect(authService.getKakaoSuccessUrl).toHaveBeenCalledWith('exchange-1', 'ios');
+  });
+
+  // 쿠키에 아무 문자열이나 넣어도 앱 스킴으로 새지 않는다(웹으로 떨어진다).
+  it('falls back to the web target for an unknown return cookie', async () => {
+    const { controller, authService, res } = makeController();
+    const req = {
+      headers: {
+        cookie: `tripick_kakao_state=state-1; tripick_kakao_bind=${BIND}; tripick_kakao_return=evil`,
+      },
+    } as any;
+
+    await controller.kakaoCallback('kakao-code', 'state-1', undefined, req, res);
+
+    expect(authService.getKakaoSuccessUrl).toHaveBeenCalledWith('exchange-1', 'web');
   });
 });
 

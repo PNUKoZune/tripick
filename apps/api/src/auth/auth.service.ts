@@ -49,6 +49,25 @@ const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** 이 시간 안의 재사용은 탈취가 아니라 경합·재시도로 본다 (family 폐기 대상에서 제외). */
 const REFRESH_ROTATION_GRACE_MS = 30 * 1000;
 
+/** 앱 복귀용 커스텀 스킴. 모바일 셸의 URL scheme(iOS) · intent scheme(Android) 과 같은 값이다. */
+const APP_SCHEME = 'tripick';
+const ANDROID_PACKAGE = 'com.tripick.place';
+
+/**
+ * 카카오 로그인을 시작한 실행 환경. 앱에서 시작했으면 그 앱으로 돌려보내야 한다 —
+ * 웹 URL 로 답하면 로그인은 브라우저에서 끝나고, 교환 코드를 쓸 bind 는 앱 웹뷰에만 있어
+ * 사용자는 "로그인했는데 앱은 그대로" 인 상태가 된다.
+ */
+export type KakaoReturnTarget = 'web' | 'android' | 'ios';
+
+export function normalizeKakaoReturnTarget(value: string | undefined | null): KakaoReturnTarget {
+  return value === 'android' || value === 'ios' ? value : 'web';
+}
+
+function getAppSchemeUrl(params: Record<string, string>): string {
+  return `${APP_SCHEME}://auth/kakao/callback?${new URLSearchParams(params).toString()}`;
+}
+
 /** 인증 링크가 켤 가입 신청 내용. 같은 신청에서 나온 값이라 항상 같이 움직인다. */
 interface PendingSignup {
   passwordHash: string;
@@ -364,20 +383,39 @@ export class AuthService {
     return url.toString();
   }
 
-  /** Android 앱이 시작한 OAuth 를 사용자 링크 설정과 무관하게 해당 패키지로 돌려보낸다. */
-  getAndroidKakaoSuccessUrl(code: string): string {
-    return this.getAndroidKakaoIntentUrl({ code }, this.getWebKakaoSuccessUrl(code));
+  /** 로그인을 시작한 곳으로 돌려보낸다. 앱에서 시작했는데 웹 URL 로 답하면 세션이 브라우저에 갇힌다. */
+  getKakaoSuccessUrl(code: string, target: KakaoReturnTarget = 'web'): string {
+    switch (target) {
+      case 'android':
+        return this.getAndroidKakaoIntentUrl({ code }, this.getWebKakaoSuccessUrl(code));
+      case 'ios':
+        return getAppSchemeUrl({ code });
+      default:
+        return this.getWebKakaoSuccessUrl(code);
+    }
   }
 
-  getAndroidKakaoErrorUrl(message: string): string {
-    return this.getAndroidKakaoIntentUrl({ error: message }, this.getWebKakaoErrorUrl(message));
+  getKakaoErrorUrl(message: string, target: KakaoReturnTarget = 'web'): string {
+    switch (target) {
+      case 'android':
+        return this.getAndroidKakaoIntentUrl({ error: message }, this.getWebKakaoErrorUrl(message));
+      case 'ios':
+        return getAppSchemeUrl({ error: message });
+      default:
+        return this.getWebKakaoErrorUrl(message);
+    }
   }
 
+  /**
+   * Android 는 `intent://` 로 돌려보낸다 — package 를 못박아 두면 사용자가 App Link 열기를
+   * 꺼 뒀어도 앱으로 돌아오고, 앱이 없으면 `browser_fallback_url` 로 웹이 열린다.
+   * (iOS 에는 `intent://` 가 없어 커스텀 스킴을 그대로 쓴다)
+   */
   private getAndroidKakaoIntentUrl(params: Record<string, string>, fallbackUrl: string): string {
     const query = new URLSearchParams(params).toString();
     return (
       `intent://auth/kakao/callback?${query}` +
-      '#Intent;scheme=tripick;package=com.tripick.place;' +
+      `#Intent;scheme=${APP_SCHEME};package=${ANDROID_PACKAGE};` +
       `S.browser_fallback_url=${encodeURIComponent(fallbackUrl)};end`
     );
   }

@@ -131,6 +131,19 @@ function isInternalWebUrl(url: string): boolean {
 const KAKAO_APP_LINK_URL = `${KAKAO_APP_LINK_PROTOCOL}//auth/kakao/callback`;
 
 /**
+ * 카카오 로그인 **시작** URL 인지. 서버가 `/auth/kakao/status` 로 내려주는 절대 주소이고
+ * (API 오리진이라 웹뷰 입장에선 외부 URL), 그 뒤 카카오 왕복은 전부 열린 탭 안에서 끝난다.
+ * 지도·문의 같은 평범한 외부 링크는 지금처럼 시스템 브라우저로 보낸다.
+ */
+function isKakaoAuthStartUrl(url: string): boolean {
+  try {
+    return /\/auth\/kakao$/.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 검증된 App Link(https) 또는 `tripick://` 딥링크로 들어온 카카오 콜백만 WebView 에 다시 싣는다.
  *
  * 돌아갈 오리진은 **지금 웹뷰가 보고 있는 곳**(`WEB_APP_ORIGIN`)이다. 릴리스에서는
@@ -178,6 +191,16 @@ type FileSaveNative = {
   saveBase64(fileName: string, mimeType: string, base64: string): Promise<string>;
 };
 const FileSave = (NativeModules.TripickFileSave ?? null) as FileSaveNative | null;
+
+// 카카오 로그인을 시스템 브라우저 대신 앱 안에서 여는 모듈 (Android: Custom Tabs,
+// iOS: ASWebAuthenticationSession). 시스템 브라우저로 내보내면 로그인 한 번에 앱이 통째로
+// 두 번 전환된다.
+//
+// 복귀 방식이 플랫폼마다 다르다 — Android 는 서버가 `intent://` 로 앱을 다시 열어 딥링크로
+// 돌아오므로 `open` 은 곧바로 null 로 끝나고, iOS 는 인증 세션이 `tripick://` 리다이렉트를
+// 가로채 스스로 닫으며 **그 URL 을 이 promise 로** 돌려준다. 사용자가 닫았으면 양쪽 다 null.
+type AuthTabNative = { open(url: string, toolbarColor: string | null): Promise<string | null> };
+const AuthTab = (NativeModules.TripickAuthTab ?? null) as AuthTabNative | null;
 
 // 설치된 앱 자신의 버전(versionName). 설정 화면이 웹 빌드 버전 대신 이걸 보여준다.
 // iOS 는 아직 모듈이 없어 null → 웹이 자기 빌드 버전으로 폴백한다.
@@ -237,6 +260,33 @@ export default function App() {
     setInitialLoadFailed(false);
     setWebViewUri(callbackUrl);
   }, []);
+
+  /**
+   * 웹뷰 밖으로 내보내는 URL 을 실제로 연다.
+   *
+   * 카카오 로그인만 인앱 브라우저로 띄운다 — 앱 위에 얹혀 화면 전환 없이 열리고, 쿠키는
+   * 시스템 브라우저와 같은 저장소를 써서 서버가 심는 state·bind 왕복이 그대로 성립한다.
+   * 인앱 브라우저를 못 여는 기기는 예전처럼 시스템 브라우저로 내보낸다 — 로그인 창이
+   * 아예 안 열리는 것보다 화면이 전환되는 편이 낫다.
+   */
+  const openOutsideWebView = useCallback(
+    (url: string) => {
+      const delegateToBrowser = () => {
+        Linking.openURL(url).catch(() => undefined);
+      };
+      if (AuthTab && isKakaoAuthStartUrl(url)) {
+        AuthTab.open(url, shellColor)
+          // iOS 는 복귀 URL 이 여기로 온다. Android 는 null 이고 딥링크로 따로 들어온다.
+          .then((callbackUrl) => {
+            if (callbackUrl) handleIncomingUrl(callbackUrl);
+          })
+          .catch(delegateToBrowser);
+        return;
+      }
+      delegateToBrowser();
+    },
+    [handleIncomingUrl, shellColor],
+  );
 
   // 저장된 refresh 토큰이 있으면 로그인 사용자로 보고 홈으로 바로 들어간다.
   // 딥링크(카카오 콜백)가 먼저 URL 을 정했으면 그쪽이 우선.
@@ -736,7 +786,7 @@ export default function App() {
             // 페이지가 만든 `intent://`·앱 딥링크로 임의의 다른 앱을 띄울 수 있었다.
             // (웹이 실제로 쓰는 건 https 링크와 문의용 mailto 뿐이다)
             if (!isDelegatableUrl(request.url)) return false;
-            Linking.openURL(request.url).catch(() => undefined);
+            openOutsideWebView(request.url);
             return false;
           }}
           onNavigationStateChange={(state) => {

@@ -49,6 +49,13 @@ export function getKakaoStatus() {
   return api.get<KakaoAuthStatusDto>('/auth/kakao/status');
 }
 
+/** 앱 셸이 복귀를 처리할 수 있는 플랫폼인지. 둘 다 아니면(모르는 셸) 웹 복귀로 둔다. */
+function nativeReturnTarget(userAgent: string): 'android' | 'ios' | null {
+  if (/Android/i.test(userAgent)) return 'android';
+  if (/iPhone|iPad|iPod/i.test(userAgent)) return 'ios';
+  return null;
+}
+
 /**
  * 카카오 로그인 시작. 서버가 준 절대 `startUrl` 로 이동한다 — 상대경로로 가면 웹 프록시
  * 오리진에서 출발하는데 카카오는 API 오리진으로 돌려보내, 시작 때 심은 CSRF state 쿠키가
@@ -67,10 +74,12 @@ export async function redirectToKakao(): Promise<void> {
   // 이 브라우저가 로그인을 시작했다는 증거. 서버가 해시를 교환 코드에 묶어, 남이 던진
   // 코드로는 세션이 안 나오게 한다 (로그인 CSRF 차단). 없으면 서버가 시작 자체를 거절한다.
   startUrl.searchParams.set('bind', startKakaoBind());
-  // Android 앱에서 시작한 OAuth 는 서버가 최종 콜백을 package 지정 intent:// 로 돌려준다.
-  // 검증된 App Link 가 사용자 설정으로 꺼져 있어도 시스템 브라우저에 세션이 갇히지 않는다.
-  if (isNativeShell() && /Android/i.test(navigator.userAgent)) {
-    startUrl.searchParams.set('returnTo', 'android');
+  // 앱에서 시작한 OAuth 는 서버가 최종 콜백을 앱으로 되돌린다 — Android 는 package 를 못박은
+  // `intent://`(링크 열기 설정이 꺼져 있어도 복귀), iOS 는 셸의 인증 세션이 가로채는 `tripick://`.
+  // 안 보내면 로그인은 브라우저에서 끝나고, 교환에 필요한 bind 는 앱 웹뷰에만 있어 실패한다.
+  const nativeTarget = isNativeShell() ? nativeReturnTarget(navigator.userAgent) : null;
+  if (nativeTarget) {
+    startUrl.searchParams.set('returnTo', nativeTarget);
   }
   window.location.href = startUrl.toString();
 }
