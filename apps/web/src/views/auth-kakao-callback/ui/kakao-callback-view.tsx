@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -27,8 +27,15 @@ export function KakaoCallbackView() {
   const [state, setState] = useState<CallbackState>({ status: 'checking' });
   const [submitting, setSubmitting] = useState(false);
   const [consentError, setConsentError] = useState<string | null>(null);
+  // 콜백 코드는 서버가 한 번 쓰고 버린다. effect 가 두 번 돌면(개발 모드 StrictMode 가
+  // 마운트 직후 정리·재실행한다) 두 번째 교환이 "이미 사용됨" 으로 떨어지고, 늦게 온
+  // 그 실패가 성공 화면을 덮어써 로그인이 안 된 것처럼 보인다. 마운트당 한 번으로 묶는다.
+  const exchanged = useRef(false);
 
   useEffect(() => {
+    if (exchanged.current) return;
+    exchanged.current = true;
+
     // 약관 전문을 보고 돌아온 경우. 교환은 이미 끝났고 동의만 남았다 — 다시 교환하면
     // 코드가 이미 소비돼 실패한다.
     const resumed = readPendingKakaoConsent();
