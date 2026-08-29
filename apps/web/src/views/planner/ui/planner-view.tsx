@@ -478,6 +478,7 @@ function PlannerContent({
             placeholder={trip.searchPlaceholder}
             center={mapCenter}
             markers={dayMarkers}
+            fitMarkers={!focusedMarker}
             onPickSearchPlace={handlePickSearchPlace}
             pickPlaceLabel={pickPlaceLabel}
           />
@@ -792,6 +793,7 @@ function PlannerContent({
                   placeholder={trip.searchPlaceholder}
                   center={mapCenter}
                   markers={dayMarkers}
+                  fitMarkers={!focusedMarker}
                   selectedMarkerId={focusedMarkerId}
                   showCurrentDot={false}
                   fill
