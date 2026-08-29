@@ -128,29 +128,39 @@ function isInternalWebUrl(url: string): boolean {
   }
 }
 
-/** 검증된 Android App Link 로 들어온 카카오 콜백만 WebView 에 다시 싣는다. */
+const KAKAO_APP_LINK_URL = `${KAKAO_APP_LINK_PROTOCOL}//auth/kakao/callback`;
+
+/**
+ * 검증된 App Link(https) 또는 `tripick://` 딥링크로 들어온 카카오 콜백만 WebView 에 다시 싣는다.
+ *
+ * 돌아갈 오리진은 **지금 웹뷰가 보고 있는 곳**(`WEB_APP_ORIGIN`)이다. 릴리스에서는
+ * 프로덕션과 같은 값이지만, 개발 빌드에서 프로덕션으로 고정하면 로컬 서버가 발급한
+ * 교환 코드를 라이브 사이트가 받게 된다 — 코드도 없고 bind(localStorage)도 그쪽
+ * 오리진엔 없어 로그인이 반드시 실패한다.
+ *
+ * ⚠️ 커스텀 스킴은 `URL` 로 뜯지 않는다. RN 의 URL 은 브라우저 것이 아니라 부분 폴리필이라
+ * `host`·`hostname`·`pathname`·`origin` 의 정규식이 `https?:` 로 고정돼 있어 `tripick://` 은
+ * hostname 이 빈 문자열로 나오고, `hash` 는 setter 자체가 없어 대입하면 TypeError 가 난다.
+ * 예전 구현이 둘 다 밟아서 Android 복귀 딥링크가 조용히 무시됐다(= 카카오 로그인이 끝나지 않음).
+ */
 function getKakaoCallbackUrl(url: string): string | null {
   try {
-    const parsed = new URL(url);
-    if (parsed.origin === PRODUCTION_WEB_APP_ORIGIN && parsed.pathname === KAKAO_CALLBACK_PATH) {
-      return parsed.toString();
+    if (isInternalWebUrl(url) && new URL(url).pathname === KAKAO_CALLBACK_PATH) {
+      return url;
     }
 
-    if (
-      parsed.protocol !== KAKAO_APP_LINK_PROTOCOL ||
-      parsed.hostname !== 'auth' ||
-      parsed.pathname !== '/kakao/callback'
-    ) {
-      return null;
-    }
+    if (!url.startsWith(KAKAO_APP_LINK_URL)) return null;
+    // `tripick://auth/kakao/callback` 뒤에는 쿼리만 올 수 있다 — `...callbackXXX` 는 남이다.
+    const query = url.slice(KAKAO_APP_LINK_URL.length);
+    if (query && !query.startsWith('?')) return null;
 
-    const callback = new URL(KAKAO_CALLBACK_PATH, PRODUCTION_WEB_APP_ORIGIN);
-    const code = parsed.searchParams.get('code');
-    const error = parsed.searchParams.get('error');
-    if (code) callback.hash = `code=${encodeURIComponent(code)}`;
-    else if (error) callback.searchParams.set('error', error);
-    else return null;
-    return callback.toString();
+    const params = new URLSearchParams(query);
+    const code = params.get('code');
+    const error = params.get('error');
+    const callback = `${WEB_APP_ORIGIN}${KAKAO_CALLBACK_PATH}`;
+    if (code) return `${callback}#code=${encodeURIComponent(code)}`;
+    if (error) return `${callback}?error=${encodeURIComponent(error)}`;
+    return null;
   } catch {
     return null;
   }
