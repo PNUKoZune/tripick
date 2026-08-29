@@ -66,7 +66,7 @@ function SettingsContent() {
             <div className="mb-2 px-1">
               <h2 className="text-[15px] font-bold text-[color:var(--ink)]">프로필</h2>
               <p className="mt-0.5 text-[12px] leading-[18px] text-[color:var(--ink-faint)]">
-                다른 멤버와 친구에게 보이는 정보예요.
+                다른 멤버와 친구에게 보이는 정보예요. 이름·아이디는 눌러서 바꿀 수 있어요.
               </p>
             </div>
             <SettingsProfileHero me={me} loading={isLoading} onError={setError('profile')} />
