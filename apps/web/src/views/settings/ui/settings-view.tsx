@@ -16,11 +16,6 @@ import { useNativeAppVersion } from '@/shared/rn-bridge/native-app-version';
 import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
 import { SettingsProfileHero } from '@/widgets/settings-profile-hero';
 
-// next.config 가 package.json version 을 주입한다(단일 출처). 빌드 시 인라인.
-// 앱 안에서는 이 값 대신 셸이 알려 준 설치 버전을 쓴다 — 웹 배포와 앱 릴리스 주기가 달라
-// 스토어 버전과 어긋난 숫자가 보이던 문제.
-const WEB_BUILD_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0';
-
 export function SettingsView() {
   return (
     <SessionGuard>
@@ -86,15 +81,11 @@ function SettingsContent() {
           </Section>
 
           <Section title="앱 정보">
-            <InfoRow label="버전" value={nativeAppVersion ?? WEB_BUILD_VERSION} />
-            <InfoRow
-              label="라이선스"
-              value={
-                <Link href="#open-source" className="text-[color:var(--primary)] hover:underline">
-                  오픈소스 라이선스
-                </Link>
-              }
-            />
+            {/* 버전은 앱에서만 — 셸이 알려 준 스토어 버전. 브라우저는 push 마다 재배포돼
+                올릴 사람이 없는 package.json 숫자가 굳어 보일 뿐이라 행 자체를 감춘다. */}
+            {nativeAppVersion ? <InfoRow label="버전" value={nativeAppVersion} /> : null}
+            {/* 링크 대신 값만 — 레포 LICENSE 가 MIT 이고, 별도 고지 페이지가 없다. */}
+            <InfoRow label="라이선스" value="MIT" />
           </Section>
 
           <Section title="계정">

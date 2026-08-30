@@ -598,7 +598,7 @@ function PlannerContent({
                 </Link>
                 <div className="min-w-0">
                   <div className="text-[12px] font-semibold tracking-wide text-[color:var(--primary)]">
-                    Tripick · 일정
+                    TriPick · 일정
                   </div>
                   <h1 className="mt-0.5 truncate text-[20px] font-bold leading-[28px] text-[color:var(--ink)]">
                     {trip?.title ?? '여행 정보 불러오는 중'}

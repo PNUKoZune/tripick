@@ -250,6 +250,9 @@ src/
 
 - 로그인 시작(`GET /auth/kakao`)과 콜백은 **같은 오리진**이어야 한다. `state` 를 httpOnly 쿠키로 브라우저에 묶어 콜백에서 대조하는데, 웹이 상대경로(`/api/v1/...`)로 시작하면 Next 프록시 오리진에서 출발하고 카카오는 `KAKAO_CALLBACK_URL`(API 오리진)로 돌려보내 쿠키가 안 실린다. 그래서 서버가 `KAKAO_CALLBACK_URL` 에서 파생한 절대 `startUrl` 을 `/auth/kakao/status` 로 내려주고 웹은 그걸로 이동한다 — 로컬은 포트가 달라도 쿠키가 공유돼 우연히 통과하니, 이 경로를 바꿀 땐 배포 기준으로 판단할 것
 - 로그인 결과는 URL 에 세션이 아니라 **1회용 교환 코드**(Redis, 120초)만 싣는다. 웹이 `POST /auth/kakao/exchange` 로 바꿔 간다
+- 앱에서는 로그인 시작 URL을 시스템 브라우저가 아니라 **인앱 브라우저**로 연다 — 네이티브 모듈 `TripickAuthTab`(Android=Custom Tabs, iOS=`ASWebAuthenticationSession`). 앱 위에 얹혀 화면 전환이 없고, 쿠키 저장소는 시스템 브라우저와 같아 state·bind 왕복이 그대로 성립한다. 웹뷰 안에서 태우는 선택지는 **쓰지 말 것**: 앱이 카카오 계정 입력창을 들여다볼 수 있는 구조가 된다. 인앱 브라우저를 못 여는 기기는 시스템 브라우저로 폴백
+- 복귀 경로는 실행 환경마다 다르고, 웹이 시작 URL에 `returnTo=android|ios` 를 실어 서버가 고른다(`KakaoReturnTarget`). **Android**는 package 를 못박은 `intent://` → App Link 열기가 꺼져 있어도 앱으로 돌아오고, 앱이 없으면 `browser_fallback_url` 로 웹이 열린다. **iOS**는 `intent://` 가 없어 `tripick://` 를 그대로 돌려준다 — 인증 세션이 그 스킴을 가로채 스스로 닫고 URL 을 네이티브 모듈에 넘긴다(딥링크로 앱이 다시 열리지 않는다). `returnTo` 를 안 보내면 로그인이 브라우저에서 끝나고, 교환에 필요한 bind 는 앱 웹뷰에만 있어 실패한다
+- **커스텀 스킴을 RN 의 `URL` 로 파싱하지 말 것** — RN 것은 부분 폴리필이라 `hostname`·`pathname`·`origin` 정규식이 `https?:` 로 고정돼 있고 `hash` 는 setter 가 없다. 여기서 조용히 실패하면 앱 카카오 로그인이 통째로 끝나지 않는다
 - 상세: [docs/auth/account-security-hardening-v1.md](docs/auth/account-security-hardening-v1.md)
 
 **기상청 API 주의사항**

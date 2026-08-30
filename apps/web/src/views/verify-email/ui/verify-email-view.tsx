@@ -2,26 +2,38 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useRef } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 
 import { verifyEmail } from '@/entities/session/api/auth-api';
 import { AppFrame } from '@/shared/ui/app-frame';
+
+type VerifyState =
+  | { status: 'pending' }
+  | { status: 'success' }
+  | { status: 'error'; message: string };
 
 export function VerifyEmailView() {
   const params = useSearchParams();
   const token = params.get('token') ?? '';
   const triggered = useRef(false);
+  const [state, setState] = useState<VerifyState>({ status: 'pending' });
 
-  const mutation = useMutation({
-    mutationFn: () => verifyEmail(token),
-  });
-
+  // 결과를 컴포넌트 state 로 들고 있는다 — `useMutation` 을 쓰면 개발 모드에서 화면이
+  // "인증 중…" 에 멈춘다. StrictMode 가 마운트 직후 effect 를 한 번 정리하는데,
+  // react-query 의 MutationObserver 는 구독이 끊길 때 진행 중인 mutation 에서 자신을
+  // 떼어내고 다시 붙지 않아, 서버 인증이 끝나도 결과가 화면에 오지 않는다.
   useEffect(() => {
     if (!token || triggered.current) return;
     triggered.current = true;
-    mutation.mutate();
-  }, [token, mutation]);
+    verifyEmail(token)
+      .then(() => setState({ status: 'success' }))
+      .catch((error: unknown) => {
+        setState({
+          status: 'error',
+          message: error instanceof Error ? error.message : '알 수 없는 오류',
+        });
+      });
+  }, [token]);
 
   return (
     <AppFrame showNav={false} themed>
@@ -34,23 +46,23 @@ export function VerifyEmailView() {
         <div className="mt-8">
           {!token ? (
             <Block tone="error" title="잘못된 링크" body="토큰이 없는 링크에요. 인증 메일에서 다시 시도해주세요." />
-          ) : mutation.isPending ? (
+          ) : state.status === 'pending' ? (
             <Block tone="info" title="인증 중…" body="잠시만 기다려주세요." />
-          ) : mutation.isSuccess ? (
+          ) : state.status === 'success' ? (
             <Block
               tone="success"
               title="인증이 완료됐어요"
               body="이제 로그인해서 여행을 시작해보세요."
               cta={{ href: '/login', label: '로그인하러 가기' }}
             />
-          ) : mutation.isError ? (
+          ) : (
             <Block
               tone="error"
               title="인증에 실패했어요"
-              body={mutation.error instanceof Error ? mutation.error.message : '알 수 없는 오류'}
+              body={state.message}
               cta={{ href: '/login', label: '로그인 페이지로' }}
             />
-          ) : null}
+          )}
         </div>
       </div>
     </AppFrame>

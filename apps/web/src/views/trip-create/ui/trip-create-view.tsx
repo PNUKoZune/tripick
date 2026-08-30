@@ -451,7 +451,7 @@ function TripCreateContent({
               </Link>
               <div className="min-w-0">
                 <div className="hidden text-[12px] font-semibold tracking-wide text-[color:var(--primary)] lg:block">
-                  Tripick · 새 여행
+                  TriPick · 새 여행
                 </div>
                 <h1 className="text-[18px] font-bold text-[color:var(--ink)] lg:mt-0.5 lg:text-[22px] lg:leading-[30px]">
                   새 여행 만들기

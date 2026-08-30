@@ -44,6 +44,25 @@ export interface KakaoAuthStatusDto {
   startUrl?: string;
 }
 
+/**
+ * 카카오 교환 결과.
+ *
+ * 기존 회원이면 바로 세션이 나오지만, **처음 오는 사람은 계정을 만들기 전에 약관 동의를
+ * 받아야 한다**(이용약관 제5조: 약관에 동의해야 회원가입이 성립). 그래서 이 단계에서는
+ * 계정을 만들지 않고 동의 화면으로 넘길 코드만 돌려준다 — 동의하지 않고 떠나면 계정은
+ * 아예 생기지 않는다.
+ */
+export type KakaoExchangeResultDto =
+  | { status: 'ok'; session: LoginResponseDto }
+  | {
+      status: 'consent_required';
+      /** 동의 후 `POST /auth/kakao/signup` 에 되돌려줄 1회용 코드. */
+      consentCode: string;
+      /** 동의 화면에 "OO 님으로 가입" 을 보여주기 위한 카카오 프로필 요약. */
+      nickname?: string;
+      email?: string;
+    };
+
 /** 카카오 콜백이 URL 로 넘긴 1회용 교환 코드 → 실제 세션. */
 export interface KakaoExchangeDto {
   code: string;

@@ -7,6 +7,7 @@ import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.tripick.place.appinfo.AppInfoPackage
+import com.tripick.place.authtab.AuthTabPackage
 import com.tripick.place.filesave.FileSavePackage
 import com.tripick.place.location.LocationTrackingPackage
 
@@ -23,6 +24,8 @@ class MainApplication : Application(), ReactApplication {
           add(FileSavePackage())
           // 설정 화면이 웹 빌드 버전 대신 앱 versionName 을 보여주도록 값을 넘기는 모듈
           add(AppInfoPackage())
+          // 카카오 로그인을 시스템 브라우저 대신 인앱 브라우저(Custom Tabs)로 여는 모듈
+          add(AuthTabPackage())
         },
     )
   }

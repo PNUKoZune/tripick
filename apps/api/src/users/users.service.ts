@@ -78,6 +78,17 @@ export class UsersService {
     return this.repo.findOneBy({ email });
   }
 
+  /**
+   * 이 카카오 프로필이 **이미 있는 계정**으로 이어지는지. {@link findOrCreateByKakao} 의
+   * 1·2순위(카카오 ID / 같은 이메일 merge)와 같은 판정이라, 둘이 어긋나면 신규가 아닌
+   * 사람에게 가입 동의 화면을 다시 띄우게 된다 — 한쪽을 고치면 다른 쪽도 같이 본다.
+   */
+  async existsForKakao(profile: KakaoProfile): Promise<boolean> {
+    if (await this.repo.findOneBy({ kakaoId: profile.id })) return true;
+    if (profile.email && (await this.findByEmail(profile.email.toLowerCase()))) return true;
+    return false;
+  }
+
   async findOrCreateByKakao(profile: KakaoProfile): Promise<UserEntity> {
     // 1순위: 이미 카카오 ID 로 가입한 사용자
     const byKakao = await this.repo.findOneBy({ kakaoId: profile.id });

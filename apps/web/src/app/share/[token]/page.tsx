@@ -23,8 +23,8 @@ export async function generateMetadata({
     });
     if (!res.ok) return {};
     const trip = (await res.json()) as SharedItineraryDto;
-    const title = `${trip.title} — Tripick 공유 일정`;
-    const description = `${trip.destination} · ${trip.durationLabel} · Tripick 으로 함께 짠 여행 일정을 확인해 보세요`;
+    const title = `${trip.title} — TriPick 공유 일정`;
+    const description = `${trip.destination} · ${trip.durationLabel} · TriPick 으로 함께 짠 여행 일정을 확인해 보세요`;
     return {
       title,
       description,
