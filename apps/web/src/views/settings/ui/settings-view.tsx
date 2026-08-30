@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { SessionGuard } from '@/entities/session';
 import { fetchMe } from '@/entities/user';
+import { PasswordSettingsRow } from '@/features/change-password';
 import { DeleteAccountButton } from '@/features/delete-account';
 import { SignOutButton } from '@/features/sign-out';
 import { ThemeSwitch } from '@/features/switch-theme';
@@ -98,6 +99,7 @@ function SettingsContent() {
           </Section>
 
           <Section title="계정">
+            <PasswordSettingsRow me={me} />
             <SignOutButton />
             <DeleteAccountButton onError={setError('delete-account')} />
           </Section>

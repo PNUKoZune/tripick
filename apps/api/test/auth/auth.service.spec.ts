@@ -740,6 +740,82 @@ describe('AuthService — password reset & verify', () => {
   });
 });
 
+describe('AuthService — 로그인 상태 비밀번호 변경', () => {
+  /** 현재 비밀번호 `pw-old-1` 을 가진 계정. 해시는 실제 bcrypt 라 비교 경로가 그대로 돈다. */
+  async function passwordUser(plain = 'pw-old-1') {
+    return user({ email: 'a@b.com', passwordHash: await bcrypt.hash(plain, 4) });
+  }
+
+  it('현재 비밀번호가 틀리면 403 — 401 은 클라이언트가 세션 만료로 읽어 로그아웃시킨다', async () => {
+    const { service, usersService } = createHarness();
+    usersService.findById.mockResolvedValue(await passwordUser());
+
+    await expect(
+      service.changePassword('u1', { currentPassword: 'wrong-one', newPassword: 'abc12345' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(usersService.setPassword).not.toHaveBeenCalled();
+  });
+
+  it('비밀번호가 없는 계정(카카오 단독)은 이 경로를 못 쓴다 — 재설정 플로우로 보낸다', async () => {
+    const { service, usersService } = createHarness();
+    usersService.findById.mockResolvedValue(user({ kakaoId: '77' }));
+
+    await expect(
+      service.changePassword('u1', { currentPassword: '', newPassword: 'abc12345' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(usersService.setPassword).not.toHaveBeenCalled();
+  });
+
+  it('새 비밀번호도 가입과 같은 규칙을 통과해야 한다', async () => {
+    const { service, usersService } = createHarness();
+    usersService.findById.mockResolvedValue(await passwordUser());
+
+    await expect(
+      service.changePassword('u1', { currentPassword: 'pw-old-1', newPassword: 'onlyletters' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('지금 쓰는 값 그대로면 거절한다 — 바꾸지 않고 다른 기기만 끊는 요청', async () => {
+    const { service, usersService } = createHarness();
+    usersService.findById.mockResolvedValue(await passwordUser('abc12345'));
+
+    await expect(
+      service.changePassword('u1', { currentPassword: 'abc12345', newPassword: 'abc12345' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(usersService.setPassword).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 다른 기기는 끊되 이 기기는 이어져야 한다. refresh 를 전부 폐기한 뒤 새로 발급하지
+   * 않으면, 비밀번호를 바꾼 사람이 다음 갱신에서 자기만 로그아웃된다.
+   */
+  it('다른 기기 세션을 끊고 이 기기 몫의 새 토큰을 돌려준다', async () => {
+    const { service, usersService, refreshRepo, expiredTokenTargets } = createHarness();
+    usersService.findById.mockResolvedValue(await passwordUser());
+    const qb = queryBuilder();
+    refreshRepo.createQueryBuilder.mockReturnValue(qb);
+
+    const res = await service.changePassword('u1', {
+      currentPassword: 'pw-old-1',
+      newPassword: 'abc12345',
+    });
+
+    expect(usersService.setPassword).toHaveBeenCalledWith('u1', expect.any(String));
+    expect(qb.wheres).toContainEqual(expect.objectContaining({ userId: 'u1' })); // revokeAll
+    expect(res.tokens.accessToken).toBeTruthy();
+    expect(res.tokens.refreshToken).toBeTruthy();
+    expect(res.user).toMatchObject({ id: 'u1', hasPassword: true });
+    // 살아 있던 재설정·가입 링크는 무효화한다 — 옛 링크로 방금 정한 값을 덮을 수 있으면
+    // 변경한 의미가 없다.
+    expect(expiredTokenTargets()).toContainEqual(
+      expect.objectContaining({ userId: 'u1', purpose: 'reset_password' }),
+    );
+    expect(expiredTokenTargets()).toContainEqual(
+      expect.objectContaining({ userId: 'u1', purpose: 'verify_email' }),
+    );
+  });
+});
+
 describe('AuthService — kakao login', () => {
   /**
    * 카카오 로그인은 같은 이메일의 미인증 가입을 merge 하면서 계정을 인증 상태로 만든다.

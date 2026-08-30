@@ -11,18 +11,23 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { KakaoExchangeResultDto, LoginResponseDto } from '@tripick/types';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { timingSafeEqual } from 'node:crypto';
 import type { CookieOptions, Request, Response } from 'express';
 import { perMinute } from '../common/throttle';
+import { UserEntity } from '../users/user.entity';
 import { AuthService, normalizeKakaoReturnTarget, type TokenContext } from './auth.service';
+import { CurrentUser } from './decorators/current-user.decorator';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { KakaoExchangeService } from './kakao-exchange.service';
 import { EmailSendLimiterService, type MailPurpose } from './email-send-limiter.service';
 import {
+  ChangePasswordBodyDto,
   EmailLoginBodyDto,
   EmailSignupBodyDto,
   KakaoExchangeBodyDto,
@@ -124,6 +129,22 @@ export class AuthController {
   @ApiOperation({ summary: '비밀번호 재설정 토큰 검증 + 새 비밀번호 저장' })
   resetPassword(@Body() dto: ResetPasswordBodyDto) {
     return this.authService.resetPassword(dto.token, dto.password);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @Throttle(perMinute(5)) // 현재 비밀번호 추측 방지
+  @ApiOperation({ summary: '로그인 상태에서 비밀번호 변경 (현재 비밀번호 확인)' })
+  changePassword(
+    @CurrentUser() user: UserEntity,
+    @Body() dto: ChangePasswordBodyDto,
+    @Req() req: Request,
+  ): Promise<LoginResponseDto> {
+    // 새 세션을 돌려준다 — 서비스가 다른 기기의 refresh 를 전부 끊기 때문에, 방금 바꾼
+    // 이 기기까지 같이 죽지 않으려면 여기서 발급한 토큰으로 갈아타야 한다.
+    return this.authService.changePassword(user.id, dto, this.tokenContext(req));
   }
 
   // ─── 카카오 OAuth ──────────────────────────────────────────

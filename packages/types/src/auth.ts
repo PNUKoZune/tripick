@@ -106,6 +106,20 @@ export interface ResetPasswordDto {
   password: string;
 }
 
+/**
+ * 로그인한 상태에서 비밀번호 변경. 메일 왕복이 없는 대신 **현재 비밀번호**로 본인을 다시
+ * 확인한다 — 세션만으로 통과시키면 잠깐 열린 기기·탈취된 access token 이 그대로 계정
+ * 인수(비밀번호 교체 → 다른 세션 폐기)로 이어진다.
+ *
+ * 비밀번호가 아직 없는 계정(카카오 단독 가입)은 이 경로를 쓰지 않는다. 대조할 현재
+ * 비밀번호가 없어 확인이 세션 하나로 줄어들기 때문 — 그쪽은 이메일 소유를 다시 증명하는
+ * 재설정 플로우(`/auth/forgot-password`)로 보낸다.
+ */
+export interface ChangePasswordDto {
+  currentPassword: string;
+  newPassword: string;
+}
+
 /** /auth/signup, /auth/verify-email 등 비-로그인 응답 — message + email 정도만 노출 */
 export interface AuthOpResultDto {
   ok: true;

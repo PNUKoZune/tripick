@@ -14,6 +14,7 @@ import {
   NICKNAME_TOO_LONG,
 } from '../../users/nickname.constants';
 import type {
+  ChangePasswordDto,
   EmailLoginDto,
   EmailSignupDto,
   KakaoExchangeDto,
@@ -90,6 +91,19 @@ export class ResetPasswordBodyDto extends VerifyEmailBodyDto implements ResetPas
   @MinLength(8, { message: '비밀번호는 8자 이상이어야 해요.' })
   @MaxLength(72, { message: '비밀번호는 72자 이내로 입력해주세요.' })
   password: string;
+}
+
+export class ChangePasswordBodyDto implements ChangePasswordDto {
+  // 현재 비밀번호는 로그인과 같은 규칙이다 — 규칙이 바뀌기 전에 만든 값도 대조는 돼야 한다.
+  @IsString()
+  @IsNotEmpty({ message: '현재 비밀번호를 입력해주세요.' })
+  @MaxLength(1024, { message: '현재 비밀번호가 올바르지 않아요.' })
+  currentPassword: string;
+
+  @IsString()
+  @MinLength(8, { message: '비밀번호는 8자 이상이어야 해요.' })
+  @MaxLength(72, { message: '비밀번호는 72자 이내로 입력해주세요.' })
+  newPassword: string;
 }
 
 export class KakaoExchangeBodyDto implements KakaoExchangeDto {

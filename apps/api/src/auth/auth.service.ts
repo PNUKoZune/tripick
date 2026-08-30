@@ -29,6 +29,7 @@ import {
 import type {
   AuthOpResultDto,
   AuthTokens,
+  ChangePasswordDto,
   EmailLoginDto,
   EmailSignupDto,
   KakaoAuthStatusDto,
@@ -260,6 +261,53 @@ export class AuthService {
     // 비밀번호 변경 = 다른 디바이스 모두 로그아웃
     await this.revokeAllRefreshTokens(record.userId);
     return { ok: true, message: '비밀번호가 변경됐어요. 새 비밀번호로 로그인해주세요.' };
+  }
+
+  /**
+   * 로그인 상태에서의 비밀번호 변경. 재설정과 달리 메일 왕복이 없으므로 **현재 비밀번호**가
+   * 본인 확인의 전부다 — 세션만으로 통과시키면 잠깐 열어 둔 기기나 탈취된 access token 이
+   * 그대로 계정 인수가 된다(비밀번호를 갈고 나머지 세션을 폐기하면 주인이 밀려난다).
+   *
+   * 비밀번호가 없는 계정(카카오 단독 가입)은 여기서 받지 않는다. 대조할 값이 없어 확인이
+   * 세션 하나로 줄어드는 데다, 기존 계정에 비밀번호를 다는 경로는 이메일 소유를 다시
+   * 증명하는 재설정 플로우 하나로 유지한다.
+   *
+   * 성공하면 이 기기만 새 토큰으로 이어 간다 — 남의 손에 있을 수 있는 다른 기기의 refresh
+   * 는 전부 끊고(변경 이유가 보통 그것이다), 정작 비밀번호를 바꾼 사람만 로그아웃시키지 않는다.
+   */
+  async changePassword(
+    userId: string,
+    dto: ChangePasswordDto,
+    ctx: TokenContext = {},
+  ): Promise<LoginResponseDto> {
+    const user = await this.usersService.findById(userId);
+    if (!user) throw new NotFoundException('사용자를 찾을 수 없어요.');
+    if (!user.passwordHash) {
+      throw new BadRequestException(
+        '아직 비밀번호가 없는 계정이에요. 비밀번호 설정 메일로 등록해주세요.',
+      );
+    }
+    // 401 이 아니라 403 이다 — 클라이언트는 인증된 요청의 401 을 "세션 만료" 로 읽어
+    // 로그인 화면으로 보내 버린다. 틀린 건 세션이 아니라 입력한 현재 비밀번호다.
+    if (!(await bcrypt.compare(dto.currentPassword ?? '', user.passwordHash))) {
+      throw new ForbiddenException('현재 비밀번호가 올바르지 않아요.');
+    }
+    assertValidPassword(dto.newPassword);
+    if (await bcrypt.compare(dto.newPassword, user.passwordHash)) {
+      throw new BadRequestException('지금 쓰는 비밀번호와 다른 값으로 바꿔주세요.');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_COST);
+    await this.usersService.setPassword(userId, passwordHash);
+    // 살아 있던 재설정·가입 링크는 여기서 무효화한다. 방금 주인이 비밀번호를 확정했는데
+    // 옛 링크로 그 값을 다시 덮을 수 있으면 변경한 의미가 없다(재설정 메일을 띄워 놓고
+    // 기기를 빼앗긴 경우가 정확히 이 시나리오다).
+    await this.expirePendingTokens(userId, 'reset_password');
+    await this.expirePendingTokens(userId, 'verify_email');
+    // 다른 기기는 전부 로그아웃 → 이 기기만 새 토큰으로 다시 잇는다.
+    await this.revokeAllRefreshTokens(userId);
+    const tokens = await this.issueTokens(userId, ctx);
+    return { tokens, user: this.toSessionUser({ ...user, passwordHash }) };
   }
 
   // ─────────────────────────────────────────────────────────────
