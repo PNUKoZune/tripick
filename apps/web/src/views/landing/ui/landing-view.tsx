@@ -18,6 +18,8 @@ import { AuthStartActions } from '@/features/auth-start/ui/auth-start-actions';
 import { AppFrame } from '@/shared/ui/app-frame';
 import { ScrollReveal } from '@/shared/ui';
 
+import { FaqList } from './faq-list';
+
 /**
  * @MX:ANCHOR: 랜딩 "광안리의 하루" — SPEC-WEB-VISUAL-REDESIGN-001 M3 정본 구현.
  * 목업(docs/design-system/mockups/tripick-landing-mockup.html)의 hero 인라인 SVG ·
@@ -702,7 +704,11 @@ function AlertSection() {
    FAQ
    ============================================================ */
 
-/** JS 없이 접히도록 `<details>` 로 짠다 — 랜딩은 서버 컴포넌트로 남겨야 첫 페인트가 빠르다. */
+/**
+ * 여닫는 높이 전환을 붙이려고 목록만 클라이언트 조각(FaqList)으로 뺐다 — 예전엔 `<details>`
+ * 라 서버 렌더였지만, 네이티브 요소는 열림이 즉시라 전환을 걸 자리가 없었다. 제목·여백 등
+ * 나머지는 그대로 서버가 그린다.
+ */
 function FaqSection() {
   return (
     <section id="faq" className="mt-[72px] scroll-mt-24 lg:mt-[128px]">
@@ -711,34 +717,7 @@ function FaqSection() {
       </div>
 
       <div className="mx-auto mt-8 max-w-[760px] lg:mt-10">
-        <ul className="flex flex-col gap-3">
-          {FAQS.map((faq, index) => (
-            <li key={faq.q} data-reveal style={{ ['--reveal-delay' as string]: `${index * 60}ms` }}>
-              <details className="group rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] px-5 py-4 open:shadow-[var(--shadow-card)]">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[15.5px] font-bold tracking-[-0.015em] text-[color:var(--ink)] [&::-webkit-details-marker]:hidden">
-                  {faq.q}
-                  <span
-                    aria-hidden="true"
-                    className="grid size-6 shrink-0 place-items-center rounded-full text-[color:var(--ink-faint)] transition-transform group-open:rotate-45"
-                    style={{ background: 'var(--card-soft)' }}
-                  >
-                    <svg width="13" height="13" viewBox="0 0 12 12" aria-hidden="true">
-                      <path
-                        d="M6 1.5v9M1.5 6h9"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </span>
-                </summary>
-                <p className="mt-3 text-[14.5px] leading-[1.68] text-[color:var(--ink-sub)]">
-                  {faq.a}
-                </p>
-              </details>
-            </li>
-          ))}
-        </ul>
+        <FaqList items={FAQS} />
       </div>
     </section>
   );

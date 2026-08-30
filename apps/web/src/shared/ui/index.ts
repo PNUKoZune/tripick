@@ -17,3 +17,4 @@ export { Skeleton, SkeletonList } from './skeleton';
 export { ItemTypeIcon, ITEM_TYPE_ICON } from './item-type-icon';
 export { LegalConsentStep } from './legal-consent';
 export { ScrollReveal } from './scroll-reveal';
+export { Accordion } from './accordion';
