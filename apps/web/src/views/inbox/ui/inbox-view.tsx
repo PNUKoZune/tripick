@@ -19,7 +19,7 @@ import {
   LuUsers,
 } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
-import type { InboxItemDto, InboxItemKind, NotificationCategory } from '@tripick/types';
+import type { InboxItemDto, InboxItemKind, InboxSummaryDto } from '@tripick/types';
 
 import { acceptFriend, removeFriend } from '@/entities/friend';
 import { fetchInbox, markAllInboxRead, markInboxRead } from '@/entities/inbox';
@@ -126,10 +126,52 @@ function InboxContent() {
       queryClient.invalidateQueries({ queryKey: queryKeys.planner.trips }),
     ]);
 
-  const readMutation = useMutation({ mutationFn: markInboxRead, onSuccess: () => invalidate() });
+  /**
+   * 읽음 처리 낙관적 갱신의 공통부. 캐시를 즉시 뒤집고 롤백용 스냅샷을 돌려준다.
+   *
+   * 서버 왕복 + 목록 재조회를 기다리면 행을 눌러도 한 박자 뒤에 색이 바뀐다 — 읽음은
+   * 실패할 여지가 거의 없는 조작이라 먼저 반영하고 어긋나면 되돌리는 편이 자연스럽다.
+   * `cancelQueries` 로 진행 중인 조회를 먼저 멈춰야, 뒤늦게 도착한 옛 응답이 덮어쓰지 않는다.
+   */
+  async function optimisticInbox(update: (prev: InboxSummaryDto) => InboxSummaryDto) {
+    await queryClient.cancelQueries({ queryKey: queryKeys.inbox.list });
+    const snapshot = queryClient.getQueryData<InboxSummaryDto>(queryKeys.inbox.list);
+    if (snapshot) queryClient.setQueryData(queryKeys.inbox.list, update(snapshot));
+    return { snapshot };
+  }
+
+  function rollbackInbox(context: { snapshot: InboxSummaryDto | undefined } | undefined) {
+    if (context?.snapshot) queryClient.setQueryData(queryKeys.inbox.list, context.snapshot);
+  }
+
+  const readMutation = useMutation({
+    mutationFn: markInboxRead,
+    onMutate: (id: string) => {
+      const now = new Date().toISOString();
+      return optimisticInbox((prev) => ({
+        items: prev.items.map((item) => (item.id === id ? { ...item, readAt: now } : item)),
+        // 누를 수 있는 행은 아직 안 읽은 영속 알림뿐이라(muted·친구 요청은 제외) 1 만 뺀다.
+        unreadCount: Math.max(0, prev.unreadCount - 1),
+      }));
+    },
+    onError: (_error, _id, context) => rollbackInbox(context),
+    onSettled: () => invalidate(),
+  });
   const readAllMutation = useMutation({
     mutationFn: markAllInboxRead,
-    onSuccess: () => invalidate(),
+    onMutate: () => {
+      const now = new Date().toISOString();
+      return optimisticInbox((prev) => ({
+        items: prev.items.map((item) =>
+          // 친구 요청은 friends 기반 가상 row 라 읽음 처리 대상이 아니다(서버도 안 건드림).
+          item.kind === 'friend_request' || item.readAt ? item : { ...item, readAt: now },
+        ),
+        // 서버 unreadCount 는 친구 요청 수를 더하므로, 읽음 처리 후에도 그만큼은 남는다.
+        unreadCount: prev.items.filter((item) => item.kind === 'friend_request').length,
+      }));
+    },
+    onError: (_error, _vars, context) => rollbackInbox(context),
+    onSettled: () => invalidate(),
   });
   const acceptMutation = useMutation({ mutationFn: acceptFriend, onSuccess: () => invalidate() });
   const rejectMutation = useMutation({ mutationFn: removeFriend, onSuccess: () => invalidate() });
@@ -190,6 +232,17 @@ function InboxContent() {
       return true;
     });
   }, [kindScoped, filter]);
+
+  /**
+   * '모두 읽음' 이 실제로 바꿀 게 남았는지. 서버 `unreadCount` 를 그대로 쓰면 안 된다 —
+   * 거기엔 친구 요청 가상 row 가 더해져 있는데 read-all 은 notifications 테이블만 갱신하므로,
+   * 대기 중 친구 요청이 하나라도 있으면 버튼이 영영 활성인 채 눌러도 아무 일이 안 일어난다.
+   * (친구 요청은 NotificationEntity 로 저장되지 않으므로 kind 로 걸러내면 정확하다.)
+   */
+  const readableUnread = useMemo(
+    () => items.filter((item) => !item.readAt && item.kind !== 'friend_request').length,
+    [items],
+  );
 
   const filterActive = filter !== 'all' || kindFilter !== 'all';
 
@@ -301,7 +354,7 @@ function InboxContent() {
           <button
             type="button"
             onClick={() => readAllMutation.mutate()}
-            disabled={readAllMutation.isPending || unreadCount === 0}
+            disabled={readAllMutation.isPending || readableUnread === 0}
             aria-label="모두 읽음"
             className="ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-[12px] border border-[color:var(--line)] px-2.5 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--card-soft)] disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -560,7 +613,7 @@ function InboxRow({
           {unread ? (
             <span
               className="inline-block size-1.5 rounded-full bg-[color:var(--danger)]"
-              aria-label="unread"
+              aria-label="읽지 않음"
             />
           ) : null}
           <span className="ml-auto text-[11px] text-[color:var(--ink-faint)]">
@@ -658,6 +711,3 @@ function formatRelative(iso: string): string {
   const d = new Date(iso);
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
-
-// Filter type referenced for clarity
-export type { NotificationCategory };
