@@ -338,17 +338,15 @@ function InboxContent() {
   const content = (
     <div className="space-y-4">
       {/*
-        두 필터는 축이 다르다(상태 vs 종류). 같은 pill 두 줄로 두면 서로 대등한 선택지처럼 보여
-        구분이 안 되므로, 상태는 하나의 세그먼트 트랙(택1)으로 묶고 종류는 그 아래 라벨 붙은
-        칩 행으로 내려 위계를 준다. 둘을 한 툴바 카드에 담아 목록과도 분리한다.
+        두 필터는 축이 다르다(상태 vs 종류). 예전엔 상태를 세그먼트 트랙으로 감싸 위계를 줬는데,
+        툴바 카드 → 트랙 → 올라온 활성 pill 로 테두리가 세 겹 겹쳐 다크에서 특히 어수선했다.
+        트랙을 걷어내고 두 줄 다 납작한 pill 로 두되, 위계는 테두리 대신 크기와 색 세기로 준다 —
+        상태는 크게(h-9·13px)·활성은 solid, 종류는 작게(h-7·12px)·활성은 틴트. 둘을 같은 표기로
+        두면 두 줄에 나란히 놓인 '전체' 가 구분되지 않는다.
       */}
       <div className="rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] p-2">
-        <div className="flex items-center gap-2">
-          <div
-            role="group"
-            aria-label="알림 상태 필터"
-            className="flex items-center gap-0.5 rounded-full border border-[color:var(--line)] bg-[color:var(--card-soft)] p-1"
-          >
+        <div className="flex items-center gap-1.5">
+          <div role="group" aria-label="알림 상태 필터" className="flex items-center gap-1.5">
             {FILTERS.map((f) => {
               const active = f.value === filter;
               const count = counts[f.value];
@@ -358,12 +356,12 @@ function InboxContent() {
                   type="button"
                   aria-pressed={active}
                   onClick={() => setFilter(f.value)}
-                  // 다크에선 --card 와 --card-soft 차이가 작아 그림자만으로는 올라온 티가 안 난다.
-                  // 활성에 테두리를 줘 구분하고, 비활성은 transparent 테두리로 높이를 맞춘다.
-                  className={`flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[13px] transition ${
+                  // 아래 종류 칩과 같은 '테두리+틴트' 로 두면 두 줄의 '전체' 가 똑같이 보인다.
+                  // 상태는 solid 로 채워 상위 축임을 색 세기로 드러낸다(크기 차이만으론 약하다).
+                  className={`flex h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] transition ${
                     active
-                      ? 'border-[color:var(--line)] bg-[color:var(--card)] font-bold text-[color:var(--primary-deep)] shadow-[var(--shadow-card)]'
-                      : 'border-transparent font-semibold text-[color:var(--ink-faint)] hover:text-[color:var(--ink-sub)]'
+                      ? 'border-[color:var(--btn-bg)] bg-[color:var(--btn-bg)] font-bold text-[color:var(--btn-text)]'
+                      : 'border-[color:var(--line)] bg-[color:var(--card)] font-semibold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]'
                   }`}
                 >
                   <span className="whitespace-nowrap">{f.label}</span>
@@ -371,9 +369,16 @@ function InboxContent() {
                     <span
                       className={`num-badge inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] font-bold tabular-nums ${
                         active
-                          ? 'bg-[color:var(--primary)] text-[color:var(--btn-text)]'
-                          : 'bg-[color:var(--line)] text-[color:var(--ink-sub)]'
+                          ? 'text-[color:var(--btn-text)]'
+                          : 'bg-[color:var(--card-soft)] text-[color:var(--ink-faint)]'
                       }`}
+                      // 채워진 pill 위에서는 배지를 같은 파랑으로 둘 수 없다 — 글자색을 옅게 깔아
+                      // 파랑 위에 한 겹 밝은 원으로 띄운다(라이트·다크 모두 흰 글자 대비 유지).
+                      style={
+                        active
+                          ? { background: 'color-mix(in srgb, var(--btn-text) 28%, transparent)' }
+                          : undefined
+                      }
                     >
                       {count}
                     </span>
@@ -387,10 +392,10 @@ function InboxContent() {
             onClick={() => readAllMutation.mutate()}
             disabled={readAllMutation.isPending || readableUnread === 0}
             aria-label="모두 읽음"
-            className="ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-[12px] border border-[color:var(--line)] px-2.5 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--card-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-[color:var(--line)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--card-soft)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <LuCheckCheck className="size-3.5" aria-hidden />
-            {/* 좁은 폭(웹뷰 430px)에선 아이콘만 — 세그먼트 트랙이 배지까지 안고 있어 자리가 없다. */}
+            {/* 좁은 폭(웹뷰 430px)에선 아이콘만 — 상태 칩 셋이 배지까지 안고 있어 자리가 없다. */}
             <span className="hidden sm:inline">모두 읽음</span>
           </button>
         </div>
