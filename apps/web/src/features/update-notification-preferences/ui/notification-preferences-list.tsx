@@ -30,7 +30,7 @@ export function NotificationPreferencesList({ me, onError }: Props) {
           <div className="min-w-0 flex-1">
             <div className="text-[14px] font-bold text-[color:var(--ink)]">모든 알림</div>
             <p className="mt-0.5 text-[12px] leading-[18px] text-[color:var(--ink-sub)]">
-              끄면 인박스와 푸시 모두 받지 않아요. 친구 요청은 친구 페이지에선 계속 보여요.
+              끄면 푸시를 보내지 않아요. 알림함에는 읽음 상태로 그대로 쌓여요.
             </p>
           </div>
           <Switch

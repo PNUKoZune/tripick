@@ -28,7 +28,7 @@ export function NotificationDetailModal({ prefs, onClose }: Props) {
         <div className="min-w-0">
           <h2 className="text-[16px] font-bold text-[color:var(--ink)]">세부 알림</h2>
           <p className="mt-1 text-[12px] text-[color:var(--ink-faint)]">
-            카테고리별로 인박스·푸시 수신을 정해요.
+            카테고리별로 푸시를 받을지 정해요. 끈 알림도 알림함에는 남아요.
           </p>
         </div>
         <button

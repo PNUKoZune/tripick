@@ -50,8 +50,11 @@ export class InboxService {
       ...notifications.map((notification) => this.fromNotification(notification)),
     ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
+    // muted(수신 토글 off 로 푸시 없이 쌓인) 알림은 안 읽음이지만 배지에는 넣지 않는다 —
+    // 껐는데 배지가 오르면 사용자는 끈 게 안 먹혔다고 읽는다.
     const unreadCount =
-      incomingFriends.length + notifications.filter((notification) => !notification.readAt).length;
+      incomingFriends.length +
+      notifications.filter((notification) => !notification.readAt && !notification.mutedAt).length;
 
     return { items, unreadCount };
   }
@@ -79,11 +82,20 @@ export class InboxService {
     return { updated: result.affected ?? 0 };
   }
 
-  async create(dto: CreateNotificationDto): Promise<NotificationEntity | null> {
+  /**
+   * 인박스 알림 생성. 수신 토글은 **푸시(FCM)만** 제어한다 — 인박스 row 는 토글과 무관하게
+   * 항상 남긴다. 사용자가 끄고 싶은 건 방해(푸시)이지 이력이 아니고, 특히 replan_ready 는
+   * 본인이 요청한 작업의 결과라 이력까지 사라지면 완료 여부를 확인할 길이 없어진다.
+   * (친구 요청이 friends 가상 row 로 이미 이렇게 동작하고 있었다 — 나머지를 거기 맞춘 것.)
+   *
+   * 대신 끈 카테고리는 `mutedAt` 을 찍어 안 읽음 배지에서 뺀다. 배지는 "확인이 필요한 새
+   * 알림"을 뜻하는데, 껐는데 배지가 오르면 사용자는 끈 게 안 먹혔다고 읽는다. `readAt` 을
+   * 대신 쓰지 않는 건 아카이브가 그걸 기준으로 30일 뒤 지우기 때문이다 — 읽지도 않은 알림의
+   * 삭제 시계가 받은 순간부터 돌면 이력을 남기려던 목적이 무너진다.
+   */
+  async create(dto: CreateNotificationDto): Promise<NotificationEntity> {
     const receiver = await this.usersService.findById(dto.userId);
-    if (receiver && !this.usersService.prefersCategory(receiver, dto.category)) {
-      return null;
-    }
+    const pushAllowed = !receiver || this.usersService.prefersCategory(receiver, dto.category);
     const saved = await this.notificationsRepo.save(
       this.notificationsRepo.create({
         userId: dto.userId,
@@ -92,24 +104,28 @@ export class InboxService {
         body: dto.body,
         payload: dto.payload ?? null,
         readAt: null,
+        mutedAt: pushAllowed ? null : new Date(),
       }),
     );
 
     // 푸시 발송은 인박스 저장 결과와 독립 — 실패해도 인박스 row 는 살아있다.
     // sendToUser 가 사용자의 모든 기기 토큰으로 발송하고 만료 토큰은 스스로 정리한다.
-    void this.notificationService.sendToUser({
-      userId: dto.userId,
-      type: dto.category,
-      title: dto.title,
-      body: dto.body,
-      data: this.stringifyPayload({
-        notificationId: saved.id,
-        category: dto.category,
-        ...(dto.payload ?? {}),
-      }),
-    });
+    if (pushAllowed) {
+      void this.notificationService.sendToUser({
+        userId: dto.userId,
+        type: dto.category,
+        title: dto.title,
+        body: dto.body,
+        data: this.stringifyPayload({
+          notificationId: saved.id,
+          category: dto.category,
+          ...(dto.payload ?? {}),
+        }),
+      });
+    }
 
     // WebSocket 신호 — 페이지가 열려 있는(특히 브라우저 단독) 클라이언트가 즉시 목록을 갱신한다.
+    // 목록 갱신은 능동 알림이 아니라 화면 최신화라 토글과 무관하게 항상 쏜다.
     this.realtimeGateway.pushInboxInvalidate(dto.userId);
 
     return saved;
@@ -233,7 +249,9 @@ export class InboxService {
       title: notification.title,
       body: notification.body,
       createdAt: notification.createdAt.toISOString(),
-      readAt: notification.readAt?.toISOString() ?? null,
+      // muted 알림은 목록에서도 읽음처럼 조용히 둔다 — 배지엔 안 잡히는데 목록에서만
+      // 미읽음으로 강조되면 "안 읽은 게 있는데 배지가 0" 인 모순으로 보인다.
+      readAt: (notification.readAt ?? notification.mutedAt)?.toISOString() ?? null,
       actions: this.stampActions(this.actionsForNotification(notification)),
       ...(notification.payload ? { payload: notification.payload } : {}),
     };
