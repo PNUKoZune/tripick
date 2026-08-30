@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
-import { takeSessionEndReason } from '@/shared/lib/session-token';
+import { peekSessionEndReason, takeSessionEndReason } from '@/shared/lib/session-token';
 
 import { sessionFlashFor, setSessionFlash } from '../model/session-flash';
 import { getStoredSession } from '../model/session-storage';
@@ -64,6 +64,27 @@ export function useGuestGuard(redirectTo = '/'): GuestGuardState {
   }, [router, redirectTo, hasSession]);
 
   return hasSession ? 'redirecting' : 'guest';
+}
+
+/**
+ * 세션이 **만료로** 끝난 흔적을 안고 비로그인 화면에 서 있으면 로그인 화면으로 보낸다.
+ *
+ * 루트(`/`)처럼 세션 유무로 화면이 통째로 갈리는 자리를 위한 것이다 — 거기서 세션이 만료되면
+ * 보호 화면이 언마운트되면서 `useSessionGuard` 가 아예 못 돌고, 사용자는 안내 한 줄 없이
+ * 소개 화면으로 되돌아간 것만 본다. 스스로 로그아웃·탈퇴한 사유는 건드리지 않는다 —
+ * 그쪽은 랜딩이 정상 도착지라 여기서 소비하면 `useSessionGuard` 가 읽을 마커가 사라진다.
+ */
+export function useExpiredSessionExit(active: boolean, redirectTo = '/login'): void {
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!active) return;
+    if (peekSessionEndReason() !== 'expired') return;
+    const reason = takeSessionEndReason();
+    const flash = sessionFlashFor(reason);
+    if (flash) setSessionFlash(flash);
+    redirectWithFallback(router.replace, redirectTo);
+  }, [active, router, redirectTo]);
 }
 
 /**

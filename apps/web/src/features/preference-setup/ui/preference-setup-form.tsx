@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   LuCheck,
-  LuChevronDown,
   LuCircleAlert,
   LuLoader,
   LuLock,
@@ -51,7 +50,7 @@ import {
 import { getStoredSession, type Session } from '@/entities/session/model/session-storage';
 import { queryKeys } from '@/shared/api/query-keys';
 import { downscaleImage, PREFERENCE_MAX_DIMENSION } from '@/shared/lib';
-import { Button, ConfirmDialog, ImageLightbox, TimeField, Toast } from '@/shared/ui';
+import { Accordion, Button, ConfirmDialog, ImageLightbox, TimeField, Toast } from '@/shared/ui';
 
 type ToastState = {
   title: string;
@@ -1384,57 +1383,34 @@ function ThemeGroupAccordion({
   stanceOf: (value: ThemePreference) => ThemeStance | null;
   onSelect: (value: ThemePreference, stance: ThemeStance) => void;
 }) {
-  const panelId = `theme-group-${group.key}`;
   return (
-    <div className="overflow-hidden rounded-[14px] border border-[color:var(--line)]">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        aria-controls={panelId}
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition hover:bg-[color:var(--card-soft)]"
-      >
-        <span className="text-[14px] font-bold leading-6 text-[color:var(--ink)]">
-          {group.label}
-        </span>
-        <span className="flex flex-1 items-center gap-1">
+    <Accordion
+      panelId={`theme-group-${group.key}`}
+      open={open}
+      onToggle={onToggle}
+      className="rounded-[14px] border border-[color:var(--line)]"
+      headerClassName="px-3 py-2.5"
+      panelClassName="grid grid-cols-1 gap-1.5 px-2 pb-2 lg:grid-cols-2"
+      summary={
+        <>
+          <span className="text-[14px] font-bold leading-6 text-[color:var(--ink)]">
+            {group.label}
+          </span>
           {counts.like > 0 ? <StanceCount tone="like" count={counts.like} /> : null}
           {counts.dislike > 0 ? <StanceCount tone="dislike" count={counts.dislike} /> : null}
-        </span>
-        <LuChevronDown
-          aria-hidden
-          className={`size-4 shrink-0 text-[color:var(--ink-faint)] transition-transform duration-200 ease-out ${
-            open ? 'rotate-180' : ''
-          }`}
+        </>
+      }
+    >
+      {group.themes.map((theme) => (
+        <ThemeStanceRow
+          key={theme.value}
+          label={theme.label}
+          examples={theme.examples}
+          stance={stanceOf(theme.value)}
+          onSelect={(stance) => onSelect(theme.value, stance)}
         />
-      </button>
-      {/* 접을 때 언마운트하지 않는다 — aria-controls 가 가리키는 패널이 사라지면 안 되고,
-          DOM 을 지웠다 되살리면 펼칠 때마다 행 22개가 다시 만들어진다.
-          여닫는 높이는 grid-template-rows 0fr↔1fr 로 애니메이션한다 — 그룹마다 행 수가
-          달라 max-height 를 못 박으면 짧은 그룹은 다 열린 뒤에도 계속 기다리고, 긴 그룹은
-          중간에 잘린다. `inert` 로 접힌 패널의 버튼이 탭 순서·스크린리더에 잡히지 않게 한다. */}
-      <div
-        id={panelId}
-        inert={!open}
-        className={`grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${
-          open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-        }`}
-      >
-        <div className="overflow-hidden">
-          <div className="grid grid-cols-1 gap-1.5 px-2 pb-2 lg:grid-cols-2">
-            {group.themes.map((theme) => (
-              <ThemeStanceRow
-                key={theme.value}
-                label={theme.label}
-                examples={theme.examples}
-                stance={stanceOf(theme.value)}
-                onSelect={(stance) => onSelect(theme.value, stance)}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
+      ))}
+    </Accordion>
   );
 }
 
