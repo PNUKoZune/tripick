@@ -43,7 +43,7 @@ export function AuthStartActions() {
     <div className="space-y-3">
       <Link
         href="/signup"
-        className="flex h-14 w-full items-center justify-center gap-2 rounded-[16px] bg-[color:var(--btn-bg)] text-[16px] font-bold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)]"
+        className="wvr-shine flex h-14 w-full items-center justify-center gap-2 rounded-[16px] bg-[color:var(--btn-bg)] text-[16px] font-bold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)]"
       >
         이메일로 시작하기
         <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">

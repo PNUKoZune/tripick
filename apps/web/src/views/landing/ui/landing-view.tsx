@@ -16,6 +16,7 @@ import {
 import { GuestGuard } from '@/entities/session';
 import { AuthStartActions } from '@/features/auth-start/ui/auth-start-actions';
 import { AppFrame } from '@/shared/ui/app-frame';
+import { ScrollReveal } from '@/shared/ui';
 
 /**
  * @MX:ANCHOR: 랜딩 "광안리의 하루" — SPEC-WEB-VISUAL-REDESIGN-001 M3 정본 구현.
@@ -210,6 +211,9 @@ export function LandingView() {
 function LandingContent() {
   return (
     <AppFrame showNav={false} themed>
+      {/* 스크롤 등장 스위치. 마크업은 서버가 그대로 내려보내고, 이 섬이 붙기 전까지는
+          숨김이 걸리지 않아 JS 가 늦어도 빈 화면이 보이지 않는다. */}
+      <ScrollReveal />
       <LandingHeader />
 
       <div className="px-5 pb-[calc(64px+var(--safe-bottom))] lg:px-10">
@@ -244,9 +248,15 @@ function LandingContent() {
 function LandingHeader() {
   return (
     <header
-      className="sticky top-0 z-30 border-b border-[color:var(--line)] bg-[color:var(--bg)] backdrop-blur"
+      className="sticky top-0 z-30 overflow-hidden border-b border-[color:var(--line)] bg-[color:var(--bg)] backdrop-blur"
       style={{ background: 'color-mix(in srgb, var(--bg) 86%, transparent)' }}
     >
+      {/* 읽은 만큼 차는 진행 막대. 스크롤 구동 애니메이션을 아는 브라우저에서만 보인다. */}
+      <span
+        aria-hidden="true"
+        className="wvr-progress absolute inset-x-0 bottom-0 h-[2px]"
+        style={{ background: 'var(--primary)' }}
+      />
       <div className="mx-auto flex w-full max-w-[500px] items-center justify-between px-5 pb-3 pt-[calc(12px+var(--safe-top))] md:max-w-[720px] lg:max-w-[1120px] lg:px-10 lg:pb-4 lg:pt-4">
         <Link href="/start" className="inline-flex items-baseline gap-0.5" aria-label="트리픽 홈">
           <span className="text-[19px] font-extrabold tracking-[-0.02em] text-[color:var(--ink)]">
@@ -305,8 +315,9 @@ function LandingHeader() {
  */
 function HeroSection() {
   return (
-    <section className="grid pt-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)] lg:gap-x-14 lg:pt-[72px]">
-      <div className="lg:col-start-1 lg:row-start-1">
+    <section className="relative grid pt-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)] lg:gap-x-14 lg:pt-[72px]">
+      <span aria-hidden="true" className="wvr-aurora" />
+      <div className="relative lg:col-start-1 lg:row-start-1">
         <p className="wvr-rise wvr-rise-1 mb-2.5 inline-flex items-center gap-1.5 rounded-full bg-[color:var(--primary-tint)] px-3 py-1.5 text-[12.5px] font-bold tracking-[0.01em] text-[color:var(--primary)]">
           <LuSparkles aria-hidden="true" className="size-[14px]" />
           취향으로 골라주는 AI 여행 플래너
@@ -333,11 +344,11 @@ function HeroSection() {
 
       {/* 모바일은 그림이 CTA 위 — 첫 화면에서 그림이 문장보다 먼저 읽힌다.
           데스크탑은 오른쪽 열로 옮겨 문구·CTA 두 행에 걸쳐 세로 중앙에 둔다. */}
-      <div className="wvr-rise wvr-rise-4 mt-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0 lg:self-center">
+      <div className="wvr-rise wvr-rise-4 relative mt-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0 lg:self-center">
         <HeroScene />
       </div>
 
-      <div className="wvr-rise wvr-rise-5 mt-5 lg:col-start-1 lg:row-start-2 lg:mt-8 lg:max-w-[400px]">
+      <div className="wvr-rise wvr-rise-5 relative mt-5 lg:col-start-1 lg:row-start-2 lg:mt-8 lg:max-w-[400px]">
         <AuthStartActions />
         <p className="mt-3 text-center text-[13px] text-[color:var(--ink-faint)] lg:text-left">
           가입 무료 · 3분이면 첫 일정을 받아볼 수 있어요
@@ -345,7 +356,10 @@ function HeroSection() {
       </div>
 
       {/* 데이터 출처 — 그리드 두 컬럼을 가로지르게 두어 히어로 전체의 바닥선이 된다. */}
-      <div className="mt-12 border-t border-[color:var(--line)] pt-6 lg:col-span-2 lg:row-start-3 lg:mt-16">
+      <div
+        data-reveal
+        className="relative mt-12 border-t border-[color:var(--line)] pt-6 lg:col-span-2 lg:row-start-3 lg:mt-16"
+      >
         <p className="text-[12.5px] font-semibold text-[color:var(--ink-faint)]">
           이런 데이터를 확인해 후보를 고릅니다
         </p>
@@ -391,26 +405,32 @@ function HeroScene() {
 function FeatureSection() {
   return (
     <section id="features" className="mt-[72px] scroll-mt-24 lg:mt-[128px]">
-      <SectionHeading
-        eyebrow="트리픽이 하는 일"
-        title={
-          <>
-            검색 탭 스무 개 대신,
-            <br />
-            일정 하나로 정리해요
-          </>
-        }
-        description="가고 싶은 곳을 모으는 것부터 시간표를 맞추는 것까지 — 여행 준비에서 손이 많이 가는 부분을 대신합니다."
-      />
+      <div data-reveal>
+        <SectionHeading
+          eyebrow="트리픽이 하는 일"
+          title={
+            <>
+              검색 탭 스무 개 대신,
+              <br />
+              일정 하나로 정리해요
+            </>
+          }
+          description="가고 싶은 곳을 모으는 것부터 시간표를 맞추는 것까지 — 여행 준비에서 손이 많이 가는 부분을 대신합니다."
+        />
+      </div>
 
       <ul className="mt-8 grid gap-4 md:grid-cols-2 lg:mt-12 lg:grid-cols-3 lg:gap-5">
-        {FEATURES.map((feature) => (
+        {FEATURES.map((feature, index) => (
           <li
             key={feature.title}
-            className="rounded-[20px] border border-[color:var(--line)] bg-[color:var(--card)] p-5 shadow-[var(--shadow-card)] lg:p-6"
+            data-reveal
+            // 카드가 한꺼번에 나타나면 판이 통째로 깜빡인 것처럼 보인다. 60ms 씩 밀어
+            // 왼쪽 위에서 오른쪽 아래로 훑고 지나가게 한다.
+            style={{ ['--reveal-delay' as string]: `${index * 60}ms` }}
+            className="wvr-lift rounded-[20px] border border-[color:var(--line)] bg-[color:var(--card)] p-5 shadow-[var(--shadow-card)] lg:p-6"
           >
             <span
-              className="flex size-11 items-center justify-center rounded-[14px] border border-[color:var(--line)]"
+              className="wvr-lift-icon flex size-11 items-center justify-center rounded-[14px] border border-[color:var(--line)]"
               style={{
                 background: feature.warm ? 'var(--accent-tint)' : 'var(--primary-tint)',
                 color: feature.warm ? 'var(--accent-deep)' : 'var(--primary)',
@@ -442,27 +462,39 @@ function FeatureSection() {
 function HowSection() {
   return (
     <section id="how" className="mt-[72px] scroll-mt-24 lg:mt-[128px]">
-      <SectionHeading
-        eyebrow="이렇게 진행돼요"
-        title={
-          <>
-            사진 고르기부터 완성까지,
-            <br />
-            네 걸음이면 돼요
-          </>
-        }
-      />
+      <div data-reveal>
+        <SectionHeading
+          eyebrow="이렇게 진행돼요"
+          title={
+            <>
+              사진 고르기부터 완성까지,
+              <br />
+              네 걸음이면 돼요
+            </>
+          }
+        />
+      </div>
 
       <div className="relative mt-8 flex flex-col gap-[30px] lg:mt-14 lg:grid lg:grid-cols-4 lg:gap-8">
-        {/* 연결선: 모바일은 아이콘 열을 따라 세로, 데스크탑은 아이콘 중심을 잇는 가로. */}
+        {/* 연결선은 방향이 달라 두 벌로 나눠 뒀다 — 한 요소로 두면 세로(scaleY)와
+            가로(scaleX) 중 하나만 그어져 반대쪽 화면에서 선이 죽는다. */}
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-[30px] left-[23px] top-[50px] border-l-2 border-dotted lg:bottom-auto lg:left-[56px] lg:right-[56px] lg:top-[23px] lg:border-l-0 lg:border-t-2"
+          data-reveal="draw-y"
+          className="pointer-events-none absolute bottom-[30px] left-[23px] top-[50px] border-l-2 border-dotted lg:hidden"
+          style={{ borderColor: 'var(--line-dot)' }}
+        />
+        <span
+          aria-hidden="true"
+          data-reveal="draw-x"
+          className="pointer-events-none absolute left-[56px] right-[56px] top-[23px] hidden border-t-2 border-dotted lg:block"
           style={{ borderColor: 'var(--line-dot)' }}
         />
         {STEPS.map((step, index) => (
           <div
             key={step.title}
+            data-reveal
+            style={{ ['--reveal-delay' as string]: `${index * 90}ms` }}
             className="relative grid grid-cols-[46px_1fr] items-start gap-4 lg:grid-cols-1 lg:gap-0"
           >
             <span
@@ -501,7 +533,7 @@ function PreviewSection() {
   return (
     <section id="preview" className="mt-[72px] scroll-mt-24 lg:mt-[128px]">
       <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)] lg:items-start lg:gap-14">
-        <div className="lg:sticky lg:top-24">
+        <div data-reveal className="lg:sticky lg:top-24">
           <SectionHeading
             eyebrow="미리 보는 결과"
             title={<>예를 들면, 이런 하루가 나와요</>}
@@ -523,7 +555,10 @@ function PreviewSection() {
           </p>
         </div>
 
-        <article className="mt-8 rounded-[20px] border border-[color:var(--line)] bg-[color:var(--card)] px-5 pb-5 pt-[22px] shadow-[var(--shadow-card)] lg:mt-0 lg:rounded-[24px] lg:px-7 lg:pb-7 lg:pt-7">
+        <article
+          data-reveal="right"
+          className="mt-8 rounded-[20px] border border-[color:var(--line)] bg-[color:var(--card)] px-5 pb-5 pt-[22px] shadow-[var(--shadow-card)] lg:mt-0 lg:rounded-[24px] lg:px-7 lg:pb-7 lg:pt-7"
+        >
           <div className="flex items-center justify-between">
             <span className="inline-block rounded-[8px] bg-[color:var(--primary-tint)] px-[9px] py-1 font-mono text-[11px] font-bold text-[color:var(--primary)]">
               DAY 1
@@ -542,8 +577,10 @@ function PreviewSection() {
           <ol className="relative mt-[22px] flex flex-col gap-[22px]">
             <span
               aria-hidden="true"
+              data-reveal="draw-y"
               className="pointer-events-none absolute bottom-2 left-[60px] top-2 w-[3px] rounded-full"
               style={{
+                ['--reveal-delay' as string]: '220ms',
                 background:
                   'linear-gradient(180deg, var(--t-morning) 0%, var(--t-noon) 36%, var(--t-gold) 70%, var(--t-dusk) 100%)',
               }}
@@ -606,7 +643,7 @@ function AlertSection() {
   return (
     <section className="mt-[72px] lg:mt-[128px]">
       <div className="rounded-[24px] border border-[color:var(--line)] bg-[color:var(--card-soft)] px-5 py-8 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,560px)] lg:items-center lg:gap-14 lg:px-10 lg:py-12">
-        <div>
+        <div data-reveal>
           <SectionHeading
             eyebrow="여행 중에도"
             title={
@@ -629,9 +666,11 @@ function AlertSection() {
         </div>
 
         <ul className="mt-8 flex flex-col gap-3 lg:mt-0">
-          {ALERTS.map((alert) => (
+          {ALERTS.map((alert, index) => (
             <li
               key={alert.title}
+              data-reveal="right"
+              style={{ ['--reveal-delay' as string]: `${index * 110}ms` }}
               className="flex items-start gap-3.5 rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] p-4 shadow-[var(--shadow-card)]"
             >
               <span
@@ -664,12 +703,14 @@ function AlertSection() {
 function FaqSection() {
   return (
     <section id="faq" className="mt-[72px] scroll-mt-24 lg:mt-[128px]">
-      <SectionHeading eyebrow="자주 묻는 질문" title={<>궁금한 점이 있으신가요?</>} center />
+      <div data-reveal>
+        <SectionHeading eyebrow="자주 묻는 질문" title={<>궁금한 점이 있으신가요?</>} center />
+      </div>
 
       <div className="mx-auto mt-8 max-w-[760px] lg:mt-10">
         <ul className="flex flex-col gap-3">
-          {FAQS.map((faq) => (
-            <li key={faq.q}>
+          {FAQS.map((faq, index) => (
+            <li key={faq.q} data-reveal style={{ ['--reveal-delay' as string]: `${index * 60}ms` }}>
               <details className="group rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] px-5 py-4 open:shadow-[var(--shadow-card)]">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[15.5px] font-bold tracking-[-0.015em] text-[color:var(--ink)] [&::-webkit-details-marker]:hidden">
                   {faq.q}
@@ -707,6 +748,7 @@ function FaqSection() {
 function ClosingSection() {
   return (
     <section
+      data-reveal="scale"
       className="mt-[72px] rounded-[20px] px-6 py-[30px] lg:mt-[128px] lg:rounded-[28px] lg:px-16 lg:py-16 lg:text-center"
       style={{ background: 'var(--primary-tint)' }}
     >
@@ -839,11 +881,13 @@ function GwangalliDuskScene() {
       {/* 바다 */}
       <rect x="0" y="150" width="390" height="82" fill="var(--sea-1)" />
       <path
-        d="M0 174 Q40 167 80 174 T160 174 T240 174 T320 174 T400 174 L400 232 L0 232 Z"
+        className="wvr-wave-1"
+        d="M-40 174 Q0 167 40 174 T120 174 T200 174 T280 174 T360 174 T440 174 L440 232 L-40 232 Z"
         fill="var(--sea-2)"
       />
       <path
-        d="M0 200 Q45 193 90 200 T180 200 T270 200 T360 200 T450 200 L450 232 L0 232 Z"
+        className="wvr-wave-2"
+        d="M-40 200 Q5 193 50 200 T140 200 T230 200 T320 200 T410 200 T500 200 L500 232 L-40 232 Z"
         fill="var(--sea-3)"
       />
 
@@ -856,7 +900,7 @@ function GwangalliDuskScene() {
       </g>
 
       {/* 작은 배 */}
-      <g fill="var(--sil)">
+      <g className="wvr-boat" fill="var(--sil)">
         <path d="M52 182 L86 182 L79 190 L58 190 Z" />
         <rect x="66" y="170" width="2" height="12" rx="1" />
       </g>
@@ -880,7 +924,7 @@ function GwangalliDuskScene() {
         <rect x="119" y="94" width="6" height="56" rx="1.5" fill="var(--bridge)" />
         <rect x="265" y="94" width="6" height="56" rx="1.5" fill="var(--bridge)" />
         <rect x="-10" y="146" width="410" height="5" rx="2" fill="var(--bridge)" />
-        <g fill="var(--lights)">
+        <g className="wvr-bridge-lights" fill="var(--lights)">
           <circle cx="18" cy="144" r="1.6" />
           <circle cx="52" cy="144" r="1.6" />
           <circle cx="86" cy="144" r="1.6" />
