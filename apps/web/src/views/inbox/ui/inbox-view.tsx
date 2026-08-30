@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   LuCheckCheck,
@@ -61,7 +61,7 @@ const KIND_META: Record<InboxItemKind, { Icon: IconType; label: string; tone: st
   trip_reminder: { Icon: LuLuggage, label: '여행 알림', tone: 'var(--primary)' },
   schedule_change_request: { Icon: LuPencilLine, label: '변경 요청', tone: 'var(--accent-deep)' },
   schedule_change_result: { Icon: LuCircleCheck, label: '변경 결과', tone: 'var(--ok)' },
-  general: { Icon: LuInbox, label: '알림', tone: 'var(--ink-sub)' },
+  general: { Icon: LuInbox, label: '일반 알림', tone: 'var(--ink-sub)' },
 };
 
 /**
@@ -94,6 +94,33 @@ export function InboxView() {
   );
 }
 
+/**
+ * 1분마다 갱신되는 현재 시각(ms). 상대 시각 표기의 최소 단위가 분이라 그보다 자주 돌 이유가 없다.
+ * 탭이 숨겨져 있는 동안은 멈추고, 다시 보일 때 즉시 한 번 갱신해 되돌아왔을 때 옛 시각이
+ * 남아 있지 않게 한다.
+ */
+function useMinuteClock(): number {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const bump = () => setNow(Date.now());
+    let timer = window.setInterval(bump, 60_000);
+    const onVisibility = () => {
+      window.clearInterval(timer);
+      if (document.visibilityState === 'hidden') return;
+      bump();
+      timer = window.setInterval(bump, 60_000);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
+
+  return now;
+}
+
 function InboxContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -102,6 +129,10 @@ function InboxContent() {
 
   // WebSocket 신호로 새 알림 도착 시 목록을 실시간 갱신한다(브라우저 단독 FCM 공백 보완).
   useInboxInvalidateSubscription();
+
+  // '방금'·'3분 전'과 날짜 그룹은 렌더 시점의 Date.now() 로 계산된다. 알림 페이지는 열어둔 채
+  // 두기 쉬운 화면이라 그대로면 시간이 멈춰 보이고 자정을 넘겨도 '오늘' 묶음에 남는다.
+  const now = useMinuteClock();
 
   const { data, error, isLoading } = useQuery({
     queryKey: queryKeys.inbox.list,
@@ -251,7 +282,7 @@ function InboxContent() {
     setKindFilter('all');
   }
 
-  const grouped = useMemo(() => groupByDate(filteredItems), [filteredItems]);
+  const grouped = useMemo(() => groupByDate(filteredItems, now), [filteredItems, now]);
 
   function handleAction(item: InboxItemDto, actionType: string) {
     const action = item.actions.find((a) => a.type === actionType);
@@ -441,6 +472,7 @@ function InboxContent() {
                 key={item.id}
                 item={item}
                 index={index}
+                nowMs={now}
                 pending={
                   ((acceptMutation.isPending || rejectMutation.isPending) &&
                     item.kind === 'friend_request') ||
@@ -552,6 +584,7 @@ function CategoryChip({
 function InboxRow({
   item,
   index,
+  nowMs,
   pending,
   onAction,
   onClick,
@@ -559,6 +592,8 @@ function InboxRow({
   item: InboxItemDto;
   /** 그룹 안 순서 — 등장 stagger 지연에만 쓴다(0-based) */
   index: number;
+  /** 상대 시각 기준 시각. 목록 전체가 한 시점으로 계산되게 밖에서 받는다. */
+  nowMs: number;
   pending: boolean;
   onAction: (actionType: string) => void;
   onClick: () => void;
@@ -617,7 +652,7 @@ function InboxRow({
             />
           ) : null}
           <span className="ml-auto text-[11px] text-[color:var(--ink-faint)]">
-            {formatRelative(item.createdAt)}
+            {formatRelative(item.createdAt, nowMs)}
           </span>
         </div>
         <div className="mt-0.5 text-[14px] font-bold text-[color:var(--ink)]">
@@ -677,8 +712,12 @@ function emptyTitle(filter: Filter, kindFilter: KindFilter): string {
   return `${withSubject(KIND_META[kindFilter].label)} 없어요`;
 }
 
-function groupByDate(items: InboxItemDto[]): Array<{ label: string; items: InboxItemDto[] }> {
-  const now = new Date();
+/** 기준 시각(`nowMs`)을 밖에서 받는다 — 1분 시계가 갱신되면 자정 경계도 따라 움직인다. */
+function groupByDate(
+  items: InboxItemDto[],
+  nowMs: number,
+): Array<{ label: string; items: InboxItemDto[] }> {
+  const now = new Date(nowMs);
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const startOfYesterday = startOfToday - 86_400_000;
   const startOfWeek = startOfToday - 6 * 86_400_000;
@@ -701,9 +740,9 @@ function groupByDate(items: InboxItemDto[]): Array<{ label: string; items: Inbox
     .map(([label, list]) => ({ label, items: list }));
 }
 
-function formatRelative(iso: string): string {
+function formatRelative(iso: string, nowMs: number): string {
   const then = new Date(iso).getTime();
-  const diff = Date.now() - then;
+  const diff = nowMs - then;
   if (diff < 60_000) return '방금';
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}분 전`;
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}시간 전`;
