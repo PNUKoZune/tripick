@@ -60,6 +60,7 @@ type BridgeMessage =
   | { type: 'REQUEST_REFRESH_TOKEN'; requestId: string }
   | { type: 'WEB_READY' }
   | { type: 'NAV_STATE'; canGoBack: boolean }
+  | { type: 'THEME_CHANGE'; theme: 'light' | 'dark' }
   | { type: 'OVERLAY_STATE'; open: boolean }
   | {
       type: 'SAVE_FILE';
@@ -219,7 +220,11 @@ const REFRESH_TOKEN_ACCOUNT = 'refreshToken';
 export default function App() {
   // 시스템 바 아이콘·셸 배경을 웹 팔레트(--app-bg)와 같은 명암으로 맞춘다.
   // 하나로 고정해 두면 다크에서 상태바 아이콘이 어두운 배경에 묻히고, 로딩 순간 흰 판이 번쩍인다.
-  const isDark = useColorScheme() === 'dark';
+  // 웹 설정에서 OS 와 다른 테마를 고를 수 있으므로, 웹이 THEME_CHANGE 로 알려 주면 그쪽이 우선한다
+  // (웹뷰가 아직 안 붙었거나 알림 전이면 OS 설정으로 시작 — 첫 프레임에 흰 판이 번쩍이지 않게).
+  const systemDark = useColorScheme() === 'dark';
+  const [webTheme, setWebTheme] = useState<'light' | 'dark' | null>(null);
+  const isDark = webTheme ? webTheme === 'dark' : systemDark;
   const shellColor = isDark ? SHELL_BG_DARK : SHELL_BG_LIGHT;
   const webViewRef = useRef<InstanceType<typeof WebView>>(null);
   const watchIdRef = useRef<number | null>(null);
@@ -684,6 +689,10 @@ export default function App() {
     }
     if (msg.type === 'STOP_LOCATION_TRACKING') {
       stopTracking();
+      return;
+    }
+    if (msg.type === 'THEME_CHANGE' && (msg.theme === 'light' || msg.theme === 'dark')) {
+      setWebTheme(msg.theme);
       return;
     }
     if (msg.type === 'LOCATION_AUTH' && msg.apiBaseUrl && msg.accessToken) {

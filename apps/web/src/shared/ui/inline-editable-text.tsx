@@ -66,11 +66,16 @@ export function InlineEditableText({
   const sizerText = draft || placeholder || ' ';
 
   return (
+    // -mx-1 은 input 의 px-1 을 시각적으로 상쇄한다 — 이게 없으면 편집 가능한 줄만
+    // 4px 씩 밀려 옆의 고정 텍스트(이메일 등)와 좌축이 어긋난다. 중앙 정렬에서도
+    // 좌우 대칭이라 중심은 그대로다.
     <label
-      className={`inline-flex items-center gap-1 ${disabled ? 'pointer-events-none opacity-50' : 'cursor-text'}`}
+      className={`group -mx-1 inline-flex items-center ${disabled ? 'pointer-events-none opacity-50' : 'cursor-text'}`}
     >
+      {/* pl-1 로 축을 되돌리고 -mr-1 로 input 의 좌 padding 을 먹어 "@" 를 값에 붙인다.
+          포커스 테두리가 "@" 에 바짝 붙지만, 상시 노출되는 표시 상태를 우선한다. */}
       {prefix ? (
-        <span className={`select-none text-[#8B95A1] ${textClassName}`}>{prefix}</span>
+        <span className={`-mr-1 select-none pl-1 ${textClassName}`}>{prefix}</span>
       ) : null}
       <span className="inline-grid">
         <span
@@ -104,7 +109,7 @@ export function InlineEditableText({
             }
           }}
           onBlur={commit}
-          className={`col-start-1 row-start-1 w-full min-w-0 rounded-[8px] border border-transparent bg-transparent px-1 outline-none focus:border-[#3182F6] focus:bg-white focus:ring-2 focus:ring-[#E1ECFF] ${textClassName}`}
+          className={`col-start-1 row-start-1 w-full min-w-0 rounded-[8px] border border-transparent bg-transparent px-1 outline-none group-hover:bg-[color:var(--card-soft,#F8FAFD)] focus:border-[color:var(--primary,#3182F6)] focus:bg-[color:var(--card,#FFFFFF)] focus:ring-2 focus:ring-[color:var(--ring,#E1ECFF)] ${textClassName}`}
         />
       </span>
       <PencilIcon />
@@ -123,7 +128,7 @@ function PencilIcon() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="shrink-0 text-[#B0B8C1]"
+      className="ml-0.5 shrink-0 text-[color:var(--ink-faint,#B0B8C1)] opacity-0 transition-opacity group-hover:opacity-70 group-focus-within:opacity-70"
       aria-hidden
     >
       <path d="M4 20h4l10.5-10.5a2 2 0 0 0-2.83-2.83L5.17 17.17V20Z" />

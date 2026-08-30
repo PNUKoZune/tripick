@@ -9,6 +9,7 @@ import { SessionGuard } from '@/entities/session';
 import { fetchMe } from '@/entities/user';
 import { DeleteAccountButton } from '@/features/delete-account';
 import { SignOutButton } from '@/features/sign-out';
+import { ThemeSwitch } from '@/features/switch-theme';
 import { NotificationPreferencesList } from '@/features/update-notification-preferences';
 import { queryKeys } from '@/shared/api/query-keys';
 import { firstErrorMessage } from '@/shared/lib';
@@ -61,17 +62,25 @@ function SettingsContent() {
             <div className="mb-2 px-1">
               <h2 className="text-[15px] font-bold text-[color:var(--ink)]">프로필</h2>
               <p className="mt-0.5 text-[12px] leading-[18px] text-[color:var(--ink-faint)]">
-                다른 멤버와 친구에게 보이는 정보예요.
+                다른 멤버와 친구에게 보이는 정보예요. 이름·아이디는 눌러서 바꿀 수 있어요.
               </p>
             </div>
             <SettingsProfileHero me={me} loading={isLoading} onError={setError('profile')} />
           </section>
 
-          <Section
-            title="알림 설정"
-            description="끄면 인박스와 푸시 모두 받지 않아요. 친구 요청은 친구 페이지에선 계속 보여요."
-          >
+          {/* 설명은 목록 첫 줄의 "모든 알림" 행이 직접 달고 있다 — 같은 문장을 섹션 헤더에도
+              두면 두 줄이 겹쳐 읽힌다. */}
+          <Section title="알림 설정">
             <NotificationPreferencesList me={me} onError={setError('notifications')} />
+          </Section>
+
+          <Section
+            title="화면 테마"
+            description="시스템 설정을 따르거나 밝기를 직접 고를 수 있어요."
+          >
+            <div className="p-1">
+              <ThemeSwitch />
+            </div>
           </Section>
 
           <Section title="약관 및 정책">
