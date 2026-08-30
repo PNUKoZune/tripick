@@ -216,7 +216,10 @@ function LandingContent() {
       <ScrollReveal />
       <LandingHeader />
 
-      <div className="px-5 pb-[calc(64px+var(--safe-bottom))] lg:px-10">
+      {/* `wvr-landing` 은 스타일이 아니라 표식이다 — 스크롤 상자는 :root 인데 부드러운
+          스크롤을 앱 전체에 켤 수는 없어서, globals.css 가 `:root:has(.wvr-landing)` 으로
+          이 화면일 때만 켠다. */}
+      <div className="wvr-landing px-5 pb-[calc(64px+var(--safe-bottom))] lg:px-10">
         <div className="mx-auto w-full max-w-[500px] md:max-w-[720px] lg:max-w-[1120px]">
           <HeroSection />
           <FeatureSection />

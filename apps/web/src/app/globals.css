@@ -626,6 +626,16 @@ nextjs-portal {
   }
 }
 
+/* 상단 네비게이션의 섹션 앵커를 부드럽게 잇는다. 스크롤 상자는 :root 라 여기에 걸어야
+   하는데, 앱 전체에 켜면 화면 전환·모달 복귀 같은 프로그램 스크롤까지 느려진다. 그래서
+   랜딩이 떠 있을 때만(`.wvr-landing` 표식) 켠다. `:has()` 를 모르는 브라우저는 예전처럼
+   즉시 이동하므로 기능이 죽지는 않는다. */
+@media (prefers-reduced-motion: no-preference) {
+  :root:has(.wvr-landing) {
+    scroll-behavior: smooth;
+  }
+}
+
 /* 헤더 스크롤 진행 막대. 스크롤 구동 애니메이션을 아는 브라우저에서만 켠다 —
    모르는 브라우저에선 규칙 자체가 적용되지 않아 막대가 0 폭으로 숨는다. */
 .wvr-scope .wvr-progress {
