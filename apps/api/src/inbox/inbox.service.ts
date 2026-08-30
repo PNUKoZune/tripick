@@ -79,11 +79,18 @@ export class InboxService {
     return { updated: result.affected ?? 0 };
   }
 
-  async create(dto: CreateNotificationDto): Promise<NotificationEntity | null> {
+  /**
+   * 인박스 알림 생성. 수신 토글은 **푸시(FCM)만** 제어한다 — 인박스 row 는 토글과 무관하게
+   * 항상 남긴다. 사용자가 끄고 싶은 건 방해(푸시)이지 이력이 아니고, 특히 replan_ready 는
+   * 본인이 요청한 작업의 결과라 이력까지 사라지면 완료 여부를 확인할 길이 없어진다.
+   * (친구 요청이 friends 가상 row 로 이미 이렇게 동작하고 있었다 — 나머지를 거기 맞춘 것.)
+   *
+   * 대신 끈 카테고리는 저장 시점에 읽음으로 찍는다. 안 읽음 배지는 "확인이 필요한 새 알림"을
+   * 뜻하는데, 껐는데 배지가 오르면 사용자는 끈 게 안 먹혔다고 읽는다.
+   */
+  async create(dto: CreateNotificationDto): Promise<NotificationEntity> {
     const receiver = await this.usersService.findById(dto.userId);
-    if (receiver && !this.usersService.prefersCategory(receiver, dto.category)) {
-      return null;
-    }
+    const pushAllowed = !receiver || this.usersService.prefersCategory(receiver, dto.category);
     const saved = await this.notificationsRepo.save(
       this.notificationsRepo.create({
         userId: dto.userId,
@@ -91,25 +98,28 @@ export class InboxService {
         title: dto.title,
         body: dto.body,
         payload: dto.payload ?? null,
-        readAt: null,
+        readAt: pushAllowed ? null : new Date(),
       }),
     );
 
     // 푸시 발송은 인박스 저장 결과와 독립 — 실패해도 인박스 row 는 살아있다.
     // sendToUser 가 사용자의 모든 기기 토큰으로 발송하고 만료 토큰은 스스로 정리한다.
-    void this.notificationService.sendToUser({
-      userId: dto.userId,
-      type: dto.category,
-      title: dto.title,
-      body: dto.body,
-      data: this.stringifyPayload({
-        notificationId: saved.id,
-        category: dto.category,
-        ...(dto.payload ?? {}),
-      }),
-    });
+    if (pushAllowed) {
+      void this.notificationService.sendToUser({
+        userId: dto.userId,
+        type: dto.category,
+        title: dto.title,
+        body: dto.body,
+        data: this.stringifyPayload({
+          notificationId: saved.id,
+          category: dto.category,
+          ...(dto.payload ?? {}),
+        }),
+      });
+    }
 
     // WebSocket 신호 — 페이지가 열려 있는(특히 브라우저 단독) 클라이언트가 즉시 목록을 갱신한다.
+    // 목록 갱신은 능동 알림이 아니라 화면 최신화라 토글과 무관하게 항상 쏜다.
     this.realtimeGateway.pushInboxInvalidate(dto.userId);
 
     return saved;
