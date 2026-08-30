@@ -23,3 +23,20 @@ export function useHasSession(): boolean {
     () => false,
   );
 }
+
+/**
+ * 세션 판정을 3상태로 노출한다. `useHasSession` 의 `false` 는 "세션 없음" 과
+ * "아직 모름(서버 스냅샷)" 이 겹쳐 있어, 그 둘을 갈라 그려야 하는 화면에서 쓴다.
+ *
+ * 두 값을 한 스토어에서 뽑는 이유: 마운트 플래그(useEffect)로 '모름' 을 따로 만들면
+ * 세션 확정보다 한 프레임 늦게 풀려 로그인 사용자에게 비로그인 화면이 스친다.
+ */
+export type SessionState = 'pending' | 'authenticated' | 'guest';
+
+export function useSessionState(): SessionState {
+  return useSyncExternalStore(
+    subscribeSessionChange,
+    () => (getStoredSession() ? 'authenticated' : 'guest'),
+    () => 'pending' as SessionState,
+  );
+}

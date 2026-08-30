@@ -73,12 +73,9 @@ type BridgeMessage =
 const PRODUCTION_WEB_APP_URL = 'https://tripick.place';
 const WEB_APP_HOST = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
 const WEB_APP_URL = __DEV__ ? WEB_APP_HOST : PRODUCTION_WEB_APP_URL;
-// 첫 진입은 랜딩(`/start`). 루트(`/`)는 로그인 필수 화면이라 미로그인 사용자가 랜딩을
-// 못 보고 바로 /login 으로 떨어졌다. 로그인 상태면 /start 의 GuestGuard 가 `/` 로 되돌린다.
-const ENTRY_PATH = '/start';
-// 이미 로그인해 둔 사용자의 진입 경로. `/start` 로 들어가면 랜딩이 한 번 그려진 뒤
-// GuestGuard 가 `/` 로 되돌려, 켤 때마다 남의 화면이 스쳐 지나간 것처럼 보인다.
-const SESSION_ENTRY_PATH = '/';
+// 진입은 언제나 루트. 루트가 세션을 보고 홈(로그인)·랜딩(미로그인)을 스스로 가른다 —
+// 예전엔 루트가 로그인 전용이라 셸이 Keychain 을 먼저 읽어 진입 경로를 골라야 했다.
+const ENTRY_PATH = '/';
 // 웹이 첫 화면을 그렸다고 알려주지 않을 때(구버전 웹 등) 스플래시를 걷어낼 상한.
 const SPLASH_FALLBACK_MS = 10_000;
 const SPLASH_FADE_MS = 220;
@@ -249,7 +246,7 @@ export default function App() {
   // 웹이 바텀시트·모달을 띄우고 있는지. 떠 있으면 뒤로가기를 히스토리·종료가 아니라 "시트 닫기" 로 돌린다.
   const overlayOpenRef = useRef(false);
   const [webViewKey, setWebViewKey] = useState(0);
-  // 진입 URL 은 저장된 세션 여부를 보고 정한다 — 정해지기 전엔 스플래시만 보이므로 null.
+  // 진입 URL 은 초기 딥링크 판정 뒤에 정해진다 — 정해지기 전엔 스플래시만 보이므로 null.
   const [webViewUri, setWebViewUri] = useState<string | null>(null);
   const [initialLoadFailed, setInitialLoadFailed] = useState(false);
   // 웹이 첫 화면을 그릴 때까지 덮어 두는 스플래시. 이게 없으면 셸 배경만 깔린 빈 화면이
@@ -293,22 +290,6 @@ export default function App() {
     [handleIncomingUrl, shellColor],
   );
 
-  // 저장된 refresh 토큰이 있으면 로그인 사용자로 보고 홈으로 바로 들어간다.
-  // 딥링크(카카오 콜백)가 먼저 URL 을 정했으면 그쪽이 우선.
-  useEffect(() => {
-    let cancelled = false;
-    const enter = (path: string) => {
-      if (cancelled || handledDeepLinkRef.current) return;
-      setWebViewUri((current) => current ?? `${WEB_APP_URL}${path}`);
-    };
-    Keychain.getGenericPassword({ service: REFRESH_TOKEN_SERVICE })
-      .then((cred) => enter(cred ? SESSION_ENTRY_PATH : ENTRY_PATH))
-      .catch(() => enter(ENTRY_PATH));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   // 웹이 준비됐다고 알리면(WEB_READY) 스플래시를 부드럽게 걷는다. 신호가 안 오는
   // 경우(구버전 웹·로드 실패)에도 상한 시간이 지나면 걷어 화면이 잠기지 않게 한다.
   useEffect(() => {
@@ -340,13 +321,20 @@ export default function App() {
 
   // 카카오 인증은 시스템 브라우저에서 진행한다. API 가 성공 후 tripick.place 콜백으로
   // 리디렉트하면 Android App Link 가 앱을 열고, 그 URL 을 WebView 에 넘겨 세션을 교환한다.
+  //
+  // 진입 URL 도 여기서 정한다 — 초기 딥링크 판정이 끝난 뒤에 채워야 콜백으로 켜진 실행에서
+  // 루트를 먼저 열었다가 콜백으로 갈아타는 헛로드가 없다.
   useEffect(() => {
     const subscription = Linking.addEventListener('url', ({ url }) => handleIncomingUrl(url));
     Linking.getInitialURL()
       .then((url) => {
         if (url) handleIncomingUrl(url);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (handledDeepLinkRef.current) return;
+        setWebViewUri((current) => current ?? `${WEB_APP_URL}${ENTRY_PATH}`);
+      });
     return () => subscription.remove();
   }, [handleIncomingUrl]);
 

@@ -88,15 +88,15 @@ function discardSessionEnd(): void {
 }
 
 /**
- * 마지막 세션 종료 사유를 **꺼내며 지운다**(1회성). 유통기한이 지났거나 없으면 null.
- * 지우지 않으면 다음 로그아웃까지 같은 사유가 계속 재사용된다.
+ * 마지막 세션 종료 사유를 **지우지 않고** 본다. 유통기한이 지났거나 없으면 null.
+ * 사유에 따라 반응할지 말지를 먼저 정해야 하는 자리에서 쓴다 — 무조건 꺼내면
+ * 반응하지 않기로 한 사유까지 소비돼, 정작 그 사유를 기다리던 화면이 못 읽는다.
  */
-export function takeSessionEndReason(): SessionEndReason | null {
+export function peekSessionEndReason(): SessionEndReason | null {
   if (typeof window === 'undefined') return null;
   let raw: string | null = null;
   try {
     raw = window.sessionStorage.getItem(SESSION_END_KEY);
-    window.sessionStorage.removeItem(SESSION_END_KEY);
   } catch {
     return null;
   }
@@ -109,6 +109,16 @@ export function takeSessionEndReason(): SessionEndReason | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * 마지막 세션 종료 사유를 **꺼내며 지운다**(1회성). 유통기한이 지났거나 없으면 null.
+ * 지우지 않으면 다음 로그아웃까지 같은 사유가 계속 재사용된다.
+ */
+export function takeSessionEndReason(): SessionEndReason | null {
+  const reason = peekSessionEndReason();
+  discardSessionEnd();
+  return reason;
 }
 
 const sessionListeners = new Set<() => void>();
