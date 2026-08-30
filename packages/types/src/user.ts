@@ -30,6 +30,11 @@ export interface UserDto {
   profileImageUrl?: string;
   email?: string;
   notificationPreferences?: NotificationPreferencesDto;
+  /**
+   * 비밀번호가 설정된 계정인지. 카카오 단독 가입자는 false — 설정 화면이 "변경"(현재
+   * 비밀번호 확인)과 "설정"(재설정 메일)을 이 값으로 가른다. 해시 자체는 절대 나가지 않는다.
+   */
+  hasPassword: boolean;
   createdAt: string;
   updatedAt: string;
 }

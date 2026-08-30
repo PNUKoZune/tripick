@@ -27,6 +27,22 @@ export type ApiError = Error & {
 // 같은 시점에 여러 API 호출이 401 받으면 모두 같은 refresh 결과를 기다린다.
 let refreshInFlight: Promise<string | null> | null = null;
 
+/**
+ * 세션이 아니라 **자격 증명으로** 판정하는 라우트. 여기서의 401 은 만료가 아니라 인증
+ * 실패라, 자동 refresh·세션 정리를 태우지 않고 서버 메시지를 그대로 보여준다.
+ *
+ * `/auth/*` 를 통째로 묶지 않는 이유: `/auth/change-password` 는 로그인 상태에서 access
+ * token 으로 도는 평범한 인증 라우트다. 같이 묶으면 access token 이 만료됐을 때 갱신 없이
+ * "Unauthorized" 만 뜨고 끝난다. (그래서 서버도 "현재 비밀번호 불일치" 를 401 이 아니라
+ * 403 으로 준다 — 그 응답으로 세션이 지워지면 안 되므로)
+ */
+const SESSION_AUTH_PATHS = ['/auth/change-password'];
+
+function isCredentialEndpoint(path: string): boolean {
+  if (!path.startsWith('/auth/')) return false;
+  return !SESSION_AUTH_PATHS.some((sessionPath) => path.startsWith(sessionPath));
+}
+
 export function apiUrl(path: string) {
   return `${API_BASE}${path}`;
 }
@@ -62,7 +78,7 @@ async function fetcher<T>(path: string, init?: RequestInit, attempt = 0): Promis
   });
 
   // 401 + 최초 시도 + auth/refresh·login 자체가 아닌 경우 → 자동 refresh 후 1회 재시도
-  if (res.status === 401 && attempt === 0 && !path.startsWith('/auth/')) {
+  if (res.status === 401 && attempt === 0 && !isCredentialEndpoint(path)) {
     const newAccessToken = await tryRefresh();
     if (newAccessToken) {
       return fetcher<T>(path, init, attempt + 1);
@@ -73,7 +89,7 @@ async function fetcher<T>(path: string, init?: RequestInit, attempt = 0): Promis
 
   if (!res.ok) {
     // 인증된 요청이 401 → 세션 만료. /auth/* (로그인 시도 등) 의 401 은 자격 증명 실패라 세션을 건드리지 않는다.
-    const isAuthEndpoint = path.startsWith('/auth/');
+    const isAuthEndpoint = isCredentialEndpoint(path);
     if (res.status === 401 && !isAuthEndpoint) {
       clearStoredSession('expired');
     }

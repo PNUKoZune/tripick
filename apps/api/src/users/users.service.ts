@@ -34,7 +34,11 @@ import {
 const MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_REASON_DETAIL_LENGTH = 500;
 
-export type PublicProfile = Omit<UserEntity, 'passwordHash'>;
+/**
+ * 밖으로 나가는 내 프로필. 해시는 통째로 빼고, 그 자리에 "비밀번호가 있느냐" 만 남긴다 —
+ * 설정 화면이 비밀번호 변경(현재 비밀번호 확인)과 최초 설정(재설정 메일)을 이 값으로 가른다.
+ */
+export type PublicProfile = Omit<UserEntity, 'passwordHash'> & { hasPassword: boolean };
 
 @Injectable()
 export class UsersService {
@@ -63,8 +67,7 @@ export class UsersService {
   /** 클라이언트에 돌려줘도 되는 프로필. passwordHash 등 민감 컬럼을 제거한다. */
   publicProfile(user: UserEntity): PublicProfile {
     const { passwordHash, ...safe } = user;
-    void passwordHash;
-    return safe;
+    return { ...safe, hasPassword: Boolean(passwordHash) };
   }
 
   async findByHandle(handle: string): Promise<UserEntity | null> {

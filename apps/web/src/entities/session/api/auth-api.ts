@@ -1,6 +1,7 @@
 import type {
   AuthOpResultDto,
   AuthTokens,
+  ChangePasswordDto,
   EmailLoginDto,
   EmailSignupDto,
   KakaoAuthStatusDto,
@@ -41,6 +42,17 @@ export function requestPasswordReset(email: string) {
 
 export function resetPassword(token: string, password: string) {
   return api.post<AuthOpResultDto>('/auth/reset-password', { token, password });
+}
+
+/**
+ * 로그인 상태에서 비밀번호 변경. 서버가 다른 기기의 refresh 를 전부 끊고 이 기기 몫으로
+ * 새 세션을 돌려주므로, 받은 즉시 저장해 갈아탄다 — 안 그러면 방금 폐기된 토큰을 들고 있다가
+ * 다음 갱신에서 자기 세션만 만료된다.
+ */
+export async function changePassword(dto: ChangePasswordDto): Promise<LoginResponseDto> {
+  const session = await api.post<LoginResponseDto>('/auth/change-password', dto);
+  storeSession(session);
+  return session;
 }
 
 // ─── 카카오 ────────────────────────────────────────────────
