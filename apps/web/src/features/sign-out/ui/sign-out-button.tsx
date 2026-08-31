@@ -19,7 +19,7 @@ export function SignOutButton() {
       await logout();
       disconnectRealtimeSocket();
       queryClient.clear();
-      router.replace('/start');
+      router.replace('/');
     } finally {
       setPending(false);
     }

@@ -10,7 +10,7 @@ import { getStoredSession } from '../model/session-storage';
 import { useHasSession } from './use-has-session';
 
 /** 스스로 로그아웃·탈퇴한 뒤 돌아가는 자리. sign-out·delete-account 의 목적지와 같아야 한다. */
-const SIGNED_OUT_PATH = '/start';
+const SIGNED_OUT_PATH = '/';
 
 export type SessionGuardState = 'pending' | 'authenticated';
 export type GuestGuardState = 'redirecting' | 'guest';
@@ -39,7 +39,7 @@ export function useSessionGuard(redirectTo = '/login'): SessionGuardState {
       const flash = sessionFlashFor(reason);
       if (flash) setSessionFlash(flash);
       // 스스로 로그아웃·탈퇴한 경우 목적지는 로그인 폼이 아니라 랜딩이다. 그 흐름들도
-      // 같은 `/start` 로 이동하므로, 어느 쪽이 먼저 도착하든 결과가 갈리지 않는다.
+      // 같은 `/` 로 이동하므로, 어느 쪽이 먼저 도착하든 결과가 갈리지 않는다(세션이 비었으니 소개 화면).
       redirectWithFallback(router.replace, reason === 'signed-out' ? SIGNED_OUT_PATH : redirectTo);
     }
     // hasSession 을 의존성에 둬 세션이 사라지는 순간(401 등) 바로 가드가 돈다.

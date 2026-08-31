@@ -107,7 +107,7 @@ export function SharedTripView({ token }: { token: string }) {
           )}
 
           <Link
-            href="/start"
+            href="/"
             className="mt-6 flex h-12 w-full items-center justify-center rounded-[12px] bg-[#3182F6] text-[15px] font-bold text-white hover:bg-[#1B64DA]"
           >
             나도 TriPick 으로 여행 만들기
@@ -124,7 +124,7 @@ function CenterMessage({ title, description }: { title: string; description?: st
       <div className="text-[16px] font-bold text-[#191F28]">{title}</div>
       {description ? <p className="mt-2 text-[13px] text-[#8B95A1]">{description}</p> : null}
       <Link
-        href="/start"
+        href="/"
         className="mt-5 inline-flex h-11 items-center rounded-full bg-[#3182F6] px-5 text-[14px] font-bold text-white hover:bg-[#1B64DA]"
       >
         TriPick 시작하기

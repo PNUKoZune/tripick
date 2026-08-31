@@ -55,6 +55,17 @@ const nextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        // `/start` 는 예전 소개 화면 주소다. 지금은 루트가 세션을 보고 소개·홈을 스스로
+        // 가르므로 같은 내용이 두 주소에 있을 이유가 없다. 밖에 나간 링크만 살려 둔다.
+        source: '/start',
+        destination: '/',
+        permanent: true,
+      },
+    ];
+  },
   async rewrites() {
     return [
       {
