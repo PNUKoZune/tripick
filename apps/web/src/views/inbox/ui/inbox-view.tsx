@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   LuCheckCheck,
@@ -19,7 +19,7 @@ import {
   LuUsers,
 } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
-import type { InboxItemDto, InboxItemKind, NotificationCategory } from '@tripick/types';
+import type { InboxItemDto, InboxItemKind, InboxSummaryDto } from '@tripick/types';
 
 import { acceptFriend, removeFriend } from '@/entities/friend';
 import { fetchInbox, markAllInboxRead, markInboxRead } from '@/entities/inbox';
@@ -61,7 +61,7 @@ const KIND_META: Record<InboxItemKind, { Icon: IconType; label: string; tone: st
   trip_reminder: { Icon: LuLuggage, label: '여행 알림', tone: 'var(--primary)' },
   schedule_change_request: { Icon: LuPencilLine, label: '변경 요청', tone: 'var(--accent-deep)' },
   schedule_change_result: { Icon: LuCircleCheck, label: '변경 결과', tone: 'var(--ok)' },
-  general: { Icon: LuInbox, label: '알림', tone: 'var(--ink-sub)' },
+  general: { Icon: LuInbox, label: '일반 알림', tone: 'var(--ink-sub)' },
 };
 
 /**
@@ -94,6 +94,33 @@ export function InboxView() {
   );
 }
 
+/**
+ * 1분마다 갱신되는 현재 시각(ms). 상대 시각 표기의 최소 단위가 분이라 그보다 자주 돌 이유가 없다.
+ * 탭이 숨겨져 있는 동안은 멈추고, 다시 보일 때 즉시 한 번 갱신해 되돌아왔을 때 옛 시각이
+ * 남아 있지 않게 한다.
+ */
+function useMinuteClock(): number {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const bump = () => setNow(Date.now());
+    let timer = window.setInterval(bump, 60_000);
+    const onVisibility = () => {
+      window.clearInterval(timer);
+      if (document.visibilityState === 'hidden') return;
+      bump();
+      timer = window.setInterval(bump, 60_000);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
+
+  return now;
+}
+
 function InboxContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -102,6 +129,10 @@ function InboxContent() {
 
   // WebSocket 신호로 새 알림 도착 시 목록을 실시간 갱신한다(브라우저 단독 FCM 공백 보완).
   useInboxInvalidateSubscription();
+
+  // '방금'·'3분 전'과 날짜 그룹은 렌더 시점의 Date.now() 로 계산된다. 알림 페이지는 열어둔 채
+  // 두기 쉬운 화면이라 그대로면 시간이 멈춰 보이고 자정을 넘겨도 '오늘' 묶음에 남는다.
+  const now = useMinuteClock();
 
   const { data, error, isLoading } = useQuery({
     queryKey: queryKeys.inbox.list,
@@ -126,10 +157,52 @@ function InboxContent() {
       queryClient.invalidateQueries({ queryKey: queryKeys.planner.trips }),
     ]);
 
-  const readMutation = useMutation({ mutationFn: markInboxRead, onSuccess: () => invalidate() });
+  /**
+   * 읽음 처리 낙관적 갱신의 공통부. 캐시를 즉시 뒤집고 롤백용 스냅샷을 돌려준다.
+   *
+   * 서버 왕복 + 목록 재조회를 기다리면 행을 눌러도 한 박자 뒤에 색이 바뀐다 — 읽음은
+   * 실패할 여지가 거의 없는 조작이라 먼저 반영하고 어긋나면 되돌리는 편이 자연스럽다.
+   * `cancelQueries` 로 진행 중인 조회를 먼저 멈춰야, 뒤늦게 도착한 옛 응답이 덮어쓰지 않는다.
+   */
+  async function optimisticInbox(update: (prev: InboxSummaryDto) => InboxSummaryDto) {
+    await queryClient.cancelQueries({ queryKey: queryKeys.inbox.list });
+    const snapshot = queryClient.getQueryData<InboxSummaryDto>(queryKeys.inbox.list);
+    if (snapshot) queryClient.setQueryData(queryKeys.inbox.list, update(snapshot));
+    return { snapshot };
+  }
+
+  function rollbackInbox(context: { snapshot: InboxSummaryDto | undefined } | undefined) {
+    if (context?.snapshot) queryClient.setQueryData(queryKeys.inbox.list, context.snapshot);
+  }
+
+  const readMutation = useMutation({
+    mutationFn: markInboxRead,
+    onMutate: (id: string) => {
+      const now = new Date().toISOString();
+      return optimisticInbox((prev) => ({
+        items: prev.items.map((item) => (item.id === id ? { ...item, readAt: now } : item)),
+        // 누를 수 있는 행은 아직 안 읽은 영속 알림뿐이라(muted·친구 요청은 제외) 1 만 뺀다.
+        unreadCount: Math.max(0, prev.unreadCount - 1),
+      }));
+    },
+    onError: (_error, _id, context) => rollbackInbox(context),
+    onSettled: () => invalidate(),
+  });
   const readAllMutation = useMutation({
     mutationFn: markAllInboxRead,
-    onSuccess: () => invalidate(),
+    onMutate: () => {
+      const now = new Date().toISOString();
+      return optimisticInbox((prev) => ({
+        items: prev.items.map((item) =>
+          // 친구 요청은 friends 기반 가상 row 라 읽음 처리 대상이 아니다(서버도 안 건드림).
+          item.kind === 'friend_request' || item.readAt ? item : { ...item, readAt: now },
+        ),
+        // 서버 unreadCount 는 친구 요청 수를 더하므로, 읽음 처리 후에도 그만큼은 남는다.
+        unreadCount: prev.items.filter((item) => item.kind === 'friend_request').length,
+      }));
+    },
+    onError: (_error, _vars, context) => rollbackInbox(context),
+    onSettled: () => invalidate(),
   });
   const acceptMutation = useMutation({ mutationFn: acceptFriend, onSuccess: () => invalidate() });
   const rejectMutation = useMutation({ mutationFn: removeFriend, onSuccess: () => invalidate() });
@@ -191,6 +264,17 @@ function InboxContent() {
     });
   }, [kindScoped, filter]);
 
+  /**
+   * '모두 읽음' 이 실제로 바꿀 게 남았는지. 서버 `unreadCount` 를 그대로 쓰면 안 된다 —
+   * 거기엔 친구 요청 가상 row 가 더해져 있는데 read-all 은 notifications 테이블만 갱신하므로,
+   * 대기 중 친구 요청이 하나라도 있으면 버튼이 영영 활성인 채 눌러도 아무 일이 안 일어난다.
+   * (친구 요청은 NotificationEntity 로 저장되지 않으므로 kind 로 걸러내면 정확하다.)
+   */
+  const readableUnread = useMemo(
+    () => items.filter((item) => !item.readAt && item.kind !== 'friend_request').length,
+    [items],
+  );
+
   const filterActive = filter !== 'all' || kindFilter !== 'all';
 
   function resetFilters() {
@@ -198,7 +282,7 @@ function InboxContent() {
     setKindFilter('all');
   }
 
-  const grouped = useMemo(() => groupByDate(filteredItems), [filteredItems]);
+  const grouped = useMemo(() => groupByDate(filteredItems, now), [filteredItems, now]);
 
   function handleAction(item: InboxItemDto, actionType: string) {
     const action = item.actions.find((a) => a.type === actionType);
@@ -254,17 +338,15 @@ function InboxContent() {
   const content = (
     <div className="space-y-4">
       {/*
-        두 필터는 축이 다르다(상태 vs 종류). 같은 pill 두 줄로 두면 서로 대등한 선택지처럼 보여
-        구분이 안 되므로, 상태는 하나의 세그먼트 트랙(택1)으로 묶고 종류는 그 아래 라벨 붙은
-        칩 행으로 내려 위계를 준다. 둘을 한 툴바 카드에 담아 목록과도 분리한다.
+        두 필터는 축이 다르다(상태 vs 종류). 예전엔 상태를 세그먼트 트랙으로 감싸 위계를 줬는데,
+        툴바 카드 → 트랙 → 올라온 활성 pill 로 테두리가 세 겹 겹쳐 다크에서 특히 어수선했다.
+        트랙을 걷어내고 두 줄 다 납작한 pill 로 두되, 위계는 테두리 대신 크기와 색 세기로 준다 —
+        상태는 크게(h-9·13px)·활성은 solid, 종류는 작게(h-7·12px)·활성은 틴트. 둘을 같은 표기로
+        두면 두 줄에 나란히 놓인 '전체' 가 구분되지 않는다.
       */}
       <div className="rounded-[16px] border border-[color:var(--line)] bg-[color:var(--card)] p-2">
-        <div className="flex items-center gap-2">
-          <div
-            role="group"
-            aria-label="알림 상태 필터"
-            className="flex items-center gap-0.5 rounded-full border border-[color:var(--line)] bg-[color:var(--card-soft)] p-1"
-          >
+        <div className="flex items-center gap-1.5">
+          <div role="group" aria-label="알림 상태 필터" className="flex items-center gap-1.5">
             {FILTERS.map((f) => {
               const active = f.value === filter;
               const count = counts[f.value];
@@ -274,12 +356,12 @@ function InboxContent() {
                   type="button"
                   aria-pressed={active}
                   onClick={() => setFilter(f.value)}
-                  // 다크에선 --card 와 --card-soft 차이가 작아 그림자만으로는 올라온 티가 안 난다.
-                  // 활성에 테두리를 줘 구분하고, 비활성은 transparent 테두리로 높이를 맞춘다.
-                  className={`flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[13px] transition ${
+                  // 아래 종류 칩과 같은 '테두리+틴트' 로 두면 두 줄의 '전체' 가 똑같이 보인다.
+                  // 상태는 solid 로 채워 상위 축임을 색 세기로 드러낸다(크기 차이만으론 약하다).
+                  className={`flex h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] transition ${
                     active
-                      ? 'border-[color:var(--line)] bg-[color:var(--card)] font-bold text-[color:var(--primary-deep)] shadow-[var(--shadow-card)]'
-                      : 'border-transparent font-semibold text-[color:var(--ink-faint)] hover:text-[color:var(--ink-sub)]'
+                      ? 'border-[color:var(--btn-bg)] bg-[color:var(--btn-bg)] font-bold text-[color:var(--btn-text)]'
+                      : 'border-[color:var(--line)] bg-[color:var(--card)] font-semibold text-[color:var(--ink-sub)] hover:bg-[color:var(--card-soft)]'
                   }`}
                 >
                   <span className="whitespace-nowrap">{f.label}</span>
@@ -287,9 +369,16 @@ function InboxContent() {
                     <span
                       className={`num-badge inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] font-bold tabular-nums ${
                         active
-                          ? 'bg-[color:var(--primary)] text-[color:var(--btn-text)]'
-                          : 'bg-[color:var(--line)] text-[color:var(--ink-sub)]'
+                          ? 'text-[color:var(--btn-text)]'
+                          : 'bg-[color:var(--card-soft)] text-[color:var(--ink-faint)]'
                       }`}
+                      // 채워진 pill 위에서는 배지를 같은 파랑으로 둘 수 없다 — 글자색을 옅게 깔아
+                      // 파랑 위에 한 겹 밝은 원으로 띄운다(라이트·다크 모두 흰 글자 대비 유지).
+                      style={
+                        active
+                          ? { background: 'color-mix(in srgb, var(--btn-text) 28%, transparent)' }
+                          : undefined
+                      }
                     >
                       {count}
                     </span>
@@ -301,12 +390,12 @@ function InboxContent() {
           <button
             type="button"
             onClick={() => readAllMutation.mutate()}
-            disabled={readAllMutation.isPending || unreadCount === 0}
+            disabled={readAllMutation.isPending || readableUnread === 0}
             aria-label="모두 읽음"
-            className="ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-[12px] border border-[color:var(--line)] px-2.5 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--card-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-[color:var(--line)] px-3 text-[12px] font-bold text-[color:var(--ink-sub)] transition hover:bg-[color:var(--card-soft)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <LuCheckCheck className="size-3.5" aria-hidden />
-            {/* 좁은 폭(웹뷰 430px)에선 아이콘만 — 세그먼트 트랙이 배지까지 안고 있어 자리가 없다. */}
+            {/* 좁은 폭(웹뷰 430px)에선 아이콘만 — 상태 칩 셋이 배지까지 안고 있어 자리가 없다. */}
             <span className="hidden sm:inline">모두 읽음</span>
           </button>
         </div>
@@ -388,6 +477,7 @@ function InboxContent() {
                 key={item.id}
                 item={item}
                 index={index}
+                nowMs={now}
                 pending={
                   ((acceptMutation.isPending || rejectMutation.isPending) &&
                     item.kind === 'friend_request') ||
@@ -499,6 +589,7 @@ function CategoryChip({
 function InboxRow({
   item,
   index,
+  nowMs,
   pending,
   onAction,
   onClick,
@@ -506,6 +597,8 @@ function InboxRow({
   item: InboxItemDto;
   /** 그룹 안 순서 — 등장 stagger 지연에만 쓴다(0-based) */
   index: number;
+  /** 상대 시각 기준 시각. 목록 전체가 한 시점으로 계산되게 밖에서 받는다. */
+  nowMs: number;
   pending: boolean;
   onAction: (actionType: string) => void;
   onClick: () => void;
@@ -560,11 +653,11 @@ function InboxRow({
           {unread ? (
             <span
               className="inline-block size-1.5 rounded-full bg-[color:var(--danger)]"
-              aria-label="unread"
+              aria-label="읽지 않음"
             />
           ) : null}
           <span className="ml-auto text-[11px] text-[color:var(--ink-faint)]">
-            {formatRelative(item.createdAt)}
+            {formatRelative(item.createdAt, nowMs)}
           </span>
         </div>
         <div className="mt-0.5 text-[14px] font-bold text-[color:var(--ink)]">
@@ -624,8 +717,12 @@ function emptyTitle(filter: Filter, kindFilter: KindFilter): string {
   return `${withSubject(KIND_META[kindFilter].label)} 없어요`;
 }
 
-function groupByDate(items: InboxItemDto[]): Array<{ label: string; items: InboxItemDto[] }> {
-  const now = new Date();
+/** 기준 시각(`nowMs`)을 밖에서 받는다 — 1분 시계가 갱신되면 자정 경계도 따라 움직인다. */
+function groupByDate(
+  items: InboxItemDto[],
+  nowMs: number,
+): Array<{ label: string; items: InboxItemDto[] }> {
+  const now = new Date(nowMs);
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const startOfYesterday = startOfToday - 86_400_000;
   const startOfWeek = startOfToday - 6 * 86_400_000;
@@ -648,9 +745,9 @@ function groupByDate(items: InboxItemDto[]): Array<{ label: string; items: Inbox
     .map(([label, list]) => ({ label, items: list }));
 }
 
-function formatRelative(iso: string): string {
+function formatRelative(iso: string, nowMs: number): string {
   const then = new Date(iso).getTime();
-  const diff = Date.now() - then;
+  const diff = nowMs - then;
   if (diff < 60_000) return '방금';
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}분 전`;
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}시간 전`;
@@ -658,6 +755,3 @@ function formatRelative(iso: string): string {
   const d = new Date(iso);
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
-
-// Filter type referenced for clarity
-export type { NotificationCategory };

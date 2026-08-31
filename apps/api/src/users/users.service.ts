@@ -34,7 +34,11 @@ import {
 const MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_REASON_DETAIL_LENGTH = 500;
 
-export type PublicProfile = Omit<UserEntity, 'passwordHash'>;
+/**
+ * 밖으로 나가는 내 프로필. 해시는 통째로 빼고, 그 자리에 "비밀번호가 있느냐" 만 남긴다 —
+ * 설정 화면이 비밀번호 변경(현재 비밀번호 확인)과 최초 설정(재설정 메일)을 이 값으로 가른다.
+ */
+export type PublicProfile = Omit<UserEntity, 'passwordHash'> & { hasPassword: boolean };
 
 @Injectable()
 export class UsersService {
@@ -63,8 +67,7 @@ export class UsersService {
   /** 클라이언트에 돌려줘도 되는 프로필. passwordHash 등 민감 컬럼을 제거한다. */
   publicProfile(user: UserEntity): PublicProfile {
     const { passwordHash, ...safe } = user;
-    void passwordHash;
-    return safe;
+    return { ...safe, hasPassword: Boolean(passwordHash) };
   }
 
   async findByHandle(handle: string): Promise<UserEntity | null> {
@@ -76,6 +79,17 @@ export class UsersService {
   async findByEmail(email: string): Promise<UserEntity | null> {
     if (!email) return null;
     return this.repo.findOneBy({ email });
+  }
+
+  /**
+   * 이 카카오 프로필이 **이미 있는 계정**으로 이어지는지. {@link findOrCreateByKakao} 의
+   * 1·2순위(카카오 ID / 같은 이메일 merge)와 같은 판정이라, 둘이 어긋나면 신규가 아닌
+   * 사람에게 가입 동의 화면을 다시 띄우게 된다 — 한쪽을 고치면 다른 쪽도 같이 본다.
+   */
+  async existsForKakao(profile: KakaoProfile): Promise<boolean> {
+    if (await this.repo.findOneBy({ kakaoId: profile.id })) return true;
+    if (profile.email && (await this.findByEmail(profile.email.toLowerCase()))) return true;
+    return false;
   }
 
   async findOrCreateByKakao(profile: KakaoProfile): Promise<UserEntity> {

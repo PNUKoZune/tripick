@@ -75,6 +75,7 @@ function createHarness(configOverrides: Record<string, string> = {}) {
     markEmailVerified: jest.fn(),
     setPassword: jest.fn(),
     findOrCreateByKakao: jest.fn(),
+    existsForKakao: jest.fn().mockResolvedValue(true),
   };
   const jwtService = {
     signAsync: jest.fn(
@@ -548,7 +549,7 @@ describe('AuthService — logout & kakao status', () => {
 
   it('builds an Android package-scoped intent callback with a web fallback', () => {
     const { service } = createHarness({ WEB_APP_URL: 'https://tripick.place' });
-    const intent = service.getAndroidKakaoSuccessUrl('exchange-code-123');
+    const intent = service.getKakaoSuccessUrl('exchange-code-123', 'android');
 
     expect(intent).toContain('intent://auth/kakao/callback?code=exchange-code-123');
     expect(intent).toContain('scheme=tripick');
@@ -557,6 +558,19 @@ describe('AuthService — logout & kakao status', () => {
       `S.browser_fallback_url=${encodeURIComponent(
         'https://tripick.place/auth/kakao/callback#code=exchange-code-123',
       )}`,
+    );
+  });
+
+  // iOS 에는 `intent://` 가 없다. 셸의 인증 세션이 가로챌 커스텀 스킴을 그대로 돌려줘야 한다.
+  it('builds a custom-scheme callback for iOS', () => {
+    const { service } = createHarness({ WEB_APP_URL: 'https://tripick.place' });
+
+    expect(service.getKakaoSuccessUrl('exchange-code-123', 'ios')).toBe(
+      'tripick://auth/kakao/callback?code=exchange-code-123',
+    );
+    // 공백이 `+` 로 나가는 form 인코딩이다 — 앱 셸의 URLSearchParams 가 같은 규칙으로 되돌린다.
+    expect(service.getKakaoErrorUrl('로그인 실패', 'ios')).toBe(
+      `tripick://auth/kakao/callback?${new URLSearchParams({ error: '로그인 실패' }).toString()}`,
     );
   });
 
@@ -726,6 +740,82 @@ describe('AuthService — password reset & verify', () => {
   });
 });
 
+describe('AuthService — 로그인 상태 비밀번호 변경', () => {
+  /** 현재 비밀번호 `pw-old-1` 을 가진 계정. 해시는 실제 bcrypt 라 비교 경로가 그대로 돈다. */
+  async function passwordUser(plain = 'pw-old-1') {
+    return user({ email: 'a@b.com', passwordHash: await bcrypt.hash(plain, 4) });
+  }
+
+  it('현재 비밀번호가 틀리면 403 — 401 은 클라이언트가 세션 만료로 읽어 로그아웃시킨다', async () => {
+    const { service, usersService } = createHarness();
+    usersService.findById.mockResolvedValue(await passwordUser());
+
+    await expect(
+      service.changePassword('u1', { currentPassword: 'wrong-one', newPassword: 'abc12345' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(usersService.setPassword).not.toHaveBeenCalled();
+  });
+
+  it('비밀번호가 없는 계정(카카오 단독)은 이 경로를 못 쓴다 — 재설정 플로우로 보낸다', async () => {
+    const { service, usersService } = createHarness();
+    usersService.findById.mockResolvedValue(user({ kakaoId: '77' }));
+
+    await expect(
+      service.changePassword('u1', { currentPassword: '', newPassword: 'abc12345' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(usersService.setPassword).not.toHaveBeenCalled();
+  });
+
+  it('새 비밀번호도 가입과 같은 규칙을 통과해야 한다', async () => {
+    const { service, usersService } = createHarness();
+    usersService.findById.mockResolvedValue(await passwordUser());
+
+    await expect(
+      service.changePassword('u1', { currentPassword: 'pw-old-1', newPassword: 'onlyletters' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('지금 쓰는 값 그대로면 거절한다 — 바꾸지 않고 다른 기기만 끊는 요청', async () => {
+    const { service, usersService } = createHarness();
+    usersService.findById.mockResolvedValue(await passwordUser('abc12345'));
+
+    await expect(
+      service.changePassword('u1', { currentPassword: 'abc12345', newPassword: 'abc12345' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(usersService.setPassword).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 다른 기기는 끊되 이 기기는 이어져야 한다. refresh 를 전부 폐기한 뒤 새로 발급하지
+   * 않으면, 비밀번호를 바꾼 사람이 다음 갱신에서 자기만 로그아웃된다.
+   */
+  it('다른 기기 세션을 끊고 이 기기 몫의 새 토큰을 돌려준다', async () => {
+    const { service, usersService, refreshRepo, expiredTokenTargets } = createHarness();
+    usersService.findById.mockResolvedValue(await passwordUser());
+    const qb = queryBuilder();
+    refreshRepo.createQueryBuilder.mockReturnValue(qb);
+
+    const res = await service.changePassword('u1', {
+      currentPassword: 'pw-old-1',
+      newPassword: 'abc12345',
+    });
+
+    expect(usersService.setPassword).toHaveBeenCalledWith('u1', expect.any(String));
+    expect(qb.wheres).toContainEqual(expect.objectContaining({ userId: 'u1' })); // revokeAll
+    expect(res.tokens.accessToken).toBeTruthy();
+    expect(res.tokens.refreshToken).toBeTruthy();
+    expect(res.user).toMatchObject({ id: 'u1', hasPassword: true });
+    // 살아 있던 재설정·가입 링크는 무효화한다 — 옛 링크로 방금 정한 값을 덮을 수 있으면
+    // 변경한 의미가 없다.
+    expect(expiredTokenTargets()).toContainEqual(
+      expect.objectContaining({ userId: 'u1', purpose: 'reset_password' }),
+    );
+    expect(expiredTokenTargets()).toContainEqual(
+      expect.objectContaining({ userId: 'u1', purpose: 'verify_email' }),
+    );
+  });
+});
+
 describe('AuthService — kakao login', () => {
   /**
    * 카카오 로그인은 같은 이메일의 미인증 가입을 merge 하면서 계정을 인증 상태로 만든다.
@@ -742,10 +832,43 @@ describe('AuthService — kakao login', () => {
       user({ id: 'u1', email: 'a@b.com', kakaoId: '77', emailVerifiedAt: new Date() }),
     );
 
-    await service.loginWithKakao('code');
+    await service.resolveKakaoLogin('code');
 
     expect(expiredTokenTargets()).toContainEqual(
       expect.objectContaining({ userId: 'u1', purpose: 'verify_email' }),
     );
+  });
+
+  /**
+   * 약관 동의 전에 계정이 생기면, 동의 화면을 닫고 떠난 사람의 계정이 그대로 남는다
+   * (이용약관 제5조는 동의를 가입 성립 요건으로 둔다). 그래서 처음 오는 카카오 프로필은
+   * 계정을 만들지 않고 프로필만 돌려줘야 한다.
+   */
+  it('does not create an account for a first-time kakao profile — consent comes first', async () => {
+    const { service, usersService } = createHarness({
+      KAKAO_REST_API_KEY: 'key',
+      KAKAO_CALLBACK_URL: 'http://localhost:4000/api/v1/auth/kakao/callback',
+    });
+    usersService.existsForKakao.mockResolvedValue(false);
+
+    const resolved = await service.resolveKakaoLogin('code');
+
+    expect(resolved.kind).toBe('consent');
+    expect(usersService.findOrCreateByKakao).not.toHaveBeenCalled();
+  });
+
+  it('creates the account once consent is done', async () => {
+    const { service, usersService } = createHarness({
+      KAKAO_REST_API_KEY: 'key',
+      KAKAO_CALLBACK_URL: 'http://localhost:4000/api/v1/auth/kakao/callback',
+    });
+    usersService.findOrCreateByKakao.mockResolvedValue(user({ id: 'u2', kakaoId: '77' }));
+
+    const session = await service.completeKakaoSignup({ id: '77', nickname: '카카오' });
+
+    expect(usersService.findOrCreateByKakao).toHaveBeenCalledWith(
+      expect.objectContaining({ id: '77' }),
+    );
+    expect(session.user.id).toBe('u2');
   });
 });

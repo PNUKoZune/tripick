@@ -60,6 +60,7 @@ type BridgeMessage =
   | { type: 'REQUEST_REFRESH_TOKEN'; requestId: string }
   | { type: 'WEB_READY' }
   | { type: 'NAV_STATE'; canGoBack: boolean }
+  | { type: 'THEME_CHANGE'; theme: 'light' | 'dark' }
   | { type: 'OVERLAY_STATE'; open: boolean }
   | {
       type: 'SAVE_FILE';
@@ -72,12 +73,9 @@ type BridgeMessage =
 const PRODUCTION_WEB_APP_URL = 'https://tripick.place';
 const WEB_APP_HOST = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
 const WEB_APP_URL = __DEV__ ? WEB_APP_HOST : PRODUCTION_WEB_APP_URL;
-// 첫 진입은 랜딩(`/start`). 루트(`/`)는 로그인 필수 화면이라 미로그인 사용자가 랜딩을
-// 못 보고 바로 /login 으로 떨어졌다. 로그인 상태면 /start 의 GuestGuard 가 `/` 로 되돌린다.
-const ENTRY_PATH = '/start';
-// 이미 로그인해 둔 사용자의 진입 경로. `/start` 로 들어가면 랜딩이 한 번 그려진 뒤
-// GuestGuard 가 `/` 로 되돌려, 켤 때마다 남의 화면이 스쳐 지나간 것처럼 보인다.
-const SESSION_ENTRY_PATH = '/';
+// 진입은 언제나 루트. 루트가 세션을 보고 홈(로그인)·랜딩(미로그인)을 스스로 가른다 —
+// 예전엔 루트가 로그인 전용이라 셸이 Keychain 을 먼저 읽어 진입 경로를 골라야 했다.
+const ENTRY_PATH = '/';
 // 웹이 첫 화면을 그렸다고 알려주지 않을 때(구버전 웹 등) 스플래시를 걷어낼 상한.
 const SPLASH_FALLBACK_MS = 10_000;
 const SPLASH_FADE_MS = 220;
@@ -128,29 +126,52 @@ function isInternalWebUrl(url: string): boolean {
   }
 }
 
-/** 검증된 Android App Link 로 들어온 카카오 콜백만 WebView 에 다시 싣는다. */
+const KAKAO_APP_LINK_URL = `${KAKAO_APP_LINK_PROTOCOL}//auth/kakao/callback`;
+
+/**
+ * 카카오 로그인 **시작** URL 인지. 서버가 `/auth/kakao/status` 로 내려주는 절대 주소이고
+ * (API 오리진이라 웹뷰 입장에선 외부 URL), 그 뒤 카카오 왕복은 전부 열린 탭 안에서 끝난다.
+ * 지도·문의 같은 평범한 외부 링크는 지금처럼 시스템 브라우저로 보낸다.
+ */
+function isKakaoAuthStartUrl(url: string): boolean {
+  try {
+    return /\/auth\/kakao$/.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 검증된 App Link(https) 또는 `tripick://` 딥링크로 들어온 카카오 콜백만 WebView 에 다시 싣는다.
+ *
+ * 돌아갈 오리진은 **지금 웹뷰가 보고 있는 곳**(`WEB_APP_ORIGIN`)이다. 릴리스에서는
+ * 프로덕션과 같은 값이지만, 개발 빌드에서 프로덕션으로 고정하면 로컬 서버가 발급한
+ * 교환 코드를 라이브 사이트가 받게 된다 — 코드도 없고 bind(localStorage)도 그쪽
+ * 오리진엔 없어 로그인이 반드시 실패한다.
+ *
+ * ⚠️ 커스텀 스킴은 `URL` 로 뜯지 않는다. RN 의 URL 은 브라우저 것이 아니라 부분 폴리필이라
+ * `host`·`hostname`·`pathname`·`origin` 의 정규식이 `https?:` 로 고정돼 있어 `tripick://` 은
+ * hostname 이 빈 문자열로 나오고, `hash` 는 setter 자체가 없어 대입하면 TypeError 가 난다.
+ * 예전 구현이 둘 다 밟아서 Android 복귀 딥링크가 조용히 무시됐다(= 카카오 로그인이 끝나지 않음).
+ */
 function getKakaoCallbackUrl(url: string): string | null {
   try {
-    const parsed = new URL(url);
-    if (parsed.origin === PRODUCTION_WEB_APP_ORIGIN && parsed.pathname === KAKAO_CALLBACK_PATH) {
-      return parsed.toString();
+    if (isInternalWebUrl(url) && new URL(url).pathname === KAKAO_CALLBACK_PATH) {
+      return url;
     }
 
-    if (
-      parsed.protocol !== KAKAO_APP_LINK_PROTOCOL ||
-      parsed.hostname !== 'auth' ||
-      parsed.pathname !== '/kakao/callback'
-    ) {
-      return null;
-    }
+    if (!url.startsWith(KAKAO_APP_LINK_URL)) return null;
+    // `tripick://auth/kakao/callback` 뒤에는 쿼리만 올 수 있다 — `...callbackXXX` 는 남이다.
+    const query = url.slice(KAKAO_APP_LINK_URL.length);
+    if (query && !query.startsWith('?')) return null;
 
-    const callback = new URL(KAKAO_CALLBACK_PATH, PRODUCTION_WEB_APP_ORIGIN);
-    const code = parsed.searchParams.get('code');
-    const error = parsed.searchParams.get('error');
-    if (code) callback.hash = `code=${encodeURIComponent(code)}`;
-    else if (error) callback.searchParams.set('error', error);
-    else return null;
-    return callback.toString();
+    const params = new URLSearchParams(query);
+    const code = params.get('code');
+    const error = params.get('error');
+    const callback = `${WEB_APP_ORIGIN}${KAKAO_CALLBACK_PATH}`;
+    if (code) return `${callback}#code=${encodeURIComponent(code)}`;
+    if (error) return `${callback}?error=${encodeURIComponent(error)}`;
+    return null;
   } catch {
     return null;
   }
@@ -169,6 +190,16 @@ type FileSaveNative = {
 };
 const FileSave = (NativeModules.TripickFileSave ?? null) as FileSaveNative | null;
 
+// 카카오 로그인을 시스템 브라우저 대신 앱 안에서 여는 모듈 (Android: Custom Tabs,
+// iOS: ASWebAuthenticationSession). 시스템 브라우저로 내보내면 로그인 한 번에 앱이 통째로
+// 두 번 전환된다.
+//
+// 복귀 방식이 플랫폼마다 다르다 — Android 는 서버가 `intent://` 로 앱을 다시 열어 딥링크로
+// 돌아오므로 `open` 은 곧바로 null 로 끝나고, iOS 는 인증 세션이 `tripick://` 리다이렉트를
+// 가로채 스스로 닫으며 **그 URL 을 이 promise 로** 돌려준다. 사용자가 닫았으면 양쪽 다 null.
+type AuthTabNative = { open(url: string, toolbarColor: string | null): Promise<string | null> };
+const AuthTab = (NativeModules.TripickAuthTab ?? null) as AuthTabNative | null;
+
 // 설치된 앱 자신의 버전(versionName). 설정 화면이 웹 빌드 버전 대신 이걸 보여준다.
 // iOS 는 아직 모듈이 없어 null → 웹이 자기 빌드 버전으로 폴백한다.
 type AppInfoNative = { version?: string; build?: string };
@@ -186,7 +217,11 @@ const REFRESH_TOKEN_ACCOUNT = 'refreshToken';
 export default function App() {
   // 시스템 바 아이콘·셸 배경을 웹 팔레트(--app-bg)와 같은 명암으로 맞춘다.
   // 하나로 고정해 두면 다크에서 상태바 아이콘이 어두운 배경에 묻히고, 로딩 순간 흰 판이 번쩍인다.
-  const isDark = useColorScheme() === 'dark';
+  // 웹 설정에서 OS 와 다른 테마를 고를 수 있으므로, 웹이 THEME_CHANGE 로 알려 주면 그쪽이 우선한다
+  // (웹뷰가 아직 안 붙었거나 알림 전이면 OS 설정으로 시작 — 첫 프레임에 흰 판이 번쩍이지 않게).
+  const systemDark = useColorScheme() === 'dark';
+  const [webTheme, setWebTheme] = useState<'light' | 'dark' | null>(null);
+  const isDark = webTheme ? webTheme === 'dark' : systemDark;
   const shellColor = isDark ? SHELL_BG_DARK : SHELL_BG_LIGHT;
   const webViewRef = useRef<InstanceType<typeof WebView>>(null);
   const watchIdRef = useRef<number | null>(null);
@@ -211,7 +246,7 @@ export default function App() {
   // 웹이 바텀시트·모달을 띄우고 있는지. 떠 있으면 뒤로가기를 히스토리·종료가 아니라 "시트 닫기" 로 돌린다.
   const overlayOpenRef = useRef(false);
   const [webViewKey, setWebViewKey] = useState(0);
-  // 진입 URL 은 저장된 세션 여부를 보고 정한다 — 정해지기 전엔 스플래시만 보이므로 null.
+  // 진입 URL 은 초기 딥링크 판정 뒤에 정해진다 — 정해지기 전엔 스플래시만 보이므로 null.
   const [webViewUri, setWebViewUri] = useState<string | null>(null);
   const [initialLoadFailed, setInitialLoadFailed] = useState(false);
   // 웹이 첫 화면을 그릴 때까지 덮어 두는 스플래시. 이게 없으면 셸 배경만 깔린 빈 화면이
@@ -228,21 +263,32 @@ export default function App() {
     setWebViewUri(callbackUrl);
   }, []);
 
-  // 저장된 refresh 토큰이 있으면 로그인 사용자로 보고 홈으로 바로 들어간다.
-  // 딥링크(카카오 콜백)가 먼저 URL 을 정했으면 그쪽이 우선.
-  useEffect(() => {
-    let cancelled = false;
-    const enter = (path: string) => {
-      if (cancelled || handledDeepLinkRef.current) return;
-      setWebViewUri((current) => current ?? `${WEB_APP_URL}${path}`);
-    };
-    Keychain.getGenericPassword({ service: REFRESH_TOKEN_SERVICE })
-      .then((cred) => enter(cred ? SESSION_ENTRY_PATH : ENTRY_PATH))
-      .catch(() => enter(ENTRY_PATH));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  /**
+   * 웹뷰 밖으로 내보내는 URL 을 실제로 연다.
+   *
+   * 카카오 로그인만 인앱 브라우저로 띄운다 — 앱 위에 얹혀 화면 전환 없이 열리고, 쿠키는
+   * 시스템 브라우저와 같은 저장소를 써서 서버가 심는 state·bind 왕복이 그대로 성립한다.
+   * 인앱 브라우저를 못 여는 기기는 예전처럼 시스템 브라우저로 내보낸다 — 로그인 창이
+   * 아예 안 열리는 것보다 화면이 전환되는 편이 낫다.
+   */
+  const openOutsideWebView = useCallback(
+    (url: string) => {
+      const delegateToBrowser = () => {
+        Linking.openURL(url).catch(() => undefined);
+      };
+      if (AuthTab && isKakaoAuthStartUrl(url)) {
+        AuthTab.open(url, shellColor)
+          // iOS 는 복귀 URL 이 여기로 온다. Android 는 null 이고 딥링크로 따로 들어온다.
+          .then((callbackUrl) => {
+            if (callbackUrl) handleIncomingUrl(callbackUrl);
+          })
+          .catch(delegateToBrowser);
+        return;
+      }
+      delegateToBrowser();
+    },
+    [handleIncomingUrl, shellColor],
+  );
 
   // 웹이 준비됐다고 알리면(WEB_READY) 스플래시를 부드럽게 걷는다. 신호가 안 오는
   // 경우(구버전 웹·로드 실패)에도 상한 시간이 지나면 걷어 화면이 잠기지 않게 한다.
@@ -275,13 +321,20 @@ export default function App() {
 
   // 카카오 인증은 시스템 브라우저에서 진행한다. API 가 성공 후 tripick.place 콜백으로
   // 리디렉트하면 Android App Link 가 앱을 열고, 그 URL 을 WebView 에 넘겨 세션을 교환한다.
+  //
+  // 진입 URL 도 여기서 정한다 — 초기 딥링크 판정이 끝난 뒤에 채워야 콜백으로 켜진 실행에서
+  // 루트를 먼저 열었다가 콜백으로 갈아타는 헛로드가 없다.
   useEffect(() => {
     const subscription = Linking.addEventListener('url', ({ url }) => handleIncomingUrl(url));
     Linking.getInitialURL()
       .then((url) => {
         if (url) handleIncomingUrl(url);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (handledDeepLinkRef.current) return;
+        setWebViewUri((current) => current ?? `${WEB_APP_URL}${ENTRY_PATH}`);
+      });
     return () => subscription.remove();
   }, [handleIncomingUrl]);
 
@@ -626,6 +679,10 @@ export default function App() {
       stopTracking();
       return;
     }
+    if (msg.type === 'THEME_CHANGE' && (msg.theme === 'light' || msg.theme === 'dark')) {
+      setWebTheme(msg.theme);
+      return;
+    }
     if (msg.type === 'LOCATION_AUTH' && msg.apiBaseUrl && msg.accessToken) {
       // 웹뷰가 사라진 뒤에도 서버로 위치를 직접 POST 하도록 인증정보를 보관한다.
       locationConfigRef.current = { apiBaseUrl: msg.apiBaseUrl, accessToken: msg.accessToken };
@@ -726,7 +783,7 @@ export default function App() {
             // 페이지가 만든 `intent://`·앱 딥링크로 임의의 다른 앱을 띄울 수 있었다.
             // (웹이 실제로 쓰는 건 https 링크와 문의용 mailto 뿐이다)
             if (!isDelegatableUrl(request.url)) return false;
-            Linking.openURL(request.url).catch(() => undefined);
+            openOutsideWebView(request.url);
             return false;
           }}
           onNavigationStateChange={(state) => {

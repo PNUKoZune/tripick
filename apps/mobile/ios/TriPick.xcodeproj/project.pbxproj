@@ -10,6 +10,8 @@
 		0C80B921A6F3F58F76C31292 /* libPods-TriPick.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-TriPick.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
+		A54A2E8A2F00100100A20011 /* AuthTabModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = A54A2E8A2F00100100A20001 /* AuthTabModule.swift */; };
+		A54A2E8A2F00100100A20012 /* AuthTabModule.m in Sources */ = {isa = PBXBuildFile; fileRef = A54A2E8A2F00100100A20002 /* AuthTabModule.m */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		A54A2E8A2F00100100A10001 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = A54A2E8A2F00100100A10002 /* GoogleService-Info.plist */; };
 		B9D02E461491436E29C09A1B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
@@ -24,6 +26,8 @@
 		5709B34CF0A7D63546082F79 /* Pods-TriPick.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-TriPick.release.xcconfig"; path = "Target Support Files/Pods-TriPick/Pods-TriPick.release.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-TriPick.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-TriPick.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = TriPick/AppDelegate.swift; sourceTree = "<group>"; };
+		A54A2E8A2F00100100A20001 /* AuthTabModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AuthTabModule.swift; path = TriPick/AuthTab/AuthTabModule.swift; sourceTree = "<group>"; };
+		A54A2E8A2F00100100A20002 /* AuthTabModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = AuthTabModule.m; path = TriPick/AuthTab/AuthTabModule.m; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = TriPick/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		A54A2E8A2F00100100A10002 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "TriPick/GoogleService-Info.plist"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
@@ -46,12 +50,22 @@
 			children = (
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				761780EC2CA45674006654EE /* AppDelegate.swift */,
+				A54A2E8A2F00100100A20021 /* AuthTab */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				A54A2E8A2F00100100A10002 /* GoogleService-Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
 			);
 			name = TriPick;
+			sourceTree = "<group>";
+		};
+		A54A2E8A2F00100100A20021 /* AuthTab */ = {
+			isa = PBXGroup;
+			children = (
+				A54A2E8A2F00100100A20001 /* AuthTabModule.swift */,
+				A54A2E8A2F00100100A20002 /* AuthTabModule.m */,
+			);
+			name = AuthTab;
 			sourceTree = "<group>";
 		};
 		2D16E6871FA4F8E400B85C8A /* Frameworks */ = {
@@ -265,6 +279,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
+				A54A2E8A2F00100100A20011 /* AuthTabModule.swift in Sources */,
+				A54A2E8A2F00100100A20012 /* AuthTabModule.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

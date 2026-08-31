@@ -1,9 +1,11 @@
 import type {
   AuthOpResultDto,
   AuthTokens,
+  ChangePasswordDto,
   EmailLoginDto,
   EmailSignupDto,
   KakaoAuthStatusDto,
+  KakaoExchangeResultDto,
   LoginResponseDto,
 } from '@tripick/types';
 import { api, apiUrl } from '@/shared/api/client';
@@ -42,10 +44,28 @@ export function resetPassword(token: string, password: string) {
   return api.post<AuthOpResultDto>('/auth/reset-password', { token, password });
 }
 
+/**
+ * 로그인 상태에서 비밀번호 변경. 서버가 다른 기기의 refresh 를 전부 끊고 이 기기 몫으로
+ * 새 세션을 돌려주므로, 받은 즉시 저장해 갈아탄다 — 안 그러면 방금 폐기된 토큰을 들고 있다가
+ * 다음 갱신에서 자기 세션만 만료된다.
+ */
+export async function changePassword(dto: ChangePasswordDto): Promise<LoginResponseDto> {
+  const session = await api.post<LoginResponseDto>('/auth/change-password', dto);
+  storeSession(session);
+  return session;
+}
+
 // ─── 카카오 ────────────────────────────────────────────────
 
 export function getKakaoStatus() {
   return api.get<KakaoAuthStatusDto>('/auth/kakao/status');
+}
+
+/** 앱 셸이 복귀를 처리할 수 있는 플랫폼인지. 둘 다 아니면(모르는 셸) 웹 복귀로 둔다. */
+function nativeReturnTarget(userAgent: string): 'android' | 'ios' | null {
+  if (/Android/i.test(userAgent)) return 'android';
+  if (/iPhone|iPad|iPod/i.test(userAgent)) return 'ios';
+  return null;
 }
 
 /**
@@ -66,24 +86,51 @@ export async function redirectToKakao(): Promise<void> {
   // 이 브라우저가 로그인을 시작했다는 증거. 서버가 해시를 교환 코드에 묶어, 남이 던진
   // 코드로는 세션이 안 나오게 한다 (로그인 CSRF 차단). 없으면 서버가 시작 자체를 거절한다.
   startUrl.searchParams.set('bind', startKakaoBind());
-  // Android 앱에서 시작한 OAuth 는 서버가 최종 콜백을 package 지정 intent:// 로 돌려준다.
-  // 검증된 App Link 가 사용자 설정으로 꺼져 있어도 시스템 브라우저에 세션이 갇히지 않는다.
-  if (isNativeShell() && /Android/i.test(navigator.userAgent)) {
-    startUrl.searchParams.set('returnTo', 'android');
+  // 앱에서 시작한 OAuth 는 서버가 최종 콜백을 앱으로 되돌린다 — Android 는 package 를 못박은
+  // `intent://`(링크 열기 설정이 꺼져 있어도 복귀), iOS 는 셸의 인증 세션이 가로채는 `tripick://`.
+  // 안 보내면 로그인은 브라우저에서 끝나고, 교환에 필요한 bind 는 앱 웹뷰에만 있어 실패한다.
+  const nativeTarget = isNativeShell() ? nativeReturnTarget(navigator.userAgent) : null;
+  if (nativeTarget) {
+    startUrl.searchParams.set('returnTo', nativeTarget);
   }
   window.location.href = startUrl.toString();
 }
 
 /**
- * 콜백 URL 의 1회용 코드를 실제 세션으로 바꾼다. 코드는 서버에서 즉시 소비된다.
+ * 콜백 URL 의 1회용 코드를 교환한다. 코드는 서버에서 즉시 소비된다.
  *
  * 시작 때 보관한 bind 비밀을 같이 제시한다 — 서버가 코드에 실린 해시와 대조하므로,
- * 남이 링크·딥링크로 던진 코드는 여기서 떨어진다. 성공·실패 모두 1회용이라 바로 비운다.
+ * 남이 링크·딥링크로 던진 코드는 여기서 떨어진다.
+ *
+ * 기존 회원이면 세션이 바로 나오지만, **처음 오는 사람은 아직 계정이 없다** — 서버가
+ * 약관 동의를 받아 오라며 `consent_required` 를 준다. 그 경우 bind 를 지우지 않는다:
+ * 동의 후 {@link completeKakaoSignup} 이 같은 bind 로 한 번 더 서버를 불러야 한다.
  */
-export async function exchangeKakaoCode(code: string): Promise<LoginResponseDto> {
+export async function exchangeKakaoCode(code: string): Promise<KakaoExchangeResultDto> {
+  const bind = readKakaoBind();
+  let keepBind = false;
+  try {
+    const result = await api.post<KakaoExchangeResultDto>('/auth/kakao/exchange', { code, bind });
+    if (result.status === 'consent_required') {
+      keepBind = true;
+      return result;
+    }
+    storeSession(result.session);
+    void flushPendingFcmToken();
+    return result;
+  } finally {
+    if (!keepBind) clearKakaoBind();
+  }
+}
+
+/** 약관 동의를 마친 카카오 신규 가입 완료. 여기서 비로소 계정이 만들어진다. */
+export async function completeKakaoSignup(consentCode: string): Promise<LoginResponseDto> {
   const bind = readKakaoBind();
   try {
-    const session = await api.post<LoginResponseDto>('/auth/kakao/exchange', { code, bind });
+    const session = await api.post<LoginResponseDto>('/auth/kakao/signup', {
+      code: consentCode,
+      bind,
+    });
     storeSession(session);
     void flushPendingFcmToken();
     return session;

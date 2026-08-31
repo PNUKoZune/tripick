@@ -18,8 +18,9 @@ export {
 export {
   useSessionGuard,
   useGuestGuard,
+  useExpiredSessionExit,
   type SessionGuardState,
   type GuestGuardState,
 } from './lib/use-session-guard';
-export { useHasSession } from './lib/use-has-session';
-export { SessionGuard, GuestGuard } from './ui/session-guard';
+export { useHasSession, useSessionState, type SessionState } from './lib/use-has-session';
+export { SessionGuard, GuestGuard, GuardPlaceholder } from './ui/session-guard';

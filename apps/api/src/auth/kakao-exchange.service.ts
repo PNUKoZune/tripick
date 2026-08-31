@@ -2,12 +2,20 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit, UnauthorizedExceptio
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import type { LoginResponseDto } from '@tripick/types';
+import type { KakaoProfile, LoginResponseDto } from '@tripick/types';
 import { redisConnection } from '../common/redis.config';
 
 const KEY_PREFIX = 'auth:kakao:exchange:';
 /** 콜백 화면이 즉시 교환한다. 짧을수록 좋고, 웹뷰 로딩 지연만 견디면 된다. */
 const EXCHANGE_TTL_SEC = 120;
+
+/**
+ * 신규 가입자의 약관 동의 대기표. 세션 코드와 **저장소를 분리한다** — 한 통에 섞으면
+ * 동의용 코드로 세션 교환을 시도하는 식의 혼동이 코드 경로가 아니라 데이터에서 갈린다.
+ */
+const SIGNUP_KEY_PREFIX = 'auth:kakao:signup:';
+/** 사람이 약관을 읽고 누르는 시간. 교환 코드(2분)보다 넉넉해야 한다. */
+const SIGNUP_TTL_SEC = 10 * 60;
 
 /**
  * 카카오 로그인 결과를 1회용 코드 뒤에 숨긴다.
@@ -58,12 +66,7 @@ export class KakaoExchangeService implements OnModuleInit, OnModuleDestroy {
     return code;
   }
 
-  /**
-   * 코드를 소비하고 세션을 돌려준다. GETDEL 이라 두 번째 교환은 실패한다.
-   *
-   * bind 가 안 맞으면 코드는 **소비된 채로** 거절된다 — 일부러 그렇게 둔다. 남겨 두면
-   * 공격자가 피해자에게 코드를 던져 실패시킨 뒤 자기가 다시 쓰는 재시도 창이 열린다.
-   */
+  /** 코드를 소비하고 세션을 돌려준다. GETDEL 이라 두 번째 교환은 실패한다. */
   async consume(code: string, bindSecret: string): Promise<LoginResponseDto> {
     const trimmed = (code ?? '').trim();
     if (!trimmed) throw new UnauthorizedException('로그인 코드가 없습니다.');
@@ -72,13 +75,44 @@ export class KakaoExchangeService implements OnModuleInit, OnModuleDestroy {
       throw new UnauthorizedException('로그인 코드가 만료됐거나 이미 사용됐습니다. 다시 로그인해주세요.');
     }
     const record = JSON.parse(raw) as ExchangeRecord;
-    if (!matchesHash(record.bindHash, bindSecret)) {
-      this.logger.warn('카카오 교환 코드의 bind 불일치 — 다른 브라우저가 제시한 코드를 거절했다');
-      throw new UnauthorizedException(
-        '이 브라우저에서 시작한 로그인이 아니에요. 처음부터 다시 로그인해주세요.',
-      );
-    }
+    this.assertBind(record.bindHash, bindSecret);
     return record.session;
+  }
+
+  /**
+   * 아직 계정이 없는 카카오 프로필을 대기표 뒤에 넣는다. 동의 화면이 끝나면
+   * {@link consumeSignupTicket} 으로 되찾아 그때 계정을 만든다.
+   */
+  async issueSignupTicket(profile: KakaoProfile, bindSecret: string): Promise<string> {
+    const code = randomBytes(32).toString('base64url');
+    const record: SignupRecord = { profile, bindHash: sha256(bindSecret) };
+    await this.redis.set(SIGNUP_KEY_PREFIX + code, JSON.stringify(record), 'EX', SIGNUP_TTL_SEC);
+    return code;
+  }
+
+  /** 대기표를 소비하고 프로필을 돌려준다. 세션 코드와 마찬가지로 1회용이다. */
+  async consumeSignupTicket(code: string, bindSecret: string): Promise<KakaoProfile> {
+    const trimmed = (code ?? '').trim();
+    if (!trimmed) throw new UnauthorizedException('가입 코드가 없습니다.');
+    const raw = await this.redis.getdel(SIGNUP_KEY_PREFIX + trimmed);
+    if (!raw) {
+      throw new UnauthorizedException('가입 절차가 만료됐어요. 카카오 로그인부터 다시 해주세요.');
+    }
+    const record = JSON.parse(raw) as SignupRecord;
+    this.assertBind(record.bindHash, bindSecret);
+    return record.profile;
+  }
+
+  /**
+   * bind 가 안 맞으면 코드는 **소비된 채로** 거절된다 — 일부러 그렇게 둔다. 남겨 두면
+   * 공격자가 피해자에게 코드를 던져 실패시킨 뒤 자기가 다시 쓰는 재시도 창이 열린다.
+   */
+  private assertBind(bindHash: string | undefined, bindSecret: string): void {
+    if (matchesHash(bindHash, bindSecret)) return;
+    this.logger.warn('카카오 코드의 bind 불일치 — 다른 브라우저가 제시한 코드를 거절했다');
+    throw new UnauthorizedException(
+      '이 브라우저에서 시작한 로그인이 아니에요. 처음부터 다시 로그인해주세요.',
+    );
   }
 }
 
@@ -86,6 +120,12 @@ export class KakaoExchangeService implements OnModuleInit, OnModuleDestroy {
 interface ExchangeRecord {
   session: LoginResponseDto;
   /** 로그인을 시작한 브라우저의 bind 비밀 sha256. */
+  bindHash: string;
+}
+
+/** 약관 동의 전까지 계정 대신 들고 있는 카카오 프로필. */
+interface SignupRecord {
+  profile: KakaoProfile;
   bindHash: string;
 }
 

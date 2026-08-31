@@ -7,19 +7,16 @@ import { useQuery } from '@tanstack/react-query';
 
 import { SessionGuard } from '@/entities/session';
 import { fetchMe } from '@/entities/user';
+import { PasswordSettingsRow } from '@/features/change-password';
 import { DeleteAccountButton } from '@/features/delete-account';
 import { SignOutButton } from '@/features/sign-out';
+import { ThemeSwitch } from '@/features/switch-theme';
 import { NotificationPreferencesList } from '@/features/update-notification-preferences';
 import { queryKeys } from '@/shared/api/query-keys';
 import { firstErrorMessage } from '@/shared/lib';
 import { useNativeAppVersion } from '@/shared/rn-bridge/native-app-version';
 import { AppFrame, PageContainer, PageHeader } from '@/shared/ui/app-frame';
 import { SettingsProfileHero } from '@/widgets/settings-profile-hero';
-
-// next.config 가 package.json version 을 주입한다(단일 출처). 빌드 시 인라인.
-// 앱 안에서는 이 값 대신 셸이 알려 준 설치 버전을 쓴다 — 웹 배포와 앱 릴리스 주기가 달라
-// 스토어 버전과 어긋난 숫자가 보이던 문제.
-const WEB_BUILD_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0';
 
 export function SettingsView() {
   return (
@@ -66,17 +63,25 @@ function SettingsContent() {
             <div className="mb-2 px-1">
               <h2 className="text-[15px] font-bold text-[color:var(--ink)]">프로필</h2>
               <p className="mt-0.5 text-[12px] leading-[18px] text-[color:var(--ink-faint)]">
-                다른 멤버와 친구에게 보이는 정보예요.
+                다른 멤버와 친구에게 보이는 정보예요. 이름·아이디는 눌러서 바꿀 수 있어요.
               </p>
             </div>
             <SettingsProfileHero me={me} loading={isLoading} onError={setError('profile')} />
           </section>
 
-          <Section
-            title="알림 설정"
-            description="끄면 인박스와 푸시 모두 받지 않아요. 친구 요청은 친구 페이지에선 계속 보여요."
-          >
+          {/* 설명은 목록 첫 줄의 "모든 알림" 행이 직접 달고 있다 — 같은 문장을 섹션 헤더에도
+              두면 두 줄이 겹쳐 읽힌다. */}
+          <Section title="알림 설정">
             <NotificationPreferencesList me={me} onError={setError('notifications')} />
+          </Section>
+
+          <Section
+            title="화면 테마"
+            description="시스템 설정을 따르거나 밝기를 직접 고를 수 있어요."
+          >
+            <div className="p-1">
+              <ThemeSwitch />
+            </div>
           </Section>
 
           <Section title="약관 및 정책">
@@ -86,18 +91,15 @@ function SettingsContent() {
           </Section>
 
           <Section title="앱 정보">
-            <InfoRow label="버전" value={nativeAppVersion ?? WEB_BUILD_VERSION} />
-            <InfoRow
-              label="라이선스"
-              value={
-                <Link href="#open-source" className="text-[color:var(--primary)] hover:underline">
-                  오픈소스 라이선스
-                </Link>
-              }
-            />
+            {/* 버전은 앱에서만 — 셸이 알려 준 스토어 버전. 브라우저는 push 마다 재배포돼
+                올릴 사람이 없는 package.json 숫자가 굳어 보일 뿐이라 행 자체를 감춘다. */}
+            {nativeAppVersion ? <InfoRow label="버전" value={nativeAppVersion} /> : null}
+            {/* 링크 대신 값만 — 레포 LICENSE 가 MIT 이고, 별도 고지 페이지가 없다. */}
+            <InfoRow label="라이선스" value="MIT" />
           </Section>
 
           <Section title="계정">
+            <PasswordSettingsRow me={me} />
             <SignOutButton />
             <DeleteAccountButton onError={setError('delete-account')} />
           </Section>

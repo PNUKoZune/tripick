@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { redirectToKakao } from '@/entities/session/api/auth-api';
 import { InlineNotice } from '@/shared/ui/app-frame';
 import { Button } from '@/shared/ui';
@@ -14,6 +14,18 @@ import { Button } from '@/shared/ui';
 export function AuthStartActions() {
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // 카카오 로그인은 앱에서 인앱 브라우저(Custom Tabs)로 열린다 — 사용자가 거기서 X 를 눌러
+  // 취소하고 돌아오면 이 화면은 그대로 살아 있어 버튼이 "확인 중" 에 멈춘 채로 남는다.
+  // 성공하면 콜백 URL 로 이동해 이 화면 자체가 사라지므로, 되돌아온 경우만 여기서 푼다.
+  useEffect(() => {
+    if (!loading) return;
+    const handleVisible = () => {
+      if (document.visibilityState === 'visible') setLoading(false);
+    };
+    document.addEventListener('visibilitychange', handleVisible);
+    return () => document.removeEventListener('visibilitychange', handleVisible);
+  }, [loading]);
 
   async function handleKakaoStart() {
     setLoading(true);
@@ -31,7 +43,7 @@ export function AuthStartActions() {
     <div className="space-y-3">
       <Link
         href="/signup"
-        className="flex h-14 w-full items-center justify-center gap-2 rounded-[16px] bg-[color:var(--btn-bg)] text-[16px] font-bold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)]"
+        className="wvr-shine flex h-14 w-full items-center justify-center gap-2 rounded-[16px] bg-[color:var(--btn-bg)] text-[16px] font-bold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)]"
       >
         이메일로 시작하기
         <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">

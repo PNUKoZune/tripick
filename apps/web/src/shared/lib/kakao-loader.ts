@@ -10,6 +10,7 @@ export type KakaoLatLng = { lat: number; lng: number };
 
 export interface KakaoMaps {
   LatLng: new (lat: number, lng: number) => unknown;
+  LatLngBounds: new () => KakaoLatLngBoundsInstance;
   Map: new (container: HTMLElement, options: { center: unknown; level: number }) => KakaoMapInstance;
   Marker: new (options: { position: unknown; map?: KakaoMapInstance; image?: unknown; title?: string }) => KakaoMarkerInstance;
   CustomOverlay: new (options: {
@@ -102,6 +103,19 @@ export interface KakaoMapInstance {
   panTo(latLng: unknown): void;
   setLevel(level: number): void;
   relayout(): void;
+  /** 영역이 모두 보이도록 중심·레벨을 맞춘다. padding 은 상·우·하·좌(px) */
+  setBounds(
+    bounds: KakaoLatLngBoundsInstance,
+    paddingTop?: number,
+    paddingRight?: number,
+    paddingBottom?: number,
+    paddingLeft?: number,
+  ): void;
+}
+
+export interface KakaoLatLngBoundsInstance {
+  extend(latLng: unknown): void;
+  isEmpty(): boolean;
 }
 
 export interface KakaoMarkerInstance {

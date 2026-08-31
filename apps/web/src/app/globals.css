@@ -201,83 +201,84 @@ nextjs-portal {
   --shadow-btn: 0 10px 22px rgba(46, 107, 230, 0.28);
 }
 
-/* 다크 — 시스템 선호도 자동 감지만(사용자 확정: 뷰어 토글 UI·data-theme 훅 없음) */
-@media (prefers-color-scheme: dark) {
-  .wvr-scope {
-    color-scheme: dark;
+/* 다크 팔레트. 셀렉터 훅은 해석이 끝난 `data-theme` 하나다 — 시스템 추종 여부는
+   앱 부팅 스크립트(shared/theme)가 판정해 이 속성에 light|dark 로 써 넣는다.
+   `@media (prefers-color-scheme: dark)` 와 `[data-theme='dark']` 두 갈래로 두면
+   이 80줄짜리 토큰 블록을 두 벌 관리해야 해서, 판정을 JS 한 곳으로 모았다. */
+:root[data-theme='dark'] .wvr-scope {
+  color-scheme: dark;
 
-    /* 전역 토큰 섀도잉: :root 의 라이트 전용 토큰(--text-*, --app-*, --blue-* 등)을
-       참조하는 shared/ui 컴포넌트(TimeField·SegmentToggle·헤더 등)가 wvr 화면 안에서
-       렌더될 때만 다크 값을 상속받도록 스코프 내부에서 덮어쓴다. :root 자체와
-       비대상 화면은 변경되지 않음(REQ-WVR-004 로컬 스코프 결정 준수). */
-    --app-bg: #0b111e;
-    --app-surface: #131b2c;
-    --soft-bg: #172136;
-    --pressed-bg: #1b2740;
-    --line-strong: rgba(233, 238, 249, 0.18);
-    --text-primary: #e9eef9;
-    --text-secondary: #a3aec6;
-    --text-tertiary: #75809a;
-    --blue-50: #1b2a4a;
-    --blue-100: #21335a;
-    --blue-500: #7ca5fc;
-    --blue-600: #3b76f0;
-    --blue-700: #2e63d6;
-    --blue-800: #9dbcff;
+  /* 전역 토큰 섀도잉: :root 의 라이트 전용 토큰(--text-*, --app-*, --blue-* 등)을
+     참조하는 shared/ui 컴포넌트(TimeField·SegmentToggle·헤더 등)가 wvr 화면 안에서
+     렌더될 때만 다크 값을 상속받도록 스코프 내부에서 덮어쓴다. :root 자체와
+     비대상 화면은 변경되지 않음(REQ-WVR-004 로컬 스코프 결정 준수). */
+  --app-bg: #0b111e;
+  --app-surface: #131b2c;
+  --soft-bg: #172136;
+  --pressed-bg: #1b2740;
+  --line-strong: rgba(233, 238, 249, 0.18);
+  --text-primary: #e9eef9;
+  --text-secondary: #a3aec6;
+  --text-tertiary: #75809a;
+  --blue-50: #1b2a4a;
+  --blue-100: #21335a;
+  --blue-500: #7ca5fc;
+  --blue-600: #3b76f0;
+  --blue-700: #2e63d6;
+  --blue-800: #9dbcff;
 
-    --bg: #0b111e;
-    --card: #131b2c;
-    --card-soft: #172136;
-    --ink: #e9eef9;
-    --ink-sub: #a3aec6;
-    --ink-faint: #75809a;
-    --line: #263149;
-    --line-dot: #34405c;
+  --bg: #0b111e;
+  --card: #131b2c;
+  --card-soft: #172136;
+  --ink: #e9eef9;
+  --ink-sub: #a3aec6;
+  --ink-faint: #75809a;
+  --line: #263149;
+  --line-dot: #34405c;
 
-    --primary: #7ca5fc;
-    --primary-deep: #9dbcff;
-    --primary-tint: #1b2a4a;
-    --btn-bg: #3b76f0;
-    --btn-bg-press: #2e63d6;
-    --btn-text: #ffffff;
-    --ring: rgba(124, 165, 252, 0.4);
+  --primary: #7ca5fc;
+  --primary-deep: #9dbcff;
+  --primary-tint: #1b2a4a;
+  --btn-bg: #3b76f0;
+  --btn-bg-press: #2e63d6;
+  --btn-text: #ffffff;
+  --ring: rgba(124, 165, 252, 0.4);
 
-    --accent: #ff9b70;
-    --accent-deep: #ffad88;
-    --accent-tint: #33231c;
-    --hl: #4a2f20;
+  --accent: #ff9b70;
+  --accent-deep: #ffad88;
+  --accent-tint: #33231c;
+  --hl: #4a2f20;
 
-    --danger: #ff6b76;
-    --danger-tint: #3a1519;
-    --danger-border: #5c2229;
-    /* 다크는 면 색을 그대로 두고 글자를 뒤집는다 — 어두운 바탕에서 빨강을 더 눌러
-       버리면 버튼이 죽어 보이고, 흰 글자로는 2.8:1 밖에 안 나온다. 어두운 잉크를
-       얹으면 같은 빨강으로 6.6:1. */
-    --danger-deep: #ff6b76;
-    --danger-on: #2b0b0f;
-    --ok: #4caf7d;
+  --danger: #ff6b76;
+  --danger-tint: #3a1519;
+  --danger-border: #5c2229;
+  /* 다크는 면 색을 그대로 두고 글자를 뒤집는다 — 어두운 바탕에서 빨강을 더 눌러
+     버리면 버튼이 죽어 보이고, 흰 글자로는 2.8:1 밖에 안 나온다. 어두운 잉크를
+     얹으면 같은 빨강으로 6.6:1. */
+  --danger-deep: #ff6b76;
+  --danger-on: #2b0b0f;
+  --ok: #4caf7d;
 
-    --t-morning: #8fbcff;
-    --t-noon: #5b8def;
-    --t-gold: #ffc46b;
-    --t-dusk: #ff8a5c;
+  --t-morning: #8fbcff;
+  --t-noon: #5b8def;
+  --t-gold: #ffc46b;
+  --t-dusk: #ff8a5c;
 
-    --sky-top: #0b152c;
-    --sky-glow: #543246;
-    --sun: #ffa97e;
-    --sun-halo: rgba(255, 169, 126, 0.26);
-    --sea-1: #223b69;
-    --sea-2: #1a2e54;
-    --sea-3: #12203d;
-    --sil: #070d1c;
-    --bridge: #0a1322;
-    --lights: #ffc49a;
-    --star: rgba(255, 255, 255, 0.55);
-    --glass: rgba(9, 14, 26, 0.74);
+  --sky-top: #0b152c;
+  --sky-glow: #543246;
+  --sun: #ffa97e;
+  --sun-halo: rgba(255, 169, 126, 0.26);
+  --sea-1: #223b69;
+  --sea-2: #1a2e54;
+  --sea-3: #12203d;
+  --sil: #070d1c;
+  --bridge: #0a1322;
+  --lights: #ffc49a;
+  --star: rgba(255, 255, 255, 0.55);
+  --glass: rgba(9, 14, 26, 0.74);
 
-    --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.3);
-    --shadow-btn: 0 10px 22px rgba(20, 50, 120, 0.5);
-  }
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow-btn: 0 10px 22px rgba(20, 50, 120, 0.5);
 }
 
 /* 스코프 기본 면. `@layer base` 에 둬야 하는 이유 — 이 파일의 규칙은 레이어 밖이라
@@ -418,6 +419,239 @@ nextjs-portal {
     }
     50% {
       opacity: 1;
+    }
+  }
+}
+
+/* ============================================================
+   랜딩 모션 — 스크롤 등장 · 장면 · 상호작용
+   ------------------------------------------------------------
+   전부 .wvr-scope 안에서만 돈다. 숨김 상태는 `[data-reveal-ready]`(ScrollReveal 이
+   마운트 후 붙임) 안에서만 걸어, JS 가 없거나 늦으면 처음부터 다 보이게 한다.
+   reduced-motion 에서는 ScrollReveal 이 즉시 확정하고, 아래 전환 블록도
+   `@media (prefers-reduced-motion: no-preference)` 안이라 매칭되지 않는다.
+   ============================================================ */
+
+/* 등장 방향. 기본은 아래에서 올라오기, 옆에서 밀려오는 변형은 히어로 2단에서 쓴다. */
+.wvr-scope[data-reveal-ready] [data-reveal] {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .wvr-scope[data-reveal-ready] [data-reveal] {
+    transform: translateY(22px);
+    transition:
+      opacity 0.62s cubic-bezier(0.22, 0.68, 0.28, 1),
+      transform 0.62s cubic-bezier(0.22, 0.68, 0.28, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+
+  .wvr-scope[data-reveal-ready] [data-reveal='right'] {
+    transform: translateX(28px);
+  }
+
+  .wvr-scope[data-reveal-ready] [data-reveal='scale'] {
+    transform: translateY(18px) scale(0.97);
+  }
+
+  /* 세로선(4단계 연결선·타임라인)은 위에서 아래로 그어진다. */
+  .wvr-scope[data-reveal-ready] [data-reveal='draw-y'] {
+    opacity: 1;
+    transform: scaleY(0);
+    transform-origin: top center;
+    transition: transform 0.9s cubic-bezier(0.22, 0.68, 0.28, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+
+  /* 가로선(데스크탑 4단계 연결선)은 왼쪽에서 오른쪽으로. */
+  .wvr-scope[data-reveal-ready] [data-reveal='draw-x'] {
+    opacity: 1;
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 0.9s cubic-bezier(0.22, 0.68, 0.28, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+}
+
+.wvr-scope[data-reveal-ready] [data-reveal][data-revealed] {
+  opacity: 1;
+  transform: none;
+}
+
+/* 카드 상호작용. 포인터가 있는 환경에서만 — 터치에서 hover 는 탭 뒤에 눌어붙는다. */
+@media (hover: hover) and (pointer: fine) {
+  .wvr-scope .wvr-lift {
+    transition:
+      transform 0.28s cubic-bezier(0.22, 0.68, 0.28, 1),
+      box-shadow 0.28s cubic-bezier(0.22, 0.68, 0.28, 1),
+      border-color 0.28s ease;
+  }
+
+  .wvr-scope .wvr-lift:hover {
+    transform: translateY(-5px);
+    border-color: var(--line-dot);
+    box-shadow: 0 18px 38px rgba(24, 33, 54, 0.1);
+  }
+
+  /* 카드 아이콘도 같이 반응해야 판이 통째로 떠오른 것처럼 읽힌다. */
+  .wvr-scope .wvr-lift .wvr-lift-icon {
+    transition: transform 0.28s cubic-bezier(0.34, 1.4, 0.5, 1);
+  }
+
+  .wvr-scope .wvr-lift:hover .wvr-lift-icon {
+    transform: scale(1.08) rotate(-3deg);
+  }
+}
+
+:root[data-theme='dark'] .wvr-scope .wvr-lift:hover {
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.45);
+}
+
+/* 히어로 뒤 오로라. 토큰 색만 쓰는 두 겹 방사형 얼룩이라 다크에서도 같이 어두워진다. */
+.wvr-scope .wvr-aurora {
+  position: absolute;
+  inset: -12% -20% auto -20%;
+  height: 620px;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(38% 46% at 18% 22%, var(--primary-tint) 0%, transparent 70%),
+    radial-gradient(34% 42% at 82% 12%, var(--accent-tint) 0%, transparent 68%);
+  filter: blur(6px);
+  opacity: 0.9;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .wvr-scope .wvr-aurora {
+    animation: wvr-aurora 18s ease-in-out infinite alternate;
+  }
+
+  @keyframes wvr-aurora {
+    from {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    to {
+      transform: translate3d(-3%, 2%, 0) scale(1.08);
+    }
+  }
+
+  /* 광안리 장면의 잔동작 — 파도·배·다리 조명. 요소마다 주기를 어긋나게 둬서
+     한 박자에 같이 움직이는 "기계적인" 느낌을 피한다. */
+  .wvr-scope .wvr-wave-1 {
+    animation: wvr-wave 9s ease-in-out infinite alternate;
+  }
+
+  .wvr-scope .wvr-wave-2 {
+    animation: wvr-wave 12s ease-in-out infinite alternate-reverse;
+  }
+
+  @keyframes wvr-wave {
+    from {
+      transform: translateX(-8px);
+    }
+    to {
+      transform: translateX(8px);
+    }
+  }
+
+  .wvr-scope .wvr-boat {
+    animation: wvr-boat 6.5s ease-in-out infinite;
+    transform-box: fill-box;
+    transform-origin: center bottom;
+  }
+
+  @keyframes wvr-boat {
+    0%,
+    100% {
+      transform: translateY(0) rotate(-1.4deg);
+    }
+    50% {
+      transform: translateY(-2.5px) rotate(1.4deg);
+    }
+  }
+
+  .wvr-scope .wvr-bridge-lights circle {
+    animation: wvr-twinkle 3.4s ease-in-out infinite;
+  }
+
+  /* 조명이 한꺼번에 깜빡이면 신호등처럼 보인다 — 홀수/짝수로 위상을 갈라 둔다. */
+  .wvr-scope .wvr-bridge-lights circle:nth-child(even) {
+    animation-delay: 1.1s;
+  }
+
+  .wvr-scope .wvr-bridge-lights circle:nth-child(3n) {
+    animation-delay: 2.2s;
+  }
+
+  @keyframes wvr-twinkle {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.45;
+    }
+  }
+
+  /* CTA 위로 한 번 지나가는 빛. 버튼 자체가 아니라 덧댄 레이어라 글자에 영향이 없다. */
+  .wvr-scope .wvr-shine {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .wvr-scope .wvr-shine::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      100deg,
+      transparent 38%,
+      rgba(255, 255, 255, 0.28) 50%,
+      transparent 62%
+    );
+    transform: translateX(-120%);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .wvr-scope .wvr-shine:hover::after {
+      animation: wvr-shine 0.85s ease-out;
+    }
+  }
+
+  @keyframes wvr-shine {
+    to {
+      transform: translateX(120%);
+    }
+  }
+}
+
+/* 상단 네비게이션의 섹션 앵커를 부드럽게 잇는다. 스크롤 상자는 :root 라 여기에 걸어야
+   하는데, 앱 전체에 켜면 화면 전환·모달 복귀 같은 프로그램 스크롤까지 느려진다. 그래서
+   랜딩이 떠 있을 때만(`.wvr-landing` 표식) 켠다. `:has()` 를 모르는 브라우저는 예전처럼
+   즉시 이동하므로 기능이 죽지는 않는다. */
+@media (prefers-reduced-motion: no-preference) {
+  :root:has(.wvr-landing) {
+    scroll-behavior: smooth;
+  }
+}
+
+/* 헤더 스크롤 진행 막대. 스크롤 구동 애니메이션을 아는 브라우저에서만 켠다 —
+   모르는 브라우저에선 규칙 자체가 적용되지 않아 막대가 0 폭으로 숨는다. */
+.wvr-scope .wvr-progress {
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+@supports (animation-timeline: scroll()) {
+  .wvr-scope .wvr-progress {
+    animation: wvr-progress linear;
+    animation-timeline: scroll(root block);
+  }
+
+  @keyframes wvr-progress {
+    to {
+      transform: scaleX(1);
     }
   }
 }

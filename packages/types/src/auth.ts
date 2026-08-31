@@ -44,6 +44,25 @@ export interface KakaoAuthStatusDto {
   startUrl?: string;
 }
 
+/**
+ * 카카오 교환 결과.
+ *
+ * 기존 회원이면 바로 세션이 나오지만, **처음 오는 사람은 계정을 만들기 전에 약관 동의를
+ * 받아야 한다**(이용약관 제5조: 약관에 동의해야 회원가입이 성립). 그래서 이 단계에서는
+ * 계정을 만들지 않고 동의 화면으로 넘길 코드만 돌려준다 — 동의하지 않고 떠나면 계정은
+ * 아예 생기지 않는다.
+ */
+export type KakaoExchangeResultDto =
+  | { status: 'ok'; session: LoginResponseDto }
+  | {
+      status: 'consent_required';
+      /** 동의 후 `POST /auth/kakao/signup` 에 되돌려줄 1회용 코드. */
+      consentCode: string;
+      /** 동의 화면에 "OO 님으로 가입" 을 보여주기 위한 카카오 프로필 요약. */
+      nickname?: string;
+      email?: string;
+    };
+
 /** 카카오 콜백이 URL 로 넘긴 1회용 교환 코드 → 실제 세션. */
 export interface KakaoExchangeDto {
   code: string;
@@ -85,6 +104,20 @@ export interface RequestPasswordResetDto {
 export interface ResetPasswordDto {
   token: string;
   password: string;
+}
+
+/**
+ * 로그인한 상태에서 비밀번호 변경. 메일 왕복이 없는 대신 **현재 비밀번호**로 본인을 다시
+ * 확인한다 — 세션만으로 통과시키면 잠깐 열린 기기·탈취된 access token 이 그대로 계정
+ * 인수(비밀번호 교체 → 다른 세션 폐기)로 이어진다.
+ *
+ * 비밀번호가 아직 없는 계정(카카오 단독 가입)은 이 경로를 쓰지 않는다. 대조할 현재
+ * 비밀번호가 없어 확인이 세션 하나로 줄어들기 때문 — 그쪽은 이메일 소유를 다시 증명하는
+ * 재설정 플로우(`/auth/forgot-password`)로 보낸다.
+ */
+export interface ChangePasswordDto {
+  currentPassword: string;
+  newPassword: string;
 }
 
 /** /auth/signup, /auth/verify-email 등 비-로그인 응답 — message + email 정도만 노출 */

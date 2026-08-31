@@ -37,7 +37,7 @@ export function GuestGuard({
   return <>{children}</>;
 }
 
-function GuardPlaceholder() {
+export function GuardPlaceholder() {
   // wvr-scope 로 배경·글자가 팔레트(다크 포함)를 따라간다 — 라이트 고정이면
   // 다크 화면 사이에서 흰 화면이 번쩍인다. 첫 로드에만 보이는 화면이라 스코프 무해.
   //

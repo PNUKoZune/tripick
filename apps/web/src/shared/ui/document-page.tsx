@@ -18,7 +18,7 @@ export function DocumentPageShell({
   backLabel = '설정',
   children,
 }: {
-  /** 데스크탑 전용 'Tripick · X' 작은 라벨 */
+  /** 데스크탑 전용 'TriPick · X' 작은 라벨 */
   label: string;
   title: string;
   description?: string;
@@ -44,7 +44,7 @@ export function DocumentPageShell({
           </Link>
           <div className="min-w-0 flex-1">
             <div className="hidden text-[12px] font-semibold tracking-wide text-[color:var(--primary)] lg:block">
-              Tripick · {label}
+              TriPick · {label}
             </div>
             <h1 className="text-[20px] font-bold text-[color:var(--ink)] lg:mt-0.5 lg:text-[22px] lg:leading-[30px]">
               {title}

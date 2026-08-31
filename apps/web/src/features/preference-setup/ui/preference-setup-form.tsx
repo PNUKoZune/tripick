@@ -30,6 +30,7 @@ import {
   PACE_OPTIONS,
   TASTE_TAG_LABELS,
   THEME_GROUPS,
+  type ThemeGroup,
 } from '@/entities/preferences/model/options';
 import {
   analyzePreferenceImages,
@@ -49,7 +50,7 @@ import {
 import { getStoredSession, type Session } from '@/entities/session/model/session-storage';
 import { queryKeys } from '@/shared/api/query-keys';
 import { downscaleImage, PREFERENCE_MAX_DIMENSION } from '@/shared/lib';
-import { Button, ConfirmDialog, ImageLightbox, TimeField, Toast } from '@/shared/ui';
+import { Accordion, Button, ConfirmDialog, ImageLightbox, TimeField, Toast } from '@/shared/ui';
 
 type ToastState = {
   title: string;
@@ -92,6 +93,11 @@ export function PreferenceSetupForm() {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   // 마지막으로 저장된(or 하이드레이트된) 폼 스냅샷 — 변경 여부 판단용
   const [savedForm, setSavedForm] = useState<PreferenceFormState>(DEFAULT_PREFERENCE_FORM);
+  // 펼쳐 둔 테마 대분류. 22개 세부 테마를 한꺼번에 펼치면 모바일에서 이 섹션만 화면 두세 개
+  // 분량이라, 대분류를 접고 첫 그룹만 열어 둔다(조작 방식을 한 눈에 보여주는 미끼).
+  const [openThemeGroups, setOpenThemeGroups] = useState<Record<string, boolean>>(() =>
+    THEME_GROUPS[0] ? { [THEME_GROUPS[0].key]: true } : {},
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const preferenceQuery = useQuery({
@@ -421,6 +427,32 @@ export function PreferenceSetupForm() {
     [photoTagsQuery.data],
   );
 
+  /** 대분류별 선호/불호 개수 — 접힌 헤더에서 안을 열어보지 않아도 고른 걸 알 수 있게. */
+  const themeGroupCounts = useMemo(() => {
+    const liked = new Set<string>(form.likedThemes);
+    const disliked = new Set<string>(form.dislikedThemes);
+    return new Map(
+      THEME_GROUPS.map((group) => [
+        group.key,
+        {
+          like: group.themes.filter((theme) => liked.has(theme.value)).length,
+          dislike: group.themes.filter((theme) => disliked.has(theme.value)).length,
+        },
+      ]),
+    );
+  }, [form.likedThemes, form.dislikedThemes]);
+
+  const allThemeGroupsOpen = THEME_GROUPS.every((group) => openThemeGroups[group.key]);
+
+  function toggleThemeGroup(key: string) {
+    setOpenThemeGroups((current) => ({ ...current, [key]: !current[key] }));
+  }
+
+  function toggleAllThemeGroups() {
+    const next = !allThemeGroupsOpen;
+    setOpenThemeGroups(Object.fromEntries(THEME_GROUPS.map((group) => [group.key, next])));
+  }
+
   function handleSubmit() {
     if (!ready) {
       setToast({
@@ -459,90 +491,37 @@ export function PreferenceSetupForm() {
     // 토큰은 그대로 상속되고, 중첩하면 `.wvr-scope{background:var(--bg)}` 가 --app-surface
     // 컬럼 위에 --bg 사각형을 덧칠해 카드 없는 구간(CTA 아래)이 검은 블록으로 뜬다.
     <div className="space-y-8">
-      <SetupBlock title="테마/장소 선호도">
+      <SetupBlock
+        title="테마/장소 선호도"
+        action={
+          <button
+            type="button"
+            onClick={toggleAllThemeGroups}
+            className="shrink-0 rounded-[8px] px-2 py-1 text-[12.5px] font-bold text-[color:var(--ink-faint)] transition hover:bg-[color:var(--card-soft)] hover:text-[color:var(--ink-sub)]"
+          >
+            {allThemeGroupsOpen ? '모두 접기' : '모두 펼치기'}
+          </button>
+        }
+      >
         <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--ink-faint)]">
           좋아하는 건 선호, 피하고 싶은 건 불호로 골라주세요. 고르지 않으면 중립이에요.
         </p>
-        <div className="space-y-4">
+        <div className="space-y-1.5">
           {THEME_GROUPS.map((group) => (
-            <div key={group.key}>
-              <h3 className="mb-1.5 text-[13px] font-bold leading-5 text-[color:var(--ink-sub)]">
-                {group.label}
-              </h3>
-              <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-2">
-                {group.themes.map((theme) => (
-                  <ThemeStanceRow
-                    key={theme.value}
-                    label={theme.label}
-                    examples={theme.examples}
-                    stance={themeStance(theme.value)}
-                    onSelect={(stance) => setThemeStance(theme.value, stance)}
-                  />
-                ))}
-              </div>
-            </div>
+            <ThemeGroupAccordion
+              key={group.key}
+              group={group}
+              open={Boolean(openThemeGroups[group.key])}
+              counts={themeGroupCounts.get(group.key) ?? { like: 0, dislike: 0 }}
+              onToggle={() => toggleThemeGroup(group.key)}
+              stanceOf={themeStance}
+              onSelect={setThemeStance}
+            />
           ))}
         </div>
       </SetupBlock>
 
-      <div className="grid gap-x-8 gap-y-8 lg:grid-cols-2">
-        {/* 옆 "여행 스타일" 카드가 조금 더 길어 남는 높이가 이 카드 아래에 몰린다.
-            안쪽을 세로 flex 로 잡고 리듬 밴드를 mt-auto 로 내려, 남는 여백을 시간 입력과
-            밴드 사이로 흘려보낸다(카드 바닥에 뭉치지 않게). */}
-        <SetupBlock title="취침 / 기상 시간" className="flex flex-col">
-          <div className="flex flex-1 flex-col">
-            <div className="grid grid-cols-2 gap-3">
-              <TimeField
-                variant="soft"
-                label="취침"
-                value={form.sleepTime}
-                onChange={(sleepTime) => setForm((current) => ({ ...current, sleepTime }))}
-              />
-              <TimeField
-                variant="soft"
-                label="기상"
-                value={form.wakeTime}
-                onChange={(wakeTime) => setForm((current) => ({ ...current, wakeTime }))}
-              />
-            </div>
-            {/* 하루의 리듬 — 목업 가로 밴드를 실제 취침/기상 값으로 시각화(REQ-WVR-020, 읽기 전용 요약) */}
-            <div className="mt-auto">
-              <RhythmBand wakeTime={form.wakeTime} sleepTime={form.sleepTime} />
-            </div>
-          </div>
-        </SetupBlock>
-
-        {/* 페이스·활동 강도·분위기는 3지선다 한 줄짜리라 카드를 따로 두면 카드마다 여백만
-            남는다(특히 홀수라 마지막 칸이 통째로 빈다). 한 카드 안 소제목으로 묶어 취침/기상
-            카드와 높이를 맞춘다. */}
-        <SetupBlock title="여행 스타일">
-          <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--ink-faint)]">
-            하루에 몇 곳을, 얼마나 힘 있게, 어떤 분위기로 다닐지 정해요.
-          </p>
-          <div className="space-y-3.5">
-            <StyleGroup
-              label="여행 페이스"
-              options={PACE_OPTIONS}
-              value={form.pace}
-              onSelect={(value) => setSingle('pace', value)}
-            />
-            <StyleGroup
-              label="활동 강도"
-              options={ACTIVITY_INTENSITY_OPTIONS}
-              value={form.activityIntensity}
-              onSelect={(value) => setSingle('activityIntensity', value)}
-            />
-            <StyleGroup
-              label="분위기"
-              options={CROWD_OPTIONS}
-              value={form.crowdPreference}
-              onSelect={(value) => setSingle('crowdPreference', value)}
-            />
-          </div>
-        </SetupBlock>
-      </div>
-
-      {/* 사진 분석은 폼 마지막 단계 — 직접 정하는 항목을 먼저 채우고 사진으로 보강한다. */}
+      {/* 테마 바로 다음 — 직접 고른 테마를 사진으로 곧바로 보강하게 붙여 둔다. */}
       <SetupBlock title="사진으로 취향 분석">
         <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--ink-faint)]">
           좋아하는 장소·음식 사진을 올리면 취향을 자동으로 분석해요. (한 번에{' '}
@@ -828,6 +807,63 @@ export function PreferenceSetupForm() {
           ) : null}
         </section>
       ) : null}
+
+      <div className="grid gap-x-8 gap-y-8 lg:grid-cols-2">
+        {/* 옆 "여행 스타일" 카드가 조금 더 길어 남는 높이가 이 카드 아래에 몰린다.
+            안쪽을 세로 flex 로 잡고 리듬 밴드를 mt-auto 로 내려, 남는 여백을 시간 입력과
+            밴드 사이로 흘려보낸다(카드 바닥에 뭉치지 않게). */}
+        <SetupBlock title="취침 / 기상 시간" className="flex flex-col">
+          <div className="flex flex-1 flex-col">
+            <div className="grid grid-cols-2 gap-3">
+              <TimeField
+                variant="soft"
+                label="취침"
+                value={form.sleepTime}
+                onChange={(sleepTime) => setForm((current) => ({ ...current, sleepTime }))}
+              />
+              <TimeField
+                variant="soft"
+                label="기상"
+                value={form.wakeTime}
+                onChange={(wakeTime) => setForm((current) => ({ ...current, wakeTime }))}
+              />
+            </div>
+            {/* 하루의 리듬 — 목업 가로 밴드를 실제 취침/기상 값으로 시각화(REQ-WVR-020, 읽기 전용 요약) */}
+            <div className="mt-auto">
+              <RhythmBand wakeTime={form.wakeTime} sleepTime={form.sleepTime} />
+            </div>
+          </div>
+        </SetupBlock>
+
+        {/* 페이스·활동 강도·분위기는 3지선다 한 줄짜리라 카드를 따로 두면 카드마다 여백만
+            남는다(특히 홀수라 마지막 칸이 통째로 빈다). 한 카드 안 소제목으로 묶어 취침/기상
+            카드와 높이를 맞춘다. */}
+        <SetupBlock title="여행 스타일">
+          <p className="-mt-1 mb-3 text-[13px] font-medium leading-5 text-[color:var(--ink-faint)]">
+            하루에 몇 곳을, 얼마나 힘 있게, 어떤 분위기로 다닐지 정해요.
+          </p>
+          <div className="space-y-3.5">
+            <StyleGroup
+              label="여행 페이스"
+              options={PACE_OPTIONS}
+              value={form.pace}
+              onSelect={(value) => setSingle('pace', value)}
+            />
+            <StyleGroup
+              label="활동 강도"
+              options={ACTIVITY_INTENSITY_OPTIONS}
+              value={form.activityIntensity}
+              onSelect={(value) => setSingle('activityIntensity', value)}
+            />
+            <StyleGroup
+              label="분위기"
+              options={CROWD_OPTIONS}
+              value={form.crowdPreference}
+              onSelect={(value) => setSingle('crowdPreference', value)}
+            />
+          </div>
+        </SetupBlock>
+      </div>
 
       {toast ? (
         <Toast
@@ -1220,10 +1256,13 @@ function TasteChip({ label, tone }: { label: string; tone: 'warm' | 'cool' }) {
 
 function SetupBlock({
   title,
+  action,
   className = '',
   children,
 }: {
   title: string;
+  /** 제목 우측 보조 조작(예: 모두 펼치기). 없으면 제목만 그대로 렌더한다. */
+  action?: React.ReactNode;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -1231,7 +1270,10 @@ function SetupBlock({
     <section
       className={`rounded-[20px] border border-[color:var(--line)] bg-[color:var(--card)] p-5 shadow-[var(--shadow-card)] ${className}`}
     >
-      <h2 className="mb-3 text-[18px] font-extrabold leading-6 text-[color:var(--ink)]">{title}</h2>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-[18px] font-extrabold leading-6 text-[color:var(--ink)]">{title}</h2>
+        {action}
+      </div>
       {children}
     </section>
   );
@@ -1319,6 +1361,79 @@ function timeToDayPercent(time: string): number {
   if (Number.isNaN(h)) return 0;
   const minutes = h * 60 + (Number.isNaN(m) ? 0 : m);
   return Math.min(100, Math.max(0, (minutes / (24 * 60)) * 100));
+}
+
+/**
+ * 테마 대분류 하나 = 접히는 패널. 세부 테마 22개를 한꺼번에 펼쳐두면 모바일에서 이 섹션만
+ * 화면 두세 개 분량이라 기본은 접어두고, 접힌 줄에 선호·불호 개수를 띄워 열어보지 않아도
+ * 어디를 골라놨는지 보이게 한다.
+ */
+function ThemeGroupAccordion({
+  group,
+  open,
+  counts,
+  onToggle,
+  stanceOf,
+  onSelect,
+}: {
+  group: ThemeGroup;
+  open: boolean;
+  counts: { like: number; dislike: number };
+  onToggle: () => void;
+  stanceOf: (value: ThemePreference) => ThemeStance | null;
+  onSelect: (value: ThemePreference, stance: ThemeStance) => void;
+}) {
+  return (
+    <Accordion
+      panelId={`theme-group-${group.key}`}
+      open={open}
+      onToggle={onToggle}
+      className="rounded-[14px] border border-[color:var(--line)]"
+      headerClassName="px-3 py-2.5"
+      panelClassName="grid grid-cols-1 gap-1.5 px-2 pb-2 lg:grid-cols-2"
+      summary={
+        <>
+          <span className="text-[14px] font-bold leading-6 text-[color:var(--ink)]">
+            {group.label}
+          </span>
+          {counts.like > 0 ? <StanceCount tone="like" count={counts.like} /> : null}
+          {counts.dislike > 0 ? <StanceCount tone="dislike" count={counts.dislike} /> : null}
+        </>
+      }
+    >
+      {group.themes.map((theme) => (
+        <ThemeStanceRow
+          key={theme.value}
+          label={theme.label}
+          examples={theme.examples}
+          stance={stanceOf(theme.value)}
+          onSelect={(stance) => onSelect(theme.value, stance)}
+        />
+      ))}
+    </Accordion>
+  );
+}
+
+/** 접힌 대분류 줄의 선호·불호 개수 배지. */
+function StanceCount({ tone, count }: { tone: ThemeStance; count: number }) {
+  const like = tone === 'like';
+  return (
+    <span
+      aria-label={`${like ? '선호' : '불호'} ${count}개`}
+      className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-bold leading-4 ${
+        like
+          ? 'bg-[color:var(--primary-tint)] text-[color:var(--primary-deep)]'
+          : 'bg-[color:var(--danger-tint)] text-[color:var(--danger-deep)]'
+      }`}
+    >
+      {like ? (
+        <LuThumbsUp className="size-3" aria-hidden />
+      ) : (
+        <LuThumbsDown className="size-3" aria-hidden />
+      )}
+      {count}
+    </span>
+  );
 }
 
 function ThemeStanceRow({
