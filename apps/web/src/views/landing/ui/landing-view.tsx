@@ -13,7 +13,6 @@ import {
   LuUsers,
 } from 'react-icons/lu';
 
-import { GuestGuard } from '@/entities/session';
 import { AuthStartActions } from '@/features/auth-start/ui/auth-start-actions';
 import { AppFrame } from '@/shared/ui/app-frame';
 import { ScrollReveal } from '@/shared/ui';
@@ -198,19 +197,13 @@ const NAV_LINKS = [
 ] as const;
 
 /**
- * 모바일 앱의 첫 진입 경로이자 웹의 비로그인 랜딩.
- * 이미 로그인한 사용자에겐 보여줄 이유가 없으므로 GuestGuard 로 `/`(여행 목록) 로 되돌린다.
- * 본문은 클라이언트 훅을 쓰지 않는 서버 컴포넌트로 남겨, 가드와 CTA 만 클라이언트에서 돈다.
+ * 웹의 비로그인 랜딩이자 앱 웹뷰의 첫 화면.
+ *
+ * 세션 가드가 없다 — 유일한 진입점인 루트([app/page.tsx](../../../app/page.tsx))가 이미
+ * 세션을 보고 이 화면과 여행 목록을 가르므로, 여기서 한 번 더 판정하면 같은 일을 두 번 한다.
+ * 클라이언트 훅을 쓰지 않는 서버 컴포넌트라 CTA·등장 효과만 클라이언트에서 돈다.
  */
 export function LandingView() {
-  return (
-    <GuestGuard>
-      <LandingContent />
-    </GuestGuard>
-  );
-}
-
-function LandingContent() {
   return (
     <AppFrame showNav={false} themed>
       {/* 스크롤 등장 스위치. 마크업은 서버가 그대로 내려보내고, 이 섬이 붙기 전까지는
@@ -263,7 +256,7 @@ function LandingHeader() {
         style={{ background: 'var(--primary)' }}
       />
       <div className="mx-auto flex w-full max-w-[500px] items-center justify-between px-5 pb-3 pt-[calc(12px+var(--safe-top))] md:max-w-[720px] lg:max-w-[1120px] lg:px-10 lg:pb-4 lg:pt-4">
-        <Link href="/start" className="inline-flex items-baseline gap-0.5" aria-label="트리픽 홈">
+        <Link href="/" className="inline-flex items-baseline gap-0.5" aria-label="트리픽 홈">
           <span className="text-[19px] font-extrabold tracking-[-0.02em] text-[color:var(--ink)]">
             트리픽
           </span>
