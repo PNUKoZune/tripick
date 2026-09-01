@@ -24,7 +24,7 @@ export function DeleteAccountButton({ onError }: Props) {
       // 서버는 탈퇴 처리에서 계정·세션·FCM 토큰을 이미 지웠다. 로컬만 비우면 된다.
       clearLocalSession();
       queryClient.clear();
-      router.replace('/start');
+      router.replace('/');
       onError?.(null);
     },
     onError: (err) => onError?.(err instanceof Error ? err : null),
