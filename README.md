@@ -84,7 +84,10 @@ LLM 추론은 외부 API 가 아니라 **자체 GPU 파드에서 서빙하는 Ge
 
 ## 아키텍처
 
-<img src="assets/diagrams/architecture.png" alt="TriPick 시스템 아키텍처" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/diagrams/architecture-dark.png" />
+  <img src="assets/diagrams/architecture.png" alt="TriPick 시스템 아키텍처" />
+</picture>
 
 | 레이어          | 구성                                                                           |
 | --------------- | ------------------------------------------------------------------------------ |
@@ -100,7 +103,10 @@ LLM 추론은 외부 API 가 아니라 **자체 GPU 파드에서 서빙하는 Ge
 
 ## 동작 흐름
 
-<img src="assets/diagrams/flow.png" alt="일정 생성 · 재계획 흐름" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/diagrams/flow-dark.png" />
+  <img src="assets/diagrams/flow.png" alt="일정 생성 · 재계획 흐름" />
+</picture>
 
 - **FLOW A (일정 생성)** — 취향/조건 → CRAG 후보 검색 → 맥락 주입 → LLM 초안 → 제약 검증 → 저장
 - **FLOW B (재계획)** — 서버가 상황을 감지해 알림 → 사용자가 확인·요청 → BullMQ 잡 → FLOW A 재사용 → WebSocket + 인박스 통지
@@ -109,7 +115,10 @@ LLM 추론은 외부 API 가 아니라 **자체 GPU 파드에서 서빙하는 Ge
 
 ## 취향 기반 후보 검색 (RAG / CRAG)
 
-<img src="assets/diagrams/rag-crag.png" alt="RAG / CRAG 검색 파이프라인" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/diagrams/rag-crag-dark.png" />
+  <img src="assets/diagrams/rag-crag.png" alt="RAG / CRAG 검색 파이프라인" />
+</picture>
 
 pgvector 유사도만으로는 마이너 장소가 상위를 채운다. 그래서 confidence 를 6개 항의 가중합으로 계산하고
 (취향 · 지역 근접 · 맥락 · 대중 인지도 · 영업 가능 · 벡터 유사도), 기준에 못 미치면 카카오 로컬로 후보를 덧대 다시 평가한다.
