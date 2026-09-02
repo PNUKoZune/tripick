@@ -90,7 +90,11 @@ describe('PlaceEmbeddingRepository.searchByEmbedding scope', () => {
   it('지역 스코프는 정본 코드 등가 비교 + 라벨 없는 행 예외', async () => {
     const { repo, calls } = build();
 
-    await repo.searchByEmbedding([1, 0], { kind: 'region', region: { sido: '부산', sigungu: null } }, 16);
+    await repo.searchByEmbedding(
+      [1, 0],
+      { kind: 'region', region: { sido: '부산', sigungu: null } },
+      16,
+    );
 
     const { sql, params } = calls[0]!;
     expect(sql).toContain('region_code = $2');
@@ -103,7 +107,11 @@ describe('PlaceEmbeddingRepository.searchByEmbedding scope', () => {
   it('시도가 없으면 시군구 코드로 좁힌다', async () => {
     const { repo, calls } = build();
 
-    await repo.searchByEmbedding([1, 0], { kind: 'region', region: { sido: null, sigungu: '경주' } }, 16);
+    await repo.searchByEmbedding(
+      [1, 0],
+      { kind: 'region', region: { sido: null, sigungu: '경주' } },
+      16,
+    );
 
     expect(calls[0]!.sql).toContain('sigungu_code = $2');
     expect(calls[0]!.params[1]).toBe('경주');
@@ -112,7 +120,11 @@ describe('PlaceEmbeddingRepository.searchByEmbedding scope', () => {
   it('지역 코드가 둘 다 없으면 필터 없이 전역 검색', async () => {
     const { repo, calls } = build();
 
-    await repo.searchByEmbedding([1, 0], { kind: 'region', region: { sido: null, sigungu: null } }, 16);
+    await repo.searchByEmbedding(
+      [1, 0],
+      { kind: 'region', region: { sido: null, sigungu: null } },
+      16,
+    );
 
     expect(calls[0]!.sql).not.toContain('region_code =');
     expect(calls[0]!.sql).toContain('LIMIT $4');
@@ -172,6 +184,22 @@ describe('PlaceEmbeddingRepository 행사 기간 필터', () => {
     const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
     expect(calls[0]!.params.slice(1, 3)).toEqual([today, today]);
   });
+
+  it('현재 질의와 같은 임베딩 모델의 장소만 검색한다', async () => {
+    const { repo, calls } = build();
+
+    await repo.searchByEmbedding(
+      [1, 0],
+      { kind: 'region', region: { sido: '부산', sigungu: null } },
+      16,
+      undefined,
+      undefined,
+      'bge-m3-ko',
+    );
+
+    expect(calls[0]!.sql).toContain('embedding_model = $5');
+    expect(calls[0]!.params[4]).toBe('bge-m3-ko');
+  });
 });
 
 describe('PlaceEmbeddingRepository.findSamePlace', () => {
@@ -197,7 +225,7 @@ describe('PlaceEmbeddingRepository.findSamePlace', () => {
 describe('PlaceEmbeddingRepository.seedRegion', () => {
   it('폴백 시드는 DB 에 넣지 않는다 (모든 지역 검색에 남는 unlabeled 행이 된다)', async () => {
     const { repo, calls } = build();
-    const embed = jest.fn().mockResolvedValue([1, 0]);
+    const embed = jest.fn().mockResolvedValue(remoteEmbedding());
 
     await expect(repo.seedRegion('강릉', embed)).resolves.toBe(0);
     expect(embed).not.toHaveBeenCalled();
@@ -206,12 +234,30 @@ describe('PlaceEmbeddingRepository.seedRegion', () => {
 
   it('전용 seed 카탈로그가 있는 지역은 그대로 시딩한다', async () => {
     const { repo, calls } = build();
-    const embed = jest.fn().mockResolvedValue([1, 0]);
+    const embed = jest.fn().mockResolvedValue(remoteEmbedding());
 
     await expect(repo.seedRegion('서울', embed)).resolves.toBe(6);
-    expect(calls.filter((call) => call.sql.includes('INSERT INTO place_embeddings'))).toHaveLength(6);
+    expect(calls.filter((call) => call.sql.includes('INSERT INTO place_embeddings'))).toHaveLength(
+      6,
+    );
+  });
+
+  it('hash 폴백 seed 를 DB에 적재하지 않는다', async () => {
+    const { repo, calls } = build();
+    const embed = jest.fn().mockResolvedValue({
+      vector: [1, 0],
+      source: 'hash',
+      modelId: 'hash-fnv1a-v1:2',
+    });
+
+    await expect(repo.seedRegion('서울', embed)).rejects.toThrow('원격 임베딩 서버');
+    expect(calls.some((call) => call.sql.includes('INSERT INTO place_embeddings'))).toBe(false);
   });
 });
+
+function remoteEmbedding() {
+  return { vector: [1, 0], source: 'remote' as const, modelId: 'bge-m3-ko' };
+}
 
 function build(rows: unknown[] = []): { repo: PlaceEmbeddingRepository; calls: Call[] } {
   const calls: Call[] = [];

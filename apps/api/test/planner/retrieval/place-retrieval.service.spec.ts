@@ -20,7 +20,7 @@ describe('PlaceRetrievalService candidate eligibility', () => {
     };
     const service = new PlaceRetrievalService(
       config({ PLACE_RETRIEVAL_AUTO_SEED: 'false' }),
-      { embed: jest.fn().mockResolvedValue([1, 0]) } as any,
+      { embedWithSource: jest.fn().mockResolvedValue(remoteEmbedding()) } as any,
       { searchByEmbedding: jest.fn().mockResolvedValue([hospital, museum]) } as any,
       { search: jest.fn().mockResolvedValue([]) } as any,
       evaluator as any,
@@ -48,14 +48,19 @@ describe('PlaceRetrievalService 지역 하드 게이트', () => {
   function buildWithKakao(kakaoResults: RawPlaceCandidate[]) {
     const evaluator = {
       rank: jest.fn((places: RawPlaceCandidate[]) => places.map(ranked)),
-      selectTopDiverse: jest.fn((places: CandidatePlace[], limit: number) => places.slice(0, limit)),
+      selectTopDiverse: jest.fn((places: CandidatePlace[], limit: number) =>
+        places.slice(0, limit),
+      ),
       weights: jest.fn(() => DEFAULT_TERM_WEIGHTS),
     };
     const kakaoSearch = jest.fn().mockResolvedValue(kakaoResults);
     const service = new PlaceRetrievalService(
       config({ PLACE_RETRIEVAL_AUTO_SEED: 'false' }),
-      { embed: jest.fn().mockResolvedValue([1, 0]) } as any,
-      { searchByEmbedding: jest.fn().mockResolvedValue([]), countRegionCandidates: jest.fn() } as any,
+      { embedWithSource: jest.fn().mockResolvedValue(remoteEmbedding()) } as any,
+      {
+        searchByEmbedding: jest.fn().mockResolvedValue([]),
+        countRegionCandidates: jest.fn(),
+      } as any,
       { search: kakaoSearch } as any,
       evaluator as any,
       { getPopularityIndex: jest.fn().mockResolvedValue(disabledPopularityIndex()) } as any,
@@ -195,6 +200,46 @@ describe('PlaceRetrievalService anchor scope', () => {
   });
 });
 
+describe('PlaceRetrievalService embedding outage guard', () => {
+  it('hash 질의 벡터를 pgvector 와 비교하지 않고 외부 폴백으로 내린다', async () => {
+    const searchByEmbedding = jest.fn().mockResolvedValue(pool(6, 2));
+    const kakao = candidate('kakao-1', '광안리해수욕장', '여행 > 관광지');
+    kakao.source = 'kakao';
+    const evaluator = {
+      rank: jest.fn((places: RawPlaceCandidate[]) => places.map(ranked)),
+      selectTopDiverse: jest.fn((places: CandidatePlace[], limit: number) =>
+        places.slice(0, limit),
+      ),
+      weights: jest.fn(() => DEFAULT_TERM_WEIGHTS),
+    };
+    const service = new PlaceRetrievalService(
+      config({ PLACE_RETRIEVAL_AUTO_SEED: 'true' }),
+      {
+        embedWithSource: jest.fn().mockResolvedValue({
+          vector: [1, 0],
+          source: 'hash',
+          modelId: 'hash-fnv1a-v1:2',
+        }),
+      } as any,
+      {
+        searchByEmbedding,
+        countRegionCandidates: jest.fn(),
+        seedRegion: jest.fn(),
+      } as any,
+      { search: jest.fn().mockResolvedValue([kakao]) } as any,
+      evaluator as any,
+      { getPopularityIndex: jest.fn().mockResolvedValue(disabledPopularityIndex()) } as any,
+      { resolve: jest.fn().mockResolvedValue(null) } as any,
+    );
+
+    const result = await service.retrieve({ userId: 'u1', destination: '부산', limit: 4 });
+
+    expect(searchByEmbedding).not.toHaveBeenCalled();
+    expect(result.trace.embeddingSource).toBe('hash');
+    expect(result.trace.sources).toContain('kakao');
+  });
+});
+
 /**
  * 총 `total` 건 중 `dining` 건이 식음인 후보 풀. 식음의 마지막 한 건은 카페다 —
  * 반경 판정이 카페를 따로 세므로(카탈로그 비중이 1/6 이라 음식점만으로 채워지면 안 된다)
@@ -293,7 +338,7 @@ function buildService(options: {
   };
   const service = new PlaceRetrievalService(
     config({}),
-    { embed: jest.fn().mockResolvedValue([1, 0]) } as any,
+    { embedWithSource: jest.fn().mockResolvedValue(remoteEmbedding()) } as any,
     { searchByEmbedding: options.searchByEmbedding, countRegionCandidates: jest.fn() } as any,
     { search: jest.fn().mockResolvedValue([]) } as any,
     evaluator as any,
@@ -301,6 +346,15 @@ function buildService(options: {
     { resolve: jest.fn().mockResolvedValue(options.anchor) } as any,
   );
   return { service, evaluator };
+}
+
+function remoteEmbedding() {
+  return {
+    vector: [1, 0],
+    source: 'remote' as const,
+    modelId: 'bge-m3-ko',
+    remoteDimensions: 2,
+  };
 }
 
 function candidate(id: string, name: string, categoryDetail: string): RawPlaceCandidate {
