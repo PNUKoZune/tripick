@@ -145,6 +145,17 @@ export interface RetrievalTrace {
   fallbackUsed: boolean;
   averageConfidence: number;
   rejectedCount: number;
+  /** 외부 I/O와 재랭킹 단계별 벽시계 시간(ms). 병렬 단계의 합은 total보다 클 수 있다. */
+  durationsMs?: {
+    popularity: number;
+    anchor: number;
+    embedding: number;
+    seed: number;
+    pgvector: number;
+    kakao: number;
+    rerank: number;
+    total: number;
+  };
 }
 
 export interface RetrievalResult {

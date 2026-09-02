@@ -77,6 +77,7 @@ export class DestinationAnchorService {
   private readonly logger = new Logger(DestinationAnchorService.name);
   /** 목적지별 해석 결과. **실패(null)도 캐시한다** — 일자별 지역까지 겹치면 같은 실패를 반복 조회한다. */
   private readonly cache = new Map<string, { anchor: DestinationAnchor | null; expires: number }>();
+  private readonly inFlight = new Map<string, Promise<DestinationAnchor | null>>();
 
   constructor(
     private readonly config: ConfigService,
@@ -92,9 +93,19 @@ export class DestinationAnchorService {
     const cached = this.cache.get(key);
     if (cached && cached.expires > Date.now()) return cached.anchor;
 
-    const anchor = await this.resolveUncached(destination);
-    this.cache.set(key, { anchor, expires: Date.now() + this.ttlMs() });
-    return anchor;
+    const running = this.inFlight.get(key);
+    if (running) return running;
+
+    const pending = this.resolveUncached(destination).then((anchor) => {
+      this.cache.set(key, { anchor, expires: Date.now() + this.ttlMs() });
+      return anchor;
+    });
+    this.inFlight.set(key, pending);
+    try {
+      return await pending;
+    } finally {
+      if (this.inFlight.get(key) === pending) this.inFlight.delete(key);
+    }
   }
 
   private async resolveUncached(destination: string): Promise<DestinationAnchor | null> {
@@ -164,7 +175,9 @@ export class DestinationAnchorService {
   }
 
   private ttlMs(): number {
-    const value = Number(this.config.get<string | number>('DESTINATION_ANCHOR_TTL_MS', DEFAULT_TTL_MS));
+    const value = Number(
+      this.config.get<string | number>('DESTINATION_ANCHOR_TTL_MS', DEFAULT_TTL_MS),
+    );
     return Number.isFinite(value) && value > 0 ? value : DEFAULT_TTL_MS;
   }
 }
