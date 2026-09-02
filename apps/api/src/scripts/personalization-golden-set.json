@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "note": "같은 목적지에서 상반된 취향이 실제로 다른 정답을 올리는지 보는 paired golden set. 각 relevant는 방문 가능한 고유 장소명이며 음식명·지역명 자체는 넣지 않는다.",
+  "expectations": {
+    "minimumMeanNdcgLift": 0,
+    "minimumCounterfactualWinRate": 0.5,
+    "minimumGroupMemberCoverage": 0.8
+  },
+  "cases": [
+    {
+      "id": "seoul-heritage-vs-city",
+      "destination": "서울",
+      "expectRegion": "서울",
+      "personas": [
+        {
+          "id": "heritage",
+          "label": "궁궐·역사 중심 여행자",
+          "tasteTags": {
+            "food": ["korean"],
+            "mood": ["cultural", "nostalgic"],
+            "environment": ["village"],
+            "confidence": 0.9
+          },
+          "relevant": ["경복궁", "창덕궁", "덕수궁", "종묘", "북촌한옥마을", "국립중앙박물관"]
+        },
+        {
+          "id": "city-night",
+          "label": "도심 카페·야경 여행자",
+          "tasteTags": {
+            "food": ["cafe", "bakery"],
+            "mood": ["trendy", "romantic"],
+            "environment": ["city", "nightview"],
+            "confidence": 0.9
+          },
+          "relevant": ["남산서울타워", "롯데월드타워", "동대문디자인플라자", "청계천", "성수동카페거리", "홍대걷고싶은거리"]
+        }
+      ]
+    },
+    {
+      "id": "busan-beach-vs-local",
+      "destination": "부산",
+      "expectRegion": "부산",
+      "personas": [
+        {
+          "id": "beach-healing",
+          "label": "바다·휴식 여행자",
+          "tasteTags": {
+            "food": ["seafood"],
+            "mood": ["healing", "romantic"],
+            "environment": ["beach"],
+            "confidence": 0.9
+          },
+          "relevant": ["해운대해수욕장", "광안리해수욕장", "송정해수욕장", "다대포해수욕장", "오륙도", "송도해수욕장"]
+        },
+        {
+          "id": "local-culture",
+          "label": "시장·골목 문화 여행자",
+          "tasteTags": {
+            "food": ["korean", "bunsik"],
+            "mood": ["cultural", "nostalgic"],
+            "environment": ["village", "city"],
+            "confidence": 0.9
+          },
+          "relevant": ["감천문화마을", "흰여울문화마을", "자갈치시장", "국제시장", "부평깡통시장", "보수동책방골목"]
+        }
+      ]
+    },
+    {
+      "id": "jeju-outdoor-vs-cafe",
+      "destination": "제주",
+      "expectRegion": "제주",
+      "personas": [
+        {
+          "id": "outdoor",
+          "label": "오름·숲 액티비티 여행자",
+          "tasteTags": {
+            "food": [],
+            "mood": ["adventure", "healing"],
+            "environment": ["nature", "mountain"],
+            "confidence": 0.95
+          },
+          "relevant": ["한라산", "성산일출봉", "사려니숲길", "비자림", "산굼부리", "만장굴"]
+        },
+        {
+          "id": "cafe-romance",
+          "label": "카페·사진·해변 여행자",
+          "tasteTags": {
+            "food": ["cafe", "bakery"],
+            "mood": ["romantic", "trendy"],
+            "environment": ["beach", "island"],
+            "confidence": 0.9
+          },
+          "relevant": ["오설록티뮤지엄", "카멜리아힐", "협재해수욕장", "월정리해변", "애월한담해안산책로", "용두암"]
+        }
+      ]
+    },
+    {
+      "id": "gyeongju-heritage-vs-trendy",
+      "destination": "경주",
+      "expectRegion": "경북",
+      "personas": [
+        {
+          "id": "ancient-history",
+          "label": "고대 유적 몰입 여행자",
+          "tasteTags": {
+            "food": ["korean"],
+            "mood": ["cultural", "nostalgic"],
+            "environment": ["village"],
+            "confidence": 0.95
+          },
+          "relevant": ["불국사", "석굴암", "첨성대", "대릉원", "국립경주박물관", "양동마을"]
+        },
+        {
+          "id": "trendy-date",
+          "label": "감성 거리·데이트 여행자",
+          "tasteTags": {
+            "food": ["cafe", "bakery"],
+            "mood": ["trendy", "romantic"],
+            "environment": ["city", "nightview"],
+            "confidence": 0.9
+          },
+          "relevant": ["황리단길", "동궁과 월지", "월정교", "보문관광단지", "경주월드", "경주엑스포대공원"]
+        }
+      ]
+    },
+    {
+      "id": "gangneung-coast-vs-heritage",
+      "destination": "강릉",
+      "expectRegion": "강원",
+      "personas": [
+        {
+          "id": "coffee-coast",
+          "label": "커피·해변 여행자",
+          "tasteTags": {
+            "food": ["cafe", "bakery"],
+            "mood": ["healing", "romantic"],
+            "environment": ["beach"],
+            "confidence": 0.9
+          },
+          "relevant": ["안목해변", "강릉커피거리", "경포해수욕장", "강문해변", "사천해변", "테라로사"]
+        },
+        {
+          "id": "history-nature",
+          "label": "문화유산·자연 여행자",
+          "tasteTags": {
+            "food": ["korean"],
+            "mood": ["cultural", "nostalgic"],
+            "environment": ["nature", "mountain"],
+            "confidence": 0.9
+          },
+          "relevant": ["오죽헌", "선교장", "경포대", "대관령양떼목장", "정동진", "허균허난설헌기념공원"]
+        }
+      ]
+    }
+  ]
+}
