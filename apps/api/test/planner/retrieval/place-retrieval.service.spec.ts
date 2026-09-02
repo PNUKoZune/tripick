@@ -43,19 +43,80 @@ describe('PlaceRetrievalService candidate eligibility', () => {
   });
 });
 
+describe('PlaceRetrievalService critical path', () => {
+  it('인지도·앵커·임베딩을 동시에 시작하고 단계별 시간을 남긴다', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const popularity = jest.fn(async () => {
+      await gate;
+      return disabledPopularityIndex();
+    });
+    const resolveAnchor = jest.fn(async () => {
+      await gate;
+      return null;
+    });
+    const embed = jest.fn(async () => {
+      await gate;
+      return [1, 0];
+    });
+    const evaluator = {
+      rank: jest.fn((places: RawPlaceCandidate[]) => places.map(ranked)),
+      selectTopDiverse: jest.fn((places: CandidatePlace[], limit: number) =>
+        places.slice(0, limit),
+      ),
+      weights: jest.fn(() => DEFAULT_TERM_WEIGHTS),
+    };
+    const service = new PlaceRetrievalService(
+      config({ PLACE_RETRIEVAL_AUTO_SEED: 'false' }),
+      { embed } as any,
+      { searchByEmbedding: jest.fn().mockResolvedValue(pool(8, 4)) } as any,
+      { search: jest.fn().mockResolvedValue([]) } as any,
+      evaluator as any,
+      { getPopularityIndex: popularity } as any,
+      { resolve: resolveAnchor } as any,
+    );
+
+    const pending = service.retrieve({ userId: 'u1', destination: '부산', limit: 4 });
+    await Promise.resolve();
+    expect(popularity).toHaveBeenCalledTimes(1);
+    expect(resolveAnchor).toHaveBeenCalledTimes(1);
+    expect(embed).toHaveBeenCalledTimes(1);
+
+    release();
+    const result = await pending;
+    expect(result.trace.durationsMs).toEqual({
+      popularity: expect.any(Number),
+      anchor: expect.any(Number),
+      embedding: expect.any(Number),
+      seed: expect.any(Number),
+      pgvector: expect.any(Number),
+      kakao: expect.any(Number),
+      rerank: expect.any(Number),
+      total: expect.any(Number),
+    });
+  });
+});
+
 describe('PlaceRetrievalService 지역 하드 게이트', () => {
   /** 카카오 폴백을 태우기 위해 pgvector 를 비운다(풀이 얇아야 폴백이 돈다). */
   function buildWithKakao(kakaoResults: RawPlaceCandidate[]) {
     const evaluator = {
       rank: jest.fn((places: RawPlaceCandidate[]) => places.map(ranked)),
-      selectTopDiverse: jest.fn((places: CandidatePlace[], limit: number) => places.slice(0, limit)),
+      selectTopDiverse: jest.fn((places: CandidatePlace[], limit: number) =>
+        places.slice(0, limit),
+      ),
       weights: jest.fn(() => DEFAULT_TERM_WEIGHTS),
     };
     const kakaoSearch = jest.fn().mockResolvedValue(kakaoResults);
     const service = new PlaceRetrievalService(
       config({ PLACE_RETRIEVAL_AUTO_SEED: 'false' }),
       { embed: jest.fn().mockResolvedValue([1, 0]) } as any,
-      { searchByEmbedding: jest.fn().mockResolvedValue([]), countRegionCandidates: jest.fn() } as any,
+      {
+        searchByEmbedding: jest.fn().mockResolvedValue([]),
+        countRegionCandidates: jest.fn(),
+      } as any,
       { search: kakaoSearch } as any,
       evaluator as any,
       { getPopularityIndex: jest.fn().mockResolvedValue(disabledPopularityIndex()) } as any,

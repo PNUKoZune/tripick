@@ -92,7 +92,10 @@ describe('NaverPopularityIndex', () => {
 });
 
 describe('NaverPopularityIndex institution-qualifier matching', () => {
-  const idx = new NaverPopularityIndex('경주박물관 관람 후기, 경주박물관 주차. 시내 도서관 도서관 카페.', 2);
+  const idx = new NaverPopularityIndex(
+    '경주박물관 관람 후기, 경주박물관 주차. 시내 도서관 도서관 카페.',
+    2,
+  );
 
   it('정식명이 블로그 표현보다 길 때 수식어 뗀 코어로 매칭한다', () => {
     // 블로그는 '경주박물관'으로만 쓰지만 후보 정식명은 '국립경주박물관'
@@ -167,6 +170,53 @@ describe('NaverSearchService', () => {
     const index = await service.getPopularityIndex('부산');
     expect(index.docCount).toBe(0);
     expect(index.score('해운대')).toBe(NEUTRAL_POPULARITY);
+  });
+
+  it('같은 목적지의 동시 cache miss를 외부 요청 한 벌로 합친다', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mockedAxios.get.mockImplementation(async () => {
+      await gate;
+      return { data: { items: [{ title: '불국사', description: '추천' }] } } as never;
+    });
+    const service = new NaverSearchService(
+      config({ NAVER_SEARCH_CLIENT_ID: 'id', NAVER_SEARCH_CLIENT_SECRET: 'secret' }),
+    );
+
+    const first = service.getPopularityIndex('경주');
+    const second = service.getPopularityIndex('경주');
+    await Promise.resolve();
+    release();
+    await Promise.all([first, second]);
+
+    // 지역 3검색어×2 endpoint + 전국 대조 3검색어×2 endpoint. 두 호출이 겹쳐도 12회뿐이다.
+    expect(mockedAxios.get).toHaveBeenCalledTimes(12);
+  });
+
+  it('검색어 병렬 처리를 설정한 상한 안으로 제한한다', async () => {
+    let active = 0;
+    let peak = 0;
+    mockedAxios.get.mockImplementation(async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise<void>((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return { data: { items: [{ title: '장소', description: '추천' }] } } as never;
+    });
+    const service = new NaverSearchService(
+      config({
+        NAVER_SEARCH_CLIENT_ID: 'id',
+        NAVER_SEARCH_CLIENT_SECRET: 'secret',
+        NAVER_SEARCH_CONCURRENCY: '1',
+      }),
+    );
+
+    await service.collectMentionCorpus(['첫 검색', '둘 검색', '셋 검색']);
+
+    // 검색어는 한 번에 하나, 그 안의 blog+cafe 두 endpoint만 동시에 돈다.
+    expect(peak).toBe(2);
   });
 });
 
