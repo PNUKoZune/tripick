@@ -287,6 +287,8 @@ export interface TripSummaryDto {
   itemCount: number;
   /** planner 상세 화면 진입 가능 여부 */
   hasDetail: boolean;
+  /** 초기 AI 일정 생성 중이거나 최종 실패한 여행의 복구 화면 분기용 상태 */
+  generationState?: 'generating' | 'failed';
 }
 
 /** 플래너 헤더 시트 — 친구를 trip 멤버로 추가 */

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
@@ -80,6 +80,8 @@ const TYPE_LABEL: Record<string, string> = {
 
 @Injectable()
 export class MainPlannerService {
+  private readonly logger = new Logger(MainPlannerService.name);
+
   constructor(
     @InjectRepository(TripEntity)
     private readonly tripsRepo: Repository<TripEntity>,
@@ -108,20 +110,40 @@ export class MainPlannerService {
     const preference = await this.preferencesService.findByUser(user.id);
     const notes = this.composeCreateTripNotes(dto);
     const dayRegions = this.normalizeDayRegions(dto);
-    const trip = await this.tripsService.create(user.id, {
-      title: dto.title.trim(),
-      destination: dto.destination.trim(),
-      ...(dayRegions ? { dayRegions } : {}),
-      startDate: dto.startDate,
-      endDate: dto.endDate,
-      wakeTime: preference?.profile?.wakeTime ?? '08:00',
-      sleepTime: preference?.profile?.sleepTime ?? '23:00',
-      // 이동 수단은 여행마다 달라져 취향(프로필)에 두지 않는다 — 생성 폼에서 안 고르면 대중교통.
-      transportMode: dto.transportMode ?? 'transit',
-      ...(notes ? { notes } : {}),
-    } satisfies CreateTripDto);
+    let draftMembers: TripMemberDto[] = [];
+    const trip = await this.tripsService.create(
+      user.id,
+      {
+        title: dto.title.trim(),
+        destination: dto.destination.trim(),
+        ...(dayRegions ? { dayRegions } : {}),
+        startDate: dto.startDate,
+        endDate: dto.endDate,
+        wakeTime: preference?.profile?.wakeTime ?? '08:00',
+        sleepTime: preference?.profile?.sleepTime ?? '23:00',
+        // 이동 수단은 여행마다 달라져 취향(프로필)에 두지 않는다 — 생성 폼에서 안 고르면 대중교통.
+        transportMode: dto.transportMode ?? 'transit',
+        ...(notes ? { notes } : {}),
+      } satisfies CreateTripDto,
+      {
+        // Worker가 즉시 잡을 집어도 멤버가 먼저 보이게 큐 등록 전에 저장한다.
+        beforeEnqueue: async (savedTrip) => {
+          draftMembers = await this.addDraftMembers(savedTrip, user, dto.members);
+        },
+      },
+    );
 
-    await this.addDraftMembers(trip, user, dto.members);
+    // 큐 등록이 확정된 뒤에만 초대한다. 등록 실패로 trip이 롤백됐는데 죽은 링크 알림이 남지 않는다.
+    for (const member of draftMembers) {
+      try {
+        await this.notifyTripInvite(trip, user, member);
+      } catch (error) {
+        // 일정 생성 잡은 이미 등록됐다. 알림 실패 때문에 생성 요청을 실패로 보이거나 잡을 중복 등록하지 않는다.
+        this.logger.warn(
+          `Trip ${trip.id} 초대 알림 실패: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
     return this.toTripSummary(trip, user);
   }
 
@@ -662,11 +684,12 @@ export class MainPlannerService {
     trip: TripEntity,
     inviter: UserEntity,
     members: PlannerMemberDto[],
-  ): Promise<void> {
+  ): Promise<TripMemberDto[]> {
     const friendIds = members
       .map((member) => member.friendId ?? this.friendIdFromDraftMemberId(member.id))
       .filter((friendId): friendId is string => Boolean(friendId));
 
+    const createdMembers: TripMemberDto[] = [];
     for (const friendId of [...new Set(friendIds)]) {
       const friend = await this.friendsService.findAcceptedById(inviter.id, friendId);
       const created = await this.tripMembersService
@@ -677,11 +700,9 @@ export class MainPlannerService {
           }
           throw error;
         });
-      // 생성 시에도 pending 초대 멤버에게 trip_invite 를 보내야 수락 → 목록 노출이 가능하다.
-      if (created) {
-        await this.notifyTripInvite(trip, inviter, created);
-      }
+      if (created) createdMembers.push(created);
     }
+    return createdMembers;
   }
 
   private assertCreateTrip(dto: CreateTripRequestDto): void {
@@ -778,12 +799,19 @@ export class MainPlannerService {
       endDate: trip.endDate,
       durationLabel: this.durationLabel(trip.startDate, trip.endDate),
       status: this.summaryStatus(trip),
-      statusLabel: this.summaryStatusLabel(this.summaryStatus(trip)),
+      statusLabel:
+        trip.status === 'generating'
+          ? 'AI 일정 생성 중'
+          : trip.status === 'generation_failed'
+            ? '생성 실패'
+            : this.summaryStatusLabel(this.summaryStatus(trip)),
       members: members.map((member) => this.toPlannerMember(member)),
       coverEmoji: this.coverEmoji(trip.destination),
       highlight: trip.notes?.trim() || this.highlightFromItems(firstItems, trip.destination),
       itemCount,
-      hasDetail: true,
+      hasDetail: !['generating', 'generation_failed'].includes(trip.status),
+      ...(trip.status === 'generating' ? { generationState: 'generating' as const } : {}),
+      ...(trip.status === 'generation_failed' ? { generationState: 'failed' as const } : {}),
     };
   }
 
@@ -1451,7 +1479,14 @@ export class MainPlannerService {
   }
 
   private summaryStatus(trip: TripEntity): TripSummaryStatus {
-    if (trip.status === 'draft' || trip.status === 'cancelled') return 'draft';
+    if (
+      trip.status === 'draft' ||
+      trip.status === 'generating' ||
+      trip.status === 'generation_failed' ||
+      trip.status === 'cancelled'
+    ) {
+      return 'draft';
+    }
     if (trip.status === 'completed') return 'done';
 
     const today = toKstIsoDate();

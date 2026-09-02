@@ -39,6 +39,7 @@ import type {
   ReplanBudget,
   ReplanPace,
   ReplanRequestDto,
+  TripGenerationStage,
 } from '@tripick/types';
 import type { CandidatePlace, PoolCategoryQuota, RetrievalContext } from './retrieval/types';
 
@@ -102,6 +103,8 @@ interface GenerateOptions {
   mustIncludePlaces?: ReplanRequestDto['mustIncludePlaces'];
   /** 구조화 재계획 옵션 (강도·회피·동선·예산) */
   preferences?: ReplanRequestDto['preferences'];
+  /** 초기 생성 Worker가 실제 처리 단계를 BullMQ progress로 보고할 때만 사용한다. */
+  onProgress?: (stage: TripGenerationStage, progress: number) => Promise<void> | void;
 }
 
 /** 초안 한 회차의 판정 결과. 하드 제약 위반과 "다 못 담음"을 나눠 들고 있다. */
@@ -146,13 +149,19 @@ export class PlannerService {
     private readonly constraintEngine: ConstraintEngine,
   ) {}
 
-  async generateItinerary(tripId: string): Promise<ItineraryItemDto[]> {
+  async generateItinerary(
+    tripId: string,
+    onProgress?: GenerateOptions['onProgress'],
+  ): Promise<ItineraryItemDto[]> {
     const trip = await this.tripsRepo.findOneBy({ id: tripId });
     if (!trip) {
       throw new NotFoundException(`Trip ${tripId} not found`);
     }
 
-    const items = await this.buildAndStoreItinerary(trip, {});
+    await onProgress?.('preparing', 15);
+    const items = await this.buildAndStoreItinerary(trip, {
+      ...(onProgress ? { onProgress } : {}),
+    });
     trip.status = 'confirmed';
     await this.tripsRepo.save(trip);
     return items;
@@ -256,6 +265,8 @@ export class PlannerService {
     // 부분 재계획이라고 단일 풀(결합 라벨 destination) 경로로 떨어뜨리면 안 된다.
     const perDayMode = new Set(dayRegions.flat()).size > 1;
 
+    await options.onProgress?.('discovering_places', 35);
+
     let candidates: CandidatePlace[];
     let poolsByDay: CandidatePlace[][] | null = null;
     let traceLabel: string;
@@ -290,6 +301,8 @@ export class PlannerService {
     if (candidates.length === 0) {
       throw new BadRequestException('No place candidates found for itinerary generation');
     }
+
+    await options.onProgress?.('building_itinerary', 65);
 
     // 다시 짜는 일차의 실제 날짜. 프롬프트 day↔날짜 매핑과 날씨 힌트 범위가 이걸 공유한다.
     const planDates = planDays.map((day) => this.offsetDate(trip.startDate, day - 1));
@@ -431,6 +444,7 @@ export class PlannerService {
     const storePayload = [...doneStoreItems, ...toStore].sort(
       (a, b) => a.day - b.day || a.order - b.order,
     );
+    await options.onProgress?.('saving', 90);
     // 부분 재계획은 대상 일차만 갈아끼운다. 전체 재계획은 기존대로 통째로 교체.
     const saved = partial
       ? await this.itineraryService.replaceDayItems(trip.id, planDays, storePayload)

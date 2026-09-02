@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -61,9 +62,10 @@ export class MainPlannerController {
   }
 
   @Post('trips')
-  // 생성 한 건이 일정 전체를 LLM 으로 만든다 (trips.controller 의 생성과 같은 비용).
+  @HttpCode(HttpStatus.ACCEPTED)
+  // 실제 LLM 처리는 큐에서 실행하지만 등록 폭주가 GPU 대기열을 무한히 늘리므로 제한은 유지한다.
   @Throttle(LLM_GENERATION_LIMIT)
-  @ApiOperation({ summary: '신규 여행 생성 및 일정 생성' })
+  @ApiOperation({ summary: '신규 여행 저장 및 초기 AI 일정 생성 큐 등록' })
   createTrip(@CurrentUser() user: UserEntity, @Body() dto: CreateTripRequestBodyDto) {
     return this.mainPlannerService.createTrip(user, dto);
   }
