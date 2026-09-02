@@ -1,8 +1,18 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { GuardPlaceholder, useExpiredSessionExit, useSessionState } from '@/entities/session';
-import { LandingView } from '@/views/landing/ui/landing-view';
-import { TripsView } from '@/views/trips/ui/trips-view';
+
+// localStorage 세션 판정 뒤 실제로 선택된 화면만 받는다. 정적 import 로 두면 비로그인
+// 랜딩 방문자도 인증 전용 여행 목록 코드를, 로그인 사용자는 랜딩 코드를 함께 내려받는다.
+const LandingView = dynamic(
+  () => import('@/views/landing/ui/landing-view').then((module) => module.LandingView),
+  { loading: () => <GuardPlaceholder /> },
+);
+const TripsView = dynamic(
+  () => import('@/views/trips/ui/trips-view').then((module) => module.TripsView),
+  { loading: () => <GuardPlaceholder /> },
+);
 
 /**
  * 루트(`/`)는 인증 상태로 갈린다 — 로그인했으면 홈(여행 목록), 아니면 소개(랜딩).
