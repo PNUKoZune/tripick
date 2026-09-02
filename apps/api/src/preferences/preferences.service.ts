@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PreferenceEntity } from './preference.entity';
@@ -27,6 +27,8 @@ const DEFAULT_PROFILE: PreferenceProfileDto = {
 
 @Injectable()
 export class PreferencesService {
+  private readonly logger = new Logger(PreferencesService.name);
+
   constructor(
     @InjectRepository(PreferenceEntity)
     private readonly repo: Repository<PreferenceEntity>,
@@ -61,7 +63,7 @@ export class PreferencesService {
 
   /** 검색 개인화용 저장된 취향 벡터 조회 */
   async getPreferenceVector(userId: string): Promise<number[] | null> {
-    return this.preferenceEmbeddings.findVectorByUser(userId);
+    return this.preferenceEmbeddings.findVectorByUser(userId, this.embeddings.modelId());
   }
 
   async upsert(userId: string, dto: UpdatePreferenceDto): Promise<PreferenceEntity> {
@@ -147,7 +149,18 @@ export class PreferencesService {
     const text = buildPreferenceText(tasteTags, profile);
     // 취향 신호가 없으면 제네릭 벡터를 저장하지 않는다 (개인화 편향 방지)
     if (!text.trim()) return '';
-    const vector = await this.embeddings.embed(text);
-    return this.preferenceEmbeddings.upsertUserEmbedding(userId, vector, text);
+    const result = await this.embeddings.embedWithSource(text);
+    // 장애 중 만든 해시 벡터로 마지막 정상 원격 벡터를 덮어쓰면, 서버 복구 뒤에도 서로 다른
+    // 공간의 벡터를 비교하게 된다. 취향 원문은 preferences 에 저장하되 벡터는 마지막 정상본 유지.
+    if (result.source !== 'remote') {
+      this.logger.warn(
+        `취향 임베딩 갱신 생략 (user=${userId}): 원격 임베딩 서버가 없어 기존 정상 벡터를 유지합니다.`,
+      );
+      return '';
+    }
+    return this.preferenceEmbeddings.upsertUserEmbedding(userId, result.vector, text, {
+      modelId: result.modelId,
+      source: result.source,
+    });
   }
 }

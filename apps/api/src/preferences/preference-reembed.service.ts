@@ -4,7 +4,7 @@ import { DataSource } from 'typeorm';
 import type { PreferenceProfileDto, TasteTagDto } from '@tripick/types';
 import { PreferenceEmbeddingRepository } from './preference-embedding.repository';
 import { buildPreferenceText } from './preference-text';
-import { TextEmbeddingService } from '../embedding/text-embedding.service';
+import { TextEmbeddingService, type EmbeddingResult } from '../embedding/text-embedding.service';
 
 interface PreferenceRow {
   userId: string;
@@ -54,11 +54,12 @@ export class PreferenceReembedService {
         skipped += 1;
         continue;
       }
-      const vector = await this.embedStrict(text, allowHash);
+      const result = await this.embedStrict(text, allowHash);
       const embeddingId = await this.preferenceEmbeddings.upsertUserEmbedding(
         row.userId,
-        vector,
+        result.vector,
         text,
+        { modelId: result.modelId, source: result.source },
       );
       if (!embeddingId) {
         failed += 1;
@@ -101,11 +102,11 @@ export class PreferenceReembedService {
   }
 
   /** 해시 폴백이 감지되면(allowHash=false) 1회 재시도 후 중단한다. */
-  private async embedStrict(text: string, allowHash: boolean): Promise<number[]> {
+  private async embedStrict(text: string, allowHash: boolean): Promise<EmbeddingResult> {
     const first = await this.embeddings.embedWithSource(text);
-    if (first.source === 'remote' || allowHash) return first.vector;
+    if (first.source === 'remote' || allowHash) return first;
     const retry = await this.embeddings.embedWithSource(text);
-    if (retry.source === 'remote') return retry.vector;
+    if (retry.source === 'remote') return retry;
     throw new Error(
       '재임베딩 중 임베딩 서버 응답 실패(해시 폴백)로 중단합니다. 서버 복구 후 재실행하세요.',
     );
