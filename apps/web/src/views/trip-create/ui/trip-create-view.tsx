@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { DayPicker, type DateRange } from 'react-day-picker';
 import { ko } from 'react-day-picker/locale';
 import { format } from 'date-fns';
@@ -12,7 +12,11 @@ import type { PlannerMemberDto, ReplanBudget, ReplanPace, ReplanPlaceDto } from 
 
 import { fetchFriends } from '@/entities/friend';
 import { SessionGuard } from '@/entities/session';
-import { createTrip } from '@/entities/trip-plan';
+import {
+  createTrip,
+  fetchTripGeneration,
+  retryTripGeneration,
+} from '@/entities/trip-plan';
 import { DestinationSearchInput, DestinationMapPicker } from '@/features/destination-search';
 import { queryKeys } from '@/shared/api/query-keys';
 import { Button, PlaceSearchPicker, SegmentToggle, Switch, TimeField } from '@/shared/ui';
@@ -51,12 +55,18 @@ function toIsoDate(date: Date) {
 export function TripCreateView({
   initialDestination,
   initialFriendId,
-}: { initialDestination?: string; initialFriendId?: string } = {}) {
+  initialGenerationTripId,
+}: {
+  initialDestination?: string;
+  initialFriendId?: string;
+  initialGenerationTripId?: string;
+} = {}) {
   return (
     <SessionGuard>
       <TripCreateContent
         {...(initialDestination ? { initialDestination } : {})}
         {...(initialFriendId ? { initialFriendId } : {})}
+        {...(initialGenerationTripId ? { initialGenerationTripId } : {})}
       />
     </SessionGuard>
   );
@@ -65,9 +75,11 @@ export function TripCreateView({
 function TripCreateContent({
   initialDestination,
   initialFriendId,
+  initialGenerationTripId,
 }: {
   initialDestination?: string;
   initialFriendId?: string;
+  initialGenerationTripId?: string;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -123,21 +135,56 @@ function TripCreateContent({
   const [budget, setBudget] = useState<ReplanBudget>('normal');
   const [transportMode, setTransportMode] = useState<TransportMode | ''>('');
   const [notes, setNotes] = useState('');
-  const [navigating, setNavigating] = useState(false);
+  const navigationStarted = useRef(false);
+  const [generationTripId, setGenerationTripId] = useState(initialGenerationTripId ?? '');
 
   const NOTES_MAX = 200;
 
   const { mutate, isPending, error } = useMutation({
     mutationFn: createTrip,
-    onSuccess: async (trip) => {
-      // 생성 성공 후 /planner 이동이 끝날 때까지 로딩 화면을 유지 (isPending 이 내려가며 생기는 깜빡임 방지)
-      setNavigating(true);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.planner.trips });
-      router.push(`/planner?tripId=${trip.id}`);
+    onSuccess: (trip) => {
+      setGenerationTripId(trip.id);
+      // URL에 잡 식별자를 남겨 생성 중 새로고침해도 같은 큐 상태를 복구한다.
+      router.replace(`/trips/new?generationTripId=${encodeURIComponent(trip.id)}`, {
+        scroll: false,
+      });
     },
   });
 
-  const showLoading = isPending || navigating;
+  const generation = useQuery({
+    queryKey: queryKeys.planner.generation(generationTripId),
+    queryFn: () => fetchTripGeneration(generationTripId),
+    enabled: Boolean(generationTripId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === 'completed' || status === 'failed' ? false : 1_000;
+    },
+    retry: 2,
+  });
+
+  const retryGeneration = useMutation({
+    mutationFn: () => retryTripGeneration(generationTripId),
+    onSuccess: (next) => {
+      queryClient.setQueryData(queryKeys.planner.generation(generationTripId), next);
+    },
+  });
+
+  useEffect(() => {
+    if (
+      !generationTripId ||
+      generation.data?.status !== 'completed' ||
+      navigationStarted.current
+    ) {
+      return;
+    }
+    navigationStarted.current = true;
+    void (async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.planner.trips });
+      router.replace(`/planner?tripId=${generationTripId}`);
+    })();
+  }, [generation.data?.status, generationTripId, queryClient, router]);
+
+  const showLoading = isPending || Boolean(generationTripId);
 
   const errorMessage = error instanceof Error ? error.message : null;
 
@@ -509,7 +556,19 @@ function TripCreateContent({
           ) : null}
         </div>
 
-        {showLoading ? <TripCreateLoading /> : null}
+        {showLoading ? (
+          <TripCreateLoading
+            job={generation.data}
+            loadingStatus={generation.isLoading || isPending}
+            connectionError={generation.error instanceof Error ? generation.error.message : null}
+            retrying={retryGeneration.isPending}
+            retryError={
+              retryGeneration.error instanceof Error ? retryGeneration.error.message : null
+            }
+            onRetry={() => retryGeneration.mutate()}
+            onRefresh={() => void generation.refetch()}
+          />
+        ) : null}
       </div>
     </AppFrame>
   );

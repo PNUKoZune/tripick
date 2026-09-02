@@ -12,6 +12,7 @@ import type {
   PreferenceDto,
   ReplanJobDto,
   ReplanResultDto,
+  TripGenerationJobDto,
   TripSummaryDto,
 } from '@tripick/types';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -127,8 +128,20 @@ describe('Travel AI planner E2E', () => {
     });
     createdTripId = trip.id;
 
-    expect(trip.status).toBe('upcoming');
-    expect(trip.itemCount).toBeGreaterThanOrEqual(3);
+    // 생성 HTTP는 LLM을 기다리지 않고 큐 등록 직후 반환한다.
+    expect(trip.status).toBe('draft');
+    expect(trip.generationState).toBe('generating');
+    expect(trip.itemCount).toBe(0);
+
+    const generation = await waitForGeneration(trip.id);
+    expect(generation.status).toBe('completed');
+    expect(generation.progress).toBe(100);
+
+    const completedSummary = (await get<TripSummaryDto[]>('/main-planner/trips')).find(
+      (candidate) => candidate.id === trip.id,
+    );
+    expect(completedSummary).toMatchObject({ status: 'upcoming', hasDetail: true });
+    expect(completedSummary?.itemCount).toBeGreaterThanOrEqual(3);
 
     const planner = await get<PlannerTripDto>(`/main-planner/trips/${trip.id}`);
     expect(planner.meta.tasteTags.food).toContain('cafe');
@@ -186,6 +199,19 @@ describe('Travel AI planner E2E', () => {
       method: 'PUT',
       body: JSON.stringify(body),
     });
+  }
+
+  async function waitForGeneration(tripId: string): Promise<TripGenerationJobDto> {
+    const deadline = Date.now() + 110_000;
+    while (Date.now() < deadline) {
+      const status = await get<TripGenerationJobDto>(`/trips/${tripId}/generation`);
+      if (status.status === 'completed') return status;
+      if (status.status === 'failed') {
+        throw new Error(status.error ?? '초기 일정 생성 실패');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    throw new Error('초기 일정 생성 완료를 기다리다 시간 초과');
   }
 
   async function request<T>(path: string, init: RequestInit): Promise<T> {

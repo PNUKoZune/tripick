@@ -4,13 +4,13 @@ import { TripEntity } from './trip.entity';
 import { TripDayEntity } from './trip-day.entity';
 import { TripsController } from './trips.controller';
 import { TripsService } from './trips.service';
-import { PlannerModule } from '../planner/planner.module';
 import { TripMemberEntity } from '../trip-members/trip-member.entity';
+import { TripGenerationModule } from '../trip-generation/trip-generation.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([TripEntity, TripDayEntity, TripMemberEntity]),
-    PlannerModule,
+    TripGenerationModule,
   ],
   controllers: [TripsController],
   providers: [TripsService],
