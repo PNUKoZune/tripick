@@ -148,6 +148,14 @@ const DEFAULT_MIN_POPULARITY_COVERAGE = 0.05;
 const DEFAULT_TASTE_FALLBACK_NEUTRAL = true;
 
 /**
+ * 그룹 개인화에서 가장 낮은 구성원 점수에 주는 비중. 0이면 단순 평균, 1이면 least-misery다.
+ * 평균만 쓰면 다수와 매우 잘 맞는 장소가 한 명에게 극단적으로 안 맞아도 상위에 남고, least만
+ * 쓰면 한 명의 노이즈 벡터가 전체 결과를 지배한다. 기본 0.35는 다수 효용을 주축(0.65)으로 두되
+ * 최저 구성원이 순위를 실제로 움직일 수 있는 절충값이며 오프라인 그룹 지표로 조정한다.
+ */
+const DEFAULT_GROUP_LEAST_MISERY_WEIGHT = 0.35;
+
+/**
  * 앵커 반경 경계의 locality 점수 = **거리 항의 세기**. 0.95 는 사실상 끈 것(전 후보 동점)이고,
  * 낮출수록 앵커 가까운 쪽을 강하게 우대한다.
  *
@@ -381,7 +389,7 @@ export class CragEvaluatorService {
     const penalties: string[] = [];
     const retrieval = this.retrievalScore(candidate);
     const personalization = this.personalizationScore(candidate);
-    const taste = this.tasteScore(tags, context, personalization);
+    const taste = this.tasteScore(tags, context, personalization?.score);
     const locality = this.localityScore(candidate, context, expectedRegion, judgement.region, penalties);
     const contextScore = this.contextScore(candidate, tags, context);
     const availability = this.availabilityScore(candidate, context, penalties);
@@ -407,7 +415,8 @@ export class CragEvaluatorService {
       popularity,
       matchedTags,
       penalties,
-      ...(personalization !== undefined ? { personalization } : {}),
+      ...(personalization !== undefined ? { personalization: personalization.score } : {}),
+      ...(personalization?.group ? { groupPersonalization: personalization.group } : {}),
     };
 
     return {
@@ -432,20 +441,37 @@ export class CragEvaluatorService {
     context: RetrievalContext,
     personalization?: number,
   ): number {
+    const memberTagScores = (context.memberTasteTags ?? []).map((memberTags) =>
+      this.singleTasteScore(tags, memberTags),
+    );
+    const tagScore =
+      memberTagScores.length >= 2
+        ? this.groupFairnessBlend(memberTagScores)
+        : this.singleTasteScore(tags, context.tasteTags);
+    // 취향 벡터 유사도가 있으면 태그 매칭보다 우선해 리랭킹 (벡터 기반 개인화)
+    if (personalization === undefined) return tagScore;
+    return this.clamp(tagScore * 0.45 + personalization * 0.55);
+  }
+
+  private singleTasteScore(tags: string[], tasteTags?: RetrievalContext['tasteTags']): number {
     const neutralScore = 0.56;
-    const preferred = tasteTagsToKeywords(context.tasteTags);
+    const preferred = tasteTagsToKeywords(tasteTags);
     const judgeable = !this.tasteFallbackNeutral() || tags.some((tag) => !FALLBACK_ONLY_TAGS.has(tag));
     const rawTagScore =
       preferred.length === 0 || !judgeable
         ? neutralScore
         : this.clamp(0.35 + preferred.filter((tag) => tags.includes(tag)).length / preferred.length);
-    const rawConfidence = context.tasteTags?.confidence ?? 0;
+    const rawConfidence = tasteTags?.confidence ?? 0;
     const tasteConfidence = Number.isFinite(rawConfidence) ? this.clamp(rawConfidence) : 0;
     // 사진 분석 confidence 만큼만 태그 매칭 점수를 중립값에서 움직인다.
-    const tagScore = neutralScore + (rawTagScore - neutralScore) * tasteConfidence;
-    // 취향 벡터 유사도가 있으면 태그 매칭보다 우선해 리랭킹 (벡터 기반 개인화)
-    if (personalization === undefined) return tagScore;
-    return this.clamp(tagScore * 0.45 + personalization * 0.55);
+    return neutralScore + (rawTagScore - neutralScore) * tasteConfidence;
+  }
+
+  private groupFairnessBlend(scores: number[]): number {
+    const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+    const least = Math.min(...scores);
+    const leastWeight = this.groupLeastMiseryWeight();
+    return average * (1 - leastWeight) + least * leastWeight;
   }
 
   /**
@@ -514,10 +540,41 @@ export class CragEvaluatorService {
     return this.readWeight('CRAG_MIN_POPULARITY_COVERAGE', DEFAULT_MIN_POPULARITY_COVERAGE);
   }
 
-  /** 저장된 취향 벡터와의 코사인 유사도(-1~1)를 0~1 점수로 정규화 */
-  private personalizationScore(candidate: RawPlaceCandidate): number | undefined {
+  /**
+   * 저장 취향 코사인(-1~1)을 0~1로 바꾼다. 그룹이면 평균과 최저 구성원 점수를 섞어,
+   * 다수에게만 좋은 후보가 소수 구성원을 완전히 희생하며 상위에 오르는 것을 누른다.
+   */
+  private personalizationScore(candidate: RawPlaceCandidate):
+    | {
+        score: number;
+        group?: CragScore['groupPersonalization'];
+      }
+    | undefined {
+    const memberScores = (candidate.memberPreferenceSimilarities ?? [])
+      .filter((value) => Number.isFinite(value))
+      .map((value) => this.clamp((value + 1) / 2));
+    if (memberScores.length >= 2) {
+      const average = memberScores.reduce((sum, value) => sum + value, 0) / memberScores.length;
+      const least = Math.min(...memberScores);
+      const blended = this.groupFairnessBlend(memberScores);
+      return {
+        score: blended,
+        group: {
+          average,
+          least,
+          blended,
+          memberCount: memberScores.length,
+        },
+      };
+    }
     if (candidate.preferenceSimilarity === undefined) return undefined;
-    return this.clamp((candidate.preferenceSimilarity + 1) / 2);
+    return { score: this.clamp((candidate.preferenceSimilarity + 1) / 2) };
+  }
+
+  private groupLeastMiseryWeight(): number {
+    return this.clamp(
+      this.readWeight('CRAG_GROUP_LEAST_MISERY_WEIGHT', DEFAULT_GROUP_LEAST_MISERY_WEIGHT),
+    );
   }
 
   /**
@@ -704,9 +761,12 @@ export class CragEvaluatorService {
       score.personalization !== undefined && score.personalization >= 0.6
         ? `, 취향 벡터 ${Math.round(score.personalization * 100)}% 부합`
         : '';
+    const groupFairness = score.groupPersonalization
+      ? `, 그룹 최저 만족 ${Math.round(score.groupPersonalization.least * 100)}%`
+      : '';
     // NEUTRAL_POPULARITY(0.5) 초과는 네이버 추천 글에 실제 언급된 장소를 뜻한다.
     const popular = score.popularity > NEUTRAL_POPULARITY ? ', 네이버 추천 글 다수 언급' : '';
-    return `${matched}, ${sourceLabel} confidence ${confidence}%${personalized}${popular}${fallback}`;
+    return `${matched}, ${sourceLabel} confidence ${confidence}%${personalized}${groupFairness}${popular}${fallback}`;
   }
 
   /** ID·이름+주소 완전일치 중복 제거. 근접 중복은 점수 정렬 뒤 `collapseNearDuplicates` 가 맡는다. */

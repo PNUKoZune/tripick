@@ -43,6 +43,42 @@ describe('PlaceRetrievalService candidate eligibility', () => {
   });
 });
 
+describe('PlaceRetrievalService group personalization', () => {
+  it('passes compatible member vectors to pgvector and reports group coverage in trace', async () => {
+    const searchByEmbedding = jest.fn().mockResolvedValue(pool(6, 2));
+    const { service } = buildService({ anchor: null, searchByEmbedding });
+
+    const result = await service.retrieve({
+      userId: 'owner',
+      destination: '부산',
+      limit: 4,
+      preferenceVector: [Math.SQRT1_2, Math.SQRT1_2],
+      memberPreferenceVectors: [
+        [1, 0],
+        [0, 1],
+        [1, 0, 0],
+      ],
+      groupMemberCount: 4,
+    });
+
+    expect(searchByEmbedding).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.any(Object),
+      expect.any(Number),
+      [Math.SQRT1_2, Math.SQRT1_2],
+      expect.any(Object),
+      [
+        [1, 0],
+        [0, 1],
+      ],
+    );
+    expect(result.trace.groupPersonalization).toEqual({
+      memberCount: 4,
+      vectorMemberCount: 2,
+    });
+  });
+});
+
 describe('PlaceRetrievalService 지역 하드 게이트', () => {
   /** 카카오 폴백을 태우기 위해 pgvector 를 비운다(풀이 얇아야 폴백이 돈다). */
   function buildWithKakao(kakaoResults: RawPlaceCandidate[]) {

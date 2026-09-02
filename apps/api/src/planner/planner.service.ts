@@ -41,6 +41,7 @@ import type {
   ReplanRequestDto,
 } from '@tripick/types';
 import type { CandidatePlace, PoolCategoryQuota, RetrievalContext } from './retrieval/types';
+import { GroupPreferenceService } from './retrieval/group-preference.service';
 
 /**
  * 일차 수에 맞춘 후보 풀 종류별 하한. 하루에 필요한 건 끼니 2 + 휴식(카페) 1 이고, 볼거리는
@@ -144,6 +145,7 @@ export class PlannerService {
     private readonly routeHelper: RouteHelper,
     private readonly placeRetrieval: PlaceRetrievalService,
     private readonly constraintEngine: ConstraintEngine,
+    private readonly groupPreferences: GroupPreferenceService,
   ) {}
 
   async generateItinerary(tripId: string): Promise<ItineraryItemDto[]> {
@@ -178,10 +180,14 @@ export class PlannerService {
 
   private async buildAndStoreItinerary(trip: TripEntity, options: GenerateOptions): Promise<ItineraryItemDto[]> {
     this.assertTripWindow(trip);
-    const preference = await this.preferencesService.findByUser(trip.userId);
-    const tasteTags = preference?.tasteTags;
-    // 저장된 취향 벡터로 pgvector 검색을 개인화 (블렌딩 + 리랭킹)
-    const preferenceVector = await this.preferencesService.getPreferenceVector(trip.userId);
+    const [preference, groupPreference] = await Promise.all([
+      this.preferencesService.findByUser(trip.userId),
+      this.groupPreferences.forTrip(trip.id, trip.userId),
+    ]);
+    const tasteTags = groupPreference?.tasteTags ?? preference?.tasteTags;
+    // accepted 그룹의 centroid로 후보를 찾고, 개별 벡터는 평균+최저 만족 리랭킹에 쓴다.
+    // 그룹 서비스는 멤버 행이 없어도 owner-only 프로필을 반환한다.
+    const preferenceVector = groupPreference.preferenceVector;
     const dayCount = countTripDays(trip.startDate, trip.endDate);
     const wakeTime = trip.wakeTime ?? '08:30';
     const sleepTime = trip.sleepTime ?? '22:00';
@@ -237,6 +243,13 @@ export class PlannerService {
       },
       ...(tasteTags !== undefined ? { tasteTags } : {}),
       ...(preferenceVector ? { preferenceVector } : {}),
+      ...(groupPreference?.memberPreferenceVectors
+        ? { memberPreferenceVectors: groupPreference.memberPreferenceVectors }
+        : {}),
+      ...(groupPreference?.memberTasteTags
+        ? { memberTasteTags: groupPreference.memberTasteTags }
+        : {}),
+      ...(groupPreference ? { groupMemberCount: groupPreference.memberCount } : {}),
       ...(options.trigger !== undefined ? { trigger: options.trigger } : {}),
       ...(options.currentLocation !== undefined ? { currentLocation: options.currentLocation } : {}),
     } satisfies Omit<RetrievalContext, 'destination' | 'limit'>;

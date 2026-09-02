@@ -118,6 +118,38 @@ describe('PlaceEmbeddingRepository.searchByEmbedding scope', () => {
     expect(calls[0]!.sql).toContain('LIMIT $4');
   });
 
+  it('그룹 벡터는 후보별 구성원 코사인 배열로 한 쿼리에서 계산한다', async () => {
+    const { repo, calls } = build([
+      {
+        id: 'place-1',
+        name: '그룹 장소',
+        category: 'attraction',
+        address: '부산광역시',
+        coordinates: { lat: 35.15, lng: 129.11 },
+        similarity: '0.8',
+        preference_similarity: '0.7',
+        member_preference_similarities: '{0.9,-0.2}',
+      },
+    ]);
+
+    const places = await repo.searchByEmbedding(
+      [1, 0],
+      { kind: 'region', region: { sido: null, sigungu: null } },
+      16,
+      [0.5, 0.5],
+      undefined,
+      [
+        [1, 0],
+        [0, 1],
+      ],
+    );
+
+    const { sql, params } = calls[0]!;
+    expect(sql).toContain('ARRAY[1 - (embedding <=> $6::vector), 1 - (embedding <=> $7::vector)]');
+    expect(params.slice(4)).toEqual(['[0.5,0.5]', '[1,0]', '[0,1]']);
+    expect(places[0]!.memberPreferenceSimilarities).toEqual([0.9, -0.2]);
+  });
+
   it('앵커 스코프는 bbox 로 인덱스를 타고 정확 거리로 모서리를 깎는다', async () => {
     const { repo, calls } = build();
 

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { PreferenceEntity } from './preference.entity';
 import { PreferenceEmbeddingRepository } from './preference-embedding.repository';
 import { buildPreferenceText } from './preference-text';
@@ -38,6 +38,13 @@ export class PreferencesService {
     return this.repo.findOneBy({ userId });
   }
 
+  /** 그룹 플래너가 구성원 프로필을 한 번에 읽도록 제공하는 배치 API. */
+  async findByUsers(userIds: string[]): Promise<PreferenceEntity[]> {
+    const uniqueIds = [...new Set(userIds.filter(Boolean))];
+    if (uniqueIds.length === 0) return [];
+    return this.repo.find({ where: { userId: In(uniqueIds) } });
+  }
+
   /**
    * 취향 사진 URL 목록만 교체한다.
    * 태그가 그대로면 임베딩 텍스트도 그대로라 재임베딩(원격 호출)을 건너뛴다 —
@@ -62,6 +69,11 @@ export class PreferencesService {
   /** 검색 개인화용 저장된 취향 벡터 조회 */
   async getPreferenceVector(userId: string): Promise<number[] | null> {
     return this.preferenceEmbeddings.findVectorByUser(userId);
+  }
+
+  /** 그룹 플래너용 취향 벡터 배치 조회. */
+  async getPreferenceVectors(userIds: string[]): Promise<Map<string, number[]>> {
+    return this.preferenceEmbeddings.findVectorsByUsers([...new Set(userIds.filter(Boolean))]);
   }
 
   async upsert(userId: string, dto: UpdatePreferenceDto): Promise<PreferenceEntity> {

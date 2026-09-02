@@ -52,6 +52,32 @@ export class PreferenceEmbeddingRepository {
     }
   }
 
+  /** 그룹 일정 생성용 배치 조회. 멤버 수만큼 DB round-trip이 늘어나는 N+1을 막는다. */
+  async findVectorsByUsers(userIds: string[]): Promise<Map<string, number[]>> {
+    const uniqueIds = [...new Set(userIds.filter(Boolean))];
+    if (uniqueIds.length === 0) return new Map();
+    try {
+      const rows: Array<{ user_id: string; embedding: string | null }> =
+        await this.dataSource.query(
+          `SELECT user_id, embedding::text AS embedding
+           FROM preference_embeddings
+           WHERE user_id = ANY($1::uuid[])`,
+          [uniqueIds],
+        );
+      const vectors = new Map<string, number[]>();
+      for (const row of rows) {
+        const vector = this.parseVector(row.embedding);
+        if (vector) vectors.set(row.user_id, vector);
+      }
+      return vectors;
+    } catch (error) {
+      this.logger.warn(
+        `그룹 취향 벡터 조회 실패: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return new Map();
+    }
+  }
+
   private parseVector(raw: string | null): number[] | null {
     if (!raw) return null;
     const parsed = raw
