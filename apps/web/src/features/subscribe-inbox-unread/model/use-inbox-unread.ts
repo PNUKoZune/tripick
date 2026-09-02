@@ -29,13 +29,28 @@ export function useInboxUnread(): number {
 
   useEffect(() => {
     if (!hasSession) return;
-    const socket = getRealtimeSocket();
-    const handleInvalidate = () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.inbox.list });
-    };
-    socket.on('inbox_invalidate', handleInvalidate);
+    let active = true;
+    let unsubscribe = () => {};
+
+    void getRealtimeSocket()
+      .then((socket) => {
+        if (!active) return;
+        const handleInvalidate = () => {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.inbox.list });
+        };
+
+        socket.on('inbox_invalidate', handleInvalidate);
+        unsubscribe = () => socket.off('inbox_invalidate', handleInvalidate);
+      })
+      .catch((error) => {
+        if (active && error instanceof Error && error.name !== 'AbortError') {
+          console.warn('[realtime] 미읽음 배지 연결 실패:', error);
+        }
+      });
+
     return () => {
-      socket.off('inbox_invalidate', handleInvalidate);
+      active = false;
+      unsubscribe();
     };
   }, [hasSession, queryClient]);
 

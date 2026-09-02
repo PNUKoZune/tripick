@@ -36,18 +36,29 @@ export function useInboxToastSubscription() {
     if (!getStoredSession()) return;
 
     let active = true;
-    const socket = getRealtimeSocket();
+    let unsubscribe = () => {};
 
-    const handleToast = (payload: InboxToastDto) => {
-      if (!active) return;
-      setClosing(false);
-      setToast(payload);
-    };
+    void getRealtimeSocket()
+      .then((socket) => {
+        if (!active) return;
+        const handleToast = (payload: InboxToastDto) => {
+          if (!active) return;
+          setClosing(false);
+          setToast(payload);
+        };
 
-    socket.on('inbox_toast', handleToast);
+        socket.on('inbox_toast', handleToast);
+        unsubscribe = () => socket.off('inbox_toast', handleToast);
+      })
+      .catch((error) => {
+        if (active && error instanceof Error && error.name !== 'AbortError') {
+          console.warn('[realtime] 인박스 토스트 연결 실패:', error);
+        }
+      });
+
     return () => {
       active = false;
-      socket.off('inbox_toast', handleToast);
+      unsubscribe();
     };
   }, []);
 
