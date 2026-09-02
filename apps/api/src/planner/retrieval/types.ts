@@ -67,6 +67,8 @@ export interface RawPlaceCandidate extends PlaceDto {
   similarity?: number;
   /** 저장된 사용자 취향 벡터와의 코사인 유사도 (pgvector 후보만) */
   preferenceSimilarity?: number;
+  /** accepted 그룹 구성원 각각과의 코사인 유사도 (pgvector 후보만). */
+  memberPreferenceSimilarities?: number[];
   distanceM?: number;
 }
 
@@ -81,6 +83,13 @@ export interface CragScore {
   penalties: string[];
   /** 취향 벡터 기반 개인화 점수 (0~1). 벡터가 없으면 undefined */
   personalization?: number;
+  /** 그룹 평균과 최저 구성원 점수. 개인화 total은 두 값을 함께 반영한다. */
+  groupPersonalization?: {
+    average: number;
+    least: number;
+    blended: number;
+    memberCount: number;
+  };
   /** 네이버 추천 글 대중 인지도 점수 (0~1). 인덱스 비활성이면 중립값 */
   popularity: number;
 }
@@ -93,6 +102,7 @@ export interface CandidatePlace extends PlaceDto {
   crag: CragScore;
   similarity?: number;
   preferenceSimilarity?: number;
+  memberPreferenceSimilarities?: number[];
   distanceM?: number;
 }
 
@@ -102,6 +112,12 @@ export interface RetrievalContext {
   tasteTags?: TasteTagDto;
   /** 저장된 사용자 취향 임베딩 (preference_embeddings). 검색 개인화에 사용 */
   preferenceVector?: number[];
+  /** 그룹 구성원별 취향 벡터. 후보별 평균 + least-member 공정성 리랭킹에 사용한다. */
+  memberPreferenceVectors?: number[][];
+  /** 벡터가 없는 수동 동행자도 포함한 구성원별 취향 태그. */
+  memberTasteTags?: TasteTagDto[];
+  /** 태그까지 포함해 그룹 취향에 참여한 accepted 구성원 수 (trace용). */
+  groupMemberCount?: number;
   trigger?: ReplanTrigger;
   currentLocation?: Coordinates;
   notes?: string | null;
@@ -145,6 +161,10 @@ export interface RetrievalTrace {
   fallbackUsed: boolean;
   averageConfidence: number;
   rejectedCount: number;
+  groupPersonalization?: {
+    memberCount: number;
+    vectorMemberCount: number;
+  };
 }
 
 export interface RetrievalResult {

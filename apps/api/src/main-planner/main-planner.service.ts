@@ -17,6 +17,7 @@ import { KakaoLocalService } from '../planner/retrieval/kakao-local.service';
 import { PlaceEmbeddingRepository } from '../planner/retrieval/place-embedding.repository';
 import { PlaceRetrievalService } from '../planner/retrieval/place-retrieval.service';
 import { TourApiService } from '../planner/retrieval/tour-api.service';
+import { GroupPreferenceService } from '../planner/retrieval/group-preference.service';
 import type { CandidatePlace, RawPlaceCandidate } from '../planner/retrieval/types';
 import type { ParsedForecast } from '@tripick/utils';
 import { addDaysToIsoDate, countTripDays, getKstMinutes, toKstIsoDate } from '@tripick/utils';
@@ -96,6 +97,7 @@ export class MainPlannerService {
     private readonly placeEmbeddings: PlaceEmbeddingRepository,
     private readonly tourApi: TourApiService,
     private readonly routeHelper: RouteHelper,
+    private readonly groupPreferences: GroupPreferenceService,
   ) {}
 
   async listTrips(user: UserEntity): Promise<TripSummaryDto[]> {
@@ -108,20 +110,32 @@ export class MainPlannerService {
     const preference = await this.preferencesService.findByUser(user.id);
     const notes = this.composeCreateTripNotes(dto);
     const dayRegions = this.normalizeDayRegions(dto);
-    const trip = await this.tripsService.create(user.id, {
-      title: dto.title.trim(),
-      destination: dto.destination.trim(),
-      ...(dayRegions ? { dayRegions } : {}),
-      startDate: dto.startDate,
-      endDate: dto.endDate,
-      wakeTime: preference?.profile?.wakeTime ?? '08:00',
-      sleepTime: preference?.profile?.sleepTime ?? '23:00',
-      // 이동 수단은 여행마다 달라져 취향(프로필)에 두지 않는다 — 생성 폼에서 안 고르면 대중교통.
-      transportMode: dto.transportMode ?? 'transit',
-      ...(notes ? { notes } : {}),
-    } satisfies CreateTripDto);
+    let preparedMembers: TripMemberDto[] = [];
+    const trip = await this.tripsService.create(
+      user.id,
+      {
+        title: dto.title.trim(),
+        destination: dto.destination.trim(),
+        ...(dayRegions ? { dayRegions } : {}),
+        startDate: dto.startDate,
+        endDate: dto.endDate,
+        wakeTime: preference?.profile?.wakeTime ?? '08:00',
+        sleepTime: preference?.profile?.sleepTime ?? '23:00',
+        // 이동 수단은 여행마다 달라져 취향(프로필)에 두지 않는다 — 생성 폼에서 안 고르면 대중교통.
+        transportMode: dto.transportMode ?? 'transit',
+        ...(notes ? { notes } : {}),
+      } satisfies CreateTripDto,
+      // planner.generateItinerary 전에 accepted 동행자가 보여야 최초 후보 검색부터 그룹 취향을 쓴다.
+      async (saved) => {
+        preparedMembers = await this.addDraftMembers(saved, user, dto.members);
+      },
+    );
 
-    await this.addDraftMembers(trip, user, dto.members);
+    // 생성 실패 시 trip과 멤버가 롤백되므로, 죽은 여행을 가리키는 초대 알림이 남지 않게 성공 후 발송.
+    for (const member of preparedMembers) {
+      await this.notifyTripInvite(trip, user, member);
+    }
+
     return this.toTripSummary(trip, user);
   }
 
@@ -662,11 +676,12 @@ export class MainPlannerService {
     trip: TripEntity,
     inviter: UserEntity,
     members: PlannerMemberDto[],
-  ): Promise<void> {
+  ): Promise<TripMemberDto[]> {
     const friendIds = members
       .map((member) => member.friendId ?? this.friendIdFromDraftMemberId(member.id))
       .filter((friendId): friendId is string => Boolean(friendId));
 
+    const createdMembers: TripMemberDto[] = [];
     for (const friendId of [...new Set(friendIds)]) {
       const friend = await this.friendsService.findAcceptedById(inviter.id, friendId);
       const created = await this.tripMembersService
@@ -677,11 +692,9 @@ export class MainPlannerService {
           }
           throw error;
         });
-      // 생성 시에도 pending 초대 멤버에게 trip_invite 를 보내야 수락 → 목록 노출이 가능하다.
-      if (created) {
-        await this.notifyTripInvite(trip, inviter, created);
-      }
+      if (created) createdMembers.push(created);
     }
+    return createdMembers;
   }
 
   private assertCreateTrip(dto: CreateTripRequestDto): void {
@@ -1063,9 +1076,12 @@ export class MainPlannerService {
     item: ItineraryItemEntity,
     note?: string,
   ): Promise<PlannerAlternativeDto[]> {
-    const preference = await this.preferencesService.findByUser(trip.userId);
-    const tasteTags = preference?.tasteTags;
-    const preferenceVector = await this.preferencesService.getPreferenceVector(trip.userId);
+    const [preference, groupPreference] = await Promise.all([
+      this.preferencesService.findByUser(trip.userId),
+      this.groupPreferences.forTrip(trip.id, trip.userId),
+    ]);
+    const tasteTags = groupPreference?.tasteTags ?? preference?.tasteTags;
+    const preferenceVector = groupPreference.preferenceVector;
     // 여행 고정 노트 + 이번 요청 조건(note)을 합쳐 검색을 개인화
     const combinedNotes =
       [trip.notes, note].map((v) => v?.trim()).filter(Boolean).join(' · ') || null;
@@ -1080,6 +1096,13 @@ export class MainPlannerService {
         currentLocation: item.coordinates,
         ...(tasteTags !== undefined ? { tasteTags } : {}),
         ...(preferenceVector ? { preferenceVector } : {}),
+        ...(groupPreference?.memberPreferenceVectors
+          ? { memberPreferenceVectors: groupPreference.memberPreferenceVectors }
+          : {}),
+        ...(groupPreference?.memberTasteTags
+          ? { memberTasteTags: groupPreference.memberTasteTags }
+          : {}),
+        ...(groupPreference ? { groupMemberCount: groupPreference.memberCount } : {}),
       });
     } catch {
       return [];

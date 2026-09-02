@@ -48,6 +48,7 @@ function setup(opts: { db?: string | null; kto?: string | undefined } = {}) {
     { findOpeningHoursByKakaoId } as never, // placeEmbeddings
     { resolveOpeningHours } as never, // tourApi
     noop, // routeHelper
+    noop, // groupPreferences (이 테스트 경로에서는 사용 안 함)
   );
   const user = { id: 'u1' } as never;
   return { service, user, findOpeningHoursByKakaoId, resolveOpeningHours, saved };

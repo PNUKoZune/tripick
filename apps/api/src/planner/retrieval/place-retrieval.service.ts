@@ -90,6 +90,17 @@ export class PlaceRetrievalService {
       context.preferenceVector && context.preferenceVector.length === queryEmbedding.length
         ? context.preferenceVector
         : undefined;
+    const memberPreferenceVectors = (context.memberPreferenceVectors ?? []).filter(
+      (vector) => vector.length === queryEmbedding.length,
+    );
+    if (
+      context.memberPreferenceVectors &&
+      memberPreferenceVectors.length !== context.memberPreferenceVectors.length
+    ) {
+      this.logger.warn(
+        `그룹 취향 벡터 ${context.memberPreferenceVectors.length - memberPreferenceVectors.length}개를 질의 벡터 차원(${queryEmbedding.length}) 불일치로 제외합니다.`,
+      );
+    }
     if (context.preferenceVector && !preferenceVector) {
       this.logger.warn(
         `취향 벡터 차원(${context.preferenceVector.length})이 질의 벡터(${queryEmbedding.length})와 달라 개인화를 건너뜁니다. reembed:preferences 로 재임베딩이 필요합니다.`,
@@ -115,6 +126,7 @@ export class PlaceRetrievalService {
         visitWindow,
         quota,
         preferenceVector,
+        memberPreferenceVectors,
       );
       // 확정된 반경을 컨텍스트에 실어 카카오 폴백이 같은 범위를 보게 한다.
       context.anchor = { ...anchor, radiusM: around.radiusM };
@@ -127,6 +139,7 @@ export class PlaceRetrievalService {
           poolSize,
           preferenceVector,
           visitWindow,
+          memberPreferenceVectors,
         ),
         'pgvector',
       );
@@ -185,8 +198,12 @@ export class PlaceRetrievalService {
     const scope = context.anchor
       ? `anchor="${context.anchor.label}"/${context.anchor.radiusM / 1000}km`
       : `region=${regionFilter.sido ?? regionFilter.sigungu ?? 'none'}`;
+    const groupLabel =
+      context.groupMemberCount && context.groupMemberCount > 1
+        ? ` group=${context.groupMemberCount}members/${memberPreferenceVectors.length}vectors`
+        : '';
     this.logger.log(
-      `CRAG retrieval for "${context.destination}" ${scope} sources=${sources.join('+') || 'none'} avg=${averageConfidence.toFixed(2)} selected=${places.length} naver=${popularityIndex.docCount}docs/${popularCount}matched`,
+      `CRAG retrieval for "${context.destination}" ${scope} sources=${sources.join('+') || 'none'} avg=${averageConfidence.toFixed(2)} selected=${places.length} naver=${popularityIndex.docCount}docs/${popularCount}matched${groupLabel}`,
     );
     this.warnThinPool(context.destination, places, limit, quota, scope, sources);
 
@@ -198,6 +215,14 @@ export class PlaceRetrievalService {
         fallbackUsed: sources.some((source) => source !== 'pgvector'),
         averageConfidence,
         rejectedCount,
+        ...(context.groupMemberCount && context.groupMemberCount > 1
+          ? {
+              groupPersonalization: {
+                memberCount: context.groupMemberCount,
+                vectorMemberCount: memberPreferenceVectors.length,
+              },
+            }
+          : {}),
       },
     };
   }
@@ -217,6 +242,7 @@ export class PlaceRetrievalService {
     visitWindow: VisitWindow,
     quota: PoolCategoryQuota,
     preferenceVector?: number[],
+    memberPreferenceVectors?: number[][],
   ): Promise<{ candidates: RawPlaceCandidate[]; radiusM: number }> {
     const steps = this.radiusStepsM();
     const search = async (radiusM: number): Promise<RawPlaceCandidate[]> =>
@@ -227,6 +253,7 @@ export class PlaceRetrievalService {
           poolSize,
           preferenceVector,
           visitWindow,
+          memberPreferenceVectors,
         ),
         'pgvector',
       );
@@ -250,6 +277,7 @@ export class PlaceRetrievalService {
         poolSize,
         preferenceVector,
         visitWindow,
+        memberPreferenceVectors,
       ),
       'pgvector',
     );

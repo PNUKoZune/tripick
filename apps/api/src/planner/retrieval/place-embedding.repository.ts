@@ -119,6 +119,7 @@ interface PlaceEmbeddingRow {
   opening_hours?: string | null;
   similarity?: number | string | null;
   preference_similarity?: number | string | null;
+  member_preference_similarities?: number[] | string | null;
 }
 
 @Injectable()
@@ -133,6 +134,7 @@ export class PlaceEmbeddingRepository {
     limit: number,
     preferenceVector?: number[],
     visitWindow?: VisitWindow,
+    memberPreferenceVectors?: number[][],
   ): Promise<RawPlaceCandidate[]> {
     const params: unknown[] = [`[${embedding.join(',')}]`];
     const regionClause = this.scopeClause(scope, params);
@@ -147,6 +149,19 @@ export class PlaceEmbeddingRepository {
     if (hasPreference) {
       params.push(`[${preferenceVector!.join(',')}]`);
       preferenceSelect = `1 - (embedding <=> $${params.length}::vector) AS preference_similarity`;
+    }
+
+    const groupVectors = (memberPreferenceVectors ?? []).filter(
+      (vector) => Array.isArray(vector) && vector.length > 0,
+    );
+    let memberPreferenceSelect = 'NULL::float8[] AS member_preference_similarities';
+    if (groupVectors.length >= 2) {
+      const expressions = groupVectors.map((vector) => {
+        params.push(`[${vector.join(',')}]`);
+        return `1 - (embedding <=> $${params.length}::vector)`;
+      });
+      memberPreferenceSelect =
+        `ARRAY[${expressions.join(', ')}]::float8[] AS member_preference_similarities`;
     }
 
     try {
@@ -164,7 +179,8 @@ export class PlaceEmbeddingRepository {
                image_url,
                opening_hours,
                1 - (embedding <=> $1::vector) AS similarity,
-               ${preferenceSelect}
+               ${preferenceSelect},
+               ${memberPreferenceSelect}
         FROM place_embeddings
         WHERE embedding IS NOT NULL
           ${regionClause}
@@ -760,6 +776,7 @@ export class PlaceEmbeddingRepository {
 
     const similarity = this.numberOrUndefined(row.similarity);
     const preferenceSimilarity = this.numberOrUndefined(row.preference_similarity);
+    const memberPreferenceSimilarities = this.numberArray(row.member_preference_similarities);
     return [
       {
         ...place,
@@ -768,6 +785,7 @@ export class PlaceEmbeddingRepository {
         ...(row.destination_region ? { destinationRegion: row.destination_region } : {}),
         ...(similarity !== undefined ? { similarity } : {}),
         ...(preferenceSimilarity !== undefined ? { preferenceSimilarity } : {}),
+        ...(memberPreferenceSimilarities.length > 0 ? { memberPreferenceSimilarities } : {}),
       },
     ];
   }
@@ -785,5 +803,16 @@ export class PlaceEmbeddingRepository {
     if (value === null || value === undefined) return undefined;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  private numberArray(value: number[] | string | null | undefined): number[] {
+    if (!value) return [];
+    const raw = Array.isArray(value)
+      ? value
+      : value
+          .replace(/^\{/, '')
+          .replace(/\}$/, '')
+          .split(',');
+    return raw.map(Number).filter((item) => Number.isFinite(item));
   }
 }
