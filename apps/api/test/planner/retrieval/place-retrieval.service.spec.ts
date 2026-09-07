@@ -20,7 +20,7 @@ describe('PlaceRetrievalService candidate eligibility', () => {
     };
     const service = new PlaceRetrievalService(
       config({ PLACE_RETRIEVAL_AUTO_SEED: 'false' }),
-      { embed: jest.fn().mockResolvedValue([1, 0]) } as any,
+      { embedWithSource: jest.fn().mockResolvedValue({ source: 'remote', vector: [1, 0] }) } as any,
       { searchByEmbedding: jest.fn().mockResolvedValue([hospital, museum]) } as any,
       { search: jest.fn().mockResolvedValue([]) } as any,
       evaluator as any,
@@ -54,7 +54,7 @@ describe('PlaceRetrievalService 지역 하드 게이트', () => {
     const kakaoSearch = jest.fn().mockResolvedValue(kakaoResults);
     const service = new PlaceRetrievalService(
       config({ PLACE_RETRIEVAL_AUTO_SEED: 'false' }),
-      { embed: jest.fn().mockResolvedValue([1, 0]) } as any,
+      { embedWithSource: jest.fn().mockResolvedValue({ source: 'remote', vector: [1, 0] }) } as any,
       { searchByEmbedding: jest.fn().mockResolvedValue([]), countRegionCandidates: jest.fn() } as any,
       { search: kakaoSearch } as any,
       evaluator as any,
@@ -293,7 +293,7 @@ function buildService(options: {
   };
   const service = new PlaceRetrievalService(
     config({}),
-    { embed: jest.fn().mockResolvedValue([1, 0]) } as any,
+    { embedWithSource: jest.fn().mockResolvedValue({ source: 'remote', vector: [1, 0] }) } as any,
     { searchByEmbedding: options.searchByEmbedding, countRegionCandidates: jest.fn() } as any,
     { search: jest.fn().mockResolvedValue([]) } as any,
     evaluator as any,

@@ -31,7 +31,7 @@ describe('PreferencesService.upsert — 기상/취침 시간 교차 검증', () 
     create: jest.fn((value: Partial<PreferenceEntity>) => value),
     save: jest.fn(async (value: Partial<PreferenceEntity>) => value),
   };
-  const embeddings = { embed: jest.fn(async () => [0.1, 0.2]) };
+  const embeddings = { embedWithSource: jest.fn(async () => ({ source: 'remote', vector: [0.1, 0.2] })) };
   const preferenceEmbeddings = { upsertUserEmbedding: jest.fn(async () => 'emb-1') };
 
   beforeEach(() => {
@@ -71,7 +71,7 @@ function makeService(stored: Partial<PreferenceEntity> | null = null) {
     create: jest.fn((value: Partial<PreferenceEntity>) => value),
     save: jest.fn(async (value: Partial<PreferenceEntity>) => value),
   };
-  const embeddings = { embed: jest.fn(async () => [0.1, 0.2]) };
+  const embeddings = { embedWithSource: jest.fn(async () => ({ source: 'remote', vector: [0.1, 0.2] })) };
   const preferenceEmbeddings = {
     upsertUserEmbedding: jest.fn(async () => 'emb-1'),
     findVectorByUser: jest.fn(async () => [0.5, 0.6]),
@@ -108,29 +108,29 @@ describe('PreferencesService.setPhotoKeys', () => {
   it('취향 행이 없으면 기본값으로 새로 만들고 재임베딩하지 않는다', async () => {
     const { service, repo, embeddings } = makeService(null);
 
-    const saved = await service.setPhotoKeys('u1', ['a.jpg', 'b.jpg']);
+    const saved = await service.setPhotoKeys('u1', ['preferences/u1/a.jpg', 'preferences/u1/b.jpg']);
 
     expect(repo.create).toHaveBeenCalled();
-    expect(saved.photoKeys).toEqual(['a.jpg', 'b.jpg']);
+    expect(saved.photoKeys).toEqual(['preferences/u1/a.jpg', 'preferences/u1/b.jpg']);
     // 태그가 바뀌지 않았으므로 원격 임베딩 호출은 건너뛴다.
-    expect(embeddings.embed).not.toHaveBeenCalled();
+    expect(embeddings.embedWithSource).not.toHaveBeenCalled();
   });
 
   it('남지 않은 사진의 photoTags·disabledPhotoTags 를 함께 정리한다', async () => {
     const stored: Partial<PreferenceEntity> = {
-      photoKeys: ['a.jpg', 'b.jpg'],
+      photoKeys: ['preferences/u1/a.jpg', 'preferences/u1/b.jpg'],
       photoTags: {
-        'a.jpg': { food: ['cafe'], mood: [], environment: [], confidence: 0.8 },
-        'b.jpg': { food: ['korean'], mood: [], environment: [], confidence: 0.8 },
+        'preferences/u1/a.jpg': { food: ['cafe'], mood: [], environment: [], confidence: 0.8 },
+        'preferences/u1/b.jpg': { food: ['korean'], mood: [], environment: [], confidence: 0.8 },
       } as any,
-      disabledPhotoTags: { 'b.jpg': ['korean'] } as any,
+      disabledPhotoTags: { 'preferences/u1/b.jpg': ['korean'] } as any,
     };
     const { service } = makeService(stored);
 
-    const saved = await service.setPhotoKeys('u1', ['a.jpg']);
+    const saved = await service.setPhotoKeys('u1', ['preferences/u1/a.jpg']);
 
-    expect(saved.photoKeys).toEqual(['a.jpg']);
-    expect(Object.keys(saved.photoTags ?? {})).toEqual(['a.jpg']);
+    expect(saved.photoKeys).toEqual(['preferences/u1/a.jpg']);
+    expect(Object.keys(saved.photoTags ?? {})).toEqual(['preferences/u1/a.jpg']);
     expect(saved.disabledPhotoTags).toEqual({});
   });
 });
@@ -171,7 +171,7 @@ describe('PreferencesService.upsert — 병합·임베딩', () => {
       tasteTags: { food: ['cafe'], mood: [], environment: [], confidence: 0.9 },
     });
 
-    expect(embeddings.embed).toHaveBeenCalledTimes(1);
+    expect(embeddings.embedWithSource).toHaveBeenCalledTimes(1);
     expect(preferenceEmbeddings.upsertUserEmbedding).toHaveBeenCalledTimes(1);
     expect(saved.embeddingId).toBe('emb-1');
   });
@@ -184,8 +184,16 @@ describe('PreferencesService.upsert — 병합·임베딩', () => {
     });
 
     // buildPreferenceText 가 빈 문자열이면 embed·upsert 를 건너뛴다.
-    expect(embeddings.embed).not.toHaveBeenCalled();
+    expect(embeddings.embedWithSource).not.toHaveBeenCalled();
     expect(preferenceEmbeddings.upsertUserEmbedding).not.toHaveBeenCalled();
     expect(saved.embeddingId).toBeUndefined();
+  });
+
+  it('keeps the last semantic embedding when the provider falls back to a hash', async () => {
+    const { service, embeddings, preferenceEmbeddings } = makeService({ ...storedPreference({}), embeddingId: 'last-good' });
+    embeddings.embedWithSource.mockResolvedValueOnce({ source: 'hash', vector: [1, 0] });
+    const saved = await service.upsert('u1', { tasteTags: { food: ['cafe'] } });
+    expect(saved.embeddingId).toBe('last-good');
+    expect(preferenceEmbeddings.upsertUserEmbedding).not.toHaveBeenCalled();
   });
 });

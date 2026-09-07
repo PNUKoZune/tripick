@@ -6,6 +6,7 @@ import { PreferenceEmbeddingRepository } from './preference-embedding.repository
 import { buildPreferenceText } from './preference-text';
 import { TextEmbeddingService } from '../embedding/text-embedding.service';
 import { pruneToPhotos } from './photo-taste';
+import { ownedPreferencePhotos, ownsPreferencePhoto } from './photo-ownership';
 import type { PreferenceProfileDto, TasteTagDto, UpdatePreferenceDto } from '@tripick/types';
 
 const EMPTY_TASTE_TAGS: TasteTagDto = {
@@ -35,7 +36,13 @@ export class PreferencesService {
   ) {}
 
   async findByUser(userId: string): Promise<PreferenceEntity | null> {
-    return this.repo.findOneBy({ userId });
+    const preference = await this.repo.findOneBy({ userId });
+    if (!preference) return null;
+    // Also discard invalid legacy references before signing, deleting or analyzing them.
+    preference.photoKeys = ownedPreferencePhotos(userId, preference.photoKeys ?? []);
+    preference.photoTags = pruneToPhotos(preference.photoTags ?? {}, preference.photoKeys);
+    preference.disabledPhotoTags = pruneToPhotos(preference.disabledPhotoTags ?? {}, preference.photoKeys);
+    return preference;
   }
 
   /**
@@ -44,6 +51,7 @@ export class PreferencesService {
    * 업로드 직후처럼 아직 분석 결과가 없는 시점에 upsert 를 쓰면 임베딩만 헛돈다.
    */
   async setPhotoKeys(userId: string, keys: string[]): Promise<PreferenceEntity> {
+    this.assertPhotoOwnership(userId, keys);
     const pref =
       (await this.repo.findOneBy({ userId })) ??
       this.repo.create({
@@ -65,7 +73,8 @@ export class PreferencesService {
   }
 
   async upsert(userId: string, dto: UpdatePreferenceDto): Promise<PreferenceEntity> {
-    let pref = await this.repo.findOneBy({ userId });
+    if (dto.photoKeys) this.assertPhotoOwnership(userId, dto.photoKeys);
+    let pref = await this.findByUser(userId);
     const incomingTasteTags = dto?.tasteTags ?? {};
     const nextTags: TasteTagDto = {
       food: [...new Set(incomingTasteTags.food ?? pref?.tasteTags.food ?? EMPTY_TASTE_TAGS.food)],
@@ -147,7 +156,15 @@ export class PreferencesService {
     const text = buildPreferenceText(tasteTags, profile);
     // 취향 신호가 없으면 제네릭 벡터를 저장하지 않는다 (개인화 편향 방지)
     if (!text.trim()) return '';
-    const vector = await this.embeddings.embed(text);
-    return this.preferenceEmbeddings.upsertUserEmbedding(userId, vector, text);
+    const result = await this.embeddings.embedWithSource(text);
+    // Keep the last semantic vector when the provider is down or returns an invalid vector.
+    if (result.source !== 'remote') return '';
+    return this.preferenceEmbeddings.upsertUserEmbedding(userId, result.vector, text);
+  }
+
+  private assertPhotoOwnership(userId: string, keys: string[]): void {
+    if (keys.some((key) => !ownsPreferencePhoto(userId, key))) {
+      throw new BadRequestException('본인이 업로드한 사진만 사용할 수 있습니다.');
+    }
   }
 }

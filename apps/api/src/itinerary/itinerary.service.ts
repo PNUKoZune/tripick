@@ -23,14 +23,16 @@ export class ItineraryService {
   }
 
   async replaceTripItems(tripId: string, items: CreateItineraryItemDto[]): Promise<ItineraryItemEntity[]> {
-    await this.repo.delete({ tripId });
-    const entities = items.map((item) =>
-      this.repo.create({
+    return this.repo.manager.transaction(async (manager) => {
+      const repo = manager.getRepository(ItineraryItemEntity);
+      await repo.delete({ tripId });
+      const entities = items.map((item) => repo.create({
         ...item,
+        tripId,
         scheduledAt: new Date(item.scheduledAt),
-      }),
-    );
-    return this.repo.save(entities);
+      }));
+      return entities.length > 0 ? repo.save(entities) : [];
+    });
   }
 
   /**

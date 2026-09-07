@@ -84,10 +84,11 @@ export class PlaceRetrievalService {
     const queryText = this.buildQueryText(context);
     const sources: RetrievalSource[] = [];
     const rawCandidates: RawPlaceCandidate[] = [];
-    const queryEmbedding = await this.embeddings.embed(queryText);
+    const embedding = await this.embeddings.embedWithSource(queryText);
+    const queryEmbedding = embedding.vector;
     // 차원이 맞는 취향 벡터만 사용 (차원 불일치 시 pgvector 코사인이 통째로 실패하는 것 방지)
     const preferenceVector =
-      context.preferenceVector && context.preferenceVector.length === queryEmbedding.length
+      embedding.source === 'remote' && context.preferenceVector && context.preferenceVector.length === queryEmbedding.length
         ? context.preferenceVector
         : undefined;
     if (context.preferenceVector && !preferenceVector) {
@@ -106,7 +107,9 @@ export class PlaceRetrievalService {
     // 기간 있는 행사(축제)는 이 구간과 겹칠 때만 후보로 남는다. 여행 날짜를 모르면 오늘 기준.
     const visitWindow = this.visitWindow(context);
     let pgvector: RawPlaceCandidate[];
-    if (anchor) {
+    if (embedding.source !== 'remote') {
+      pgvector = [];
+    } else if (anchor) {
       const around = await this.searchAroundAnchor(
         anchor,
         searchEmbedding,
@@ -320,7 +323,11 @@ export class PlaceRetrievalService {
     if (count > 0) return;
 
     try {
-      await this.placeEmbeddings.seedRegion(destination, (text) => this.embeddings.embed(text));
+      await this.placeEmbeddings.seedRegion(destination, async (text) => {
+        const result = await this.embeddings.embedWithSource(text);
+        if (result.source !== 'remote') throw new Error('Semantic embedding unavailable');
+        return result.vector;
+      });
     } catch (error) {
       this.logger.warn(
         `Local place embedding seed skipped: ${error instanceof Error ? error.message : String(error)}`,

@@ -8,6 +8,7 @@ import { StorageService } from '../storage/storage.service';
 import { PreferencesService } from './preferences.service';
 import { PreferenceEntity } from './preference.entity';
 import { UpdatePreferenceBodyDto } from './dto/preference.dto';
+import { ownedPreferencePhotos } from './photo-ownership';
 
 @ApiTags('Preferences')
 @ApiBearerAuth()
@@ -45,7 +46,7 @@ export class PreferencesController {
     preference: PreferenceEntity | null,
   ): Promise<(PreferenceEntity & { photos: PreferencePhotoRefDto[] }) | null> {
     if (!preference) return null;
-    const keys = preference.photoKeys ?? [];
+    const keys = ownedPreferencePhotos(preference.userId, preference.photoKeys ?? []);
     const urls = keys.length > 0 ? await this.storage.signedUrls(keys) : [];
     return Object.assign(preference, {
       photos: keys.map((key, index) => ({ key, url: urls[index] ?? '' })),

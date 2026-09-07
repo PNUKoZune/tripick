@@ -148,6 +148,7 @@ describe('PreferenceAnalysisService.runJob', () => {
 
   it('reports progress per analyzed photo', async () => {
     const { service } = makeService({
+      findByUser: jest.fn().mockResolvedValue({ photoKeys: ['preferences/u1/1.png', 'preferences/u1/2.png'], photoTags: {} }),
       analyzePhoto: jest.fn().mockResolvedValue(ok({ food: ['cafe'], confidence: 0.5 })),
     });
     const job = makeJob({

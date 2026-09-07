@@ -8,6 +8,7 @@ import { createE2EApp, TestAuthGuard } from '../e2e/create-e2e-app';
 import { UserEntity } from '../../src/users/user.entity';
 import { WithdrawalReasonEntity } from '../../src/users/withdrawal-reason.entity';
 import { UsersController } from '../../src/users/users.controller';
+import { AccessSessionsService } from '../../src/auth/access-sessions.service';
 import { UsersService } from '../../src/users/users.service';
 import { FcmTokenEntity } from '../../src/notification/fcm-token.entity';
 import { RefreshTokenEntity } from '../../src/auth/entities/refresh-token.entity';
@@ -50,6 +51,7 @@ describe('Users (e2e)', () => {
       controllers: [UsersController],
       providers: [
         UsersService,
+        AccessSessionsService,
         FcmTokenService,
         { provide: StorageService, useValue: storage },
       ],
@@ -335,7 +337,7 @@ describe('Users (e2e)', () => {
         preferences.create({
           userId: uid,
           // 취향 사진은 값이 곧 비공개 버킷 키다(URL 변환 없음).
-          photoKeys: ['preferences/u/1-0.jpg', 'preferences/u/1-1.jpg'],
+          photoKeys: [`preferences/${uid}/1-0.jpg`, `preferences/${uid}/1-1.jpg`, 'preferences/other-user/private.png'],
         }),
       );
       storage.keyFromPublicUrl.mockImplementation((url: string) =>
@@ -357,7 +359,7 @@ describe('Users (e2e)', () => {
       ]);
       expect(
         storage.deletePrivateObject.mock.calls.map(([key]: [string]) => key).sort(),
-      ).toEqual(['preferences/u/1-0.jpg', 'preferences/u/1-1.jpg']);
+      ).toEqual([`preferences/${uid}/1-0.jpg`, `preferences/${uid}/1-1.jpg`]);
       storage.keyFromPublicUrl.mockReturnValue(null);
     });
 

@@ -6,7 +6,7 @@
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"],
-      "env": ["SENTRY_ORG", "SENTRY_PROJECT"],
+      "env": ["SENTRY_ORG", "SENTRY_PROJECT", "TRIPICK_API_ORIGIN", "TRIPICK_STORAGE_ORIGIN", "TRIPICK_PRIVATE_STORAGE_ORIGIN"],
       "passThroughEnv": ["SENTRY_AUTH_TOKEN"]
     },
     "dev": {

@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import { io, type Socket } from 'socket.io-client';
 import type { ReplanResultDto } from '@tripick/types';
+import { AccessSessionsService } from '../../src/auth/access-sessions.service';
 import { RealtimeGateway } from '../../src/realtime/realtime.gateway';
 import { TripMembersService } from '../../src/trip-members/trip-members.service';
 
@@ -33,6 +34,7 @@ describe('RealtimeGateway 인증/인가 e2e', () => {
       imports: [JwtModule.register({ secret: JWT_SECRET, signOptions: { expiresIn: '1h' } })],
       providers: [
         RealtimeGateway,
+        { provide: AccessSessionsService, useValue: { validate: async () => ({}), onRevoked: () => () => {} } },
         { provide: TripMembersService, useValue: { canAccessTrip } },
       ],
     }).compile();
