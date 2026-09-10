@@ -9,7 +9,6 @@ import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.tripick.place.appinfo.AppInfoPackage
 import com.tripick.place.authtab.AuthTabPackage
 import com.tripick.place.filesave.FileSavePackage
-import com.tripick.place.location.LocationTrackingPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -18,8 +17,6 @@ class MainApplication : Application(), ReactApplication {
       context = applicationContext,
       packageList =
         PackageList(this).packages.apply {
-          // 백그라운드 위치 추적 foreground service 모듈 (autolink 불가, 수동 등록)
-          add(LocationTrackingPackage())
           // 웹이 만든 이미지·PDF 를 다운로드 폴더에 저장하는 모듈 (WebView 는 data: URI 를 못 받는다)
           add(FileSavePackage())
           // 설정 화면이 웹 빌드 버전 대신 앱 versionName 을 보여주도록 값을 넘기는 모듈
