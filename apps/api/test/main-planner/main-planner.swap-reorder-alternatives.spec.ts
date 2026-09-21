@@ -64,6 +64,7 @@ function setup(opts: {
   retrievePlaces?: CandidatePlace[];
   retrieveThrows?: boolean;
   etaSec?: number;
+  groupPreference?: Record<string, unknown>;
 } = {}) {
   const items = opts.items ?? [];
   const saved: FakeItem[] = [];
@@ -96,6 +97,11 @@ function setup(opts: {
     }),
   };
   const routeHelper = { getEta: jest.fn(async () => ({ durationSec: opts.etaSec ?? 600 })) };
+  const groupPreferences = {
+    forTrip: jest.fn().mockResolvedValue(
+      opts.groupPreference ?? { memberCount: 1, vectorMemberCount: 0 },
+    ),
+  };
 
   const noop = {} as never;
   const service = new MainPlannerService(
@@ -112,9 +118,20 @@ function setup(opts: {
     noop, // placeEmbeddings
     noop, // tourApi
     routeHelper as never,
+    groupPreferences as never,
   );
   const user = { id: 'u1', nickname: '코티' } as never;
-  return { service, user, itemsRepo, tripsService, inboxService, placeRetrieval, routeHelper, saved };
+  return {
+    service,
+    user,
+    itemsRepo,
+    tripsService,
+    inboxService,
+    placeRetrieval,
+    routeHelper,
+    groupPreferences,
+    saved,
+  };
 }
 
 describe('MainPlannerService.swap', () => {
@@ -192,6 +209,46 @@ describe('MainPlannerService.reorderItems', () => {
 
 describe('MainPlannerService.getAlternatives', () => {
   const item = makeItem({ id: 'item-1', name: '현재장소', type: 'attraction' });
+
+  it('accepted group profile is used for alternative retrieval', async () => {
+    const groupPreference = {
+      memberCount: 2,
+      vectorMemberCount: 2,
+      tasteTags: {
+        food: ['cafe', 'korean'],
+        mood: ['trendy', 'cultural'],
+        environment: ['city', 'village'],
+        confidence: 0.9,
+      },
+      preferenceVector: [Math.SQRT1_2, Math.SQRT1_2],
+      memberPreferenceVectors: [
+        [1, 0],
+        [0, 1],
+      ],
+      memberTasteTags: [
+        { food: ['cafe'], mood: ['trendy'], environment: ['city'], confidence: 0.9 },
+        { food: ['korean'], mood: ['cultural'], environment: ['village'], confidence: 0.9 },
+      ],
+    };
+    const { service, user, placeRetrieval, groupPreferences } = setup({
+      items: [item],
+      findOneBy: item,
+      groupPreference,
+    });
+
+    await service.getAlternatives(user, 'trip-1', 'item-1');
+
+    expect(groupPreferences.forTrip).toHaveBeenCalledWith('trip-1', 'u1');
+    expect(placeRetrieval.retrieve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tasteTags: groupPreference.tasteTags,
+        preferenceVector: groupPreference.preferenceVector,
+        memberPreferenceVectors: groupPreference.memberPreferenceVectors,
+        memberTasteTags: groupPreference.memberTasteTags,
+        groupMemberCount: 2,
+      }),
+    );
+  });
 
   it('실 후보가 3개 이상이면 그대로 노출하고 realtime=true, 폴백을 안 채운다', async () => {
     const places = [

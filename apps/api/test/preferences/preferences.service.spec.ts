@@ -29,6 +29,7 @@ describe('PreferencesService.upsert — 기상/취침 시간 교차 검증', () 
 
   const repo = {
     findOneBy: jest.fn(async () => stored),
+    find: jest.fn(async () => []),
     create: jest.fn((value: Partial<PreferenceEntity>) => value),
     save: jest.fn(async (value: Partial<PreferenceEntity>) => value),
   };
@@ -72,6 +73,7 @@ describe('PreferencesService.upsert — 기상/취침 시간 교차 검증', () 
 function makeService(stored: Partial<PreferenceEntity> | null = null) {
   const repo = {
     findOneBy: jest.fn(async () => stored),
+    find: jest.fn(async () => []),
     create: jest.fn((value: Partial<PreferenceEntity>) => value),
     save: jest.fn(async (value: Partial<PreferenceEntity>) => value),
   };
@@ -82,6 +84,7 @@ function makeService(stored: Partial<PreferenceEntity> | null = null) {
   const preferenceEmbeddings = {
     upsertUserEmbedding: jest.fn(async () => 'emb-1'),
     findVectorByUser: jest.fn(async () => [0.5, 0.6]),
+    findVectorsByUsers: jest.fn(async () => new Map([['u1', [0.5, 0.6]]])),
   };
   const service = new PreferencesService(
     repo as any,
@@ -112,6 +115,20 @@ describe('PreferencesService.getPreferenceVector', () => {
 
     await expect(service.getPreferenceVector('u1')).resolves.toEqual([0.5, 0.6]);
     expect(preferenceEmbeddings.findVectorByUser).toHaveBeenCalledWith('u1', 'bge-m3-ko');
+  });
+});
+
+describe('PreferencesService group batch reads', () => {
+  it('deduplicates user ids for profile and vector queries', async () => {
+    const { service, repo, preferenceEmbeddings } = makeService();
+
+    await service.findByUsers(['u1', 'u1', 'u2']);
+    await service.getPreferenceVectors(['u1', 'u1', 'u2']);
+
+    expect(repo.find).toHaveBeenCalledWith({
+      where: { userId: expect.any(Object) },
+    });
+    expect(preferenceEmbeddings.findVectorsByUsers).toHaveBeenCalledWith(['u1', 'u2'], 'bge-m3-ko');
   });
 });
 

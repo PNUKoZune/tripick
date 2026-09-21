@@ -69,7 +69,15 @@ export class TripsService {
     return trip;
   }
 
-  async create(userId: string, dto: CreateTripDto): Promise<TripEntity> {
+  async create(
+    userId: string,
+    dto: CreateTripDto,
+    /**
+     * 일정 생성 직전 실행할 내부 훅. Main planner가 accepted 동행자를 먼저 저장해 그룹 취향을
+     * 최초 일정에도 반영하는 용도다. 실패하면 여행 생성 전체와 함께 롤백한다.
+     */
+    beforeGenerate?: (trip: TripEntity) => Promise<void>,
+  ): Promise<TripEntity> {
     this.assertTrip(dto.startDate, dto.endDate, dto.wakeTime, dto.sleepTime);
     const trip = this.repo.create({
       userId,
@@ -97,6 +105,7 @@ export class TripsService {
       );
     }
     try {
+      await beforeGenerate?.(saved);
       await this.plannerService.generateItinerary(saved.id);
     } catch (error) {
       // 일정 생성이 실패하면 재시도 수단이 없어 되살릴 수 없는 여행이 남는다.

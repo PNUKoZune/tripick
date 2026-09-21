@@ -2,7 +2,8 @@
 
 import { BadRequestException } from '@nestjs/common';
 import { MainPlannerService } from '../../src/main-planner/main-planner.service';
-import type { CreateTripRequestDto } from '@tripick/types';
+import type { CreateTripDto, CreateTripRequestDto } from '@tripick/types';
+import type { TripEntity } from '../../src/trips/trip.entity';
 
 function validDto(over: Partial<CreateTripRequestDto> = {}): CreateTripRequestDto {
   return {
@@ -19,17 +20,25 @@ function validDto(over: Partial<CreateTripRequestDto> = {}): CreateTripRequestDt
 
 function createHarness() {
   const tripsService = {
-    create: jest.fn(async (_userId: string, dto: any) => ({
-      id: 'trip-1',
-      userId: 'u1',
-      title: dto.title,
-      destination: dto.destination,
-      startDate: dto.startDate,
-      endDate: dto.endDate,
-      status: 'confirmed',
-      notes: dto.notes ?? null,
-      transportMode: dto.transportMode,
-    })),
+    create: jest.fn(async (
+      _userId: string,
+      dto: CreateTripDto,
+      beforeGenerate?: (trip: TripEntity) => Promise<void>,
+    ) => {
+      const trip = {
+        id: 'trip-1',
+        userId: 'u1',
+        title: dto.title,
+        destination: dto.destination,
+        startDate: dto.startDate,
+        endDate: dto.endDate,
+        status: 'confirmed',
+        notes: dto.notes ?? null,
+        transportMode: dto.transportMode,
+      } as TripEntity;
+      await beforeGenerate?.(trip);
+      return trip;
+    }),
     findVisible: jest.fn(),
   };
   const tripMembersService = { findAll: jest.fn().mockResolvedValue([]), createFromFriend: jest.fn() };
@@ -56,6 +65,7 @@ function createHarness() {
     noop, // placeEmbeddings
     noop, // tourApi
     noop, // routeHelper
+    noop, // groupPreferences (여행 생성은 TripsService 내부 planner가 사용)
   );
   const user = { id: 'u1', nickname: '앨리스' } as any;
   return { service, tripsService, tripMembersService, friendsService, inboxService, preferencesService, user };
@@ -153,6 +163,34 @@ describe('MainPlannerService.createTrip — 참여자 초대', () => {
 
     await service.createTrip(user, validDto({ members: [{ id: 'tm-y', friendId: 'f2' } as any] }));
 
+    expect(inboxService.create).not.toHaveBeenCalled();
+  });
+
+  it('일정 생성이 실패하면 먼저 만든 pending 멤버의 죽은 초대 알림을 남기지 않는다', async () => {
+    const { service, tripsService, friendsService, tripMembersService, inboxService, user } =
+      createHarness();
+    friendsService.findAcceptedById.mockResolvedValue({
+      id: 'f1',
+      friendUserId: 'u2',
+      nickname: '밥',
+      handle: 'bob',
+      color: '#000',
+    });
+    tripMembersService.createFromFriend.mockResolvedValue({
+      id: 'tm-1',
+      userId: 'u2',
+      status: 'pending',
+    });
+    tripsService.create.mockImplementation(async (_userId, _dto, beforeGenerate) => {
+      await beforeGenerate?.({ id: 'trip-dead', userId: 'u1' } as TripEntity);
+      throw new Error('generation failed');
+    });
+
+    await expect(
+      service.createTrip(user, validDto({ members: [{ id: 'tm-x', friendId: 'f1' } as never] })),
+    ).rejects.toThrow('generation failed');
+
+    expect(tripMembersService.createFromFriend).toHaveBeenCalled();
     expect(inboxService.create).not.toHaveBeenCalled();
   });
 });

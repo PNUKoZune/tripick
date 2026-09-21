@@ -180,6 +180,82 @@ describe('CragEvaluatorService', () => {
     expect(highPref.confidence).toBeGreaterThan(lowPref.confidence);
   });
 
+  it('penalizes a high-average candidate that strongly excludes one group member', () => {
+    const base: RawPlaceCandidate = {
+      id: 'base',
+      name: '그룹 후보',
+      category: 'attraction',
+      address: '부산 수영구 광안해변로 1',
+      coordinates: { lat: 35.1532, lng: 129.1185 },
+      source: 'pgvector',
+      similarity: 0.85,
+      tags: ['beach', 'romantic'],
+      destinationRegion: 'busan',
+    };
+    // raw cosine 기준 polar 평균(0.275)이 balanced(0.2)보다 높지만, 한 멤버는 -0.4로 소외된다.
+    const ranked = service.rank(
+      [
+        {
+          ...base,
+          id: 'polar',
+          name: '다수 취향 특화 후보',
+          memberPreferenceSimilarities: [0.95, -0.4],
+        },
+        {
+          ...base,
+          id: 'balanced',
+          name: '모두에게 균형 후보',
+          memberPreferenceSimilarities: [0.2, 0.2],
+        },
+      ],
+      busanContext,
+    );
+
+    expect(ranked.map((candidate) => candidate.id)).toEqual(['balanced', 'polar']);
+    expect(ranked[0]!.crag.groupPersonalization).toMatchObject({
+      average: 0.6,
+      least: 0.6,
+      memberCount: 2,
+    });
+    expect(ranked[1]!.crag.groupPersonalization!.least).toBeCloseTo(0.3);
+    expect(ranked[1]!.reason).toContain('그룹 최저 만족 30%');
+  });
+
+  it('includes vectorless members in least-member fairness through per-member tags', () => {
+    const context: RetrievalContext = {
+      ...busanContext,
+      memberTasteTags: [
+        { food: ['cafe'], mood: ['romantic'], environment: ['beach'], confidence: 1 },
+        { food: ['korean'], mood: ['cultural'], environment: ['village'], confidence: 1 },
+      ],
+    };
+    const base: RawPlaceCandidate = {
+      id: 'base',
+      name: '후보',
+      category: 'attraction',
+      address: '부산 수영구',
+      coordinates: { lat: 35.15, lng: 129.11 },
+      source: 'seed',
+      similarity: 0.8,
+      destinationRegion: 'busan',
+    };
+    const ranked = service.rank(
+      [
+        { ...base, id: 'one-sided', name: '한쪽 취향 후보', tags: ['cafe', 'romantic', 'beach'] },
+        {
+          ...base,
+          id: 'balanced-tags',
+          name: '양쪽 취향 후보',
+          tags: ['cafe', 'romantic', 'korean', 'cultural', 'village'],
+        },
+      ],
+      context,
+    );
+
+    expect(ranked.map((candidate) => candidate.id)).toEqual(['balanced-tags', 'one-sided']);
+    expect(ranked[0]!.crag.taste).toBeGreaterThan(ranked[1]!.crag.taste);
+  });
+
   it('weights tag matching by photo-analysis confidence', () => {
     const candidate: RawPlaceCandidate = {
       id: 'matched-cafe',
