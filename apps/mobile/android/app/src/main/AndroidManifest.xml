@@ -1,15 +1,16 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- 여행 진행 중 실시간 위치 추적 (경로 이탈 감지) -->
+    <!-- 여행 진행 화면이 열려 있을 때 현재 위치와 경로 이탈을 확인한다. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <!-- 화면이 꺼진 상태의 장시간 추적용 (후속 foreground service 에서 사용) -->
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <!-- Android 13+ 푸시 알림 런타임 권한 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- WorkManager/Notifee의 선택적 장기 작업 서비스는 사용하지 않는다. -->
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE"
+        tools:node="remove" />
     <!--
       사진 업로드(<input type=file>)는 권한 선언이 필요 없다.
       갤러리 선택은 react-native-webview 가 SAF(ACTION_GET_CONTENT)로 열어 선택한 파일만 URI 로 넘겨받으므로
@@ -35,6 +36,9 @@
       android:theme="@style/AppTheme"
       android:usesCleartextTraffic="${usesCleartextTraffic}"
       android:supportsRtl="true">
+      <service
+          android:name="app.notifee.core.ForegroundService"
+          tools:node="remove" />
       <activity
         android:name=".MainActivity"
         android:label="@string/app_name"
@@ -70,10 +74,5 @@
                 android:pathPrefix="/kakao/callback" />
         </intent-filter>
       </activity>
-      <!-- 여행 진행 중 백그라운드 위치 추적 foreground service -->
-      <service
-        android:name=".location.LocationTrackingService"
-        android:foregroundServiceType="location"
-        android:exported="false" />
     </application>
 </manifest>

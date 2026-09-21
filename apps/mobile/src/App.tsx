@@ -11,11 +11,9 @@ import {
   View,
   Linking,
   NativeModules,
-  NativeEventEmitter,
   useColorScheme,
   Animated,
   Image,
-  type EmitterSubscription,
   type ImageSourcePropType,
 } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
@@ -177,11 +175,6 @@ function getKakaoCallbackUrl(url: string): string | null {
   }
 }
 
-// Android 전용 백그라운드 위치 추적 네이티브 모듈 (foreground service).
-// iOS 는 모듈이 없어 undefined → watchPosition 폴백을 사용한다.
-type LocationTrackingNative = { start(): void; stop(): void };
-const LocationTracking = (NativeModules.LocationTracking ?? null) as LocationTrackingNative | null;
-
 // Android 전용 파일 저장 네이티브 모듈. 웹의 "이미지·PDF 저장" 은 data: URI 를 <a download> 로
 // 흘리는데, Android WebView 의 다운로드 리스너는 http/https 만 받아 조용히 버린다
 // ("Can only download HTTP/HTTPS URIs"). 그래서 base64 를 브리지로 받아 네이티브가 저장한다.
@@ -204,8 +197,6 @@ const AuthTab = (NativeModules.TripickAuthTab ?? null) as AuthTabNative | null;
 // iOS 는 아직 모듈이 없어 null → 웹이 자기 빌드 버전으로 폴백한다.
 type AppInfoNative = { version?: string; build?: string };
 const AppInfo = (NativeModules.TripickAppInfo ?? null) as AppInfoNative | null;
-const LOCATION_EVENT = 'TripickLocationUpdate';
-const LOCATION_ERROR_EVENT = 'TripickLocationError';
 // 서버 위치 보고 최소 간격(ms). 미도착 판정은 분 단위라 과보고를 막는다(웹 스로틀과 동일).
 const LOCATION_REPORT_THROTTLE_MS = 60_000;
 
@@ -225,9 +216,8 @@ export default function App() {
   const shellColor = isDark ? SHELL_BG_DARK : SHELL_BG_LIGHT;
   const webViewRef = useRef<InstanceType<typeof WebView>>(null);
   const watchIdRef = useRef<number | null>(null);
-  const nativeSubsRef = useRef<EmitterSubscription[]>([]);
-  // 웹이 넘겨준 인증정보 + 마지막 서버 보고 시각. 앱이 백그라운드·종료돼 웹뷰가 사라져도
-  // foreground service 로 잡은 위치를 이 정보로 서버에 직접 POST 한다.
+  // 웹이 넘겨준 인증정보 + 마지막 서버 보고 시각. 앱이 열려 있는 동안 수집한 위치를
+  // 이 정보로 서버에 직접 POST 한다.
   const locationConfigRef = useRef<{ apiBaseUrl: string; accessToken: string } | null>(null);
   const lastServerReportRef = useRef(0);
   // 마지막으로 받은 위치 + 하트비트 타이머. 위치는 이동 기반으로만 갱신돼 정지 시 콜백이 끊기므로,
@@ -376,27 +366,7 @@ export default function App() {
     ];
     const post = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
     if (post) required.push(post); // Android 13+ 만 존재
-    const result = await PermissionsAndroid.requestMultiple(required);
-
-    // 백그라운드(항상 허용) 위치는 포그라운드 권한이 먼저 승인된 뒤에만 요청 가능.
-    // Android 11+(API 30+)은 이 요청이 곧장 설정 화면을 유도한다.
-    const fineGranted =
-      result[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] ===
-      PermissionsAndroid.RESULTS.GRANTED;
-    const background = PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION;
-    if (fineGranted && background) {
-      try {
-        await PermissionsAndroid.request(background, {
-          title: '백그라운드 위치 권한',
-          message:
-            '여행 진행 중 앱을 보고 있지 않을 때도 경로 이탈을 감지하려면 위치를 "항상 허용"으로 설정해 주세요.',
-          buttonPositive: '확인',
-          buttonNegative: '나중에',
-        });
-      } catch {
-        // 거부/미지원이어도 포그라운드 추적은 계속 동작하므로 무시한다.
-      }
-    }
+    await PermissionsAndroid.requestMultiple(required);
   }, []);
 
   const setupFcm = useCallback(async () => {
@@ -517,8 +487,8 @@ export default function App() {
   }, []);
 
   /**
-   * 위치를 서버에 직접 보고한다(미도착 감지용). 웹뷰가 살아있든 아니든 네이티브가 담당하므로
-   * 앱 백그라운드·종료 상태(웹뷰 JS 정지)에서도 foreground service 가 이 경로로 보고를 이어간다.
+   * 위치를 서버에 직접 보고한다(미도착 감지용). Play 배포 빌드에서는 웹뷰가 활성화된
+   * 동안만 네이티브가 이 경로로 보고한다.
    * 웹이 LOCATION_AUTH 로 인증정보를 넘기기 전이면 no-op. 스로틀로 과보고를 막고 실패는 무시한다.
    */
   const reportLocationToServer = useCallback((lat: number, lng: number, accuracy?: number) => {
@@ -543,9 +513,8 @@ export default function App() {
   /**
    * 여행 진행(Live) 화면이 켜져 있는 동안 연속 위치 추적.
    * 웹의 useCurrentLocation 이 START/STOP_LOCATION_TRACKING 으로 켜고 끈다.
-   * - Android: 네이티브 foreground service 모듈로 화면이 꺼져도 추적 유지
-   * - iOS: Always 권한 + UIBackgroundModes(location) 기반 watchPosition 폴백
-   *   (distanceFilter 10m 로 배터리·네트워크 절약)
+   * Play 배포 빌드는 앱이 열려 있는 동안 watchPosition으로 추적한다.
+   * (distanceFilter 10m 로 배터리·네트워크 절약)
    */
   const startTracking = useCallback(() => {
     // 하트비트: 위치 콜백이 끊겨도(정지) 마지막 위치를 주기 재보고해 서버 캐시를 신선하게 유지.
@@ -556,24 +525,6 @@ export default function App() {
       }, LOCATION_REPORT_THROTTLE_MS);
     }
 
-    // Android: foreground service 네이티브 모듈 우선
-    if (LocationTracking) {
-      if (nativeSubsRef.current.length > 0) return; // 이미 추적 중
-      const emitter = new NativeEventEmitter(NativeModules.LocationTracking);
-      nativeSubsRef.current = [
-        emitter.addListener(LOCATION_EVENT, (e: { lat: number; lng: number; accuracy?: number; timestamp?: number }) => {
-          postToWeb({ type: 'LOCATION_UPDATE', ...e });
-          reportLocationToServer(e.lat, e.lng, e.accuracy);
-        }),
-        emitter.addListener(LOCATION_ERROR_EVENT, (e: { code: number; message: string }) => {
-          postToWeb({ type: 'LOCATION_ERROR', code: e.code, message: e.message });
-        }),
-      ];
-      LocationTracking.start();
-      return;
-    }
-
-    // iOS / 폴백: watchPosition
     if (watchIdRef.current !== null) return; // 이미 추적 중이면 중복 등록 방지
     watchIdRef.current = Geolocation.watchPosition(
       (pos) => {
@@ -603,12 +554,6 @@ export default function App() {
     if (heartbeatRef.current) {
       clearInterval(heartbeatRef.current);
       heartbeatRef.current = null;
-    }
-    if (LocationTracking) {
-      LocationTracking.stop();
-      nativeSubsRef.current.forEach((sub) => sub.remove());
-      nativeSubsRef.current = [];
-      return;
     }
     if (watchIdRef.current === null) return;
     Geolocation.clearWatch(watchIdRef.current);
