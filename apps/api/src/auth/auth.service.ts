@@ -21,6 +21,7 @@ import { EmailService } from '../email/email.service';
 import { JWT_ALGORITHM, refreshTokenSecret } from '../common/jwt-secrets';
 import { EmailTokenEntity, type EmailTokenPurpose } from './entities/email-token.entity';
 import { RefreshTokenEntity } from './entities/refresh-token.entity';
+import { AccessSessionsService } from './access-sessions.service';
 import {
   NICKNAME_MAX_LENGTH,
   NICKNAME_REQUIRED,
@@ -105,6 +106,7 @@ export class AuthService {
     private readonly refreshRepo: Repository<RefreshTokenEntity>,
     @InjectRepository(EmailTokenEntity)
     private readonly emailTokenRepo: Repository<EmailTokenEntity>,
+    private readonly sessions: AccessSessionsService,
   ) {
     this.refreshSecret = refreshTokenSecret(this.config);
   }
@@ -478,7 +480,10 @@ export class AuthService {
     ctx: TokenContext = {},
     familyId?: string,
   ): Promise<AuthTokens> {
-    const accessToken = await this.jwtService.signAsync({ sub: userId });
+    if (familyId) {
+      const root = await this.refreshRepo.findOne({ where: { id: familyId, userId } });
+      if (!root || root.revokedAt) throw new UnauthorizedException('Session revoked');
+    }
     // jti 로 매 발급을 유일하게 만든다. payload 가 { sub } 뿐이면 iat 가 초 단위라 같은 초에
     // 발급된 두 refresh 토큰이 바이트까지 동일해지고, tokenHash 유니크 인덱스에 걸려 500 이
     // 난다 — 로그인 직후 같은 초에 갱신하면 재현된다(로그인끼리는 bcrypt 비용이 초를 벌려 준다).
@@ -508,6 +513,7 @@ export class AuthService {
       await this.refreshRepo.save(row);
     }
 
+    const accessToken = await this.jwtService.signAsync({ sub: userId, sid: row.familyId });
     return { accessToken, refreshToken };
   }
 
@@ -573,8 +579,7 @@ export class AuthService {
     const tokenHash = sha256(refreshToken);
     const row = await this.refreshRepo.findOne({ where: { tokenHash } });
     if (row && !row.revokedAt) {
-      row.revokedAt = new Date();
-      await this.refreshRepo.save(row);
+      await this.revokeFamily(row.familyId);
     }
   }
 
@@ -583,8 +588,9 @@ export class AuthService {
       .createQueryBuilder()
       .update()
       .set({ revokedAt: () => 'NOW()' })
-      .where('userId = :userId AND revokedAt IS NULL', { userId })
+      .where('"userId" = :userId AND "revokedAt" IS NULL', { userId })
       .execute();
+    this.sessions.invalidate({ userId });
   }
 
   private async revokeFamily(familyId: string): Promise<void> {
@@ -592,8 +598,9 @@ export class AuthService {
       .createQueryBuilder()
       .update()
       .set({ revokedAt: () => 'NOW()' })
-      .where('familyId = :familyId AND revokedAt IS NULL', { familyId })
+      .where('"familyId" = :familyId AND "revokedAt" IS NULL', { familyId })
       .execute();
+    this.sessions.invalidate({ sid: familyId });
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -780,6 +787,8 @@ export class AuthService {
         id: number;
         kakao_account?: {
           email?: string;
+          is_email_valid?: boolean;
+          is_email_verified?: boolean;
           profile?: { nickname?: string; profile_image_url?: string };
         };
       }>('https://kapi.kakao.com/v2/user/me', {
@@ -796,7 +805,9 @@ export class AuthService {
       ...(account?.profile?.profile_image_url
         ? { profileImageUrl: account.profile.profile_image_url }
         : {}),
-      ...(account?.email ? { email: account.email } : {}),
+      ...(account?.email && account.is_email_valid === true && account.is_email_verified === true
+        ? { email: account.email }
+        : {}),
     };
   }
 

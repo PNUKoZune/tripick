@@ -5,10 +5,9 @@ import type { EntityClassOrSchema } from '@nestjs/typeorm/dist/interfaces/entity
 import type { Provider, Type } from '@nestjs/common';
 import type { Repository } from 'typeorm';
 import { UserEntity } from '../../src/users/user.entity';
+import { testDatabaseUrl } from './test-database';
 
-const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL ??
-  'postgresql://tripick:tripick@localhost:5432/tripick_test';
+const TEST_DATABASE_URL = testDatabaseUrl();
 
 /**
  * `x-test-user-id` 헤더가 가리키는 사용자를 request.user 에 주입한다.

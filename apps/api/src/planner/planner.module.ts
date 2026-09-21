@@ -23,10 +23,12 @@ import { ItineraryModule } from '../itinerary/itinerary.module';
 import { PreferencesModule } from '../preferences/preferences.module';
 import { TripEntity } from '../trips/trip.entity';
 import { TripDayEntity } from '../trips/trip-day.entity';
+import { TripMemberEntity } from '../trip-members/trip-member.entity';
+import { GroupPreferenceService } from './retrieval/group-preference.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([TripEntity, TripDayEntity]),
+    TypeOrmModule.forFeature([TripEntity, TripDayEntity, TripMemberEntity]),
     ItineraryModule,
     PreferencesModule,
     EmbeddingModule,
@@ -45,6 +47,7 @@ import { TripDayEntity } from '../trips/trip-day.entity';
     CragEvaluatorService,
     DestinationAnchorService,
     PlaceRetrievalService,
+    GroupPreferenceService,
     TourApiService,
     TatsCnctrRateService,
     PopularPlaceService,
@@ -61,6 +64,7 @@ import { TripDayEntity } from '../trips/trip-day.entity';
     NaverSearchService,
     RouteHelper,
     WeatherHelper,
+    GroupPreferenceService,
   ],
 })
 export class PlannerModule {}

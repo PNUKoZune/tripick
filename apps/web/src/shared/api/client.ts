@@ -81,7 +81,8 @@ async function fetcher<T>(path: string, init?: RequestInit, attempt = 0): Promis
   if (res.status === 401 && attempt === 0 && !isCredentialEndpoint(path)) {
     const newAccessToken = await tryRefresh();
     if (newAccessToken) {
-      return fetcher<T>(path, init, attempt + 1);
+      headers.set('Authorization', `Bearer ${newAccessToken}`);
+      return fetcher<T>(path, { ...init, headers }, attempt + 1);
     }
   }
 
@@ -107,31 +108,36 @@ async function fetcher<T>(path: string, init?: RequestInit, attempt = 0): Promis
 
 async function tryRefresh(): Promise<string | null> {
   if (refreshInFlight) return refreshInFlight;
-  refreshInFlight = (async () => {
-    // RN 웹뷰에선 refresh 가 네이티브 SecureStore 에 있어 브리지로 가져온다.
-    const refreshToken = isNativeShell() ? await requestNativeRefreshToken() : getRefreshToken();
-    if (!refreshToken) return null;
+  const pending = (async () => {
+    const startingAccessToken = getAccessToken();
     try {
+      const refreshToken = isNativeShell() ? await requestNativeRefreshToken() : getRefreshToken();
+      if (!refreshToken) return null;
       const res = await fetch(apiUrl('/auth/refresh'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
       });
-      if (!res.ok) {
-        clearStoredSession('expired');
-        return null;
-      }
+      // Another login/logout may have completed while this request was in flight.
+      if (getAccessToken() !== startingAccessToken) return getAccessToken();
+      if (res.status === 401 || res.status === 403) return null;
+      if (!res.ok) throw new Error('Refresh temporarily unavailable');
       const tokens = (await res.json()) as { accessToken: string; refreshToken: string };
+      if (!tokens.accessToken || !tokens.refreshToken) throw new Error('Invalid refresh response');
       replaceTokens(tokens);
       return tokens.accessToken;
     } catch {
-      clearStoredSession('expired');
-      return null;
-    } finally {
-      refreshInFlight = null;
+      // Network/server failures are retryable and do not revoke the stored session.
+      throw Object.assign(new Error(FALLBACK_ERROR), { status: 503 });
     }
   })();
-  return refreshInFlight;
+  refreshInFlight = pending;
+  try {
+    return await pending;
+  } finally {
+    // Includes missing credentials and failures before the HTTP request starts.
+    if (refreshInFlight === pending) refreshInFlight = null;
+  }
 }
 
 async function parseResponse(res: Response): Promise<unknown> {

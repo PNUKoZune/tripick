@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -12,6 +13,8 @@ import { UserEntity } from '../users/user.entity';
 import type { TripMemberPreferenceDto, TripMemberRole, TripMemberStatus } from '@tripick/types';
 
 @Entity('trip_members')
+@Index('IDX_trip_members_user_status_trip', ['userId', 'status', 'tripId'])
+@Index('IDX_trip_members_trip', ['tripId'])
 export class TripMemberEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;

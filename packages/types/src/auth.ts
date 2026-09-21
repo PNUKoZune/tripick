@@ -7,6 +7,8 @@ export interface KakaoProfile {
 
 export interface JwtPayload {
   sub: string;
+  /** Stable refresh family root; required for access-token authorization. */
+  sid?: string;
   email?: string;
   iat?: number;
   exp?: number;

@@ -7,7 +7,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { PreferencesService } from '../preferences/preferences.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { InboxService } from '../inbox/inbox.service';
@@ -147,6 +147,38 @@ export class TripMembersService {
     return members.map((member) => this.toDto(member));
   }
 
+  /** Call only with trips already authorized by TripsService.findVisible. No writes on listing. */
+  async findForVisibleTrips(tripIds: string[]): Promise<Map<string, TripMemberDto[]>> {
+    const grouped = new Map<string, TripMemberDto[]>();
+    if (!tripIds.length) return grouped;
+    const members = await this.membersRepo.find({
+      where: { tripId: In(tripIds) },
+      relations: { user: true },
+      order: { role: 'DESC', createdAt: 'ASC' },
+    });
+    for (const member of members) {
+      const group = grouped.get(member.tripId) ?? [];
+      group.push(this.toDto(member));
+      grouped.set(member.tripId, group);
+    }
+    // Older trips and the basic /trips endpoint may have no materialized owner member.
+    // Keep the owner visible without turning a list request into a database write.
+    const missingOwners = tripIds.filter((id) => !grouped.get(id)?.some((member) => member.role === 'owner'));
+    if (missingOwners.length) {
+      const ownedTrips = await this.tripsRepo.find({ where: { id: In(missingOwners) }, relations: { user: true } });
+      for (const trip of ownedTrips) {
+        const owner = this.toDto(this.membersRepo.create({
+          id: trip.id, tripId: trip.id, userId: trip.userId, user: trip.user,
+          nickname: trip.user.nickname, role: 'owner', status: 'accepted',
+          color: MEMBER_COLORS[0]!, preferenceTags: DEFAULT_MEMBER_PREFERENCE,
+          createdAt: trip.createdAt, updatedAt: trip.updatedAt,
+        }));
+        grouped.set(trip.id, [owner, ...(grouped.get(trip.id) ?? [])]);
+      }
+    }
+    return grouped;
+  }
+
   async create(tripId: string, userId: string, dto: CreateTripMemberDto): Promise<TripMemberDto> {
     await this.assertTripOwner(tripId, userId);
     const nickname = dto.nickname.trim();
@@ -240,6 +272,7 @@ export class TripMembersService {
     }
     await this.membersRepo.remove(member);
     // 응답 완료 — 남아 있던 초대 카드(수락/거절 버튼)를 정리한다.
+    await this.realtimeGateway.evictFromTrip(tripId, user.id);
     await this.inboxService.clearTripInvite(user.id, memberId);
   }
 
@@ -265,7 +298,12 @@ export class TripMembersService {
     if (dto.contact !== undefined) member.contact = dto.contact?.trim() || null;
     if (dto.kakaoId !== undefined) member.kakaoId = dto.kakaoId?.trim() || null;
     if (dto.relation !== undefined) member.relation = dto.relation?.trim() || null;
-    if (dto.status !== undefined) member.status = dto.status;
+    if (dto.status !== undefined && dto.status !== member.status) {
+      if (member.userId || member.role === 'owner') {
+        throw new BadRequestException('실제 사용자의 초대 상태는 수락·거절로만 변경할 수 있습니다.');
+      }
+      member.status = dto.status;
+    }
     if (dto.preferenceTags !== undefined) {
       member.preferenceTags = this.mergePreference(dto.preferenceTags, member.preferenceTags);
     }
@@ -342,7 +380,7 @@ export class TripMembersService {
     };
   }
 
-  private async assertTripOwner(tripId: string, userId: string): Promise<TripEntity> {
+  async assertTripOwner(tripId: string, userId: string): Promise<TripEntity> {
     const trip = await this.tripsRepo.findOneBy({ id: tripId });
     if (!trip) {
       throw new NotFoundException(`Trip ${tripId} not found`);

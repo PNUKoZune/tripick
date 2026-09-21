@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
@@ -11,6 +12,7 @@ import { TripEntity } from '../trips/trip.entity';
 import type { ItineraryItemType, Coordinates } from '@tripick/types';
 
 @Entity('itinerary_items')
+@Index('IDX_itinerary_trip_day_order', ['tripId', 'day', 'order'])
 export class ItineraryItemEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;

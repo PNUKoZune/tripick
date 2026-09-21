@@ -103,6 +103,8 @@ export interface MentionCorpus {
 export class NaverSearchService {
   private readonly logger = new Logger(NaverSearchService.name);
   private readonly cache = new Map<string, { index: PopularityIndex; expires: number }>();
+  /** 같은 cache miss가 겹치면 외부 요청 한 벌만 실행한다(thundering herd 방지). */
+  private readonly inFlight = new Map<string, Promise<PopularityIndex>>();
 
   constructor(private readonly config: ConfigService) {}
 
@@ -129,12 +131,15 @@ export class NaverSearchService {
     // 서브지역(부산 해운대 등)까지 보존해야 그 지역의 인기 장소가 코퍼스에 잡힌다.
     const stem = regionSearchStem(destination) || destination;
     const queries = RECOMMEND_SUFFIXES.map((suffix) => `${stem} ${suffix}`);
-    const region = await this.buildIndex(`region:${key}`, queries, destination, credentials);
+    // 지역·전국 대조 코퍼스는 서로 독립이다. 콜드 캐시에서 직렬로 기다리지 않는다.
+    const [region, control] = await Promise.all([
+      this.buildIndex(`region:${key}`, queries, destination, credentials),
+      this.getControlIndex(),
+    ]);
     if (region.docCount === 0) return region;
 
     // 대조 코퍼스는 목적지와 무관하므로 캐시 1건으로 전 목적지가 공유한다(6h 당 6콜).
     // 실패하면 필터 없이 지역 인덱스만 쓴다 — 보정을 못 하는 것이지 랭킹이 망가지진 않는다.
-    const control = await this.getControlIndex();
     if (!control) return region;
     return new RegionSpecificPopularityIndex(region, control, this.minRegionSpecificity());
   }
@@ -182,7 +187,12 @@ export class NaverSearchService {
       `${month}월 여행지 추천`,
       `${month}월 국내여행 가볼만한 곳`,
     ];
-    return this.buildIndex(`seasonal:${year}-${month}`, queries, `${year}년 ${month}월`, credentials);
+    return this.buildIndex(
+      `seasonal:${year}-${month}`,
+      queries,
+      `${year}년 ${month}월`,
+      credentials,
+    );
   }
 
   /** 검색 키가 설정돼 있는지. 키가 없으면 모든 인지도 기능이 무동작이다. */
@@ -230,6 +240,25 @@ export class NaverSearchService {
     const cached = this.cache.get(cacheKey);
     if (cached && cached.expires > Date.now()) return cached.index;
 
+    const running = this.inFlight.get(cacheKey);
+    if (running) return running;
+
+    const pending = this.buildIndexUncached(cacheKey, queries, label, credentials);
+    this.inFlight.set(cacheKey, pending);
+    try {
+      return await pending;
+    } finally {
+      // clearCache 뒤 같은 키로 새 작업이 시작됐으면 새 Promise를 지우지 않는다.
+      if (this.inFlight.get(cacheKey) === pending) this.inFlight.delete(cacheKey);
+    }
+  }
+
+  private async buildIndexUncached(
+    cacheKey: string,
+    queries: string[],
+    label: string,
+    credentials: { id: string; secret: string },
+  ): Promise<PopularityIndex> {
     try {
       const corpus = await this.collectCorpus(queries, credentials);
       if (corpus.docCount === 0) {
@@ -257,28 +286,40 @@ export class NaverSearchService {
     displayOverride?: number,
   ): Promise<{ text: string; docCount: number }> {
     const display = this.normalizeDisplay(displayOverride) ?? this.display();
-    const parts: string[] = [];
-    let docCount = 0;
-
-    for (const query of queries) {
-      // 블로그·카페 중 한쪽이 실패해도 나머지 코퍼스는 살린다(allSettled).
-      const settled = await Promise.allSettled([
-        this.search(NAVER_BLOG_URL, query, display, credentials),
-        this.search(NAVER_CAFE_URL, query, display, credentials),
-      ]);
-      for (const result of settled) {
-        if (result.status !== 'fulfilled') {
-          this.logger.warn(
-            `네이버 검색 일부 실패 ("${query}"): ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
-          );
-          continue;
+    const results = new Array<{ parts: string[]; docCount: number }>(queries.length);
+    let cursor = 0;
+    const worker = async (): Promise<void> => {
+      while (cursor < queries.length) {
+        const index = cursor;
+        cursor += 1;
+        const query = queries[index]!;
+        // 블로그·카페 중 한쪽이 실패해도 나머지 코퍼스는 살린다(allSettled).
+        const settled = await Promise.allSettled([
+          this.search(NAVER_BLOG_URL, query, display, credentials),
+          this.search(NAVER_CAFE_URL, query, display, credentials),
+        ]);
+        const parts: string[] = [];
+        let docCount = 0;
+        for (const result of settled) {
+          if (result.status !== 'fulfilled') {
+            this.logger.warn(
+              `네이버 검색 일부 실패 ("${query}"): ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+            );
+            continue;
+          }
+          for (const item of result.value) {
+            parts.push(item);
+            docCount += 1;
+          }
         }
-        for (const item of result.value) {
-          parts.push(item);
-          docCount += 1;
-        }
+        results[index] = { parts, docCount };
       }
-    }
+    };
+
+    const concurrency = Math.min(queries.length, this.searchConcurrency());
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+    const parts = results.flatMap((result) => result?.parts ?? []);
+    const docCount = results.reduce((sum, result) => sum + (result?.docCount ?? 0), 0);
 
     return { text: stripMarkup(parts.join(' ')), docCount };
   }
@@ -316,7 +357,9 @@ export class NaverSearchService {
    * 골든셋 11케이스 기준 R|cat 0.337→0.377, MRR 0.514→0.650.
    */
   private display(): number {
-    return this.normalizeDisplay(this.config.get<string | number>('NAVER_SEARCH_DISPLAY', 100)) ?? 100;
+    return (
+      this.normalizeDisplay(this.config.get<string | number>('NAVER_SEARCH_DISPLAY', 100)) ?? 100
+    );
   }
 
   /**
@@ -328,6 +371,7 @@ export class NaverSearchService {
    */
   clearCache(): void {
     this.cache.clear();
+    this.inFlight.clear();
   }
 
   /** 1..NAVER_MAX_DISPLAY 로 클램프. 값이 없거나 잘못되면 null. */
@@ -341,6 +385,12 @@ export class NaverSearchService {
   private cacheTtlMs(): number {
     const hours = Number(this.config.get<string | number>('NAVER_SEARCH_CACHE_TTL_HOURS', 6));
     return (Number.isFinite(hours) && hours > 0 ? hours : 6) * 60 * 60 * 1000;
+  }
+
+  /** 검색어 묶음 동시 처리 수. 각 묶음 안에서는 blog+cafe 두 요청이 함께 돈다. */
+  private searchConcurrency(): number {
+    const value = Number(this.config.get<string | number>('NAVER_SEARCH_CONCURRENCY', 2));
+    return Number.isFinite(value) && value > 0 ? Math.min(4, Math.floor(value)) : 2;
   }
 }
 

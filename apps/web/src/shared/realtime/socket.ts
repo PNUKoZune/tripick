@@ -1,4 +1,4 @@
-import { io, type Socket } from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
 
 import { getAccessToken } from '@/shared/lib/session-token';
 
@@ -6,6 +6,8 @@ import { getAccessToken } from '@/shared/lib/session-token';
 const REALTIME_NAMESPACE = '/realtime';
 
 let socket: Socket | null = null;
+let socketPromise: Promise<Socket> | null = null;
+let connectionGeneration = 0;
 
 function resolveWsBase(): string {
   const fromEnv = process.env.NEXT_PUBLIC_WS_URL;
@@ -24,23 +26,45 @@ function resolveWsBase(): string {
 
 /**
  * `/realtime` 네임스페이스에 연결된 socket.io 클라이언트를 반환한다.
- * 앱 전체에서 커넥션 1개를 공유한다 (lazy singleton).
+ * 앱 전체에서 커넥션 1개를 공유한다 (async lazy singleton).
+ *
+ * socket.io-client 는 실시간 기능을 실제로 쓰는 인증 사용자에게만 내려간다. 동시에 여러
+ * 구독이 시작돼도 import·커넥션은 하나만 만들고, import 중 로그아웃한 경우 연결을 취소한다.
  */
-export function getRealtimeSocket(): Socket {
+export async function getRealtimeSocket(): Promise<Socket> {
   if (socket) return socket;
+  if (socketPromise) return socketPromise;
 
-  socket = io(`${resolveWsBase()}${REALTIME_NAMESPACE}`, {
-    transports: ['websocket'],
-    autoConnect: true,
-    // 핸드셰이크마다 최신 토큰을 실어 보낸다 (재연결 시에도 갱신된 토큰 사용)
-    auth: (cb) => cb({ token: getAccessToken() ?? '' }),
+  const requestedGeneration = connectionGeneration;
+  const pending = import('socket.io-client').then(({ io }) => {
+    if (requestedGeneration !== connectionGeneration) {
+      const error = new Error('Realtime connection was cancelled');
+      error.name = 'AbortError';
+      throw error;
+    }
+
+    socket ??= io(`${resolveWsBase()}${REALTIME_NAMESPACE}`, {
+      transports: ['websocket'],
+      autoConnect: true,
+      // 핸드셰이크마다 최신 토큰을 실어 보낸다 (재연결 시에도 갱신된 토큰 사용)
+      auth: (cb) => cb({ token: getAccessToken() ?? '' }),
+    });
+
+    return socket;
   });
+  socketPromise = pending;
 
-  return socket;
+  try {
+    return await pending;
+  } finally {
+    if (socketPromise === pending) socketPromise = null;
+  }
 }
 
 /** 로그아웃 등으로 커넥션을 끊어야 할 때 호출 */
 export function disconnectRealtimeSocket(): void {
+  connectionGeneration += 1;
+  socketPromise = null;
   if (socket) {
     socket.disconnect();
     socket = null;

@@ -4,15 +4,19 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TripEntity } from './trip.entity';
 import { TripDayEntity } from './trip-day.entity';
-import { PlannerService } from '../planner/planner.service';
 import { TripMemberEntity } from '../trip-members/trip-member.entity';
-import type { CreateTripDto, UpdateTripDto } from '@tripick/types';
+import { TripGenerationService } from '../trip-generation/trip-generation.service';
+import type { CreateTripDto, TripGenerationJobDto, UpdateTripDto } from '@tripick/types';
+
+interface CreateTripOptions {
+  /** 생성 잡이 시작되기 전에 동행자처럼 검색 입력에 필요한 연관 데이터를 저장한다. */
+  beforeEnqueue?: (trip: TripEntity) => Promise<void>;
+}
 
 @Injectable()
 export class TripsService {
@@ -25,7 +29,7 @@ export class TripsService {
     private readonly tripDaysRepo: Repository<TripDayEntity>,
     @InjectRepository(TripMemberEntity)
     private readonly membersRepo: Repository<TripMemberEntity>,
-    private readonly plannerService: PlannerService,
+    private readonly tripGeneration: TripGenerationService,
   ) {}
 
   findByUser(userId: string): Promise<TripEntity[]> {
@@ -69,12 +73,16 @@ export class TripsService {
     return trip;
   }
 
-  async create(userId: string, dto: CreateTripDto): Promise<TripEntity> {
+  async create(
+    userId: string,
+    dto: CreateTripDto,
+    options: CreateTripOptions = {},
+  ): Promise<TripEntity> {
     this.assertTrip(dto.startDate, dto.endDate, dto.wakeTime, dto.sleepTime);
     const trip = this.repo.create({
       userId,
       ...dto,
-      status: 'confirmed',
+      status: 'generating',
       transportMode: dto.transportMode ?? 'transit',
       wakeTime: dto.wakeTime ?? '08:30',
       sleepTime: dto.sleepTime ?? '22:00',
@@ -97,19 +105,39 @@ export class TripsService {
       );
     }
     try {
-      await this.plannerService.generateItinerary(saved.id);
+      await options.beforeEnqueue?.(saved);
+      await this.tripGeneration.enqueue({ tripId: saved.id, userId });
     } catch (error) {
-      // 일정 생성이 실패하면 재시도 수단이 없어 되살릴 수 없는 여행이 남는다.
-      // 좀비 draft 를 남기지 않고 생성을 통째로 롤백해 사용자가 다시 시도하게 한다.
+      // 큐 등록 전 실패는 백그라운드에서 되살릴 수 없다. 연관 행까지 CASCADE로 정리한다.
       await this.repo.delete(saved.id);
       this.logger.warn(
-        `Trip ${saved.id} creation rolled back (itinerary generation failed): ${error instanceof Error ? error.message : String(error)}`,
+        `Trip ${saved.id} creation rolled back before enqueue: ${error instanceof Error ? error.message : String(error)}`,
       );
-      throw new ServiceUnavailableException(
-        '여행 일정을 생성하지 못했어요. 잠시 후 다시 시도해주세요.',
-      );
+      throw error;
     }
     return this.findOne(saved.id, userId);
+  }
+
+  async getGenerationStatus(
+    id: string,
+    userId: string,
+  ): Promise<TripGenerationJobDto> {
+    const trip = await this.findOneForViewer(id, userId);
+    return this.tripGeneration.getStatus(trip.id, trip.status);
+  }
+
+  async retryGeneration(id: string, userId: string): Promise<TripGenerationJobDto> {
+    const trip = await this.findOne(id, userId);
+    this.tripGeneration.assertRetryable(trip.status);
+    trip.status = 'generating';
+    await this.repo.save(trip);
+    try {
+      return await this.tripGeneration.enqueue({ tripId: trip.id, userId });
+    } catch (error) {
+      trip.status = 'generation_failed';
+      await this.repo.save(trip);
+      throw error;
+    }
   }
 
   async update(id: string, userId: string, dto: UpdateTripDto): Promise<TripEntity> {

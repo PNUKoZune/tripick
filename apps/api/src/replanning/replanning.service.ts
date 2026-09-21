@@ -1,5 +1,4 @@
 import {
-  ForbiddenException,
   Injectable,
   Logger,
   ServiceUnavailableException,
@@ -35,11 +34,8 @@ export class ReplanningService {
   ) {}
 
   async enqueue(userId: string, dto: ReplanRequestDto): Promise<ReplanJobDto> {
-    // owner 뿐 아니라 accepted 멤버도 이탈 신고·수동 요청으로 재계획을 트리거할 수 있다.
-    const canAccess = await this.tripMembersService.canAccessTrip(dto.tripId, userId);
-    if (!canAccess) {
-      throw new ForbiddenException();
-    }
+    // Companions submit a schedule-change proposal; only its owner approval executes it.
+    await this.tripMembersService.assertTripOwner(dto.tripId, userId);
 
     // 같은 일차를 다시 짜는 잡이 이미 큐에 있으면 새로 등록하지 않고 그 잡을 돌려준다.
     const inFlight = await this.findInFlight(dto);

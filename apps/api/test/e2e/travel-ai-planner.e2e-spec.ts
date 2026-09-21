@@ -1,7 +1,5 @@
 /// <reference types="jest" />
 
-import { ValidationPipe } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import { io, type Socket } from 'socket.io-client';
 import { fitsInAwakeWindow, getAwakeWindow, getKstMinutes } from '@tripick/utils';
@@ -12,38 +10,21 @@ import type {
   PreferenceDto,
   ReplanJobDto,
   ReplanResultDto,
+  TripGenerationJobDto,
   TripSummaryDto,
 } from '@tripick/types';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { IsNull, type Repository } from 'typeorm';
-import { AppModule } from '../../src/app.module';
-import { EmailTokenEntity } from '../../src/auth/entities/email-token.entity';
-import { UserEntity } from '../../src/users/user.entity';
+import { createIntegrationApp } from './integration-app';
 
-describe('Travel AI planner E2E', () => {
+describe('Travel planner integration E2E', () => {
   let app: INestApplication;
   let baseUrl: string;
   let accessToken: string;
+  let fixture: Awaited<ReturnType<typeof createIntegrationApp>>;
   let createdTripId: string | undefined;
 
   beforeAll(async () => {
-    process.env['NODE_ENV'] = 'development';
-    process.env['LLM_PLANNER_ENABLED'] = process.env['LLM_PLANNER_ENABLED'] ?? 'true';
-    process.env['PLACE_RETRIEVAL_AUTO_SEED'] = process.env['PLACE_RETRIEVAL_AUTO_SEED'] ?? 'true';
-
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleRef.createNestApplication();
-    app.setGlobalPrefix('api/v1');
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    );
+    fixture = await createIntegrationApp();
+    app = fixture.app;
 
     await app.listen(0);
     const address = app.getHttpServer().address();
@@ -53,34 +34,22 @@ describe('Travel AI planner E2E', () => {
       `http://127.0.0.1:${port}/realtime`;
 
     // 데모 로그인 엔드포인트는 없앴다(모든 방문자가 계정 하나를 공유하던 구멍).
-    // 실제 가입 동선을 그대로 탄다 — 인증 토큰만 메일 대신 DB 에서 꺼내 온다.
+    // 실제 가입 동선을 그대로 탄다. 테스트 메일함에서 인증 링크를 가져온다.
     accessToken = await signUpAndLogIn(`e2e-${Date.now()}@tripick.test`);
   }, 120000);
 
   /**
    * 가입 → 이메일 인증 → 로그인. access token 을 돌려준다.
    *
-   * 인증 링크의 raw 토큰은 메일로만 나가고 DB 에는 hash 만 남아 되돌릴 수 없다. 그래서
-   * 인증 완료 상태만 DB 로 세우고(= 링크를 눌렀다고 치고), 가입·로그인은 실제 엔드포인트를 탄다.
+   * 발송만 테스트 메일함으로 바꾸고 인증 링크도 실제 엔드포인트에서 소비한다.
    */
   async function signUpAndLogIn(email: string): Promise<string> {
     const password = 'e2epass123';
     await post('/auth/signup', { email, password, nickname: 'E2E 여행자' });
 
-    const users = app.get<Repository<UserEntity>>(getRepositoryToken(UserEntity));
-    const user = await users.findOneByOrFail({ email });
-    // 대기 비밀번호는 계정이 아니라 그 가입 신청이 만든 인증 토큰에 실려 있다.
-    const emailTokens = app.get<Repository<EmailTokenEntity>>(getRepositoryToken(EmailTokenEntity));
-    const token = await emailTokens.findOne({
-      where: { userId: user.id, purpose: 'verify_email', consumedAt: IsNull() },
-      order: { createdAt: 'DESC' },
-    });
-    if (!token?.pendingPasswordHash) throw new Error('가입 직후 대기 비밀번호가 없습니다.');
-    user.emailVerifiedAt = new Date();
-    user.passwordHash = token.pendingPasswordHash;
-    await users.save(user);
-    token.consumedAt = new Date();
-    await emailTokens.save(token);
+    const link = fixture.mail.get(email);
+    if (!link) throw new Error('Verification email missing');
+    await post('/auth/verify-email', { token: new URL(link).searchParams.get('token') });
 
     const session = await post<LoginResponseDto>('/auth/login', { email, password });
     return session.tokens.accessToken;
@@ -90,10 +59,10 @@ describe('Travel AI planner E2E', () => {
     if (createdTripId) {
       await request(`/trips/${createdTripId}`, { method: 'DELETE' }).catch(() => undefined);
     }
-    await app?.close();
+    await fixture?.close();
   });
 
-  it('creates a preference-based AI itinerary and pushes a real-time replan result', async () => {
+  it('creates a preference-based fallback itinerary and persists a queued real-time replan', async () => {
     const preference = await put<PreferenceDto>('/preferences', {
       tasteTags: {
         food: ['cafe', 'korean'],
@@ -127,8 +96,20 @@ describe('Travel AI planner E2E', () => {
     });
     createdTripId = trip.id;
 
-    expect(trip.status).toBe('upcoming');
-    expect(trip.itemCount).toBeGreaterThanOrEqual(3);
+    // 생성 HTTP는 LLM을 기다리지 않고 큐 등록 직후 반환한다.
+    expect(trip.status).toBe('draft');
+    expect(trip.generationState).toBe('generating');
+    expect(trip.itemCount).toBe(0);
+
+    const generation = await waitForGeneration(trip.id);
+    expect(generation.status).toBe('completed');
+    expect(generation.progress).toBe(100);
+
+    const completedSummary = (await get<TripSummaryDto[]>('/main-planner/trips')).find(
+      (candidate) => candidate.id === trip.id,
+    );
+    expect(completedSummary).toMatchObject({ status: 'upcoming', hasDetail: true });
+    expect(completedSummary?.itemCount).toBeGreaterThanOrEqual(3);
 
     const planner = await get<PlannerTripDto>(`/main-planner/trips/${trip.id}`);
     expect(planner.meta.tasteTags.food).toContain('cafe');
@@ -162,11 +143,11 @@ describe('Travel AI planner E2E', () => {
     expect(result.updatedItems?.length).toBeGreaterThanOrEqual(3);
     // 재계획 반영 여부는 항목 이름으로 본다. 재계획 사유도 memo 에 쓰지 않는다 —
     // 쓰면 사용자가 직접 남긴 메모를 덮어쓴다.
-    expect(result.updatedItems?.some((item) => item.name.includes('deviation 대응'))).toBe(true);
+    expect(result.updatedItems?.every((item) => !itinerary.some((old) => old.id === item.id))).toBe(true);
     expect(result.updatedItems?.every((item) => !item.memo)).toBe(true);
 
     const replanned = await get<ItineraryItemDto[]>(`/trips/${trip.id}/itinerary`);
-    expect(replanned.some((item) => item.name.includes('deviation 대응'))).toBe(true);
+    expect(replanned.map((item) => item.id).sort()).toEqual(result.updatedItems?.map((item) => item.id).sort());
     expect(replanned.every((item) => isWithinKstBounds(item.scheduledAt, item.durationMin, '09:00', '22:00'))).toBe(true);
   }, 120000);
 
@@ -186,6 +167,19 @@ describe('Travel AI planner E2E', () => {
       method: 'PUT',
       body: JSON.stringify(body),
     });
+  }
+
+  async function waitForGeneration(tripId: string): Promise<TripGenerationJobDto> {
+    const deadline = Date.now() + 110_000;
+    while (Date.now() < deadline) {
+      const status = await get<TripGenerationJobDto>(`/trips/${tripId}/generation`);
+      if (status.status === 'completed') return status;
+      if (status.status === 'failed') {
+        throw new Error(status.error ?? '초기 일정 생성 실패');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    throw new Error('초기 일정 생성 완료를 기다리다 시간 초과');
   }
 
   async function request<T>(path: string, init: RequestInit): Promise<T> {

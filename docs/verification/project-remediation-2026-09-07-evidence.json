@@ -1,0 +1,89 @@
+{
+  "date": "2026-09-07",
+  "branch": "fix/audit-security-reliability",
+  "base": "origin/develop@1bec04f",
+  "environment": {
+    "node": "24.20.0",
+    "pnpm": "9.12.0",
+    "os": "macOS",
+    "postgres": "16 with pgvector",
+    "redis": "7"
+  },
+  "checks": {
+    "turbo_lint_typecheck_test": {
+      "tasks_passed": 15,
+      "cached": 0
+    },
+    "api_unit": {
+      "suites": 73,
+      "tests": 937
+    },
+    "utils_unit": {
+      "suites": 7,
+      "tests": 69
+    },
+    "web_unit": {
+      "suites": 1,
+      "tests": 6
+    },
+    "dependency_regression": {
+      "tests": 4
+    },
+    "api_e2e": {
+      "suites": 7,
+      "tests": 94,
+      "real_auth_security_tests": 13
+    },
+    "queue_integration": {
+      "suites": 1,
+      "tests": 1
+    },
+    "browser_e2e": {
+      "tests": 6,
+      "projects": [
+        "chromium",
+        "firefox",
+        "webkit-mobile"
+      ],
+      "retries": 0
+    },
+    "total_passed": 1117,
+    "production_build": {
+      "tasks_passed": 4
+    },
+    "eslint": {
+      "errors": 0,
+      "api_warnings": 264,
+      "web_warnings": 2
+    },
+    "migrations": {
+      "fresh_up": 16,
+      "repeat_pending": 0,
+      "latest_down_up": "passed"
+    },
+    "docker": {
+      "image": "tripick-api:audit-20260907",
+      "image_sha256": "dede114e32f9ddbde23b547edd9f1fd5611ad0abe04dc8c8ff9d6cb1a9c5ea68",
+      "health_status": 200,
+      "uid": 1000
+    },
+    "audit": {
+      "high": 2,
+      "moderate": 0,
+      "low": 0,
+      "critical": 0,
+      "remaining_modules": [
+        "image-size"
+      ],
+      "local_patch": "patches/image-size@1.2.1.patch"
+    },
+    "frozen_install": "passed",
+    "git_diff_check": "passed"
+  },
+  "limits": [
+    "External mail/S3 are test doubles; embeddings use a local HTTP fixture; planner uses deterministic fallback.",
+    "No live LLM/Kakao/FCM/R2 or native iOS/Android device E2E.",
+    "Revocation fan-out is local to one API process; horizontal replicas need distributed events.",
+    "Version-only dependency audit still reports the two locally patched image-size advisories."
+  ]
+}

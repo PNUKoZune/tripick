@@ -38,10 +38,25 @@ export class TripsController {
     return this.tripsService.findOne(id, user.id);
   }
 
-  @Post()
-  // 생성 한 건이 일정 전체를 LLM 으로 만든다 — 전역 120/분 안에서도 GPU·외부 쿼터가 녹는다.
+  @Get(':id/generation')
+  @ApiOperation({ summary: '초기 AI 일정 생성 작업 상태 조회' })
+  generationStatus(@CurrentUser() user: UserEntity, @Param('id') id: string) {
+    return this.tripsService.getGenerationStatus(id, user.id);
+  }
+
+  @Post(':id/generation/retry')
+  @HttpCode(HttpStatus.ACCEPTED)
   @Throttle(LLM_GENERATION_LIMIT)
-  @ApiOperation({ summary: '여행 생성 (일정 자동 생성 트리거)' })
+  @ApiOperation({ summary: '최종 실패한 초기 AI 일정 생성 재시도' })
+  retryGeneration(@CurrentUser() user: UserEntity, @Param('id') id: string) {
+    return this.tripsService.retryGeneration(id, user.id);
+  }
+
+  @Post()
+  @HttpCode(HttpStatus.ACCEPTED)
+  // 실제 LLM 처리는 큐에서 실행하지만 등록 폭주가 GPU 대기열을 무한히 늘리므로 제한은 유지한다.
+  @Throttle(LLM_GENERATION_LIMIT)
+  @ApiOperation({ summary: '여행 저장 및 초기 AI 일정 생성 큐 등록' })
   create(@CurrentUser() user: UserEntity, @Body() dto: CreateTripBodyDto) {
     return this.tripsService.create(user.id, dto);
   }

@@ -18,6 +18,7 @@ import {
   ParseFilePipe,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import { randomUUID } from 'node:crypto';
 import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import {
@@ -35,7 +36,8 @@ import {
 } from '../preferences/photo-taste';
 import { TogglePhotoTagBodyDto } from '../preferences/dto/preference.dto';
 import { VISION_UPLOAD_LIMIT } from '../common/throttle';
-import { ImageFileValidator, extForMime } from '../common/image-upload';
+import { ImageFileValidator, extForMime, MAX_IMAGE_BYTES } from '../common/image-upload';
+import { ownedPreferencePhotos, ownsPreferencePhoto } from '../preferences/photo-ownership';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserEntity } from '../users/user.entity';
@@ -69,9 +71,9 @@ export class PreferenceAnalyzerController {
     summary: `취향 이미지 업로드 → 분석 잡 등록 (한 번에 ${MAX_PREFERENCE_UPLOAD}장, 총 ${MAX_PREFERENCE_PHOTOS}장)`,
   })
   @ApiConsumes('multipart/form-data')
-  // 인터셉터 한도는 총 보관 수로 두고 1회 업로드 한도는 핸들러에서 본다.
-  // multer 한도에 걸리면 "Unexpected field - images" 라는 원인을 알 수 없는 메시지가 나가서다.
-  @UseInterceptors(FilesInterceptor('images', MAX_PREFERENCE_PHOTOS))
+  @UseInterceptors(FilesInterceptor('images', MAX_PREFERENCE_UPLOAD, {
+    limits: { fileSize: MAX_IMAGE_BYTES, files: MAX_PREFERENCE_UPLOAD, fields: 0, parts: MAX_PREFERENCE_UPLOAD + 1 },
+  }))
   async uploadImages(
     @CurrentUser() user: UserEntity,
     // 크기·mimetype·매직바이트를 한 검증기에서 본다. 예전엔 앵커 없는 정규식이라
@@ -98,7 +100,7 @@ export class PreferenceAnalyzerController {
     }
 
     const existing = await this.preferencesService.findByUser(user.id);
-    const currentKeys = existing?.photoKeys ?? [];
+    const currentKeys = ownedPreferencePhotos(user.id, existing?.photoKeys ?? []);
     if (currentKeys.length + files.length > MAX_PREFERENCE_PHOTOS) {
       throw new BadRequestException(
         `취향 사진은 최대 ${MAX_PREFERENCE_PHOTOS}장까지 보관할 수 있습니다. (현재 ${currentKeys.length}장)`,
@@ -106,7 +108,7 @@ export class PreferenceAnalyzerController {
     }
 
     // `public/` 프리픽스를 떼었다 — 공개 여부는 이제 버킷이 가른다.
-    const stamp = Date.now();
+    const stamp = randomUUID();
     const newKeys = files.map(
       (file, index) => `preferences/${user.id}/${stamp}-${index}.${extForMime(file.mimetype)}`,
     );
@@ -150,7 +152,7 @@ export class PreferenceAnalyzerController {
     }
 
     const existing = await this.preferencesService.findByUser(user.id);
-    const photoKeys = existing?.photoKeys ?? [];
+    const photoKeys = ownedPreferencePhotos(user.id, existing?.photoKeys ?? []);
     const pending = this.pendingPhotoKeys(photoKeys, existing?.photoTags ?? {});
     if (pending.length === 0) {
       throw new BadRequestException('다시 분석할 사진이 없습니다.');
@@ -206,7 +208,7 @@ export class PreferenceAnalyzerController {
     const preference = await this.preferencesService.findByUser(user.id);
     const current = preference?.photoKeys ?? [];
     // 본인 취향 사진 목록에 있는 키만 삭제 (임의 오브젝트 삭제 방지)
-    if (!current.includes(key)) {
+    if (!ownsPreferencePhoto(user.id, key) || !current.includes(key)) {
       return { photos: [], tasteTags: preference?.tasteTags };
     }
     await this.storage.deletePrivateObject(key);

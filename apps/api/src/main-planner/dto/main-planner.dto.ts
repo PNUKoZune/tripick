@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  ArrayUnique,
   IsIn,
   IsInt,
   IsLatitude,
@@ -31,6 +32,7 @@ import type {
 } from '@tripick/types';
 
 import { ReplanPlaceBodyDto } from '../../replanning/dto/replan-request.dto';
+import { HH_MM } from '../../common/validation/patterns';
 
 const CREATE_TRIP_PACE = ['relaxed', 'balanced', 'packed'] as const satisfies readonly ReplanPace[];
 const CREATE_TRIP_BUDGET = ['thrifty', 'normal', 'premium'] as const satisfies readonly ReplanBudget[];
@@ -87,13 +89,13 @@ export class CreateTripRequestBodyDto implements CreateTripRequestDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   startDate!: string;
 
-  @Matches(/^\d{2}:\d{2}$/)
+  @Matches(HH_MM)
   startTime!: string;
 
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   endDate!: string;
 
-  @Matches(/^\d{2}:\d{2}$/)
+  @Matches(HH_MM)
   endTime!: string;
 
   @IsArray()
@@ -190,7 +192,7 @@ export class PlannerAddItemBodyDto implements PlannerAddItemRequestDto {
   @MaxLength(120)
   name!: string;
 
-  @Matches(/^\d{2}:\d{2}$/)
+  @Matches(HH_MM)
   scheduledAt!: string;
 
   @IsOptional()
@@ -237,7 +239,7 @@ export class PlannerUpdateItemBodyDto implements PlannerUpdateItemRequestDto {
   name?: string;
 
   @IsOptional()
-  @Matches(/^\d{2}:\d{2}$/)
+  @Matches(HH_MM)
   scheduledAt?: string;
 
   @IsOptional()
@@ -258,6 +260,7 @@ export class PlannerReorderItemsBodyDto implements PlannerReorderItemsRequestDto
   day!: number;
 
   @IsArray()
+  @ArrayUnique()
   @IsUUID('4', { each: true })
   orderedItemIds!: string[];
 }

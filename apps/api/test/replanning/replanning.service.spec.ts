@@ -59,7 +59,7 @@ function build(
     find: jest.fn(async () => opts.items ?? [item(1, DAY1), item(2, DAY2)]),
   } as any;
   const tripMembersService = {
-    canAccessTrip: jest.fn(async () => opts.canAccess ?? true),
+    assertTripOwner: jest.fn(async () => { if (opts.canAccess === false) throw new ForbiddenException(); }),
   } as any;
   const liveLocation = { getFresh: jest.fn(async () => opts.location ?? null) } as any;
 

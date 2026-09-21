@@ -14,6 +14,9 @@
 .gitignore
 **/*.log
 .vscode
+.claude
+**/playwright-report
+**/test-results
 
 # 로컬 환경파일 — 런타임 env 는 배포 플랫폼(Railway)이 주입한다
 **/.env

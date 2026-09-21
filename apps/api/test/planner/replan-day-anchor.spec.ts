@@ -144,6 +144,7 @@ function build(opts: {
     routeHelper as any,
     placeRetrieval as any,
     constraintEngine as any,
+    { forTrip: jest.fn().mockResolvedValue({ memberCount: 1, vectorMemberCount: 0 }) } as never,
   );
   return { service, itineraryService, plannerAgent, placeRetrieval };
 }

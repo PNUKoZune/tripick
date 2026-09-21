@@ -17,15 +17,28 @@ export function useInboxInvalidateSubscription() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    const socket = getRealtimeSocket();
+    let active = true;
+    let unsubscribe = () => {};
 
-    const handleInvalidate = () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.inbox.list });
-    };
+    void getRealtimeSocket()
+      .then((socket) => {
+        if (!active) return;
+        const handleInvalidate = () => {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.inbox.list });
+        };
 
-    socket.on('inbox_invalidate', handleInvalidate);
+        socket.on('inbox_invalidate', handleInvalidate);
+        unsubscribe = () => socket.off('inbox_invalidate', handleInvalidate);
+      })
+      .catch((error) => {
+        if (active && error instanceof Error && error.name !== 'AbortError') {
+          console.warn('[realtime] 인박스 동기화 연결 실패:', error);
+        }
+      });
+
     return () => {
-      socket.off('inbox_invalidate', handleInvalidate);
+      active = false;
+      unsubscribe();
     };
   }, [queryClient]);
 }
