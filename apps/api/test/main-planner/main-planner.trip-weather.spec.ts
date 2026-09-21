@@ -52,6 +52,7 @@ function setup(opts: { forecast?: Map<string, ParsedForecast>; forecastError?: E
     noop, // placeEmbeddings
     noop, // tourApi
     noop, // routeHelper
+    noop, // groupPreferences (날씨 조회 경로에서는 사용 안 함)
   );
   return { service, user: { id: 'u1' } as never, getExtendedForecast };
 }

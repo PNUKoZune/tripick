@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
@@ -11,6 +12,7 @@ import { UserEntity } from '../users/user.entity';
 import type { RouteMode, TripStatus } from '@tripick/types';
 
 @Entity('trips')
+@Index('IDX_trips_user_created', ['userId', 'createdAt'])
 export class TripEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;

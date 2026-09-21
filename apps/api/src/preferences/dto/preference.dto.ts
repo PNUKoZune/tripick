@@ -1,6 +1,5 @@
 import { Type } from 'class-transformer';
 import {
-  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsIn,
@@ -65,9 +64,6 @@ const THEMES = [
 const PACE = ['packed', 'balanced', 'relaxed'] as const satisfies readonly TravelPace[];
 const INTENSITY = ['active', 'moderate', 'restful'] as const satisfies readonly ActivityIntensity[];
 const CROWD = ['hotspot', 'balanced', 'quiet'] as const satisfies readonly CrowdPreference[];
-
-/** 취향 사진 URL 개수 상한 — 온보딩에서 올리는 장 수를 넉넉히 덮는다. */
-const MAX_PHOTO_URLS = 30;
 
 export class TasteTagBodyDto implements Partial<TasteTagDto> {
   @IsOptional()
@@ -135,12 +131,6 @@ export class UpdatePreferenceBodyDto implements UpdatePreferenceDto {
   @Type(() => PreferenceProfileBodyDto)
   profile?: PreferenceProfileBodyDto;
 
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(MAX_PHOTO_URLS)
-  @IsString({ each: true })
-  @Matches(STORAGE_KEY, { each: true })
-  photoKeys?: string[];
 }
 
 export class TogglePhotoTagBodyDto implements TogglePhotoTagDto {

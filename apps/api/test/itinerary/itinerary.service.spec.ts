@@ -11,6 +11,7 @@ function createHarness() {
     create: jest.fn((v: any) => v),
     save: jest.fn(async (v: any) => v),
   };
+  Object.assign(repo, { manager: { transaction: (run: (manager: unknown) => unknown) => run({ getRepository: () => repo }) } });
   const tripsRepo = { findOneBy: jest.fn() };
   const service = new ItineraryService(repo as any, tripsRepo as any);
   return { service, repo, tripsRepo };

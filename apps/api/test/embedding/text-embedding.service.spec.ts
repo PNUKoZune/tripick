@@ -19,9 +19,10 @@ describe('TextEmbeddingService.embedWithSource', () => {
 
   it('reports source=remote when the embedding server responds', async () => {
     mockedPost.mockResolvedValue({ data: { data: [{ embedding: [0.1, 0.2, 0.3] }] } });
-    const result = await makeService().embedWithSource('테스트');
+    const result = await makeService({ LLM_EMBEDDING_DIMENSIONS: '3' }).embedWithSource('테스트');
     expect(result.source).toBe('remote');
-    expect(result.vector).toHaveLength(1024); // normalizeDimensions 패딩 (기본 차원)
+    expect(result.modelId).toBe('text-embedding-model');
+    expect(result.vector).toHaveLength(3); // remote dimensions must match the configured model
     expect(result.remoteDimensions).toBe(3); // 정규화 전 원본 차원 (차원 불일치 감지용)
   });
 
@@ -29,8 +30,17 @@ describe('TextEmbeddingService.embedWithSource', () => {
     mockedPost.mockRejectedValue(new Error('ECONNREFUSED'));
     const result = await makeService().embedWithSource('테스트');
     expect(result.source).toBe('hash');
+    expect(result.modelId).toBe('hash-fnv1a-v1:1024');
     expect(result.vector).toHaveLength(1024);
     expect(result.remoteDimensions).toBeUndefined(); // hash 폴백은 원본 차원 없음
+  });
+
+  it('uses the configured remote model as the vector-space id', async () => {
+    mockedPost.mockResolvedValue({ data: { data: [{ embedding: [0.1, 0.2] }] } });
+    const result = await makeService({ LLM_EMBEDDING_MODEL: 'bge-m3-ko-v2', LLM_EMBEDDING_DIMENSIONS: '2' }).embedWithSource(
+      '테스트',
+    );
+    expect(result.modelId).toBe('bge-m3-ko-v2');
   });
 
   it('embed() still returns just the vector', async () => {
@@ -38,6 +48,13 @@ describe('TextEmbeddingService.embedWithSource', () => {
     const vector = await makeService().embed('테스트');
     expect(Array.isArray(vector)).toBe(true);
     expect(vector).toHaveLength(1024);
+  });
+
+  it.each([[1, 2], [0, 0, 0], [NaN, 1, 0], [Infinity, 1, 0]])('rejects an invalid semantic vector %j', async (...vector) => {
+    mockedPost.mockResolvedValue({ data: { data: [{ embedding: vector }] } });
+    const result = await makeService({ LLM_EMBEDDING_DIMENSIONS: '3' }).embedWithSource('test');
+    expect(result.source).toBe('hash');
+    expect(result.vector.every(Number.isFinite)).toBe(true);
   });
 });
 

@@ -16,6 +16,8 @@ import { FcmTokenService } from '../notification/fcm-token.service';
 import { RefreshTokenEntity } from '../auth/entities/refresh-token.entity';
 import { EmailTokenEntity } from '../auth/entities/email-token.entity';
 import { PreferenceEntity } from '../preferences/preference.entity';
+import { ownedPreferencePhotos } from '../preferences/photo-ownership';
+import { AccessSessionsService } from '../auth/access-sessions.service';
 import { UserEntity } from './user.entity';
 import { WithdrawalReasonEntity } from './withdrawal-reason.entity';
 import { WithdrawUserDto } from './dto/withdraw-user.dto';
@@ -57,6 +59,7 @@ export class UsersService {
     private readonly preferences: Repository<PreferenceEntity>,
     private readonly storage: StorageService,
     private readonly fcmTokens: FcmTokenService,
+    private readonly sessions: AccessSessionsService,
   ) {}
 
 
@@ -101,6 +104,9 @@ export class UsersService {
     if (profile.email) {
       const byEmail = await this.findByEmail(profile.email.toLowerCase());
       if (byEmail) {
+        if (byEmail.kakaoId && byEmail.kakaoId !== profile.id) {
+          throw new ConflictException('다른 카카오 계정에 연결된 이메일입니다.');
+        }
         byEmail.kakaoId = profile.id;
         if (!byEmail.profileImageUrl && profile.profileImageUrl) {
           byEmail.profileImageUrl = profile.profileImageUrl;
@@ -421,12 +427,14 @@ export class UsersService {
    * 삭제 요청을 이행하지 않은 것과 같다.
    */
   private async removeUser(user: UserEntity): Promise<void> {
+    const userId = user.id; // TypeORM remove clears the entity primary key.
     // 행이 사라지면 키를 알 방법이 없으므로 DB 삭제 **전에** 읽어 둔다.
     const { publicKeys, privateKeys } = await this.uploadedStorageKeys(user);
     await this.fcmTokens.removeAllForUser(user.id);
     await this.refreshTokens.delete({ userId: user.id });
     await this.emailTokens.delete({ userId: user.id });
     await this.repo.remove(user);
+    this.sessions.invalidate({ userId });
     // 오브젝트 삭제 실패로 탈퇴를 되돌리지는 않는다 — 계정은 이미 지워졌고, 사용자에게
     // 500 을 돌려주면 "탈퇴가 안 됐다"고 읽힌다. `allSettled` 로 여기서 직접 막는다:
     // deleteObject 가 지금은 스스로 삼키지만, 그 구현에 기대면 나중에 던지도록 바뀔 때
@@ -455,7 +463,7 @@ export class UsersService {
   ): Promise<{ publicKeys: string[]; privateKeys: string[] }> {
     const preference = await this.preferences.findOne({ where: { userId: user.id } });
     // 취향 사진은 비공개 버킷의 키가 그대로 저장돼 있다(URL 변환 불필요).
-    const privateKeys = [...new Set(preference?.photoKeys ?? [])];
+    const privateKeys = ownedPreferencePhotos(user.id, preference?.photoKeys ?? []);
     // 프로필 이미지는 공개 버킷이고 값이 URL 이다. 카카오 등 외부 URL 은 null 이라 빠진다.
     const profileKey = user.profileImageUrl
       ? this.storage.keyFromPublicUrl(user.profileImageUrl)

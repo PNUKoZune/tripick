@@ -11,6 +11,7 @@ import type {
 import { VisionAnalyzer } from './vision.analyzer';
 import { PreferencesService } from '../preferences/preferences.service';
 import { effectivePhotoTags, pruneToPhotos } from '../preferences/photo-taste';
+import { ownedPreferencePhotos, ownsPreferencePhoto } from '../preferences/photo-ownership';
 import { StorageService } from '../storage/storage.service';
 import { InboxService } from '../inbox/inbox.service';
 import {
@@ -64,7 +65,7 @@ export class PreferenceAnalysisService {
       status: 'queued',
       analyzed: 0,
       total: data.photoKeys.length,
-      photos: await this.signPhotos(allPhotoKeys),
+      photos: await this.signPhotos(ownedPreferencePhotos(data.userId, allPhotoKeys)),
     };
   }
 
@@ -142,7 +143,7 @@ export class PreferenceAnalysisService {
     // 재시도로 다시 들어온 경우 이미 분석해 둔 사진은 건너뛴다 — 장당 35초라 전량 재분석은 비싸다.
     const before = await this.preferencesService.findByUser(userId);
     const done = before?.photoTags ?? {};
-    const pending = photoKeys.filter((key) => Boolean(key) && !done[key]);
+    const pending = photoKeys.filter((key) => ownsPreferencePhoto(userId, key) && before?.photoKeys.includes(key) && !done[key]);
 
     let progress = photoKeys.length - pending.length;
     await job.updateProgress(progress);

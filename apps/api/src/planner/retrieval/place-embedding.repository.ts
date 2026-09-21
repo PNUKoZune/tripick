@@ -119,6 +119,7 @@ interface PlaceEmbeddingRow {
   opening_hours?: string | null;
   similarity?: number | string | null;
   preference_similarity?: number | string | null;
+  member_preference_similarities?: number[] | string | null;
 }
 
 @Injectable()
@@ -133,10 +134,17 @@ export class PlaceEmbeddingRepository {
     limit: number,
     preferenceVector?: number[],
     visitWindow?: VisitWindow,
+    expectedEmbeddingModel?: string,
+    memberPreferenceVectors?: number[][],
   ): Promise<RawPlaceCandidate[]> {
     const params: unknown[] = [`[${embedding.join(',')}]`];
     const regionClause = this.scopeClause(scope, params);
     const eventClause = this.eventPeriodClause(visitWindow, params);
+    let modelClause = '';
+    if (expectedEmbeddingModel) {
+      params.push(expectedEmbeddingModel);
+      modelClause = `AND embedding_model = $${params.length}`;
+    }
 
     params.push(limit);
     const limitIndex = params.length;
@@ -147,6 +155,19 @@ export class PlaceEmbeddingRepository {
     if (hasPreference) {
       params.push(`[${preferenceVector!.join(',')}]`);
       preferenceSelect = `1 - (embedding <=> $${params.length}::vector) AS preference_similarity`;
+    }
+
+    const groupVectors = (memberPreferenceVectors ?? []).filter(
+      (vector) => Array.isArray(vector) && vector.length > 0,
+    );
+    let memberPreferenceSelect = 'NULL::float8[] AS member_preference_similarities';
+    if (groupVectors.length >= 2) {
+      const expressions = groupVectors.map((vector) => {
+        params.push(`[${vector.join(',')}]`);
+        return `1 - (embedding <=> $${params.length}::vector)`;
+      });
+      memberPreferenceSelect =
+        `ARRAY[${expressions.join(', ')}]::float8[] AS member_preference_similarities`;
     }
 
     try {
@@ -164,9 +185,11 @@ export class PlaceEmbeddingRepository {
                image_url,
                opening_hours,
                1 - (embedding <=> $1::vector) AS similarity,
-               ${preferenceSelect}
+               ${preferenceSelect},
+               ${memberPreferenceSelect}
         FROM place_embeddings
         WHERE embedding IS NOT NULL
+          ${modelClause}
           ${regionClause}
           ${eventClause}
         ORDER BY embedding <=> $1::vector
@@ -385,7 +408,11 @@ export class PlaceEmbeddingRepository {
 
   async seedRegion(
     destination: string,
-    embed: (text: string) => Promise<number[]>,
+    embed: (text: string) => Promise<{
+      vector: number[];
+      source: 'remote' | 'hash';
+      modelId: string;
+    }>,
   ): Promise<number> {
     const region = normalizeDestinationRegion(destination);
     // 폴백 시드(DEFAULT_SEEDS)는 DB 에 넣지 않는다 — 라벨이 'default' 라 region_code·sigungu_code
@@ -413,6 +440,9 @@ export class PlaceEmbeddingRepository {
       if (existing) continue;
 
       const embedding = await embed(buildPlaceEmbeddingText(place));
+      if (embedding.source !== 'remote') {
+        throw new Error('원격 임베딩 서버가 없어 seed 카탈로그 적재를 중단합니다.');
+      }
       await this.upsertPlace(
         {
           kakaoPlaceId,
@@ -423,8 +453,9 @@ export class PlaceEmbeddingRepository {
           region,
           coordinates: place.coordinates,
           openingHours: place.openingHours ?? null,
+          embeddingModel: embedding.modelId,
         },
-        embedding,
+        embedding.vector,
       );
       inserted += 1;
     }
@@ -760,6 +791,7 @@ export class PlaceEmbeddingRepository {
 
     const similarity = this.numberOrUndefined(row.similarity);
     const preferenceSimilarity = this.numberOrUndefined(row.preference_similarity);
+    const memberPreferenceSimilarities = this.numberArray(row.member_preference_similarities);
     return [
       {
         ...place,
@@ -768,13 +800,14 @@ export class PlaceEmbeddingRepository {
         ...(row.destination_region ? { destinationRegion: row.destination_region } : {}),
         ...(similarity !== undefined ? { similarity } : {}),
         ...(preferenceSimilarity !== undefined ? { preferenceSimilarity } : {}),
+        ...(memberPreferenceSimilarities.length > 0 ? { memberPreferenceSimilarities } : {}),
       },
     ];
   }
 
   private parseCoordinates(value: PlaceEmbeddingRow['coordinates']): Coordinates | null {
     if (!value) return null;
-    const raw = typeof value === 'string' ? JSON.parse(value) as Partial<Coordinates> : value;
+    const raw = typeof value === 'string' ? (JSON.parse(value) as Partial<Coordinates>) : value;
     const lat = Number(raw.lat);
     const lng = Number(raw.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
@@ -785,5 +818,16 @@ export class PlaceEmbeddingRepository {
     if (value === null || value === undefined) return undefined;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  private numberArray(value: number[] | string | null | undefined): number[] {
+    if (!value) return [];
+    const raw = Array.isArray(value)
+      ? value
+      : value
+          .replace(/^\{/, '')
+          .replace(/\}$/, '')
+          .split(',');
+    return raw.map(Number).filter((item) => Number.isFinite(item));
   }
 }

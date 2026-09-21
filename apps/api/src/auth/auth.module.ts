@@ -4,6 +4,7 @@ import { PassportModule } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthController } from './auth.controller';
+import { AccessSessionsModule } from './access-sessions.module';
 import { AuthService } from './auth.service';
 import { KakaoExchangeService } from './kakao-exchange.service';
 import { EmailSendLimiterService } from './email-send-limiter.service';
@@ -16,6 +17,7 @@ import { JWT_ALGORITHM, accessTokenSecret } from '../common/jwt-secrets';
 
 @Module({
   imports: [
+    AccessSessionsModule,
     UsersModule,
     EmailModule,
     PassportModule,

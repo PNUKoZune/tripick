@@ -18,6 +18,7 @@ import type {
   ReplanRequestDto,
   SharedItineraryDto,
   TripShareResponseDto,
+  TripGenerationJobDto,
   TripSummaryDto,
   UpdateLiveLocationDto,
 } from '@tripick/types';
@@ -74,6 +75,15 @@ export function fetchRecommendedDestinations() {
 
 export function createTrip(body: CreateTripRequestDto) {
   return api.post<TripSummaryDto>('/main-planner/trips', body);
+}
+
+/** BullMQ Worker가 보고한 초기 AI 일정 생성 단계. 시간 기반 가짜 progress를 만들지 않는다. */
+export function fetchTripGeneration(tripId: string) {
+  return api.get<TripGenerationJobDto>(`/trips/${tripId}/generation`);
+}
+
+export function retryTripGeneration(tripId: string) {
+  return api.post<TripGenerationJobDto>(`/trips/${tripId}/generation/retry`, {});
 }
 
 /** 여행 삭제 (owner 만) */

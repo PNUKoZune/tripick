@@ -6,6 +6,47 @@ import type { CandidatePlace } from '../../src/planner/retrieval/types';
 import type { ItineraryItemDto } from '@tripick/types';
 
 describe('PlannerService hard constraints', () => {
+  it('uses the accepted group profile for initial retrieval instead of the owner alone', async () => {
+    const groupPreference = {
+      memberCount: 3,
+      vectorMemberCount: 2,
+      tasteTags: {
+        food: ['cafe', 'korean'],
+        mood: ['trendy', 'cultural'],
+        environment: ['city', 'village'],
+        confidence: 0.9,
+      },
+      preferenceVector: [Math.SQRT1_2, Math.SQRT1_2],
+      memberPreferenceVectors: [
+        [1, 0],
+        [0, 1],
+      ],
+      memberTasteTags: [
+        { food: ['cafe'], mood: ['trendy'], environment: ['city'], confidence: 0.9 },
+        { food: ['korean'], mood: ['cultural'], environment: ['village'], confidence: 0.9 },
+      ],
+    };
+    const harness = createHarness(undefined, { groupPreference });
+    harness.constraintEngine.validate.mockImplementation(async (items: ItineraryItemDto[]) => ({
+      valid: true,
+      issues: [],
+      items,
+    }));
+
+    await harness.service.generateItinerary(TRIP.id);
+
+    expect(harness.groupPreferences.forTrip).toHaveBeenCalledWith(TRIP.id, TRIP.userId);
+    expect(harness.placeRetrieval.retrieve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tasteTags: groupPreference.tasteTags,
+        preferenceVector: groupPreference.preferenceVector,
+        memberPreferenceVectors: groupPreference.memberPreferenceVectors,
+        memberTasteTags: groupPreference.memberTasteTags,
+        groupMemberCount: 3,
+      }),
+    );
+  });
+
   it('expands the daily target beyond the pace minimum for a long activity window', async () => {
     const harness = createHarness('relaxed');
     harness.constraintEngine.validate.mockImplementation(async (items: ItineraryItemDto[]) => ({
@@ -63,6 +104,39 @@ describe('PlannerService hard constraints', () => {
     // memo 는 사용자 메모 공간이라 생성 단계 AI 추론을 저장하지 않는다(의도된 동작).
     expect(stored[0]?.memo).toBeUndefined();
     expect(harness.tripsRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: 'confirmed' }));
+  });
+
+  it('skips multiple closed places without consuming travel time or leaving order gaps', async () => {
+    const pool = [
+      place('open-1', '첫 방문', 'cafe'),
+      { ...place('closed-1', '폐장 1', 'attraction'), openingHours: '07:00-08:00' },
+      { ...place('closed-2', '폐장 2', 'attraction'), openingHours: '08:00-09:00' },
+      place('open-2', '다음 방문', 'cafe'),
+    ];
+    const harness = createHarness(undefined, { pool });
+    harness.constraintEngine.validate.mockImplementation(async (items: ItineraryItemDto[]) => ({
+      valid: true, issues: [], items,
+    }));
+
+    const items = await harness.service.generateItinerary(TRIP.id);
+
+    expect(items.map((item) => item.name).sort()).toEqual(['다음 방문', '첫 방문']);
+    expect(items.map((item) => item.order)).toEqual([1, 2]);
+    for (const [draft] of harness.constraintEngine.validate.mock.calls) {
+      expect(draft.map((item: ItineraryItemDto) => item.name)).not.toContain('폐장 1');
+      expect(draft.map((item: ItineraryItemDto) => item.name)).not.toContain('폐장 2');
+      const gap = Date.parse(draft[1].scheduledAt) - Date.parse(draft[0].scheduledAt);
+      expect(gap).toBe((draft[0].durationMin + 15) * 60_000);
+    }
+  });
+
+  it('does not replace an itinerary with an empty draft when every place is closed', async () => {
+    const harness = createHarness(undefined, { openingHours: '07:00-08:00' });
+    harness.constraintEngine.validate.mockImplementation(async (items: ItineraryItemDto[]) => ({
+      valid: true, issues: [], items,
+    }));
+    await expect(harness.service.generateItinerary(TRIP.id)).rejects.toBeInstanceOf(BadRequestException);
+    expect(harness.itineraryService.replaceTripItems).not.toHaveBeenCalled();
   });
 
   it('preserves a user memo on the matching place when replanning', async () => {
@@ -145,6 +219,13 @@ function createHarness(
     openingHours?: string;
     /** 검색이 돌려줄 후보 풀. 생략하면 종전대로 1건(얇은 풀). */
     pool?: CandidatePlace[];
+    groupPreference?: {
+      memberCount: number;
+      vectorMemberCount: number;
+      tasteTags?: Record<string, unknown>;
+      preferenceVector?: number[];
+      memberPreferenceVectors?: number[][];
+    };
   } = {},
 ) {
   const trip = { ...TRIP, ...overrides.trip };
@@ -217,6 +298,11 @@ function createHarness(
   const constraintEngine = {
     validate: jest.fn(),
   };
+  const groupPreferences = {
+    forTrip: jest.fn().mockResolvedValue(
+      overrides.groupPreference ?? { memberCount: 1, vectorMemberCount: 0 },
+    ),
+  };
   const service = new PlannerService(
     tripsRepo as any,
     tripDaysRepo as any,
@@ -227,6 +313,7 @@ function createHarness(
     routeHelper as any,
     placeRetrieval as any,
     constraintEngine as any,
+    groupPreferences as never,
   );
 
   return {
@@ -235,6 +322,8 @@ function createHarness(
     itineraryService,
     constraintEngine,
     plannerAgent,
+    placeRetrieval,
+    groupPreferences,
   };
 }
 
@@ -295,7 +384,8 @@ describe('PlannerService 일자별 지역', () => {
       weatherHelper as any,
       routeHelper as any,
       placeRetrieval as any,
-        constraintEngine as any,
+      constraintEngine as any,
+      { forTrip: jest.fn().mockResolvedValue({ memberCount: 1, vectorMemberCount: 0 }) } as never,
     );
 
     await service.generateItinerary(trip.id);
@@ -464,6 +554,7 @@ function createPartialHarness() {
     routeHelper as any,
     placeRetrieval as any,
     constraintEngine as any,
+    { forTrip: jest.fn().mockResolvedValue({ memberCount: 1, vectorMemberCount: 0 }) } as never,
   );
 
   return { service, itineraryService, plannerAgent, placeRetrieval, weatherHelper };

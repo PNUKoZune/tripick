@@ -97,7 +97,7 @@ function TripsContent() {
     const done = trips.filter((t) => t.status === 'done').length;
     return { upcoming, ongoing, done };
   }, [trips]);
-  const latestTrip = trips[0];
+  const latestTrip = trips.find((trip) => trip.hasDetail);
 
   return (
     <AppFrame themed>
@@ -178,7 +178,17 @@ function TripsContent() {
                 <TripSummaryCard
                   trip={trip}
                   draftAction={
-                    <DeleteTripButton tripId={trip.id} tripTitle={trip.title} variant="compact" />
+                    <div className="flex items-center gap-1.5">
+                      {trip.generationState ? (
+                        <Link
+                          href={`/trips/new?generationTripId=${encodeURIComponent(trip.id)}`}
+                          className="inline-flex h-9 items-center rounded-[12px] bg-[color:var(--primary,#3182F6)] px-3 text-[12px] font-bold text-white"
+                        >
+                          {trip.generationState === 'failed' ? '다시 열기' : '진행 보기'}
+                        </Link>
+                      ) : null}
+                      <DeleteTripButton tripId={trip.id} tripTitle={trip.title} variant="compact" />
+                    </div>
                   }
                 />
               </div>

@@ -41,6 +41,8 @@ tmp/
 # Testing
 coverage
 .nyc_output
+playwright-report/
+test-results/
 
 # React Native — 공통 (앱 별 native 디렉터리 안의 build 산출물은 apps/mobile/.gitignore 에서 처리)
 *.jks

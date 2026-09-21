@@ -39,8 +39,10 @@ import type {
   ReplanBudget,
   ReplanPace,
   ReplanRequestDto,
+  TripGenerationStage,
 } from '@tripick/types';
 import type { CandidatePlace, PoolCategoryQuota, RetrievalContext } from './retrieval/types';
+import { GroupPreferenceService } from './retrieval/group-preference.service';
 
 /**
  * 일차 수에 맞춘 후보 풀 종류별 하한. 하루에 필요한 건 끼니 2 + 휴식(카페) 1 이고, 볼거리는
@@ -102,6 +104,8 @@ interface GenerateOptions {
   mustIncludePlaces?: ReplanRequestDto['mustIncludePlaces'];
   /** 구조화 재계획 옵션 (강도·회피·동선·예산) */
   preferences?: ReplanRequestDto['preferences'];
+  /** 초기 생성 Worker가 실제 처리 단계를 BullMQ progress로 보고할 때만 사용한다. */
+  onProgress?: (stage: TripGenerationStage, progress: number) => Promise<void> | void;
 }
 
 /** 초안 한 회차의 판정 결과. 하드 제약 위반과 "다 못 담음"을 나눠 들고 있다. */
@@ -144,15 +148,22 @@ export class PlannerService {
     private readonly routeHelper: RouteHelper,
     private readonly placeRetrieval: PlaceRetrievalService,
     private readonly constraintEngine: ConstraintEngine,
+    private readonly groupPreferences: GroupPreferenceService,
   ) {}
 
-  async generateItinerary(tripId: string): Promise<ItineraryItemDto[]> {
+  async generateItinerary(
+    tripId: string,
+    onProgress?: GenerateOptions['onProgress'],
+  ): Promise<ItineraryItemDto[]> {
     const trip = await this.tripsRepo.findOneBy({ id: tripId });
     if (!trip) {
       throw new NotFoundException(`Trip ${tripId} not found`);
     }
 
-    const items = await this.buildAndStoreItinerary(trip, {});
+    await onProgress?.('preparing', 15);
+    const items = await this.buildAndStoreItinerary(trip, {
+      ...(onProgress ? { onProgress } : {}),
+    });
     trip.status = 'confirmed';
     await this.tripsRepo.save(trip);
     return items;
@@ -178,10 +189,14 @@ export class PlannerService {
 
   private async buildAndStoreItinerary(trip: TripEntity, options: GenerateOptions): Promise<ItineraryItemDto[]> {
     this.assertTripWindow(trip);
-    const preference = await this.preferencesService.findByUser(trip.userId);
-    const tasteTags = preference?.tasteTags;
-    // 저장된 취향 벡터로 pgvector 검색을 개인화 (블렌딩 + 리랭킹)
-    const preferenceVector = await this.preferencesService.getPreferenceVector(trip.userId);
+    const [preference, groupPreference] = await Promise.all([
+      this.preferencesService.findByUser(trip.userId),
+      this.groupPreferences.forTrip(trip.id, trip.userId),
+    ]);
+    const tasteTags = groupPreference?.tasteTags ?? preference?.tasteTags;
+    // accepted 그룹의 centroid로 후보를 찾고, 개별 벡터는 평균+최저 만족 리랭킹에 쓴다.
+    // 그룹 서비스는 멤버 행이 없어도 owner-only 프로필을 반환한다.
+    const preferenceVector = groupPreference.preferenceVector;
     const dayCount = countTripDays(trip.startDate, trip.endDate);
     const wakeTime = trip.wakeTime ?? '08:30';
     const sleepTime = trip.sleepTime ?? '22:00';
@@ -237,6 +252,13 @@ export class PlannerService {
       },
       ...(tasteTags !== undefined ? { tasteTags } : {}),
       ...(preferenceVector ? { preferenceVector } : {}),
+      ...(groupPreference?.memberPreferenceVectors
+        ? { memberPreferenceVectors: groupPreference.memberPreferenceVectors }
+        : {}),
+      ...(groupPreference?.memberTasteTags
+        ? { memberTasteTags: groupPreference.memberTasteTags }
+        : {}),
+      ...(groupPreference ? { groupMemberCount: groupPreference.memberCount } : {}),
       ...(options.trigger !== undefined ? { trigger: options.trigger } : {}),
       ...(options.currentLocation !== undefined ? { currentLocation: options.currentLocation } : {}),
     } satisfies Omit<RetrievalContext, 'destination' | 'limit'>;
@@ -255,6 +277,8 @@ export class PlannerService {
     // 판정은 여행 전체 기준이다 — 한 일차만 다시 짜도 그 일차의 지역으로만 채워야 하므로,
     // 부분 재계획이라고 단일 풀(결합 라벨 destination) 경로로 떨어뜨리면 안 된다.
     const perDayMode = new Set(dayRegions.flat()).size > 1;
+
+    await options.onProgress?.('discovering_places', 35);
 
     let candidates: CandidatePlace[];
     let poolsByDay: CandidatePlace[][] | null = null;
@@ -290,6 +314,8 @@ export class PlannerService {
     if (candidates.length === 0) {
       throw new BadRequestException('No place candidates found for itinerary generation');
     }
+
+    await options.onProgress?.('building_itinerary', 65);
 
     // 다시 짜는 일차의 실제 날짜. 프롬프트 day↔날짜 매핑과 날씨 힌트 범위가 이걸 공유한다.
     const planDates = planDays.map((day) => this.offsetDate(trip.startDate, day - 1));
@@ -431,6 +457,7 @@ export class PlannerService {
     const storePayload = [...doneStoreItems, ...toStore].sort(
       (a, b) => a.day - b.day || a.order - b.order,
     );
+    await options.onProgress?.('saving', 90);
     // 부분 재계획은 대상 일차만 갈아끼운다. 전체 재계획은 기존대로 통째로 교체.
     const saved = partial
       ? await this.itineraryService.replaceDayItems(trip.id, planDays, storePayload)
@@ -668,15 +695,25 @@ export class PlannerService {
         // "지금 그 장소에 이미 도착해 있다" 를 가정하게 된다.
         const from =
           sameDayPrevious?.coordinates ??
-          (anchored && order === 0 ? options.currentLocation : undefined);
+          (anchored && !sameDayPrevious ? options.currentLocation : undefined);
         const travelTimeMin = from
           ? await this.estimateTravelTime(from, seed.coordinates, trip.transportMode)
           : 0;
 
-        currentAt = new Date(currentAt.getTime() + travelTimeMin * 60000);
-        currentAt = this.alignToOpeningHours(currentAt, seed.openingHours);
+        const arrivalAt = this.alignToOpeningHours(
+          new Date(currentAt.getTime() + travelTimeMin * 60000),
+          seed.openingHours,
+        );
 
-        const remainMin = Math.floor((dayEndAt - currentAt.getTime()) / 60_000);
+        // 폐장 전에 방문을 마칠 수 없는 장소는 건너뛴다. 제외한 장소로 이동한 시간은
+        // 누적하지 않아, 다음 후보를 마지막으로 담은 장소에서 다시 계산한다.
+        const hours = seed.openingHours?.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
+        if (hours) {
+          const closingMinutes = Number(hours[3]) * 60 + Number(hours[4]);
+          if (getKstMinutes(arrivalAt) + planned.durationMin > closingMinutes) continue;
+        }
+
+        const remainMin = Math.floor((dayEndAt - arrivalAt.getTime()) / 60_000);
         // 45분도 안 남으면 이 항목부터는 그 날 안에 넣을 수 없다.
         if (remainMin < MIN_FITTING_VISIT_MIN) break;
         let durationMin = planned.durationMin;
@@ -692,12 +729,12 @@ export class PlannerService {
         const item: CreateItineraryItemDto = {
           tripId: trip.id,
           day,
-          order: order + 1,
+          order: (sameDayPrevious?.order ?? 0) + 1,
           type: this.toItemType(seed.category),
           name: seed.name,
           address: seed.address,
           coordinates: seed.coordinates,
-          scheduledAt: currentAt.toISOString(),
+          scheduledAt: arrivalAt.toISOString(),
           durationMin,
         };
         if (seed.kakaoPlaceId) item.kakaoPlaceId = seed.kakaoPlaceId;
@@ -707,7 +744,7 @@ export class PlannerService {
         if (travelTimeMin > 0) item.travelTimeMin = travelTimeMin;
         created.push(item);
 
-        currentAt = new Date(currentAt.getTime() + durationMin * 60000);
+        currentAt = new Date(arrivalAt.getTime() + durationMin * 60000);
       }
     }
 
@@ -765,6 +802,10 @@ export class PlannerService {
   ): Promise<DraftAttempt> {
     const items = await this.buildDraft(plan, context);
     const validation = await this.validateDraft(items, context);
+    if (items.length === 0 && plan.length > 0) {
+      validation.valid = false;
+      validation.issues.push('No visits fit within the available activity and opening hours');
+    }
     const shortfall = Math.max(0, this.plannedItemCount(plan, context) - items.length);
     return { validation, shortfall, accepted: validation.valid && shortfall === 0 };
   }

@@ -3,6 +3,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { PreferencesService } from '../../src/preferences/preferences.service';
 import type { PreferenceEntity } from '../../src/preferences/preference.entity';
+import type { EmbeddingResult } from '../../src/embedding/text-embedding.service';
 import type { PreferenceProfileDto } from '@tripick/types';
 
 /** 저장돼 있는 취향 행. profile 은 항상 전체 필드를 갖는다. */
@@ -28,10 +29,14 @@ describe('PreferencesService.upsert — 기상/취침 시간 교차 검증', () 
 
   const repo = {
     findOneBy: jest.fn(async () => stored),
+    find: jest.fn(async () => []),
     create: jest.fn((value: Partial<PreferenceEntity>) => value),
     save: jest.fn(async (value: Partial<PreferenceEntity>) => value),
   };
-  const embeddings = { embed: jest.fn(async () => [0.1, 0.2]) };
+  const embeddings = {
+    embedWithSource: jest.fn(async (): Promise<EmbeddingResult> => remoteEmbedding()),
+    modelId: jest.fn(() => 'bge-m3-ko'),
+  };
   const preferenceEmbeddings = { upsertUserEmbedding: jest.fn(async () => 'emb-1') };
 
   beforeEach(() => {
@@ -68,15 +73,24 @@ describe('PreferencesService.upsert — 기상/취침 시간 교차 검증', () 
 function makeService(stored: Partial<PreferenceEntity> | null = null) {
   const repo = {
     findOneBy: jest.fn(async () => stored),
+    find: jest.fn(async () => []),
     create: jest.fn((value: Partial<PreferenceEntity>) => value),
     save: jest.fn(async (value: Partial<PreferenceEntity>) => value),
   };
-  const embeddings = { embed: jest.fn(async () => [0.1, 0.2]) };
+  const embeddings = {
+    embedWithSource: jest.fn(async (): Promise<EmbeddingResult> => remoteEmbedding()),
+    modelId: jest.fn(() => 'bge-m3-ko'),
+  };
   const preferenceEmbeddings = {
     upsertUserEmbedding: jest.fn(async () => 'emb-1'),
     findVectorByUser: jest.fn(async () => [0.5, 0.6]),
+    findVectorsByUsers: jest.fn(async () => new Map([['u1', [0.5, 0.6]]])),
   };
-  const service = new PreferencesService(repo as any, embeddings as any, preferenceEmbeddings as any);
+  const service = new PreferencesService(
+    repo as any,
+    embeddings as any,
+    preferenceEmbeddings as any,
+  );
   return { service, repo, embeddings, preferenceEmbeddings };
 }
 
@@ -100,7 +114,21 @@ describe('PreferencesService.getPreferenceVector', () => {
     const { service, preferenceEmbeddings } = makeService();
 
     await expect(service.getPreferenceVector('u1')).resolves.toEqual([0.5, 0.6]);
-    expect(preferenceEmbeddings.findVectorByUser).toHaveBeenCalledWith('u1');
+    expect(preferenceEmbeddings.findVectorByUser).toHaveBeenCalledWith('u1', 'bge-m3-ko');
+  });
+});
+
+describe('PreferencesService group batch reads', () => {
+  it('deduplicates user ids for profile and vector queries', async () => {
+    const { service, repo, preferenceEmbeddings } = makeService();
+
+    await service.findByUsers(['u1', 'u1', 'u2']);
+    await service.getPreferenceVectors(['u1', 'u1', 'u2']);
+
+    expect(repo.find).toHaveBeenCalledWith({
+      where: { userId: expect.any(Object) },
+    });
+    expect(preferenceEmbeddings.findVectorsByUsers).toHaveBeenCalledWith(['u1', 'u2'], 'bge-m3-ko');
   });
 });
 
@@ -108,29 +136,29 @@ describe('PreferencesService.setPhotoKeys', () => {
   it('취향 행이 없으면 기본값으로 새로 만들고 재임베딩하지 않는다', async () => {
     const { service, repo, embeddings } = makeService(null);
 
-    const saved = await service.setPhotoKeys('u1', ['a.jpg', 'b.jpg']);
+    const saved = await service.setPhotoKeys('u1', ['preferences/u1/a.jpg', 'preferences/u1/b.jpg']);
 
     expect(repo.create).toHaveBeenCalled();
-    expect(saved.photoKeys).toEqual(['a.jpg', 'b.jpg']);
+    expect(saved.photoKeys).toEqual(['preferences/u1/a.jpg', 'preferences/u1/b.jpg']);
     // 태그가 바뀌지 않았으므로 원격 임베딩 호출은 건너뛴다.
-    expect(embeddings.embed).not.toHaveBeenCalled();
+    expect(embeddings.embedWithSource).not.toHaveBeenCalled();
   });
 
   it('남지 않은 사진의 photoTags·disabledPhotoTags 를 함께 정리한다', async () => {
     const stored: Partial<PreferenceEntity> = {
-      photoKeys: ['a.jpg', 'b.jpg'],
+      photoKeys: ['preferences/u1/a.jpg', 'preferences/u1/b.jpg'],
       photoTags: {
-        'a.jpg': { food: ['cafe'], mood: [], environment: [], confidence: 0.8 },
-        'b.jpg': { food: ['korean'], mood: [], environment: [], confidence: 0.8 },
+        'preferences/u1/a.jpg': { food: ['cafe'], mood: [], environment: [], confidence: 0.8 },
+        'preferences/u1/b.jpg': { food: ['korean'], mood: [], environment: [], confidence: 0.8 },
       } as any,
-      disabledPhotoTags: { 'b.jpg': ['korean'] } as any,
+      disabledPhotoTags: { 'preferences/u1/b.jpg': ['korean'] } as any,
     };
     const { service } = makeService(stored);
 
-    const saved = await service.setPhotoKeys('u1', ['a.jpg']);
+    const saved = await service.setPhotoKeys('u1', ['preferences/u1/a.jpg']);
 
-    expect(saved.photoKeys).toEqual(['a.jpg']);
-    expect(Object.keys(saved.photoTags ?? {})).toEqual(['a.jpg']);
+    expect(saved.photoKeys).toEqual(['preferences/u1/a.jpg']);
+    expect(Object.keys(saved.photoTags ?? {})).toEqual(['preferences/u1/a.jpg']);
     expect(saved.disabledPhotoTags).toEqual({});
   });
 });
@@ -146,12 +174,21 @@ describe('PreferencesService.upsert — 병합·임베딩', () => {
     expect(repo.create).toHaveBeenCalled();
     expect(saved.tasteTags?.food).toEqual(['cafe', 'korean']);
     // 프로필을 안 보냈으므로 DEFAULT_PROFILE 이 채워진다.
-    expect(saved.profile).toMatchObject({ sleepTime: '23:00', wakeTime: '07:30', pace: 'balanced' });
+    expect(saved.profile).toMatchObject({
+      sleepTime: '23:00',
+      wakeTime: '07:30',
+      pace: 'balanced',
+    });
   });
 
   it('부분 dto 는 저장값 위에 병합된다 (안 보낸 축은 저장값 유지)', async () => {
     const stored = storedPreference({});
-    stored.tasteTags = { food: ['korean'], mood: ['healing'], environment: ['beach'], confidence: 0.7 };
+    stored.tasteTags = {
+      food: ['korean'],
+      mood: ['healing'],
+      environment: ['beach'],
+      confidence: 0.7,
+    };
     const { service } = makeService(stored);
 
     const saved = await service.upsert('u1', {
@@ -171,8 +208,13 @@ describe('PreferencesService.upsert — 병합·임베딩', () => {
       tasteTags: { food: ['cafe'], mood: [], environment: [], confidence: 0.9 },
     });
 
-    expect(embeddings.embed).toHaveBeenCalledTimes(1);
-    expect(preferenceEmbeddings.upsertUserEmbedding).toHaveBeenCalledTimes(1);
+    expect(embeddings.embedWithSource).toHaveBeenCalledTimes(1);
+    expect(preferenceEmbeddings.upsertUserEmbedding).toHaveBeenCalledWith(
+      'u1',
+      [0.1, 0.2],
+      expect.any(String),
+      { modelId: 'bge-m3-ko', source: 'remote' },
+    );
     expect(saved.embeddingId).toBe('emb-1');
   });
 
@@ -184,8 +226,34 @@ describe('PreferencesService.upsert — 병합·임베딩', () => {
     });
 
     // buildPreferenceText 가 빈 문자열이면 embed·upsert 를 건너뛴다.
-    expect(embeddings.embed).not.toHaveBeenCalled();
+    expect(embeddings.embedWithSource).not.toHaveBeenCalled();
     expect(preferenceEmbeddings.upsertUserEmbedding).not.toHaveBeenCalled();
     expect(saved.embeddingId).toBeUndefined();
   });
+
+  it('원격 서버 장애의 hash 벡터로 마지막 정상 벡터를 덮어쓰지 않는다', async () => {
+    const { service, embeddings, preferenceEmbeddings } = makeService({ ...storedPreference({}), embeddingId: 'last-good' });
+    embeddings.embedWithSource.mockResolvedValueOnce({
+      vector: [0.9, 0.1],
+      source: 'hash',
+      modelId: 'hash-fnv1a-v1:2',
+    });
+
+    const saved = await service.upsert('u1', {
+      tasteTags: { food: ['cafe'], mood: [], environment: [], confidence: 0.9 },
+    });
+
+    expect(preferenceEmbeddings.upsertUserEmbedding).not.toHaveBeenCalled();
+    expect(saved.tasteTags?.food).toEqual(['cafe']);
+    expect(saved.embeddingId).toBe('last-good');
+  });
 });
+
+function remoteEmbedding() {
+  return {
+    vector: [0.1, 0.2],
+    source: 'remote' as const,
+    modelId: 'bge-m3-ko',
+    remoteDimensions: 2,
+  };
+}

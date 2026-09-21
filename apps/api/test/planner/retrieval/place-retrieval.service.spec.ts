@@ -20,7 +20,7 @@ describe('PlaceRetrievalService candidate eligibility', () => {
     };
     const service = new PlaceRetrievalService(
       config({ PLACE_RETRIEVAL_AUTO_SEED: 'false' }),
-      { embed: jest.fn().mockResolvedValue([1, 0]) } as any,
+      { embedWithSource: jest.fn().mockResolvedValue(remoteEmbedding()) } as any,
       { searchByEmbedding: jest.fn().mockResolvedValue([hospital, museum]) } as any,
       { search: jest.fn().mockResolvedValue([]) } as any,
       evaluator as any,
@@ -43,19 +43,117 @@ describe('PlaceRetrievalService candidate eligibility', () => {
   });
 });
 
+describe('PlaceRetrievalService critical path', () => {
+  it('인지도·앵커·임베딩을 동시에 시작하고 단계별 시간을 남긴다', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const popularity = jest.fn(async () => {
+      await gate;
+      return disabledPopularityIndex();
+    });
+    const resolveAnchor = jest.fn(async () => {
+      await gate;
+      return null;
+    });
+    const embed = jest.fn(async () => {
+      await gate;
+      return remoteEmbedding();
+    });
+    const evaluator = {
+      rank: jest.fn((places: RawPlaceCandidate[]) => places.map(ranked)),
+      selectTopDiverse: jest.fn((places: CandidatePlace[], limit: number) =>
+        places.slice(0, limit),
+      ),
+      weights: jest.fn(() => DEFAULT_TERM_WEIGHTS),
+    };
+    const service = new PlaceRetrievalService(
+      config({ PLACE_RETRIEVAL_AUTO_SEED: 'false' }),
+      { embedWithSource: embed } as any,
+      { searchByEmbedding: jest.fn().mockResolvedValue(pool(8, 4)) } as any,
+      { search: jest.fn().mockResolvedValue([]) } as any,
+      evaluator as any,
+      { getPopularityIndex: popularity } as any,
+      { resolve: resolveAnchor } as any,
+    );
+
+    const pending = service.retrieve({ userId: 'u1', destination: '부산', limit: 4 });
+    await Promise.resolve();
+    expect(popularity).toHaveBeenCalledTimes(1);
+    expect(resolveAnchor).toHaveBeenCalledTimes(1);
+    expect(embed).toHaveBeenCalledTimes(1);
+
+    release();
+    const result = await pending;
+    expect(result.trace.durationsMs).toEqual({
+      popularity: expect.any(Number),
+      anchor: expect.any(Number),
+      embedding: expect.any(Number),
+      seed: expect.any(Number),
+      pgvector: expect.any(Number),
+      kakao: expect.any(Number),
+      rerank: expect.any(Number),
+      total: expect.any(Number),
+    });
+  });
+});
+
+describe('PlaceRetrievalService group personalization', () => {
+  it('passes compatible member vectors to pgvector and reports group coverage in trace', async () => {
+    const searchByEmbedding = jest.fn().mockResolvedValue(pool(6, 2));
+    const { service } = buildService({ anchor: null, searchByEmbedding });
+
+    const result = await service.retrieve({
+      userId: 'owner',
+      destination: '부산',
+      limit: 4,
+      preferenceVector: [Math.SQRT1_2, Math.SQRT1_2],
+      memberPreferenceVectors: [
+        [1, 0],
+        [0, 1],
+        [1, 0, 0],
+      ],
+      groupMemberCount: 4,
+    });
+
+    expect(searchByEmbedding).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.any(Object),
+      expect.any(Number),
+      [Math.SQRT1_2, Math.SQRT1_2],
+      expect.any(Object),
+      'bge-m3-ko',
+      [
+        [1, 0],
+        [0, 1],
+      ],
+    );
+    expect(result.trace.groupPersonalization).toEqual({
+      memberCount: 4,
+      vectorMemberCount: 2,
+    });
+  });
+});
+
 describe('PlaceRetrievalService 지역 하드 게이트', () => {
   /** 카카오 폴백을 태우기 위해 pgvector 를 비운다(풀이 얇아야 폴백이 돈다). */
   function buildWithKakao(kakaoResults: RawPlaceCandidate[]) {
     const evaluator = {
       rank: jest.fn((places: RawPlaceCandidate[]) => places.map(ranked)),
-      selectTopDiverse: jest.fn((places: CandidatePlace[], limit: number) => places.slice(0, limit)),
+      selectTopDiverse: jest.fn((places: CandidatePlace[], limit: number) =>
+        places.slice(0, limit),
+      ),
       weights: jest.fn(() => DEFAULT_TERM_WEIGHTS),
     };
     const kakaoSearch = jest.fn().mockResolvedValue(kakaoResults);
     const service = new PlaceRetrievalService(
       config({ PLACE_RETRIEVAL_AUTO_SEED: 'false' }),
-      { embed: jest.fn().mockResolvedValue([1, 0]) } as any,
-      { searchByEmbedding: jest.fn().mockResolvedValue([]), countRegionCandidates: jest.fn() } as any,
+      { embedWithSource: jest.fn().mockResolvedValue(remoteEmbedding()) } as any,
+      {
+        searchByEmbedding: jest.fn().mockResolvedValue([]),
+        countRegionCandidates: jest.fn(),
+      } as any,
       { search: kakaoSearch } as any,
       evaluator as any,
       { getPopularityIndex: jest.fn().mockResolvedValue(disabledPopularityIndex()) } as any,
@@ -195,6 +293,46 @@ describe('PlaceRetrievalService anchor scope', () => {
   });
 });
 
+describe('PlaceRetrievalService embedding outage guard', () => {
+  it('hash 질의 벡터를 pgvector 와 비교하지 않고 외부 폴백으로 내린다', async () => {
+    const searchByEmbedding = jest.fn().mockResolvedValue(pool(6, 2));
+    const kakao = candidate('kakao-1', '광안리해수욕장', '여행 > 관광지');
+    kakao.source = 'kakao';
+    const evaluator = {
+      rank: jest.fn((places: RawPlaceCandidate[]) => places.map(ranked)),
+      selectTopDiverse: jest.fn((places: CandidatePlace[], limit: number) =>
+        places.slice(0, limit),
+      ),
+      weights: jest.fn(() => DEFAULT_TERM_WEIGHTS),
+    };
+    const service = new PlaceRetrievalService(
+      config({ PLACE_RETRIEVAL_AUTO_SEED: 'true' }),
+      {
+        embedWithSource: jest.fn().mockResolvedValue({
+          vector: [1, 0],
+          source: 'hash',
+          modelId: 'hash-fnv1a-v1:2',
+        }),
+      } as any,
+      {
+        searchByEmbedding,
+        countRegionCandidates: jest.fn(),
+        seedRegion: jest.fn(),
+      } as any,
+      { search: jest.fn().mockResolvedValue([kakao]) } as any,
+      evaluator as any,
+      { getPopularityIndex: jest.fn().mockResolvedValue(disabledPopularityIndex()) } as any,
+      { resolve: jest.fn().mockResolvedValue(null) } as any,
+    );
+
+    const result = await service.retrieve({ userId: 'u1', destination: '부산', limit: 4 });
+
+    expect(searchByEmbedding).not.toHaveBeenCalled();
+    expect(result.trace.embeddingSource).toBe('hash');
+    expect(result.trace.sources).toContain('kakao');
+  });
+});
+
 /**
  * 총 `total` 건 중 `dining` 건이 식음인 후보 풀. 식음의 마지막 한 건은 카페다 —
  * 반경 판정이 카페를 따로 세므로(카탈로그 비중이 1/6 이라 음식점만으로 채워지면 안 된다)
@@ -293,7 +431,7 @@ function buildService(options: {
   };
   const service = new PlaceRetrievalService(
     config({}),
-    { embed: jest.fn().mockResolvedValue([1, 0]) } as any,
+    { embedWithSource: jest.fn().mockResolvedValue(remoteEmbedding()) } as any,
     { searchByEmbedding: options.searchByEmbedding, countRegionCandidates: jest.fn() } as any,
     { search: jest.fn().mockResolvedValue([]) } as any,
     evaluator as any,
@@ -301,6 +439,15 @@ function buildService(options: {
     { resolve: jest.fn().mockResolvedValue(options.anchor) } as any,
   );
   return { service, evaluator };
+}
+
+function remoteEmbedding() {
+  return {
+    vector: [1, 0],
+    source: 'remote' as const,
+    modelId: 'bge-m3-ko',
+    remoteDimensions: 2,
+  };
 }
 
 function candidate(id: string, name: string, categoryDetail: string): RawPlaceCandidate {

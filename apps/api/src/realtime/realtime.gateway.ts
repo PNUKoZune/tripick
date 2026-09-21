@@ -1,4 +1,4 @@
-import { Inject, Logger, forwardRef } from '@nestjs/common';
+import { Inject, Logger, forwardRef, type OnModuleInit, type OnModuleDestroy } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   WebSocketGateway,
@@ -9,16 +9,19 @@ import {
   Ack,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import type { InboxToastDto, JwtPayload, ReplanResultDto } from '@tripick/types';
 import { TripMembersService } from '../trip-members/trip-members.service';
 import { corsOrigins } from '../common/cors';
 import { JWT_ALGORITHM } from '../common/jwt-secrets';
+import { AccessSessionsService } from '../auth/access-sessions.service';
 
 /** 인증을 통과한 소켓의 client.data 에 담기는 사용자 정보 */
 interface AuthedSocketData {
   user: JwtPayload;
+  expiryTimer?: ReturnType<typeof setTimeout>;
 }
 
 type AuthedSocket = Socket & { data: AuthedSocketData };
@@ -42,8 +45,9 @@ type JoinTripAck = (response: { event: 'joined' | 'join-denied'; tripId: string 
   cors: { origin: corsOrigins() },
   namespace: '/realtime',
 })
-export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RealtimeGateway.name);
+  private unsubscribe?: () => void;
 
   @WebSocketServer()
   server: Server;
@@ -52,7 +56,33 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     private readonly jwtService: JwtService,
     @Inject(forwardRef(() => TripMembersService))
     private readonly tripMembersService: TripMembersService,
+    private readonly sessions: AccessSessionsService,
   ) {}
+
+  onModuleInit() {
+    this.unsubscribe = this.sessions.onRevoked(({ userId, sid }) => {
+      if (!this.server) return;
+      const room = sid ? `session:${sid}` : `inbox:${userId}`;
+      this.server.in(room).disconnectSockets(true);
+    });
+  }
+
+  onModuleDestroy() { this.unsubscribe?.(); }
+
+  afterInit(server: Server) {
+    // Finish authentication before Socket.IO acknowledges the handshake. Otherwise an
+    // immediate join-trip can race the asynchronous session lookup in handleConnection.
+    server.use(async (client, next) => {
+      try {
+        const token = extractToken(client);
+        if (!token) throw new Error('Missing token');
+        const payload = await this.jwtService.verifyAsync<JwtPayload>(token, { algorithms: [JWT_ALGORITHM] });
+        await this.sessions.validate(payload);
+        (client as AuthedSocket).data.user = payload;
+        next();
+      } catch { next(new Error('Unauthorized')); }
+    });
+  }
 
   async handleConnection(client: Socket) {
     const token = extractToken(client);
@@ -66,10 +96,16 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       const payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
         algorithms: [JWT_ALGORITHM],
       });
+      await this.sessions.validate(payload);
       (client as AuthedSocket).data.user = payload;
-      // 인증된 소켓은 자기 사용자 인박스 room 에 자동 합류한다 — 트립 room 과 달리
-      // 멤버십 검증이 필요 없고(본인 채널), 새 알림 시 pushInboxInvalidate 로 이 room 에 쏜다.
+      await client.join(`session:${payload.sid}`);
       await client.join(`inbox:${payload.sub}`);
+      // Join both revocation rooms before rechecking to close handshake/logout/reset races.
+      await this.sessions.validate(payload);
+      if (!client.connected) return;
+      (client as AuthedSocket).data.expiryTimer = setTimeout(
+        () => client.disconnect(true), Math.min(payload.exp! * 1000 - Date.now(), 2_147_483_647),
+      );
       this.logger.log(`WS connected: ${client.id} (user ${payload.sub})`);
     } catch {
       this.logger.warn(`WS rejected (invalid token): ${client.id}`);
@@ -78,6 +114,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   handleDisconnect(client: Socket) {
+    clearTimeout((client as AuthedSocket).data.expiryTimer);
     this.logger.log(`WS disconnected: ${client.id}`);
   }
 
@@ -87,6 +124,13 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     @ConnectedSocket() client: AuthedSocket,
     @Ack() ack?: JoinTripAck,
   ) {
+    try {
+      await this.sessions.validate(client.data.user ?? { sub: '' });
+    } catch {
+      client.disconnect(true);
+      return;
+    }
+    if (typeof data?.tripId !== 'string') return;
     const userId = client.data.user.sub;
     const allowed = await this.tripMembersService.canAccessTrip(data.tripId, userId);
     if (!allowed) {
