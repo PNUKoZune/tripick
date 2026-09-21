@@ -1,0 +1,507 @@
+{
+  "date": "2026-09-07",
+  "commit": "627cca547ecfb520e6e5e455075576d7d81eb1a0",
+  "environment": {
+    "node": "26.7.0",
+    "pnpm": "9.12.0",
+    "os": "macOS"
+  },
+  "scope_note": "Local audit only; synthetic identities, mock storage/provider/queue boundaries, owned loopback listener and isolated PostgreSQL databases. No production exploitation. No application source changes.",
+  "checks": {
+    "turbo_lint_typecheck_test": {
+      "exit_code": 0,
+      "tasks_passed": 14,
+      "force": true
+    },
+    "unit_api": {
+      "suites": 73,
+      "tests": 928
+    },
+    "unit_utils": {
+      "suites": 7,
+      "tests": 69
+    },
+    "e2e": {
+      "suites": 6,
+      "tests": 81,
+      "isolated_database": true
+    },
+    "build": {
+      "tasks_passed": 4,
+      "force": true
+    },
+    "eslint": {
+      "errors": 0,
+      "api_warnings": 261,
+      "web_warnings": 2
+    },
+    "web_http": {
+      "landing": 200,
+      "login": 200
+    },
+    "browser_ui": "Not run: browser discovery returned []",
+    "native_release_and_real_llm": "Not run"
+  },
+  "security_probes": [
+    {
+      "case": "SSRF",
+      "loopbackRequests": 1,
+      "parsedKeyword": "audit"
+    },
+    {
+      "case": "REPLAN_APPROVAL_BYPASS",
+      "callerRole": "companion",
+      "queued": "pending"
+    },
+    {
+      "case": "MEMBERSHIP_REVOCATION",
+      "httpAccess": false,
+      "websocketEvictions": 0
+    },
+    {
+      "case": "PRIVATE_PHOTO_IDOR",
+      "dtoErrors": 0,
+      "signedForeignKey": true,
+      "deletedForeignKey": true
+    },
+    {
+      "case": "RESET_OLD_ACCESS_TOKEN",
+      "refreshRevoked": true,
+      "oldAccessStillAccepted": true,
+      "ttlSeconds": 604800
+    },
+    {
+      "case": "KAKAO_UNVERIFIED_EMAIL_MERGE",
+      "providerVerified": false,
+      "providerValid": true,
+      "mergedWithExistingAccount": true
+    }
+  ],
+  "additional_probes": [
+    {
+      "case": "REFRESH_LATCH",
+      "afterRelogin": null,
+      "refreshRequests": 0
+    },
+    {
+      "case": "UPLOAD_POST_BUFFER_VALIDATION",
+      "responseStatus": 400,
+      "fileBytesBufferedBeforeRejection": 11534336,
+      "configuredLimit": 10485760
+    },
+    {
+      "case": "TRIP_LIST_N_PLUS_ONE",
+      "tripCount": 10,
+      "sqlStatements": 82,
+      "selects": 82,
+      "writes": 0,
+      "preferenceReadsMocked": false
+    },
+    {
+      "case": "HASH_FALLBACK_PERSISTED",
+      "remoteUnavailable": true,
+      "persistedVectorDimensions": 1024,
+      "persistedFallback": true
+    },
+    {
+      "case": "DUPLICATE_REORDER_IDS",
+      "dtoErrors": 0,
+      "ordersAfter": [
+        2,
+        2
+      ],
+      "namesAfter": [
+        "audit-1",
+        "audit-2"
+      ]
+    },
+    {
+      "case": "ITINERARY_VALIDATION",
+      "tripDays": 1,
+      "acceptedItemDay": 2,
+      "invalidTimeDtoErrors": 0,
+      "invalidTimeProducesNaN": true
+    }
+  ],
+  "database_probe_output": [
+    "migration up 15",
+    "migration repeat 0",
+    "migration down then up 1",
+    "entity schema drift queries 1",
+    "[",
+    "  \"ALTER TABLE \\\"users\\\" ALTER COLUMN \\\"notificationPreferences\\\" SET DEFAULT '{\\\"replan_ready\\\":true,\\\"weather_alert\\\":true,\\\"crowd_alert\\\":true,\\\"arrival_alert\\\":true,\\\"trip_reminder\\\":true,\\\"trip_invite\\\":true,\\\"schedule_change_request\\\":true,\\\"schedule_change_result\\\":true,\\\"general\\\":true,\\\"friend_request\\\":true}'::jsonb\"",
+    "]",
+    "full replacement rejected 23502",
+    "items remaining after failed full replacement 0",
+    "partial replacement rejected 23502",
+    "items remaining after failed partial replacement 1"
+  ],
+  "index_probe_output": [
+    "indexes [{\"tablename\":\"itinerary_items\",\"indexdef\":\"CREATE UNIQUE INDEX \\\"PK_f37a39ff959ce329ccbb0d98e24\\\" ON public.itinerary_items USING btree (id)\"},{\"tablename\":\"trip_members\",\"indexdef\":\"CREATE UNIQUE INDEX \\\"PK_d0368bd704fcb6883af326d8285\\\" ON public.trip_members USING btree (id)\"},{\"tablename\":\"trips\",\"indexdef\":\"CREATE UNIQUE INDEX \\\"PK_f71c231dee9c05a9522f9e840f5\\\" ON public.trips USING btree (id)\"},{\"tablename\":\"trips\",\"indexdef\":\"CREATE UNIQUE INDEX \\\"UQ_c42efc7b8ebdf904fbdd1c7e942\\\" ON public.trips USING btree (\\\"shareToken\\\")\"}]"
+  ],
+  "dependency_audit": {
+    "all": {
+      "vulnerabilities": {
+        "info": 0,
+        "low": 1,
+        "moderate": 5,
+        "high": 13,
+        "critical": 0
+      },
+      "dependencies": 1689,
+      "devDependencies": 0,
+      "optionalDependencies": 0,
+      "totalDependencies": 1689
+    },
+    "production": {
+      "vulnerabilities": {
+        "info": 0,
+        "low": 0,
+        "moderate": 2,
+        "high": 4,
+        "critical": 0
+      },
+      "dependencies": 1144,
+      "devDependencies": 0,
+      "optionalDependencies": 0,
+      "totalDependencies": 1144
+    },
+    "advisories": [
+      {
+        "id": 1119389,
+        "module_name": "turbo",
+        "severity": "low",
+        "title": "Turbo: Unexpected local code execution during Yarn Berry detection",
+        "url": "https://github.com/advisories/GHSA-3qcw-2rhx-2726",
+        "vulnerable_versions": ">=1.1.0 <2.9.14",
+        "patched_versions": ">=2.9.14",
+        "also_in_prod_audit": false,
+        "installed": [
+          {
+            "version": "2.9.9",
+            "example_path": ". > turbo@2.9.9",
+            "path_count": 1
+          }
+        ]
+      },
+      {
+        "id": 1120258,
+        "module_name": "@babel/plugin-transform-modules-systemjs",
+        "severity": "high",
+        "title": "@babel/plugin-transform-modules-systemjs generates arbitrary code when compiling malicious input",
+        "url": "https://github.com/advisories/GHSA-fv7c-fp4j-7gwp",
+        "vulnerable_versions": ">=7.12.0 <=7.29.3",
+        "patched_versions": ">=7.29.4",
+        "also_in_prod_audit": false,
+        "installed": [
+          {
+            "version": "7.29.0",
+            "example_path": "apps/mobile > @babel/preset-env@7.29.3 > @babel/plugin-transform-modules-systemjs@7.29.0",
+            "path_count": 1
+          }
+        ]
+      },
+      {
+        "id": 1121859,
+        "module_name": "js-yaml",
+        "severity": "moderate",
+        "title": "JS-YAML: Quadratic-complexity DoS in merge key handling via repeated aliases",
+        "url": "https://github.com/advisories/GHSA-h67p-54hq-rp68",
+        "vulnerable_versions": "<3.15.0",
+        "patched_versions": ">=3.15.0",
+        "also_in_prod_audit": false,
+        "installed": [
+          {
+            "version": "3.14.2",
+            "example_path": "apps/api > jest@29.7.0 > @jest/core@29.7.0 > @jest/reporters@29.7.0 > @jest/transform@29.7.0 > babel-plugin-istanbul@6.1.1 > @istanbuljs/load-nyc-config@1.1.0 > js-yaml@3.14.2",
+            "path_count": 336
+          }
+        ]
+      },
+      {
+        "id": 1121861,
+        "module_name": "turbo",
+        "severity": "moderate",
+        "title": "Turbo: Login callback CSRF/session fixation",
+        "url": "https://github.com/advisories/GHSA-hcf7-66rw-9f5r",
+        "vulnerable_versions": "<=2.9.13",
+        "patched_versions": ">=2.9.14",
+        "also_in_prod_audit": false,
+        "installed": [
+          {
+            "version": "2.9.9",
+            "example_path": ". > turbo@2.9.9",
+            "path_count": 1
+          }
+        ]
+      },
+      {
+        "id": 1123897,
+        "module_name": "brace-expansion",
+        "severity": "high",
+        "title": "brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups",
+        "url": "https://github.com/advisories/GHSA-3jxr-9vmj-r5cp",
+        "vulnerable_versions": "<1.1.16",
+        "patched_versions": ">=1.1.16",
+        "also_in_prod_audit": false,
+        "installed": [
+          {
+            "version": "1.1.14",
+            "example_path": ". > eslint@9.39.4 > @eslint/config-array@0.21.2 > minimatch@3.1.5 > brace-expansion@1.1.14",
+            "path_count": 963
+          }
+        ]
+      },
+      {
+        "id": 1123912,
+        "module_name": "js-yaml",
+        "severity": "high",
+        "title": "js-yaml: YAML merge-key chains can force quadratic CPU consumption",
+        "url": "https://github.com/advisories/GHSA-52cp-r559-cp3m",
+        "vulnerable_versions": ">=3.0.0 <3.15.0",
+        "patched_versions": ">=3.15.0",
+        "also_in_prod_audit": false,
+        "installed": [
+          {
+            "version": "3.14.2",
+            "example_path": "apps/api > jest@29.7.0 > @jest/core@29.7.0 > @jest/reporters@29.7.0 > @jest/transform@29.7.0 > babel-plugin-istanbul@6.1.1 > @istanbuljs/load-nyc-config@1.1.0 > js-yaml@3.14.2",
+            "path_count": 336
+          }
+        ]
+      },
+      {
+        "id": 1130588,
+        "module_name": "brace-expansion",
+        "severity": "high",
+        "title": "brace-expansion: DoS via unbounded expansion length causing an out-of-memory process crash",
+        "url": "https://github.com/advisories/GHSA-mh99-v99m-4gvg",
+        "vulnerable_versions": "<1.1.17",
+        "patched_versions": ">=1.1.17",
+        "also_in_prod_audit": false,
+        "installed": [
+          {
+            "version": "1.1.14",
+            "example_path": ". > eslint@9.39.4 > @eslint/config-array@0.21.2 > minimatch@3.1.5 > brace-expansion@1.1.14",
+            "path_count": 963
+          }
+        ]
+      },
+      {
+        "id": 1130709,
+        "module_name": "postcss",
+        "severity": "moderate",
+        "title": "PostCSS: incomplete fix of GHSA-6g55-p6wh-862q — attacker-controlled sourceMappingURL reads arbitrary .map files when `from` is unset",
+        "url": "https://github.com/advisories/GHSA-fxqj-rqcc-2cmp",
+        "vulnerable_versions": "<=8.5.22",
+        "patched_versions": ">=8.5.23",
+        "also_in_prod_audit": false,
+        "installed": [
+          {
+            "version": "8.5.13",
+            "example_path": "apps/web > @tailwindcss/postcss@4.2.4 > postcss@8.5.13",
+            "path_count": 2
+          }
+        ]
+      },
+      {
+        "id": 1130737,
+        "module_name": "brace-expansion",
+        "severity": "high",
+        "title": "brace-expansion: DoS via unbounded intermediate arrays, bypassing the CVE-2026-14257 mitigation",
+        "url": "https://github.com/advisories/GHSA-rgw5-rvv9-x895",
+        "vulnerable_versions": "<1.1.18",
+        "patched_versions": ">=1.1.18",
+        "also_in_prod_audit": false,
+        "installed": [
+          {
+            "version": "1.1.14",
+            "example_path": ". > eslint@9.39.4 > @eslint/config-array@0.21.2 > minimatch@3.1.5 > brace-expansion@1.1.14",
+            "path_count": 963
+          }
+        ]
+      },
+      {
+        "id": 1138114,
+        "module_name": "js-yaml",
+        "severity": "high",
+        "title": "JS-YAML: Quadratic CPU consumption in !!omap resolution (3.x and 4.x) — CVE-2026-59870 fix not backported",
+        "url": "https://github.com/advisories/GHSA-5p4m-2wfm-xmqj",
+        "vulnerable_versions": ">=3.0.0 <3.15.1",
+        "patched_versions": ">=3.15.1",
+        "also_in_prod_audit": false,
+        "installed": [
+          {
+            "version": "3.14.2",
+            "example_path": "apps/api > jest@29.7.0 > @jest/core@29.7.0 > @jest/reporters@29.7.0 > @jest/transform@29.7.0 > babel-plugin-istanbul@6.1.1 > @istanbuljs/load-nyc-config@1.1.0 > js-yaml@3.14.2",
+            "path_count": 336
+          }
+        ]
+      },
+      {
+        "id": 1138808,
+        "module_name": "image-size",
+        "severity": "high",
+        "title": "image-size: ICNS parser allows denial of service through an infinite loop",
+        "url": "https://github.com/advisories/GHSA-w3rx-r6r6-pgpr",
+        "vulnerable_versions": "<=2.0.2",
+        "patched_versions": "<0.0.0",
+        "also_in_prod_audit": true,
+        "installed": [
+          {
+            "version": "1.2.1",
+            "example_path": "apps/mobile > @notifee/react-native@9.1.8 > react-native@0.85.2 > @react-native/community-cli-plugin@0.85.2 > metro@0.84.4 > image-size@1.2.1",
+            "path_count": 6
+          }
+        ]
+      },
+      {
+        "id": 1138809,
+        "module_name": "image-size",
+        "severity": "high",
+        "title": "image-size: JXL and HEIF parsers allow denial of service through infinite loops",
+        "url": "https://github.com/advisories/GHSA-5p2g-fcmc-qvqq",
+        "vulnerable_versions": "<=2.0.2",
+        "patched_versions": "<0.0.0",
+        "also_in_prod_audit": true,
+        "installed": [
+          {
+            "version": "1.2.1",
+            "example_path": "apps/mobile > @notifee/react-native@9.1.8 > react-native@0.85.2 > @react-native/community-cli-plugin@0.85.2 > metro@0.84.4 > image-size@1.2.1",
+            "path_count": 6
+          }
+        ]
+      },
+      {
+        "id": 1138811,
+        "module_name": "nanoid",
+        "severity": "high",
+        "title": "nanoid: non-secure generators can loop indefinitely with negative size",
+        "url": "https://github.com/advisories/GHSA-28wg-ghj8-5hjv",
+        "vulnerable_versions": "<3.3.16",
+        "patched_versions": ">=3.3.16",
+        "also_in_prod_audit": false,
+        "installed": [
+          {
+            "version": "3.3.12",
+            "example_path": "apps/web > @tailwindcss/postcss@4.2.4 > postcss@8.5.13 > nanoid@3.3.12",
+            "path_count": 2
+          }
+        ]
+      },
+      {
+        "id": 1139427,
+        "module_name": "nanoid",
+        "severity": "high",
+        "title": "nanoid: custom generators can loop indefinitely when size is zero",
+        "url": "https://github.com/advisories/GHSA-2v37-7h3g-55p8",
+        "vulnerable_versions": "<3.3.18",
+        "patched_versions": ">=3.3.18",
+        "also_in_prod_audit": false,
+        "installed": [
+          {
+            "version": "3.3.12",
+            "example_path": "apps/web > @tailwindcss/postcss@4.2.4 > postcss@8.5.13 > nanoid@3.3.12",
+            "path_count": 2
+          }
+        ]
+      },
+      {
+        "id": 1139510,
+        "module_name": "postcss",
+        "severity": "high",
+        "title": "PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .map File Disclosure",
+        "url": "https://github.com/advisories/GHSA-r28c-9q8g-f849",
+        "vulnerable_versions": "<=8.5.17",
+        "patched_versions": ">=8.5.18",
+        "also_in_prod_audit": false,
+        "installed": [
+          {
+            "version": "8.5.13",
+            "example_path": "apps/web > @tailwindcss/postcss@4.2.4 > postcss@8.5.13",
+            "path_count": 2
+          }
+        ]
+      },
+      {
+        "id": 1153171,
+        "module_name": "browserslist",
+        "severity": "high",
+        "title": "Browserslist: Unbounded memory growth (no cache eviction) via distinct query results, leading to eventual OOM",
+        "url": "https://github.com/advisories/GHSA-c83g-rgw3-j3cx",
+        "vulnerable_versions": "<=4.28.6",
+        "patched_versions": ">=4.28.7",
+        "also_in_prod_audit": true,
+        "installed": [
+          {
+            "version": "4.28.2",
+            "example_path": "apps/api > @nestjs/cli@11.0.21 > fork-ts-checker-webpack-plugin@9.1.0 > webpack@5.106.0 > browserslist@4.28.2 > update-browserslist-db@1.2.3 > browserslist@4.28.2",
+            "path_count": 5077
+          }
+        ]
+      },
+      {
+        "id": 1153172,
+        "module_name": "browserslist",
+        "severity": "high",
+        "title": "Browserslist: Uncaught crash / prototype write via untrusted browserslist-stats.json custom stats (normalizeStats)",
+        "url": "https://github.com/advisories/GHSA-73wf-gq98-2v4g",
+        "vulnerable_versions": "<=4.28.6",
+        "patched_versions": ">=4.28.7",
+        "also_in_prod_audit": true,
+        "installed": [
+          {
+            "version": "4.28.2",
+            "example_path": "apps/api > @nestjs/cli@11.0.21 > fork-ts-checker-webpack-plugin@9.1.0 > webpack@5.106.0 > browserslist@4.28.2 > update-browserslist-db@1.2.3 > browserslist@4.28.2",
+            "path_count": 5077
+          }
+        ]
+      },
+      {
+        "id": 1158506,
+        "module_name": "qs",
+        "severity": "moderate",
+        "title": "qs array-limit bypass via bracket-key comma parsing",
+        "url": "https://github.com/advisories/GHSA-x5fp-wj9c-mxmx",
+        "vulnerable_versions": ">=6.14.2 <=6.15.3",
+        "patched_versions": ">=6.16.0",
+        "also_in_prod_audit": true,
+        "installed": [
+          {
+            "version": "6.15.3",
+            "example_path": "apps/api > @nest-lab/throttler-storage-redis@1.2.0 > @nestjs/core@11.1.19 > @nestjs/platform-express@11.1.19 > express@5.2.1 > body-parser@2.3.0 > qs@6.15.3",
+            "path_count": 29
+          }
+        ]
+      },
+      {
+        "id": 1158507,
+        "module_name": "qs",
+        "severity": "moderate",
+        "title": "qs: Denial of Service via Attacker Controlled isBuffer",
+        "url": "https://github.com/advisories/GHSA-4mjr-xmp4-gh2g",
+        "vulnerable_versions": ">=2.2.5 <6.16.0",
+        "patched_versions": ">=6.16.0",
+        "also_in_prod_audit": true,
+        "installed": [
+          {
+            "version": "6.15.3",
+            "example_path": "apps/api > @nest-lab/throttler-storage-redis@1.2.0 > @nestjs/core@11.1.19 > @nestjs/platform-express@11.1.19 > express@5.2.1 > body-parser@2.3.0 > qs@6.15.3",
+            "path_count": 29
+          }
+        ]
+      }
+    ]
+  },
+  "bundle_scope": "Project report-client-bundle.mjs static entry chunks only; not complete browser transfer size or Web Vitals.",
+  "bundle_gzip_kib": {
+    "/": 51.8,
+    "/planner": 120.1,
+    "/trips/new": 81.0
+  },
+  "recommended_fix_status": "Findings documented, no fixes applied",
+  "cleanup": {
+    "temporary_web_server": "stopped",
+    "isolated_audit_databases": "removed",
+    "production_database": "untouched"
+  }
+}

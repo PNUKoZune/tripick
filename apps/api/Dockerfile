@@ -7,8 +7,8 @@
 # 런타임 번들은 `pnpm deploy` 로 만든다 — dist + 프로덕션 node_modules +
 # @tripick/types·@tripick/utils 의 빌드 산출물(dist)을 주입한 자립 디렉터리.
 
-# ---- Base: Node 20 (.nvmrc) + corepack(pnpm) ----
-FROM node:20-slim AS base
+# ---- Base: Node 24 (.nvmrc) + corepack(pnpm) ----
+FROM node:24-slim AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
@@ -26,6 +26,7 @@ RUN apt-get update \
 # 1) 매니페스트만 먼저 복사 → 소스가 바뀌어도 의존성 레이어는 캐시 재사용.
 #    lockfile 정합성을 위해 모든 워크스페이스 package.json 을 함께 둔다.
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json tsconfig.base.json ./
+COPY patches/ patches/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY apps/mobile/package.json apps/mobile/

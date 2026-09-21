@@ -1,4 +1,5 @@
 import { Client } from 'pg';
+import { testDatabaseUrl } from './test-database';
 
 /**
  * e2e 전역 셋업 — 테스트 전용 데이터베이스를 (없으면) 생성한다.
@@ -11,7 +12,8 @@ export default async function globalSetup(): Promise<void> {
   const adminUrl =
     process.env.TEST_ADMIN_DATABASE_URL ??
     'postgresql://tripick:tripick@localhost:5432/tripick';
-  const testDbName = process.env.TEST_DATABASE_NAME ?? 'tripick_test';
+  const testDbName = new URL(testDatabaseUrl()).pathname.slice(1);
+  if (new URL(adminUrl).pathname.slice(1) === testDbName) throw new Error('Admin and test databases must differ');
 
   const client = new Client({ connectionString: adminUrl });
   await client.connect();

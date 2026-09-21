@@ -136,29 +136,29 @@ describe('PreferencesService.setPhotoKeys', () => {
   it('취향 행이 없으면 기본값으로 새로 만들고 재임베딩하지 않는다', async () => {
     const { service, repo, embeddings } = makeService(null);
 
-    const saved = await service.setPhotoKeys('u1', ['a.jpg', 'b.jpg']);
+    const saved = await service.setPhotoKeys('u1', ['preferences/u1/a.jpg', 'preferences/u1/b.jpg']);
 
     expect(repo.create).toHaveBeenCalled();
-    expect(saved.photoKeys).toEqual(['a.jpg', 'b.jpg']);
+    expect(saved.photoKeys).toEqual(['preferences/u1/a.jpg', 'preferences/u1/b.jpg']);
     // 태그가 바뀌지 않았으므로 원격 임베딩 호출은 건너뛴다.
     expect(embeddings.embedWithSource).not.toHaveBeenCalled();
   });
 
   it('남지 않은 사진의 photoTags·disabledPhotoTags 를 함께 정리한다', async () => {
     const stored: Partial<PreferenceEntity> = {
-      photoKeys: ['a.jpg', 'b.jpg'],
+      photoKeys: ['preferences/u1/a.jpg', 'preferences/u1/b.jpg'],
       photoTags: {
-        'a.jpg': { food: ['cafe'], mood: [], environment: [], confidence: 0.8 },
-        'b.jpg': { food: ['korean'], mood: [], environment: [], confidence: 0.8 },
+        'preferences/u1/a.jpg': { food: ['cafe'], mood: [], environment: [], confidence: 0.8 },
+        'preferences/u1/b.jpg': { food: ['korean'], mood: [], environment: [], confidence: 0.8 },
       } as any,
-      disabledPhotoTags: { 'b.jpg': ['korean'] } as any,
+      disabledPhotoTags: { 'preferences/u1/b.jpg': ['korean'] } as any,
     };
     const { service } = makeService(stored);
 
-    const saved = await service.setPhotoKeys('u1', ['a.jpg']);
+    const saved = await service.setPhotoKeys('u1', ['preferences/u1/a.jpg']);
 
-    expect(saved.photoKeys).toEqual(['a.jpg']);
-    expect(Object.keys(saved.photoTags ?? {})).toEqual(['a.jpg']);
+    expect(saved.photoKeys).toEqual(['preferences/u1/a.jpg']);
+    expect(Object.keys(saved.photoTags ?? {})).toEqual(['preferences/u1/a.jpg']);
     expect(saved.disabledPhotoTags).toEqual({});
   });
 });
@@ -196,6 +196,7 @@ describe('PreferencesService.upsert — 병합·임베딩', () => {
     });
 
     expect(saved.tasteTags?.food).toEqual(['cafe']);
+    expect(saved.embeddingId).toBe('last-good');
     // 보내지 않은 mood/environment 는 저장값에서 온다.
     expect(saved.tasteTags?.mood).toEqual(['healing']);
     expect(saved.tasteTags?.environment).toEqual(['beach']);
@@ -232,7 +233,7 @@ describe('PreferencesService.upsert — 병합·임베딩', () => {
   });
 
   it('원격 서버 장애의 hash 벡터로 마지막 정상 벡터를 덮어쓰지 않는다', async () => {
-    const { service, embeddings, preferenceEmbeddings } = makeService(storedPreference({}));
+    const { service, embeddings, preferenceEmbeddings } = makeService({ ...storedPreference({}), embeddingId: 'last-good' });
     embeddings.embedWithSource.mockResolvedValueOnce({
       vector: [0.9, 0.1],
       source: 'hash',
@@ -245,6 +246,7 @@ describe('PreferencesService.upsert — 병합·임베딩', () => {
 
     expect(preferenceEmbeddings.upsertUserEmbedding).not.toHaveBeenCalled();
     expect(saved.tasteTags?.food).toEqual(['cafe']);
+    expect(saved.embeddingId).toBe('last-good');
   });
 });
 

@@ -106,6 +106,39 @@ describe('PlannerService hard constraints', () => {
     expect(harness.tripsRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: 'confirmed' }));
   });
 
+  it('skips multiple closed places without consuming travel time or leaving order gaps', async () => {
+    const pool = [
+      place('open-1', '첫 방문', 'cafe'),
+      { ...place('closed-1', '폐장 1', 'attraction'), openingHours: '07:00-08:00' },
+      { ...place('closed-2', '폐장 2', 'attraction'), openingHours: '08:00-09:00' },
+      place('open-2', '다음 방문', 'cafe'),
+    ];
+    const harness = createHarness(undefined, { pool });
+    harness.constraintEngine.validate.mockImplementation(async (items: ItineraryItemDto[]) => ({
+      valid: true, issues: [], items,
+    }));
+
+    const items = await harness.service.generateItinerary(TRIP.id);
+
+    expect(items.map((item) => item.name).sort()).toEqual(['다음 방문', '첫 방문']);
+    expect(items.map((item) => item.order)).toEqual([1, 2]);
+    for (const [draft] of harness.constraintEngine.validate.mock.calls) {
+      expect(draft.map((item: ItineraryItemDto) => item.name)).not.toContain('폐장 1');
+      expect(draft.map((item: ItineraryItemDto) => item.name)).not.toContain('폐장 2');
+      const gap = Date.parse(draft[1].scheduledAt) - Date.parse(draft[0].scheduledAt);
+      expect(gap).toBe((draft[0].durationMin + 15) * 60_000);
+    }
+  });
+
+  it('does not replace an itinerary with an empty draft when every place is closed', async () => {
+    const harness = createHarness(undefined, { openingHours: '07:00-08:00' });
+    harness.constraintEngine.validate.mockImplementation(async (items: ItineraryItemDto[]) => ({
+      valid: true, issues: [], items,
+    }));
+    await expect(harness.service.generateItinerary(TRIP.id)).rejects.toBeInstanceOf(BadRequestException);
+    expect(harness.itineraryService.replaceTripItems).not.toHaveBeenCalled();
+  });
+
   it('preserves a user memo on the matching place when replanning', async () => {
     const harness = createHarness();
     harness.constraintEngine.validate.mockImplementation(async (items: ItineraryItemDto[]) => ({

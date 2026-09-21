@@ -18,12 +18,8 @@ EMBED_POOLING="${EMBED_POOLING:-cls}"
 # 0 = thinking 즉시 종료. 일정 JSON 생성엔 사고 과정이 필요 없고 토큰·지연만 늘린다.
 REASONING_BUDGET="${REASONING_BUDGET:-0}"
 
-# API 키는 선택. 넣으면 두 서버 모두 같은 키를 요구한다 —
-# RunPod 프록시 URL 은 인증이 없어 주소만 알면 누구나 GPU 를 쓸 수 있다.
-auth=()
-if [ -n "${LLAMA_API_KEY:-}" ]; then
-  auth=(--api-key "$LLAMA_API_KEY")
-fi
+: "${LLAMA_API_KEY:?LLAMA_API_KEY is required for publicly exposed inference servers}"
+auth=(--api-key "$LLAMA_API_KEY")
 
 echo "[start] chat=$CHAT_HF :$CHAT_PORT (ctx=$CHAT_CTX)"
 echo "[start] embed=$EMBED_HF :$EMBED_PORT (ctx=$EMBED_CTX, pooling=$EMBED_POOLING)"

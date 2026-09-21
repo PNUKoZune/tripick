@@ -695,15 +695,25 @@ export class PlannerService {
         // "지금 그 장소에 이미 도착해 있다" 를 가정하게 된다.
         const from =
           sameDayPrevious?.coordinates ??
-          (anchored && order === 0 ? options.currentLocation : undefined);
+          (anchored && !sameDayPrevious ? options.currentLocation : undefined);
         const travelTimeMin = from
           ? await this.estimateTravelTime(from, seed.coordinates, trip.transportMode)
           : 0;
 
-        currentAt = new Date(currentAt.getTime() + travelTimeMin * 60000);
-        currentAt = this.alignToOpeningHours(currentAt, seed.openingHours);
+        const arrivalAt = this.alignToOpeningHours(
+          new Date(currentAt.getTime() + travelTimeMin * 60000),
+          seed.openingHours,
+        );
 
-        const remainMin = Math.floor((dayEndAt - currentAt.getTime()) / 60_000);
+        // 폐장 전에 방문을 마칠 수 없는 장소는 건너뛴다. 제외한 장소로 이동한 시간은
+        // 누적하지 않아, 다음 후보를 마지막으로 담은 장소에서 다시 계산한다.
+        const hours = seed.openingHours?.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
+        if (hours) {
+          const closingMinutes = Number(hours[3]) * 60 + Number(hours[4]);
+          if (getKstMinutes(arrivalAt) + planned.durationMin > closingMinutes) continue;
+        }
+
+        const remainMin = Math.floor((dayEndAt - arrivalAt.getTime()) / 60_000);
         // 45분도 안 남으면 이 항목부터는 그 날 안에 넣을 수 없다.
         if (remainMin < MIN_FITTING_VISIT_MIN) break;
         let durationMin = planned.durationMin;
@@ -719,12 +729,12 @@ export class PlannerService {
         const item: CreateItineraryItemDto = {
           tripId: trip.id,
           day,
-          order: order + 1,
+          order: (sameDayPrevious?.order ?? 0) + 1,
           type: this.toItemType(seed.category),
           name: seed.name,
           address: seed.address,
           coordinates: seed.coordinates,
-          scheduledAt: currentAt.toISOString(),
+          scheduledAt: arrivalAt.toISOString(),
           durationMin,
         };
         if (seed.kakaoPlaceId) item.kakaoPlaceId = seed.kakaoPlaceId;
@@ -734,7 +744,7 @@ export class PlannerService {
         if (travelTimeMin > 0) item.travelTimeMin = travelTimeMin;
         created.push(item);
 
-        currentAt = new Date(currentAt.getTime() + durationMin * 60000);
+        currentAt = new Date(arrivalAt.getTime() + durationMin * 60000);
       }
     }
 
@@ -792,6 +802,10 @@ export class PlannerService {
   ): Promise<DraftAttempt> {
     const items = await this.buildDraft(plan, context);
     const validation = await this.validateDraft(items, context);
+    if (items.length === 0 && plan.length > 0) {
+      validation.valid = false;
+      validation.issues.push('No visits fit within the available activity and opening hours');
+    }
     const shortfall = Math.max(0, this.plannedItemCount(plan, context) - items.length);
     return { validation, shortfall, accepted: validation.valid && shortfall === 0 };
   }

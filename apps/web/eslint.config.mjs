@@ -5,7 +5,7 @@ import { sharedIgnores, sharedRules, prettier } from '../../eslint.config.base.m
 
 /** Next.js(App Router) 웹앱 — eslint-config-next flat 프리셋 기반. */
 export default [
-  { ignores: sharedIgnores },
+  { ignores: [...sharedIgnores, 'playwright-report/**', 'test-results/**'] },
   ...coreWebVitals,
   ...nextTypescript,
   { rules: sharedRules },

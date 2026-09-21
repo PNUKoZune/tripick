@@ -11,7 +11,7 @@ export interface EmbeddingResult {
   /** 벡터 공간 식별자. 차원이 같아도 모델이 다르면 코사인 비교를 금지하기 위해 저장한다. */
   modelId: string;
   /**
-   * 원격 서버가 반환한 원본 차원(normalizeDimensions 로 패딩/절단하기 전).
+   * 검증을 통과한 원격 벡터의 차원. 패딩/절단으로 다른 모델의 차원을 맞추지 않는다.
    * hash 폴백이면 undefined. 헬스체크에서 엉뚱한 모델(차원 불일치) 감지에 사용.
    */
   remoteDimensions?: number;
@@ -33,9 +33,9 @@ export class TextEmbeddingService {
    */
   async embedWithSource(text: string): Promise<EmbeddingResult> {
     const vector = await this.tryRemoteEmbedding(text);
-    if (vector.length > 0) {
+    if (vector.length === this.dimensions() && vector.every(Number.isFinite) && vector.some((value) => value !== 0)) {
       return {
-        vector: this.normalizeDimensions(vector),
+        vector: this.l2Normalize(vector),
         source: 'remote',
         modelId: this.modelId('remote'),
         remoteDimensions: vector.length,
@@ -111,15 +111,6 @@ export class TextEmbeddingService {
     return this.l2Normalize(vector);
   }
 
-  private normalizeDimensions(vector: number[]): number[] {
-    const dimensions = this.dimensions();
-    const normalized = vector.slice(0, dimensions);
-    while (normalized.length < dimensions) {
-      normalized.push(0);
-    }
-    return this.l2Normalize(normalized);
-  }
-
   private l2Normalize(vector: number[]): number[] {
     const norm = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
     if (norm === 0) {
@@ -135,6 +126,6 @@ export class TextEmbeddingService {
     // 기본값은 place_embeddings/preference_embeddings 컬럼 차원(BGE-m3-ko=1024)과 일치시킨다.
     const raw = this.config.get<string | number>('LLM_EMBEDDING_DIMENSIONS', 1024);
     const parsed = Number(raw);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1024;
+    return Number.isInteger(parsed) && parsed > 0 && parsed <= 16000 ? parsed : 1024;
   }
 }

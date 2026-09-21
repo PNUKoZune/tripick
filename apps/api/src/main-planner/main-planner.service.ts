@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
-import axios from 'axios';
+import { HH_MM } from '../common/validation/patterns';
 import { FriendsService } from '../friends/friends.service';
 import { InboxService } from '../inbox/inbox.service';
 import { ItineraryItemEntity } from '../itinerary/itinerary-item.entity';
@@ -104,7 +104,29 @@ export class MainPlannerService {
 
   async listTrips(user: UserEntity): Promise<TripSummaryDto[]> {
     const trips = await this.tripsService.findVisible(user.id);
-    return Promise.all(trips.map((trip) => this.toTripSummary(trip, user)));
+    if (!trips.length) return [];
+    const tripIds = trips.map((trip) => trip.id);
+    const [members, previews] = await Promise.all([
+      this.tripMembersService.findForVisibleTrips(tripIds),
+      this.itemsRepo.query<Array<{ tripId: string; name: string; itemCount: number }>>(
+        `SELECT "tripId", name, "itemCount" FROM (
+          SELECT "tripId", name,
+            (COUNT(*) OVER (PARTITION BY "tripId"))::int AS "itemCount",
+            ROW_NUMBER() OVER (PARTITION BY "tripId" ORDER BY day, "order", id) AS rank
+          FROM itinerary_items WHERE "tripId" = ANY($1::uuid[])
+        ) preview WHERE rank <= 2 ORDER BY "tripId", rank`, [tripIds],
+      ),
+    ]);
+    const byTrip = new Map<string, typeof previews>();
+    for (const item of previews) {
+      const group = byTrip.get(item.tripId) ?? [];
+      group.push(item);
+      byTrip.set(item.tripId, group);
+    }
+    return trips.map((trip) => {
+      const items = byTrip.get(trip.id) ?? [];
+      return this.buildTripSummary(trip, members.get(trip.id) ?? [], items[0]?.itemCount ?? 0, items);
+    });
   }
 
   async createTrip(user: UserEntity, dto: CreateTripRequestDto): Promise<TripSummaryDto> {
@@ -460,10 +482,9 @@ export class MainPlannerService {
     const trip = await this.tripsService.findOne(tripId, user.id);
     const name = dto.name?.trim();
     if (!name) throw new BadRequestException('장소 이름을 입력해 주세요.');
-    if (!Number.isInteger(dto.day) || dto.day < 1) {
+    if (!Number.isInteger(dto.day) || dto.day < 1 || dto.day > this.tripDayCount(trip)) {
       throw new BadRequestException('유효한 일차가 아닙니다.');
     }
-
     const dayItems = await this.itemsRepo.find({ where: { tripId, day: dto.day } });
     const maxOrder = dayItems.reduce((max, entry) => Math.max(max, entry.order), 0);
     const fallback =
@@ -567,10 +588,14 @@ export class MainPlannerService {
     dto: PlannerReorderItemsRequestDto,
   ): Promise<void> {
     const trip = await this.tripsService.findOne(tripId, user.id);
+    if (!Number.isInteger(dto.day) || dto.day < 1 || dto.day > this.tripDayCount(trip)) {
+      throw new BadRequestException('유효한 일차가 아닙니다.');
+    }
     const dayItems = await this.itemsRepo.find({ where: { tripId, day: dto.day } });
     const byId = new Map(dayItems.map((entry) => [entry.id, entry]));
     if (
       dto.orderedItemIds.length !== dayItems.length ||
+      new Set(dto.orderedItemIds).size !== dayItems.length ||
       !dto.orderedItemIds.every((id) => byId.has(id))
     ) {
       throw new BadRequestException('순서 정보가 현재 일정과 일치하지 않습니다.');
@@ -625,6 +650,10 @@ export class MainPlannerService {
   }
 
   /** trip.startDate 기준 day 번째 날의 달력 날짜(YYYY-MM-DD). */
+  private tripDayCount(trip: TripEntity): number {
+    return Math.floor((Date.parse(trip.endDate) - Date.parse(trip.startDate)) / 86400000) + 1;
+  }
+
   private dayBaseDate(trip: TripEntity, day: number): string {
     const base = new Date(`${trip.startDate}T12:00:00Z`);
     base.setUTCDate(base.getUTCDate() + (day - 1));
@@ -643,7 +672,7 @@ export class MainPlannerService {
 
   /** YYYY-MM-DD + HH:mm(KST) → UTC Date. */
   private combineScheduledAt(dateStr: string, hhmm: string): Date {
-    if (!/^\d{2}:\d{2}$/.test(hhmm)) {
+    if (!HH_MM.test(hhmm)) {
       throw new BadRequestException('시간 형식은 HH:mm 이어야 합니다.');
     }
     return new Date(`${dateStr}T${hhmm}:00+09:00`);
@@ -793,6 +822,13 @@ export class MainPlannerService {
       }),
     ]);
 
+    return this.buildTripSummary(trip, members, itemCount, firstItems);
+  }
+
+  private buildTripSummary(
+    trip: TripEntity, members: TripMemberDto[], itemCount: number,
+    firstItems: Array<Pick<ItineraryItemEntity, 'name'>>,
+  ): TripSummaryDto {
     return {
       id: trip.id,
       title: trip.title,
@@ -1314,7 +1350,7 @@ export class MainPlannerService {
   /**
    * 사용자 입력을 카카오 Local 검색 키워드로 정규화한다.
    * - 일반 장소 이름: 입력 텍스트 그대로 사용
-   * - http(s) 링크(붙여넣기 허용): 단축링크면 리다이렉트를 따라간 뒤 q/query/keyword 파라미터나 검색 경로 세그먼트에서 추출
+   * - 지도 링크: 네트워크 요청 없이 검색 파라미터나 검색 경로에서 추출
    */
   private async extractSearchKeyword(input: string): Promise<string | null> {
     const raw = input.trim();
@@ -1323,23 +1359,9 @@ export class MainPlannerService {
       return raw.length <= 60 ? raw : raw.slice(0, 60);
     }
 
-    let finalUrl = raw;
-    try {
-      const res = await axios.get(raw, {
-        maxRedirects: 5,
-        timeout: 5000,
-        // 본문은 필요 없고 최종 URL 만 확인 — 일부 서버는 HEAD 를 막아 GET 사용
-        validateStatus: () => true,
-      });
-      const responseUrl = (res.request?.res?.responseUrl ?? res.request?.responseURL) as
-        | string
-        | undefined;
-      if (responseUrl) finalUrl = responseUrl;
-    } catch {
-      // 리다이렉트 해석 실패 시 원본 URL 로 파싱 시도
-    }
-
-    return this.keywordFromUrl(finalUrl);
+    // Parse map links locally. Following user-controlled redirects enables SSRF;
+    // opaque short links must be opened by the user and replaced with a place name.
+    return this.keywordFromUrl(raw);
   }
 
   private keywordFromUrl(url: string): string | null {
@@ -1349,6 +1371,8 @@ export class MainPlannerService {
     } catch {
       return null;
     }
+
+    if (!['map.kakao.com', 'place.map.kakao.com', 'map.naver.com', 'maps.google.com', 'www.google.com', 'www.google.co.kr'].includes(parsed.hostname) || parsed.username || parsed.password || parsed.port) return null;
 
     for (const key of ['q', 'query', 'keyword', 'name']) {
       const value = parsed.searchParams.get(key);
@@ -1555,7 +1579,7 @@ export class MainPlannerService {
     return '🧳';
   }
 
-  private highlightFromItems(items: ItineraryItemEntity[], destination: string): string {
+  private highlightFromItems(items: Array<Pick<ItineraryItemEntity, 'name'>>, destination: string): string {
     if (items.length === 0) {
       return `${destination} 일정 생성 준비`;
     }

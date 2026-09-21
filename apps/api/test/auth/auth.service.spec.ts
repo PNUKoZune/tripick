@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { createHash } from 'node:crypto';
+import axios from 'axios';
 import { AuthService } from '../../src/auth/auth.service';
 import { UserEntity } from '../../src/users/user.entity';
 
@@ -16,7 +17,7 @@ jest.mock('axios', () => {
   const stub = {
     post: jest.fn(async () => ({ data: { access_token: 'kakao-access' } })),
     get: jest.fn(async () => ({
-      data: { id: 77, kakao_account: { email: 'a@b.com', profile: { nickname: '카카오' } } },
+      data: { id: 77, kakao_account: { email: 'a@b.com', is_email_valid: true, is_email_verified: true, profile: { nickname: '카카오' } } },
     })),
     isAxiosError: () => false,
   };
@@ -114,6 +115,7 @@ function createHarness(configOverrides: Record<string, string> = {}) {
     emailService as any,
     refreshRepo as any,
     emailTokenRepo as any,
+    { invalidate: jest.fn() } as any,
   );
   return {
     service,
@@ -514,11 +516,11 @@ describe('AuthService — logout & kakao status', () => {
 
   it('logout marks a live token revoked', async () => {
     const { service, refreshRepo } = createHarness();
-    const row: any = { revokedAt: null };
+    const row: any = { familyId: 'family-1', revokedAt: null };
     refreshRepo.findOne.mockResolvedValue(row);
     await service.logout('tok');
-    expect(row.revokedAt).toBeInstanceOf(Date);
-    expect(refreshRepo.save).toHaveBeenCalledWith(row);
+    expect(refreshRepo.createQueryBuilder).toHaveBeenCalled();
+    expect(refreshRepo.createQueryBuilder.mock.results[0]!.value.wheres).toContainEqual({ familyId: 'family-1' });
   });
 
   it('reports kakao as not ready when keys are missing', () => {
@@ -870,5 +872,19 @@ describe('AuthService — kakao login', () => {
       expect.objectContaining({ id: '77' }),
     );
     expect(session.user.id).toBe('u2');
+  });
+});
+
+describe('Kakao verified email boundary', () => {
+  it.each([undefined, false])('does not forward an email when verification is %s', async (verified) => {
+    (axios.get as jest.Mock).mockResolvedValueOnce({
+      data: { id: 77, kakao_account: { email: 'victim@example.test', is_email_valid: true, is_email_verified: verified } },
+    });
+    const { service, usersService } = createHarness({ KAKAO_REST_API_KEY: 'test', KAKAO_CALLBACK_URL: 'http://localhost/callback' });
+    usersService.existsForKakao.mockResolvedValue(false);
+    const result = await service.resolveKakaoLogin('code');
+    expect(result).toMatchObject({ kind: 'consent', profile: { id: '77' } });
+    if (result.kind === 'consent') expect(result.profile).not.toHaveProperty('email');
+    expect(usersService.findOrCreateByKakao).not.toHaveBeenCalled();
   });
 });

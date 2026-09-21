@@ -6,6 +6,7 @@ import { PreferenceEmbeddingRepository } from './preference-embedding.repository
 import { buildPreferenceText } from './preference-text';
 import { TextEmbeddingService } from '../embedding/text-embedding.service';
 import { pruneToPhotos } from './photo-taste';
+import { ownedPreferencePhotos, ownsPreferencePhoto } from './photo-ownership';
 import type { PreferenceProfileDto, TasteTagDto, UpdatePreferenceDto } from '@tripick/types';
 
 const EMPTY_TASTE_TAGS: TasteTagDto = {
@@ -37,7 +38,13 @@ export class PreferencesService {
   ) {}
 
   async findByUser(userId: string): Promise<PreferenceEntity | null> {
-    return this.repo.findOneBy({ userId });
+    const preference = await this.repo.findOneBy({ userId });
+    if (!preference) return null;
+    // Also discard invalid legacy references before signing, deleting or analyzing them.
+    preference.photoKeys = ownedPreferencePhotos(userId, preference.photoKeys ?? []);
+    preference.photoTags = pruneToPhotos(preference.photoTags ?? {}, preference.photoKeys);
+    preference.disabledPhotoTags = pruneToPhotos(preference.disabledPhotoTags ?? {}, preference.photoKeys);
+    return preference;
   }
 
   /** 그룹 플래너가 구성원 프로필을 한 번에 읽도록 제공하는 배치 API. */
@@ -53,6 +60,7 @@ export class PreferencesService {
    * 업로드 직후처럼 아직 분석 결과가 없는 시점에 upsert 를 쓰면 임베딩만 헛돈다.
    */
   async setPhotoKeys(userId: string, keys: string[]): Promise<PreferenceEntity> {
+    this.assertPhotoOwnership(userId, keys);
     const pref =
       (await this.repo.findOneBy({ userId })) ??
       this.repo.create({
@@ -79,7 +87,8 @@ export class PreferencesService {
   }
 
   async upsert(userId: string, dto: UpdatePreferenceDto): Promise<PreferenceEntity> {
-    let pref = await this.repo.findOneBy({ userId });
+    if (dto.photoKeys) this.assertPhotoOwnership(userId, dto.photoKeys);
+    let pref = await this.findByUser(userId);
     const incomingTasteTags = dto?.tasteTags ?? {};
     const nextTags: TasteTagDto = {
       food: [...new Set(incomingTasteTags.food ?? pref?.tasteTags.food ?? EMPTY_TASTE_TAGS.food)],
@@ -174,5 +183,11 @@ export class PreferencesService {
       modelId: result.modelId,
       source: result.source,
     });
+  }
+
+  private assertPhotoOwnership(userId: string, keys: string[]): void {
+    if (keys.some((key) => !ownsPreferencePhoto(userId, key))) {
+      throw new BadRequestException('본인이 업로드한 사진만 사용할 수 있습니다.');
+    }
   }
 }
