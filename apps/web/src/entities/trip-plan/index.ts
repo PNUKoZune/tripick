@@ -8,6 +8,8 @@ export {
   fetchDestinationSuggestions,
   fetchRecommendedDestinations,
   createTrip,
+  fetchTripGeneration,
+  retryTripGeneration,
   deleteTrip,
   fetchTripShareStatus,
   enableTripShare,

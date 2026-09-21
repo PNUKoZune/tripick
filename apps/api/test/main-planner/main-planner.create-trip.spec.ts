@@ -2,8 +2,8 @@
 
 import { BadRequestException } from '@nestjs/common';
 import { MainPlannerService } from '../../src/main-planner/main-planner.service';
-import type { CreateTripDto, CreateTripRequestDto } from '@tripick/types';
 import type { TripEntity } from '../../src/trips/trip.entity';
+import type { CreateTripDto, CreateTripRequestDto } from '@tripick/types';
 
 function validDto(over: Partial<CreateTripRequestDto> = {}): CreateTripRequestDto {
   return {
@@ -23,7 +23,7 @@ function createHarness() {
     create: jest.fn(async (
       _userId: string,
       dto: CreateTripDto,
-      beforeGenerate?: (trip: TripEntity) => Promise<void>,
+      options?: { beforeEnqueue?: (trip: TripEntity) => Promise<void> },
     ) => {
       const trip = {
         id: 'trip-1',
@@ -32,11 +32,11 @@ function createHarness() {
         destination: dto.destination,
         startDate: dto.startDate,
         endDate: dto.endDate,
-        status: 'confirmed',
+        status: 'generating',
         notes: dto.notes ?? null,
         transportMode: dto.transportMode,
       } as TripEntity;
-      await beforeGenerate?.(trip);
+      await options?.beforeEnqueue?.(trip);
       return trip;
     }),
     findVisible: jest.fn(),
@@ -143,6 +143,10 @@ describe('MainPlannerService.createTrip — 참여자 초대', () => {
 
     await service.createTrip(user, validDto({ members: [{ id: 'tm-x', friendId: 'f1' } as any] }));
 
+    // 멤버 저장은 TripsService의 beforeEnqueue 안에서 끝나고, 알림은 create(큐 등록)가 끝난 뒤 보낸다.
+    expect(tripMembersService.createFromFriend.mock.invocationCallOrder[0]).toBeLessThan(
+      inboxService.create.mock.invocationCallOrder[0]!,
+    );
     expect(inboxService.create).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'u2',

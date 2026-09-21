@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
@@ -81,6 +81,8 @@ const TYPE_LABEL: Record<string, string> = {
 
 @Injectable()
 export class MainPlannerService {
+  private readonly logger = new Logger(MainPlannerService.name);
+
   constructor(
     @InjectRepository(TripEntity)
     private readonly tripsRepo: Repository<TripEntity>,
@@ -110,7 +112,7 @@ export class MainPlannerService {
     const preference = await this.preferencesService.findByUser(user.id);
     const notes = this.composeCreateTripNotes(dto);
     const dayRegions = this.normalizeDayRegions(dto);
-    let preparedMembers: TripMemberDto[] = [];
+    let draftMembers: TripMemberDto[] = [];
     const trip = await this.tripsService.create(
       user.id,
       {
@@ -125,17 +127,25 @@ export class MainPlannerService {
         transportMode: dto.transportMode ?? 'transit',
         ...(notes ? { notes } : {}),
       } satisfies CreateTripDto,
-      // planner.generateItinerary 전에 accepted 동행자가 보여야 최초 후보 검색부터 그룹 취향을 쓴다.
-      async (saved) => {
-        preparedMembers = await this.addDraftMembers(saved, user, dto.members);
+      {
+        // Worker가 즉시 잡을 집어도 멤버가 먼저 보이게 큐 등록 전에 저장한다.
+        beforeEnqueue: async (savedTrip) => {
+          draftMembers = await this.addDraftMembers(savedTrip, user, dto.members);
+        },
       },
     );
 
-    // 생성 실패 시 trip과 멤버가 롤백되므로, 죽은 여행을 가리키는 초대 알림이 남지 않게 성공 후 발송.
-    for (const member of preparedMembers) {
-      await this.notifyTripInvite(trip, user, member);
+    // 큐 등록이 확정된 뒤에만 초대한다. 등록 실패로 trip이 롤백됐는데 죽은 링크 알림이 남지 않는다.
+    for (const member of draftMembers) {
+      try {
+        await this.notifyTripInvite(trip, user, member);
+      } catch (error) {
+        // 일정 생성 잡은 이미 등록됐다. 알림 실패 때문에 생성 요청을 실패로 보이거나 잡을 중복 등록하지 않는다.
+        this.logger.warn(
+          `Trip ${trip.id} 초대 알림 실패: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
-
     return this.toTripSummary(trip, user);
   }
 
@@ -791,12 +801,19 @@ export class MainPlannerService {
       endDate: trip.endDate,
       durationLabel: this.durationLabel(trip.startDate, trip.endDate),
       status: this.summaryStatus(trip),
-      statusLabel: this.summaryStatusLabel(this.summaryStatus(trip)),
+      statusLabel:
+        trip.status === 'generating'
+          ? 'AI 일정 생성 중'
+          : trip.status === 'generation_failed'
+            ? '생성 실패'
+            : this.summaryStatusLabel(this.summaryStatus(trip)),
       members: members.map((member) => this.toPlannerMember(member)),
       coverEmoji: this.coverEmoji(trip.destination),
       highlight: trip.notes?.trim() || this.highlightFromItems(firstItems, trip.destination),
       itemCount,
-      hasDetail: true,
+      hasDetail: !['generating', 'generation_failed'].includes(trip.status),
+      ...(trip.status === 'generating' ? { generationState: 'generating' as const } : {}),
+      ...(trip.status === 'generation_failed' ? { generationState: 'failed' as const } : {}),
     };
   }
 
@@ -1474,7 +1491,14 @@ export class MainPlannerService {
   }
 
   private summaryStatus(trip: TripEntity): TripSummaryStatus {
-    if (trip.status === 'draft' || trip.status === 'cancelled') return 'draft';
+    if (
+      trip.status === 'draft' ||
+      trip.status === 'generating' ||
+      trip.status === 'generation_failed' ||
+      trip.status === 'cancelled'
+    ) {
+      return 'draft';
+    }
     if (trip.status === 'completed') return 'done';
 
     const today = toKstIsoDate();

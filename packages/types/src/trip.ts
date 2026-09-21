@@ -1,4 +1,39 @@
-export type TripStatus = 'draft' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled';
+export type TripStatus =
+  | 'draft'
+  | 'generating'
+  | 'generation_failed'
+  | 'confirmed'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled';
+
+export type TripGenerationStatus =
+  | 'queued'
+  | 'processing'
+  | 'retrying'
+  | 'completed'
+  | 'failed'
+  | 'unavailable';
+
+export type TripGenerationStage =
+  | 'queued'
+  | 'preparing'
+  | 'discovering_places'
+  | 'building_itinerary'
+  | 'saving'
+  | 'completed';
+
+/** BullMQ 초기 일정 생성 작업의 실제 상태. 웹은 이 값을 폴링해 진행 화면을 그린다. */
+export interface TripGenerationJobDto {
+  tripId: string;
+  status: TripGenerationStatus;
+  stage: TripGenerationStage;
+  /** 워커가 현재 시도에서 보고한 진행률(0~100). 시간 기반 추정치가 아니다. */
+  progress: number;
+  attempt: number;
+  maxAttempts: number;
+  error?: string;
+}
 
 /**
  * 정본 이동 수단. 경로·ETA 분기는 표시용 라벨이 아니라 이 값으로 한다.
