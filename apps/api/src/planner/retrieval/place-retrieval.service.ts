@@ -68,12 +68,43 @@ export class PlaceRetrievalService {
   ) {}
 
   async retrieve(inputContext: RetrievalContext): Promise<RetrievalResult> {
-    // 앞단: 목적지 네이버 추천 글로 대중 인지도 인덱스를 만들어 랭킹 컨텍스트에 주입한다.
-    // 이후 모든 evaluator.rank 호출이 이 인덱스로 마이너 장소를 후순위로 민다.
-    const popularityIndex = await this.naverSearch.getPopularityIndex(inputContext.destination);
-    // 행정구역으로 안 잡히는 목적지('광안리')만 좌표 앵커로 해석된다. 나머지는 null 이라
-    // 아래 경로가 통째로 기존과 같다.
-    const anchor = await this.anchors.resolve(inputContext.destination);
+    const totalStarted = Date.now();
+    const durations = {
+      popularity: 0,
+      anchor: 0,
+      embedding: 0,
+      seed: 0,
+      pgvector: 0,
+      kakao: 0,
+      rerank: 0,
+      total: 0,
+    };
+    type AsyncStage = 'popularity' | 'anchor' | 'embedding' | 'seed' | 'pgvector' | 'kakao';
+    const measure = async <T>(stage: AsyncStage, task: () => Promise<T>): Promise<T> => {
+      const started = Date.now();
+      try {
+        return await task();
+      } finally {
+        durations[stage] += Date.now() - started;
+      }
+    };
+    const rank = (candidates: RawPlaceCandidate[], context: RetrievalContext): CandidatePlace[] => {
+      const started = Date.now();
+      try {
+        return this.evaluator.rank(candidates, context);
+      } finally {
+        durations.rerank += Date.now() - started;
+      }
+    };
+
+    const queryText = this.buildQueryText(inputContext);
+    // 인기도·앵커·임베딩은 입력만 공유할 뿐 서로 의존하지 않는다. 콜드 경로가 세 지연의 합이
+    // 아니라 가장 느린 한 단계에 가까워지도록 동시에 시작한다.
+    const [popularityIndex, anchor, queryResult] = await Promise.all([
+      measure('popularity', () => this.naverSearch.getPopularityIndex(inputContext.destination)),
+      measure('anchor', () => this.anchors.resolve(inputContext.destination)),
+      measure('embedding', () => this.embeddings.embedWithSource(queryText)),
+    ]);
     // 지역 코드는 한 번만 해석해 내려보낸다 — 소비측이 destination 문자열에서 각자
     // 재계산하면 앵커로 알아낸 지역('광안리'→부산)을 못 보고 죽은 코드로 되돌아간다.
     const regionFilter = anchor?.region ?? destinationRegionFilter(inputContext.destination);
@@ -81,10 +112,8 @@ export class PlaceRetrievalService {
     const limit = context.limit ?? 16;
     // 종류별 하한. 플래너가 안 주면 하루치 기본값으로 본다.
     const quota = context.categoryQuota ?? DEFAULT_CATEGORY_QUOTA;
-    const queryText = this.buildQueryText(context);
     const sources: RetrievalSource[] = [];
     const rawCandidates: RawPlaceCandidate[] = [];
-    const queryResult = await this.embeddings.embedWithSource(queryText);
     const queryEmbedding = queryResult.vector;
     const semanticSearchReady = queryResult.source === 'remote';
     // 차원이 맞는 취향 벡터만 사용 (차원 불일치 시 pgvector 코사인이 통째로 실패하는 것 방지)
@@ -113,31 +142,31 @@ export class PlaceRetrievalService {
 
     // 앵커가 있으면 그 지역 카탈로그는 이미 적재돼 있다(앵커 해석 자체가 지역을 알아낸 것).
     // '광안리' 로 시드를 찾아 봐야 전용 카탈로그가 없어 매번 빈손으로 로그만 남는다.
-    if (!anchor && semanticSearchReady) await this.seedLocalCatalogIfNeeded(context.destination);
+    if (!anchor && semanticSearchReady) {
+      await measure('seed', () => this.seedLocalCatalogIfNeeded(context.destination));
+    }
 
     const poolSize = limit * this.candidatePoolMultiplier();
     // 기간 있는 행사(축제)는 이 구간과 겹칠 때만 후보로 남는다. 여행 날짜를 모르면 오늘 기준.
     const visitWindow = this.visitWindow(context);
-    let pgvector: RawPlaceCandidate[] = [];
-    if (!semanticSearchReady) {
-      // 해시와 원격 모델 벡터는 차원이 같아도 서로 다른 공간이다. 코사인 검색 대신
-      // 카카오·인메모리 시드 폴백으로 내려가 의미 없는 순위가 정상 결과처럼 저장되는 것을 막는다.
-    } else if (anchor) {
-      const around = await this.searchAroundAnchor(
-        anchor,
-        searchEmbedding,
-        poolSize,
-        limit,
-        visitWindow,
-        quota,
-        preferenceVector,
-        queryResult.modelId,
-      );
-      // 확정된 반경을 컨텍스트에 실어 카카오 폴백이 같은 범위를 보게 한다.
-      context.anchor = { ...anchor, radiusM: around.radiusM };
-      pgvector = around.candidates;
-    } else {
-      pgvector = this.filterEligibleCandidates(
+    const pgvector = await measure('pgvector', async () => {
+      if (!semanticSearchReady) return [];
+      if (anchor) {
+        const around = await this.searchAroundAnchor(
+          anchor,
+          searchEmbedding,
+          poolSize,
+          limit,
+          visitWindow,
+          quota,
+          preferenceVector,
+          queryResult.modelId,
+        );
+        // 확정된 반경을 컨텍스트에 실어 카카오 폴백이 같은 범위를 보게 한다.
+        context.anchor = { ...anchor, radiusM: around.radiusM };
+        return around.candidates;
+      }
+      return this.filterEligibleCandidates(
         await this.placeEmbeddings.searchByEmbedding(
           searchEmbedding,
           { kind: 'region', region: regionFilter },
@@ -148,24 +177,26 @@ export class PlaceRetrievalService {
         ),
         'pgvector',
       );
-    }
+    });
     if (pgvector.length > 0) {
       sources.push('pgvector');
       rawCandidates.push(...pgvector);
     }
 
-    let ranked = this.evaluator.rank(rawCandidates, context);
+    let ranked = rank(rawCandidates, context);
     if (!this.isStrongEnough(ranked, limit)) {
       // 카카오 키워드 폴백은 좌표를 못 주면(앵커·현재 위치 없는 평범한 행정구역 목적지)
       // **전국이 사정권**이라 타지역 동명 장소가 섞인다. 지역 하드 게이트를 여기서 건다.
-      const kakao = this.filterOutOfRegion(
-        this.filterEligibleCandidates(await this.kakaoLocal.search(context, limit * 2), 'kakao'),
-        regionFilter,
+      const kakao = await measure('kakao', async () =>
+        this.filterOutOfRegion(
+          this.filterEligibleCandidates(await this.kakaoLocal.search(context, limit * 2), 'kakao'),
+          regionFilter,
+        ),
       );
       if (kakao.length > 0) {
         sources.push('kakao');
         rawCandidates.push(...kakao);
-        ranked = this.evaluator.rank(rawCandidates, context);
+        ranked = rank(rawCandidates, context);
       }
     }
 
@@ -177,7 +208,7 @@ export class PlaceRetrievalService {
       const seeds = this.filterEligibleCandidates(getSeedCandidates(context.destination), 'seed');
       sources.push('seed');
       rawCandidates.push(...seeds);
-      ranked = this.evaluator.rank(rawCandidates, context);
+      ranked = rank(rawCandidates, context);
     }
 
     const minimumConfidence = this.minimumConfidence();
@@ -192,7 +223,9 @@ export class PlaceRetrievalService {
       popularityWeight * Math.max(0, NEUTRAL_POPULARITY - candidate.crag.popularity);
     const accepted = ranked.filter((candidate) => gateConfidence(candidate) >= minimumConfidence);
     const finalPool = accepted.length >= Math.min(4, limit) ? accepted : ranked;
+    const selectStarted = Date.now();
     const places = this.evaluator.selectTopDiverse(finalPool, limit, quota);
+    durations.rerank += Date.now() - selectStarted;
     const averageConfidence = this.averageConfidence(places);
     const rejectedCount = Math.max(0, ranked.length - accepted.length);
 
@@ -200,8 +233,10 @@ export class PlaceRetrievalService {
     const scope = context.anchor
       ? `anchor="${context.anchor.label}"/${context.anchor.radiusM / 1000}km`
       : `region=${regionFilter.sido ?? regionFilter.sigungu ?? 'none'}`;
+    durations.total = Date.now() - totalStarted;
     this.logger.log(
-      `CRAG retrieval for "${context.destination}" ${scope} sources=${sources.join('+') || 'none'} avg=${averageConfidence.toFixed(2)} selected=${places.length} naver=${popularityIndex.docCount}docs/${popularCount}matched`,
+      `CRAG retrieval for "${context.destination}" ${scope} sources=${sources.join('+') || 'none'} avg=${averageConfidence.toFixed(2)} selected=${places.length} naver=${popularityIndex.docCount}docs/${popularCount}matched ` +
+        `latency=${durations.total}ms stages(pop=${durations.popularity},anchor=${durations.anchor},embed=${durations.embedding},seed=${durations.seed},vector=${durations.pgvector},kakao=${durations.kakao},rank=${durations.rerank})`,
     );
     this.warnThinPool(context.destination, places, limit, quota, scope, sources);
 
@@ -215,6 +250,7 @@ export class PlaceRetrievalService {
         rejectedCount,
         embeddingSource: queryResult.source,
         embeddingModel: queryResult.modelId,
+        durationsMs: durations,
       },
     };
   }

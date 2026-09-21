@@ -7,9 +7,7 @@ describe('DestinationAnchorService', () => {
   it('행정구역으로 안 잡히는 목적지를 좌표+지역 코드로 해석한다', async () => {
     const { service, searchBrief } = build({
       catalogCount: 0,
-      docs: [
-        brief('광안리해수욕장', '부산 수영구 광안동 192-20', 35.1532, 129.119, 'AT4'),
-      ],
+      docs: [brief('광안리해수욕장', '부산 수영구 광안동 192-20', 35.1532, 129.119, 'AT4')],
     });
 
     await expect(service.resolve('광안리')).resolves.toEqual({
@@ -43,7 +41,13 @@ describe('DestinationAnchorService', () => {
     const { service } = build({
       catalogCount: 0,
       docs: [
-        brief('순천자연휴양림', '전남광주통합특별시 순천시 서면 운평리 산 159', 35.04, 127.47, 'AT4'),
+        brief(
+          '순천자연휴양림',
+          '전남광주통합특별시 순천시 서면 운평리 산 159',
+          35.04,
+          127.47,
+          'AT4',
+        ),
       ],
     });
 
@@ -81,6 +85,29 @@ describe('DestinationAnchorService', () => {
 
     await service.resolve('서면');
     await service.resolve('서면');
+
+    expect(searchBrief).toHaveBeenCalledTimes(1);
+  });
+
+  it('같은 목적지의 동시 cache miss도 한 번만 해석한다', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { service, searchBrief } = build({
+      catalogCount: 0,
+      docs: [brief('광안리해수욕장', '부산 수영구 광안동 192-20', 35.1532, 129.119, 'AT4')],
+    });
+    searchBrief.mockImplementation(async () => {
+      await gate;
+      return [brief('광안리해수욕장', '부산 수영구 광안동 192-20', 35.1532, 129.119, 'AT4')];
+    });
+
+    const first = service.resolve('광안리');
+    const second = service.resolve('광안리');
+    await Promise.resolve();
+    release();
+    await Promise.all([first, second]);
 
     expect(searchBrief).toHaveBeenCalledTimes(1);
   });

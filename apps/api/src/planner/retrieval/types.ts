@@ -149,6 +149,17 @@ export interface RetrievalTrace {
   embeddingSource?: 'remote' | 'hash';
   /** 질의 벡터 공간 식별자. 장애·모델 교체 시 검색 결과를 진단하는 저카디널리티 필드. */
   embeddingModel?: string;
+  /** 외부 I/O와 재랭킹 단계별 벽시계 시간(ms). 병렬 단계의 합은 total보다 클 수 있다. */
+  durationsMs?: {
+    popularity: number;
+    anchor: number;
+    embedding: number;
+    seed: number;
+    pgvector: number;
+    kakao: number;
+    rerank: number;
+    total: number;
+  };
 }
 
 export interface RetrievalResult {
