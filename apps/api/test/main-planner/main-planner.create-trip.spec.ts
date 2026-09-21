@@ -185,8 +185,8 @@ describe('MainPlannerService.createTrip — 참여자 초대', () => {
       userId: 'u2',
       status: 'pending',
     });
-    tripsService.create.mockImplementation(async (_userId, _dto, beforeGenerate) => {
-      await beforeGenerate?.({ id: 'trip-dead', userId: 'u1' } as TripEntity);
+    tripsService.create.mockImplementation(async (_userId, _dto, options) => {
+      await options?.beforeEnqueue?.({ id: 'trip-dead', userId: 'u1' } as TripEntity);
       throw new Error('generation failed');
     });
 

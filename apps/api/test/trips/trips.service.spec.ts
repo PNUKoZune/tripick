@@ -1,6 +1,5 @@
 /// <reference types="jest" />
 
-import { ServiceUnavailableException } from '@nestjs/common';
 import { TripsService } from '../../src/trips/trips.service';
 
 const dto = {
@@ -13,7 +12,7 @@ const dto = {
 };
 
 function setup() {
-  const saved = { id: 'trip-1', userId: 'owner', ...dto, status: 'confirmed' };
+  const saved = { id: 'trip-1', userId: 'owner', ...dto, status: 'generating' };
   const repo = {
     create: jest.fn((value: object) => ({ id: 'trip-1', ...value })),
     save: jest.fn().mockResolvedValue(saved),
@@ -22,7 +21,7 @@ function setup() {
   };
   const tripDaysRepo = { save: jest.fn(), create: jest.fn((value: object) => value) };
   const membersRepo = { find: jest.fn() };
-  const planner = { generateItinerary: jest.fn().mockResolvedValue([]) };
+  const planner = { enqueue: jest.fn().mockResolvedValue([]) };
   const service = new TripsService(
     repo as never,
     tripDaysRepo as never,
@@ -36,15 +35,15 @@ describe('TripsService.create generation hook', () => {
   it('stores accepted draft members before initial itinerary generation', async () => {
     const { service, planner } = setup();
     const order: string[] = [];
-    planner.generateItinerary.mockImplementation(async () => {
+    planner.enqueue.mockImplementation(async () => {
       order.push('generate');
       return [];
     });
 
-    await service.create('owner', dto, async (trip) => {
+    await service.create('owner', dto, { beforeEnqueue: async (trip) => {
       expect(trip.id).toBe('trip-1');
       order.push('members');
-    });
+    } });
 
     expect(order).toEqual(['members', 'generate']);
   });
@@ -53,12 +52,12 @@ describe('TripsService.create generation hook', () => {
     const { service, repo, planner } = setup();
 
     await expect(
-      service.create('owner', dto, async () => {
+      service.create('owner', dto, { beforeEnqueue: async () => {
         throw new Error('member write failed');
-      }),
-    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      } }),
+    ).rejects.toThrow('member write failed');
 
-    expect(planner.generateItinerary).not.toHaveBeenCalled();
+    expect(planner.enqueue).not.toHaveBeenCalled();
     expect(repo.delete).toHaveBeenCalledWith('trip-1');
   });
 });

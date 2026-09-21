@@ -55,8 +55,17 @@ test('signup, verify, login, edit itinerary, recover session and logout', async 
     },
     timeout: 60_000,
   });
-  expect(tripResponse.ok(), await tripResponse.text()).toBe(true);
+  expect(tripResponse.status(), await tripResponse.text()).toBe(202);
   const trip = await tripResponse.json();
+  await expect.poll(async () => {
+    const response = await request.get(`/api/v1/trips/${trip.id}/generation`, {
+      headers: { Authorization: `Bearer ${session.tokens.accessToken}` },
+    });
+    expect(response.ok()).toBe(true);
+    const generation = await response.json();
+    if (generation.status === 'failed') throw new Error(generation.error ?? 'Generation failed');
+    return generation.status;
+  }, { timeout: 60_000 }).toBe('completed');
   await page.goto(`/planner?tripId=${trip.id}`);
   await page.getByRole('button', { name: '수정', exact: true }).first().click();
   await page.getByLabel('메모', { exact: true }).fill('브라우저 E2E 저장 확인');

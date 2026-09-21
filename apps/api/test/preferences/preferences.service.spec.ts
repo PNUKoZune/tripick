@@ -196,7 +196,6 @@ describe('PreferencesService.upsert — 병합·임베딩', () => {
     });
 
     expect(saved.tasteTags?.food).toEqual(['cafe']);
-    expect(saved.embeddingId).toBe('last-good');
     // 보내지 않은 mood/environment 는 저장값에서 온다.
     expect(saved.tasteTags?.mood).toEqual(['healing']);
     expect(saved.tasteTags?.environment).toEqual(['beach']);

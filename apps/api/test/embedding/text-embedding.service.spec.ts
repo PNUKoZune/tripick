@@ -37,7 +37,7 @@ describe('TextEmbeddingService.embedWithSource', () => {
 
   it('uses the configured remote model as the vector-space id', async () => {
     mockedPost.mockResolvedValue({ data: { data: [{ embedding: [0.1, 0.2] }] } });
-    const result = await makeService({ LLM_EMBEDDING_MODEL: 'bge-m3-ko-v2' }).embedWithSource(
+    const result = await makeService({ LLM_EMBEDDING_MODEL: 'bge-m3-ko-v2', LLM_EMBEDDING_DIMENSIONS: '2' }).embedWithSource(
       '테스트',
     );
     expect(result.modelId).toBe('bge-m3-ko-v2');
