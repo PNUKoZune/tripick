@@ -30,7 +30,8 @@ test('signup, verify, login, edit itinerary, recover session and logout', async 
   const verification = new URL(link);
   await page.goto(`${verification.pathname}${verification.search}`);
   await expect(page.getByText(/인증.*완료|인증.*되었|인증.*됐/).first()).toBeVisible();
-  await page.goto('/login');
+  await page.getByRole('link', { name: '로그인하러 가기', exact: true }).click();
+  await expect(page).toHaveURL('/login');
   await page.getByLabel('이메일', { exact: true }).fill(email);
   await page.getByLabel('비밀번호', { exact: true }).fill(password);
   await page.getByRole('button', { name: '로그인', exact: true }).click();
@@ -57,16 +58,9 @@ test('signup, verify, login, edit itinerary, recover session and logout', async 
   });
   expect(tripResponse.status(), await tripResponse.text()).toBe(202);
   const trip = await tripResponse.json();
-  await expect.poll(async () => {
-    const response = await request.get(`/api/v1/trips/${trip.id}/generation`, {
-      headers: { Authorization: `Bearer ${session.tokens.accessToken}` },
-    });
-    expect(response.ok()).toBe(true);
-    const generation = await response.json();
-    if (generation.status === 'failed') throw new Error(generation.error ?? 'Generation failed');
-    return generation.status;
-  }, { timeout: 60_000 }).toBe('completed');
-  await page.goto(`/planner?tripId=${trip.id}`);
+  // Recover the real queued job through the same URL used after create/reload.
+  await page.goto(`/trips/new?generationTripId=${trip.id}`);
+  await expect(page).toHaveURL(`/planner?tripId=${trip.id}`, { timeout: 60_000 });
   await page.getByRole('button', { name: '수정', exact: true }).first().click();
   await page.getByLabel('메모', { exact: true }).fill('브라우저 E2E 저장 확인');
   const saved = page.waitForResponse(
