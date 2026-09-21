@@ -145,6 +145,10 @@ export interface RetrievalTrace {
   fallbackUsed: boolean;
   averageConfidence: number;
   rejectedCount: number;
+  /** 질의 임베딩 출처. hash 면 pgvector 경로를 사용하지 않았음을 뜻한다. */
+  embeddingSource?: 'remote' | 'hash';
+  /** 질의 벡터 공간 식별자. 장애·모델 교체 시 검색 결과를 진단하는 저카디널리티 필드. */
+  embeddingModel?: string;
 }
 
 export interface RetrievalResult {

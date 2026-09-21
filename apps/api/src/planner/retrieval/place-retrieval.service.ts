@@ -84,15 +84,28 @@ export class PlaceRetrievalService {
     const queryText = this.buildQueryText(context);
     const sources: RetrievalSource[] = [];
     const rawCandidates: RawPlaceCandidate[] = [];
-    const queryEmbedding = await this.embeddings.embed(queryText);
+    const queryResult = await this.embeddings.embedWithSource(queryText);
+    const queryEmbedding = queryResult.vector;
+    const semanticSearchReady = queryResult.source === 'remote';
     // 차원이 맞는 취향 벡터만 사용 (차원 불일치 시 pgvector 코사인이 통째로 실패하는 것 방지)
     const preferenceVector =
-      context.preferenceVector && context.preferenceVector.length === queryEmbedding.length
+      semanticSearchReady &&
+      context.preferenceVector &&
+      context.preferenceVector.length === queryEmbedding.length
         ? context.preferenceVector
         : undefined;
-    if (context.preferenceVector && !preferenceVector) {
+    if (
+      semanticSearchReady &&
+      context.preferenceVector &&
+      context.preferenceVector.length !== queryEmbedding.length
+    ) {
       this.logger.warn(
         `취향 벡터 차원(${context.preferenceVector.length})이 질의 벡터(${queryEmbedding.length})와 달라 개인화를 건너뜁니다. reembed:preferences 로 재임베딩이 필요합니다.`,
+      );
+    }
+    if (!semanticSearchReady) {
+      this.logger.warn(
+        `질의 임베딩이 hash 폴백이라 pgvector 검색을 건너뜁니다 (destination=${context.destination}).`,
       );
     }
     // 목적지/이벤트 질의 벡터에 저장된 취향 벡터를 가중 결합해 검색 자체를 개인화
@@ -100,13 +113,16 @@ export class PlaceRetrievalService {
 
     // 앵커가 있으면 그 지역 카탈로그는 이미 적재돼 있다(앵커 해석 자체가 지역을 알아낸 것).
     // '광안리' 로 시드를 찾아 봐야 전용 카탈로그가 없어 매번 빈손으로 로그만 남는다.
-    if (!anchor) await this.seedLocalCatalogIfNeeded(context.destination);
+    if (!anchor && semanticSearchReady) await this.seedLocalCatalogIfNeeded(context.destination);
 
     const poolSize = limit * this.candidatePoolMultiplier();
     // 기간 있는 행사(축제)는 이 구간과 겹칠 때만 후보로 남는다. 여행 날짜를 모르면 오늘 기준.
     const visitWindow = this.visitWindow(context);
-    let pgvector: RawPlaceCandidate[];
-    if (anchor) {
+    let pgvector: RawPlaceCandidate[] = [];
+    if (!semanticSearchReady) {
+      // 해시와 원격 모델 벡터는 차원이 같아도 서로 다른 공간이다. 코사인 검색 대신
+      // 카카오·인메모리 시드 폴백으로 내려가 의미 없는 순위가 정상 결과처럼 저장되는 것을 막는다.
+    } else if (anchor) {
       const around = await this.searchAroundAnchor(
         anchor,
         searchEmbedding,
@@ -115,6 +131,7 @@ export class PlaceRetrievalService {
         visitWindow,
         quota,
         preferenceVector,
+        queryResult.modelId,
       );
       // 확정된 반경을 컨텍스트에 실어 카카오 폴백이 같은 범위를 보게 한다.
       context.anchor = { ...anchor, radiusM: around.radiusM };
@@ -127,6 +144,7 @@ export class PlaceRetrievalService {
           poolSize,
           preferenceVector,
           visitWindow,
+          queryResult.modelId,
         ),
         'pgvector',
       );
@@ -156,10 +174,7 @@ export class PlaceRetrievalService {
     // 실제 후보가 한 건도 없을 때만(=아무것도 안 주는 것보다는 나을 때) 허용한다.
     const seedAllowed = !anchor || rawCandidates.length === 0;
     if (!this.isStrongEnough(ranked, limit) && seedAllowed) {
-      const seeds = this.filterEligibleCandidates(
-        getSeedCandidates(context.destination),
-        'seed',
-      );
+      const seeds = this.filterEligibleCandidates(getSeedCandidates(context.destination), 'seed');
       sources.push('seed');
       rawCandidates.push(...seeds);
       ranked = this.evaluator.rank(rawCandidates, context);
@@ -198,6 +213,8 @@ export class PlaceRetrievalService {
         fallbackUsed: sources.some((source) => source !== 'pgvector'),
         averageConfidence,
         rejectedCount,
+        embeddingSource: queryResult.source,
+        embeddingModel: queryResult.modelId,
       },
     };
   }
@@ -217,6 +234,7 @@ export class PlaceRetrievalService {
     visitWindow: VisitWindow,
     quota: PoolCategoryQuota,
     preferenceVector?: number[],
+    embeddingModel?: string,
   ): Promise<{ candidates: RawPlaceCandidate[]; radiusM: number }> {
     const steps = this.radiusStepsM();
     const search = async (radiusM: number): Promise<RawPlaceCandidate[]> =>
@@ -227,6 +245,7 @@ export class PlaceRetrievalService {
           poolSize,
           preferenceVector,
           visitWindow,
+          embeddingModel,
         ),
         'pgvector',
       );
@@ -250,14 +269,12 @@ export class PlaceRetrievalService {
         poolSize,
         preferenceVector,
         visitWindow,
+        embeddingModel,
       ),
       'pgvector',
     );
     const seen = new Set(candidates.map((candidate) => candidate.id));
-    const merged = [
-      ...candidates,
-      ...regional.filter((candidate) => !seen.has(candidate.id)),
-    ];
+    const merged = [...candidates, ...regional.filter((candidate) => !seen.has(candidate.id))];
     this.logger.log(
       `앵커 "${anchor.label}" 최대 반경 ${widest / 1000}km 로도 후보가 얇아(${candidates.length}건) ` +
         `${anchor.region.sido ?? anchor.region.sigungu} 전역 ${regional.length}건을 덧댔습니다.`,
@@ -320,7 +337,9 @@ export class PlaceRetrievalService {
     if (count > 0) return;
 
     try {
-      await this.placeEmbeddings.seedRegion(destination, (text) => this.embeddings.embed(text));
+      await this.placeEmbeddings.seedRegion(destination, (text) =>
+        this.embeddings.embedWithSource(text),
+      );
     } catch (error) {
       this.logger.warn(
         `Local place embedding seed skipped: ${error instanceof Error ? error.message : String(error)}`,
@@ -335,7 +354,9 @@ export class PlaceRetrievalService {
   private blendPreference(query: number[], preference?: number[]): number[] {
     if (!preference || preference.length !== query.length) return query;
     const weight = this.preferenceBlendWeight();
-    const blended = query.map((value, index) => value * weight + (preference[index] ?? 0) * (1 - weight));
+    const blended = query.map(
+      (value, index) => value * weight + (preference[index] ?? 0) * (1 - weight),
+    );
     const norm = Math.sqrt(blended.reduce((sum, value) => sum + value * value, 0));
     if (norm === 0) return query;
     return blended.map((value) => value / norm);
@@ -420,7 +441,9 @@ export class PlaceRetrievalService {
       trigger,
       tags.length > 0 ? `taste:${tags.join(', ')}` : '',
       notes,
-    ].filter(Boolean).join(' | ');
+    ]
+      .filter(Boolean)
+      .join(' | ');
   }
 
   private isStrongEnough(candidates: CandidatePlace[], limit: number): boolean {
@@ -465,7 +488,9 @@ export class PlaceRetrievalService {
     const counts = {
       restaurant: places.filter((place) => place.category === 'restaurant').length,
       cafe: places.filter((place) => place.category === 'cafe').length,
-      attraction: places.filter((place) => place.category !== 'restaurant' && place.category !== 'cafe').length,
+      attraction: places.filter(
+        (place) => place.category !== 'restaurant' && place.category !== 'cafe',
+      ).length,
     };
     const unmet = (['restaurant', 'cafe', 'attraction'] as const)
       .filter((kind) => counts[kind] < quota[kind])
@@ -503,9 +528,7 @@ export class PlaceRetrievalService {
     if (kept.length === 0) return candidates;
     const dropped = candidates.length - kept.length;
     if (dropped > 0) {
-      this.logger.debug(
-        `지역 이탈 후보 ${dropped}건 제외 (기대=${region.sido ?? region.sigungu})`,
-      );
+      this.logger.debug(`지역 이탈 후보 ${dropped}건 제외 (기대=${region.sido ?? region.sigungu})`);
     }
     return kept;
   }

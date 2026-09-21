@@ -8,6 +8,8 @@ export type EmbeddingSource = 'remote' | 'hash';
 export interface EmbeddingResult {
   vector: number[];
   source: EmbeddingSource;
+  /** 벡터 공간 식별자. 차원이 같아도 모델이 다르면 코사인 비교를 금지하기 위해 저장한다. */
+  modelId: string;
   /**
    * 원격 서버가 반환한 원본 차원(normalizeDimensions 로 패딩/절단하기 전).
    * hash 폴백이면 undefined. 헬스체크에서 엉뚱한 모델(차원 불일치) 감지에 사용.
@@ -35,10 +37,24 @@ export class TextEmbeddingService {
       return {
         vector: this.normalizeDimensions(vector),
         source: 'remote',
+        modelId: this.modelId('remote'),
         remoteDimensions: vector.length,
       };
     }
-    return { vector: this.buildHashEmbedding(text), source: 'hash' };
+    return {
+      vector: this.buildHashEmbedding(text),
+      source: 'hash',
+      modelId: this.modelId('hash'),
+    };
+  }
+
+  /**
+   * 같은 차원의 다른 모델, 또는 해시 폴백과 원격 모델이 섞이는 것을 막는 벡터 공간 식별자.
+   * 원격 모델명은 요청 payload 와 반드시 같은 설정에서 읽는다.
+   */
+  modelId(source: EmbeddingSource = 'remote'): string {
+    if (source === 'hash') return `hash-fnv1a-v1:${this.dimensions()}`;
+    return this.config.get<string>('LLM_EMBEDDING_MODEL', 'text-embedding-model');
   }
 
   private async tryRemoteEmbedding(text: string): Promise<number[]> {

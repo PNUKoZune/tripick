@@ -133,10 +133,16 @@ export class PlaceEmbeddingRepository {
     limit: number,
     preferenceVector?: number[],
     visitWindow?: VisitWindow,
+    expectedEmbeddingModel?: string,
   ): Promise<RawPlaceCandidate[]> {
     const params: unknown[] = [`[${embedding.join(',')}]`];
     const regionClause = this.scopeClause(scope, params);
     const eventClause = this.eventPeriodClause(visitWindow, params);
+    let modelClause = '';
+    if (expectedEmbeddingModel) {
+      params.push(expectedEmbeddingModel);
+      modelClause = `AND embedding_model = $${params.length}`;
+    }
 
     params.push(limit);
     const limitIndex = params.length;
@@ -167,6 +173,7 @@ export class PlaceEmbeddingRepository {
                ${preferenceSelect}
         FROM place_embeddings
         WHERE embedding IS NOT NULL
+          ${modelClause}
           ${regionClause}
           ${eventClause}
         ORDER BY embedding <=> $1::vector
@@ -385,7 +392,11 @@ export class PlaceEmbeddingRepository {
 
   async seedRegion(
     destination: string,
-    embed: (text: string) => Promise<number[]>,
+    embed: (text: string) => Promise<{
+      vector: number[];
+      source: 'remote' | 'hash';
+      modelId: string;
+    }>,
   ): Promise<number> {
     const region = normalizeDestinationRegion(destination);
     // 폴백 시드(DEFAULT_SEEDS)는 DB 에 넣지 않는다 — 라벨이 'default' 라 region_code·sigungu_code
@@ -413,6 +424,9 @@ export class PlaceEmbeddingRepository {
       if (existing) continue;
 
       const embedding = await embed(buildPlaceEmbeddingText(place));
+      if (embedding.source !== 'remote') {
+        throw new Error('원격 임베딩 서버가 없어 seed 카탈로그 적재를 중단합니다.');
+      }
       await this.upsertPlace(
         {
           kakaoPlaceId,
@@ -423,8 +437,9 @@ export class PlaceEmbeddingRepository {
           region,
           coordinates: place.coordinates,
           openingHours: place.openingHours ?? null,
+          embeddingModel: embedding.modelId,
         },
-        embedding,
+        embedding.vector,
       );
       inserted += 1;
     }
@@ -774,7 +789,7 @@ export class PlaceEmbeddingRepository {
 
   private parseCoordinates(value: PlaceEmbeddingRow['coordinates']): Coordinates | null {
     if (!value) return null;
-    const raw = typeof value === 'string' ? JSON.parse(value) as Partial<Coordinates> : value;
+    const raw = typeof value === 'string' ? (JSON.parse(value) as Partial<Coordinates>) : value;
     const lat = Number(raw.lat);
     const lng = Number(raw.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;

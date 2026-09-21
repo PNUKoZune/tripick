@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS preference_embeddings (
   user_id     UUID,
   embedding   vector(1024),  -- BGE-m3(-ko) 차원. 모델 교체 시 LLM_EMBEDDING_DIMENSIONS 와 함께 변경
   tags_text   TEXT NOT NULL,
+  embedding_model TEXT,      -- 원격 모델 식별자. 같은 차원의 다른 벡터 공간 혼용 방지
+  embedding_source TEXT,     -- remote | hash. 런타임 검색은 remote 만 소비
   created_at  TIMESTAMPTZ DEFAULT NOW(),
   updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
@@ -21,6 +23,8 @@ CREATE TABLE IF NOT EXISTS preference_embeddings (
 -- 기존 볼륨 호환용 (CREATE TABLE 이 이미 존재하는 경우 컬럼 보강)
 ALTER TABLE preference_embeddings ADD COLUMN IF NOT EXISTS user_id UUID;
 ALTER TABLE preference_embeddings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE preference_embeddings ADD COLUMN IF NOT EXISTS embedding_model TEXT;
+ALTER TABLE preference_embeddings ADD COLUMN IF NOT EXISTS embedding_source TEXT;
 
 -- 유저당 1개 취향 벡터만 유지 (upsert 대상)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_preference_embeddings_user
