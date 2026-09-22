@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Base64
+import androidx.annotation.RequiresApi
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -47,6 +48,7 @@ class FileSaveModule(private val reactContext: ReactApplicationContext) :
     }
   }
 
+  @RequiresApi(Build.VERSION_CODES.Q)
   private fun saveToMediaStore(fileName: String, mimeType: String, bytes: ByteArray): String {
     val resolver = reactContext.contentResolver
     val values =
