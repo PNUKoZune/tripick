@@ -17,6 +17,7 @@ import {
   MIN_RAINY_SLOTS,
   RAIN_PROBABILITY_THRESHOLD,
   WEATHER_SENSITIVE_TYPES,
+  weatherDedupeKey,
 } from './weather-alert.constants';
 import type { ParsedForecast } from '@tripick/utils';
 
@@ -80,10 +81,16 @@ export class WeatherAlertService implements OnModuleInit, OnModuleDestroy {
    * 예보 구간에 걸친 모든 여행을 훑어 비 예보가 있는 일자에 알림을 보낸다.
    * 한 여행의 실패가 나머지 스캔을 막지 않는다.
    *
+   * `options.tripIds` 를 주면 그 여행만 훑는다 — 정기 스캔은 전체를 보고, 시연 콘솔은
+   * 대상 여행 하나로 좁혀 다른 사용자의 여행까지 알림이 나가지 않게 한다.
+   *
    * @returns 알림을 보낸 (여행, 일자) 건수
    */
-  async scanUpcomingTrips(now: Date = new Date()): Promise<number> {
-    const trips = await this.findTripsInForecastWindow(now);
+  async scanUpcomingTrips(
+    now: Date = new Date(),
+    options: { tripIds?: string[] } = {},
+  ): Promise<number> {
+    const trips = await this.findTripsInForecastWindow(now, options.tripIds);
     if (trips.length === 0) {
       this.logger.log('예보 구간에 걸친 여행 없음 — 스캔 종료');
       return 0;
@@ -106,12 +113,14 @@ export class WeatherAlertService implements OnModuleInit, OnModuleDestroy {
    * 진행 예정·진행 중인 여행 중 예보 구간(오늘 ~ +10일)과 겹치는 것만 고른다.
    * draft·cancelled·completed 는 알릴 대상이 아니다.
    */
-  private async findTripsInForecastWindow(now: Date): Promise<TripEntity[]> {
+  private async findTripsInForecastWindow(now: Date, tripIds?: string[]): Promise<TripEntity[]> {
     const today = this.kstToday(now);
     const horizon = this.addDaysIso(today, FORECAST_HORIZON_DAYS);
+    if (tripIds && tripIds.length === 0) return [];
 
     return this.tripsRepo.find({
       where: {
+        ...(tripIds ? { id: In(tripIds) } : {}),
         status: In(['confirmed', 'in_progress']),
         // 여행 구간 [startDate, endDate] 과 예보 구간 [today, horizon] 이 겹치는 조건
         startDate: LessThanOrEqual(horizon),
@@ -281,7 +290,7 @@ export class WeatherAlertService implements OnModuleInit, OnModuleDestroy {
   private async claimAlert(tripId: string, iso: string, now: Date): Promise<boolean> {
     try {
       const res = await this.redis.set(
-        this.dedupeKey(tripId, iso),
+        weatherDedupeKey(tripId, iso),
         '1',
         'EX',
         this.dedupeTtlSec(iso, now),
@@ -301,10 +310,6 @@ export class WeatherAlertService implements OnModuleInit, OnModuleDestroy {
     const endOfDayKst = Date.parse(`${this.addDaysIso(iso, 1)}T00:00:00+09:00`);
     const remainSec = Math.ceil((endOfDayKst - now.getTime()) / 1000);
     return Math.max(remainSec, MIN_DEDUPE_TTL_SEC);
-  }
-
-  private dedupeKey(tripId: string, iso: string): string {
-    return `weather:alert:sent:${tripId}:${iso}`;
   }
 
   /**

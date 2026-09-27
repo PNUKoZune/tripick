@@ -55,3 +55,11 @@ export const CROWD_MIN_RATE = 10;
  * 음식점·카페·숙박·이동은 대상이 아니다.
  */
 export const CROWD_SENSITIVE_TYPES: ReadonlyArray<ItineraryItemType> = ['attraction'];
+
+/**
+ * 혼잡 알림 중복 억제 키. 발송 선점(CrowdAlertService)과 시연 콘솔의 재시연용 해제가
+ * 같은 키를 봐야 하므로 여기 한 곳에서 만든다.
+ */
+export function crowdDedupeKey(tripId: string, iso: string): string {
+  return `crowd:alert:sent:${tripId}:${iso}`;
+}

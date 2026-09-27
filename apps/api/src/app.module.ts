@@ -33,6 +33,7 @@ import { ScheduleChangeModule } from './schedule-change/schedule-change.module';
 import { TripMembersModule } from './trip-members/trip-members.module';
 import { FriendsModule } from './friends/friends.module';
 import { InboxModule } from './inbox/inbox.module';
+import { DemoConsoleModule, isDemoConsoleEnabled } from './demo-console/demo-console.module';
 
 @Module({
   imports: [
@@ -110,6 +111,9 @@ import { InboxModule } from './inbox/inbox.module';
     TripMembersModule,
     FriendsModule,
     InboxModule,
+
+    // 시연 콘솔은 플래그가 켜진 환경에만 붙인다 — 꺼져 있으면 라우트 자체가 생기지 않는다.
+    ...(isDemoConsoleEnabled() ? [DemoConsoleModule] : []),
   ],
   controllers: [HealthController],
   providers: [

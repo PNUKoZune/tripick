@@ -84,7 +84,7 @@ function build(opts: {
     tripMembersService,
     config(),
   );
-  return { service, tatsCnctrRate, inboxService };
+  return { service, tripsRepo, tatsCnctrRate, inboxService };
 }
 
 /** 스캔 후 남은 커버리지 요약 로그(warn 또는 log)를 뽑는다. */
@@ -179,5 +179,12 @@ describe('CrowdAlertService 커버리지 지표', () => {
     const line = coverageLine(warnSpy, logSpy);
     expect(line).toContain('매칭 5');
     expect(line).toContain('budget_exhausted 1');
+  });
+  it('tripIds 를 주면 그 여행만 조회한다 (시연 콘솔이 남의 여행까지 훑지 않도록)', async () => {
+    const { service, tripsRepo } = build({ items: [attraction('불국사')] });
+
+    await service.scanUpcomingTrips(NOW, { tripIds: ['trip-1'] });
+
+    expect(tripsRepo.find.mock.calls[0][0].where).toHaveProperty('id');
   });
 });
