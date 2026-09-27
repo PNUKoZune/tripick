@@ -1,4 +1,5 @@
 import type { ItineraryItemType } from './itinerary';
+import type { TripStatus } from './trip';
 
 /**
  * 시연용 어드민 콘솔 DTO.
@@ -40,10 +41,27 @@ export interface DemoLocationSummaryDto {
   fresh: boolean;
 }
 
+/** 콘솔에서 고를 수 있는 여행 1건. 시드 여행뿐 아니라 사용자가 직접 만든 여행도 대상이다. */
+export interface DemoTripOptionDto {
+  tripId: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  /** 총 일차 수 */
+  days: number;
+  status: TripStatus;
+  /** 콘솔이 시드한 시연 여행인지 */
+  seeded: boolean;
+  /** 알림 스캐너가 보는 상태(확정·진행 중)인지 — 아니면 알림이 나가지 않는다 */
+  scannable: boolean;
+}
+
 export interface DemoConsoleStatusDto {
   user: { id: string; email: string | null; nickname: string };
-  /** 시연 대상 여행 — 시드된 여행이 없으면 오늘 일정이 있는 여행, 그마저 없으면 null */
+  /** 선택된(또는 자동 선택된) 대상 여행의 대상 일차 요약 */
   trip: DemoTripSummaryDto | null;
+  /** 고를 수 있는 여행 목록 (최근 순) */
+  trips: DemoTripOptionDto[];
   location: DemoLocationSummaryDto | null;
 }
 

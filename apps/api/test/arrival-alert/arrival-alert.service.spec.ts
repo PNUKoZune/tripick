@@ -232,4 +232,11 @@ describe('ArrivalAlertService', () => {
     // 6시간(21600) 을 넘겨 하루 남은 일정을 전부 덮는다
     expect(ttlSec).toBeGreaterThan(6 * 60 * 60);
   });
+  it('tripIds 를 주면 그 여행의 항목만 본다 (시연 콘솔이 다른 여행까지 잡지 않도록)', async () => {
+    const { service, itemsRepo } = build({ items: [item()] });
+
+    await service.scanDueItems(NOW, { tripIds: ['trip-1'] });
+
+    expect(itemsRepo.find.mock.calls[0][0].where).toHaveProperty('tripId');
+  });
 });

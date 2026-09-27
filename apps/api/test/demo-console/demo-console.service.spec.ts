@@ -74,6 +74,7 @@ function build(opts: { trip?: any; items?: any[]; arrivalAlerted?: number } = {}
   const tripsRepo = {
     findOneBy: jest.fn(async () => opts.trip ?? trip()),
     findOne: jest.fn(async () => opts.trip ?? trip()),
+    find: jest.fn(async () => [opts.trip ?? trip()]),
     delete: jest.fn(async () => ({ affected: 1 })),
     create: jest.fn((value: any) => value),
     save: jest.fn(async (value: any) => ({ id: 'trip-seeded', ...value })),
@@ -181,7 +182,7 @@ describe('DemoConsoleService', () => {
       // 위도 1도 ≈ 111.32km — 3km 를 북쪽으로 민 만큼만 벌어져야 한다.
       expect(injected.lat - 37.5446).toBeCloseTo(3 / 111.32, 4);
       expect(injected.lng).toBe(127.0375);
-      expect(arrivalAlert.scanDueItems).toHaveBeenCalledWith(NOW);
+      expect(arrivalAlert.scanDueItems).toHaveBeenCalledWith(NOW, { tripIds: ['trip-1'] });
       expect(result).toMatchObject({ scenario: 'arrival', alerted: 1 });
     });
 
@@ -267,6 +268,45 @@ describe('DemoConsoleService', () => {
       tripsRepo.findOne.mockResolvedValue(null);
 
       await expect(service.runWeather(user, {}, NOW)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('대상 선택', () => {
+    it('상태 조회는 고를 수 있는 여행 목록을 함께 준다', async () => {
+      const { service } = build();
+
+      const status = await service.status(user, {}, NOW);
+
+      expect(status.trips).toEqual([
+        expect.objectContaining({ tripId: 'trip-1', seeded: true, scannable: true, days: 1 }),
+      ]);
+    });
+
+    it('스캐너가 보지 않는 상태도 목록에 남기고 scannable=false 로 알린다', async () => {
+      const { service } = build({ trip: trip({ status: 'draft', title: '심사위원 여행' }) });
+
+      const status = await service.status(user, {}, NOW);
+
+      expect(status.trips[0]).toMatchObject({ seeded: false, scannable: false });
+    });
+
+    it('tripId 를 주면 시드 여행 대신 그 여행을 대상으로 삼는다', async () => {
+      const { service, tripsRepo } = build({
+        trip: trip({ id: 'trip-judge', title: '심사위원이 만든 여행' }),
+      });
+
+      const result = await service.runWeather(user, { tripId: 'trip-judge' }, NOW);
+
+      expect(tripsRepo.findOneBy).toHaveBeenCalledWith({ id: 'trip-judge', userId: 'u1' });
+      expect(result.tripId).toBe('trip-judge');
+    });
+
+    it('예보 구간(오늘 +10일) 밖 일자는 0건 대신 이유를 알려준다', async () => {
+      const far = '2026-11-01';
+      const { service, weatherAlert } = build({ trip: trip({ startDate: far, endDate: far }) });
+
+      await expect(service.runWeather(user, {}, NOW)).rejects.toBeInstanceOf(BadRequestException);
+      expect(weatherAlert.scanUpcomingTrips).not.toHaveBeenCalled();
     });
   });
 

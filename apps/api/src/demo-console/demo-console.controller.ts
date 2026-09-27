@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -21,9 +21,9 @@ export class DemoConsoleController {
   constructor(private readonly demoConsole: DemoConsoleService) {}
 
   @Get('status')
-  @ApiOperation({ summary: '시연 대상 여행·일정·주입된 위치 상태' })
-  status(@CurrentUser() user: UserEntity) {
-    return this.demoConsole.status(user);
+  @ApiOperation({ summary: '고를 수 있는 여행 목록 · 선택된 여행의 일정 · 주입된 위치 상태' })
+  status(@CurrentUser() user: UserEntity, @Query() query: DemoScenarioDto) {
+    return this.demoConsole.status(user, query);
   }
 
   @Post('trip')

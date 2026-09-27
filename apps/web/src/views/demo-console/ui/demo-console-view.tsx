@@ -62,7 +62,7 @@ type LogLine = { at: string; text: string; ok: boolean };
  * 발표자만 들어온다.
  */
 export function DemoConsoleView() {
-  const { status, seed, scenario, reset } = useDemoConsole();
+  const { status, seed, scenario, reset, selection } = useDemoConsole();
   const [log, setLog] = useState<LogLine[]>([]);
 
   const append = (text: string, ok: boolean) => {
@@ -72,6 +72,8 @@ export function DemoConsoleView() {
 
   const busy = seed.isPending || scenario.isPending || reset.isPending;
   const trip = status.data?.trip ?? null;
+  const trips = status.data?.trips ?? [];
+  const selected = trips.find((option) => option.tripId === trip?.tripId) ?? null;
   const location = status.data?.location ?? null;
   const unavailable = status.isError;
 
@@ -111,10 +113,53 @@ export function DemoConsoleView() {
               ) : null}
             </div>
 
+            <div className="mt-2 flex gap-2">
+              <select
+                aria-label="대상 여행"
+                value={trip?.tripId ?? ''}
+                onChange={(event) => {
+                  selection.setTripId(event.target.value || null);
+                  // 여행마다 일차 수가 다르므로 선택을 비워 서버 기본값(오늘 일차)으로 되돌린다.
+                  selection.setDay(null);
+                }}
+                className="min-w-0 flex-1 rounded-[10px] border border-[color:var(--line-strong)] bg-[color:var(--app-surface)] px-2 py-2 text-[13px] text-[color:var(--text-primary)]"
+              >
+                {trips.length === 0 ? <option value="">여행 없음</option> : null}
+                {trips.map((option) => (
+                  <option key={option.tripId} value={option.tripId}>
+                    {option.seeded ? '[시드] ' : ''}
+                    {option.title} ({option.startDate})
+                    {option.scannable ? '' : ` · ${option.status}`}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="대상 일차"
+                value={trip?.day ?? 1}
+                onChange={(event) => selection.setDay(Number(event.target.value))}
+                className="shrink-0 rounded-[10px] border border-[color:var(--line-strong)] bg-[color:var(--app-surface)] px-2 py-2 text-[13px] text-[color:var(--text-primary)]"
+              >
+                {Array.from({ length: selected?.days ?? trip?.day ?? 1 }, (_, index) => index + 1).map(
+                  (value) => (
+                    <option key={value} value={value}>
+                      {value}일차
+                    </option>
+                  ),
+                )}
+              </select>
+            </div>
+
+            {selected && !selected.scannable ? (
+              <p className="mt-2 text-[12px] text-[color:var(--danger)]">
+                상태가 {selected.status} 라 알림 스캐너가 보지 않습니다 — 일정을 생성·확정한 여행을
+                고르세요.
+              </p>
+            ) : null}
+
             {trip ? (
               <>
-                <p className="mt-1 text-[13px] text-[color:var(--text-secondary)]">
-                  {trip.title} · {trip.date} ({trip.day}일차)
+                <p className="mt-2 text-[13px] text-[color:var(--text-secondary)]">
+                  {trip.date} · {trip.items.length}개 일정
                 </p>
                 <ul className="mt-3 flex flex-col gap-1">
                   {trip.items.map((item) => (
@@ -139,7 +184,7 @@ export function DemoConsoleView() {
               </>
             ) : (
               <p className="mt-1 text-[13px] text-[color:var(--text-secondary)]">
-                시연 대상 여행이 없습니다. 아래에서 시드하세요.
+                시연 대상 여행이 없습니다. 아래에서 시드하거나 직접 여행을 만드세요.
               </p>
             )}
 

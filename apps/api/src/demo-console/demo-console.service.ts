@@ -23,6 +23,7 @@ import type {
   DemoScenario,
   DemoScenarioRequestDto,
   DemoScenarioResultDto,
+  DemoTripOptionDto,
   DemoTripSummaryDto,
 } from '@tripick/types';
 import { redisConnection } from '../common/redis.config';
@@ -42,11 +43,13 @@ import {
 } from '../arrival-alert/arrival-alert.constants';
 import { WeatherAlertService } from '../weather-alert/weather-alert.service';
 import {
+  FORECAST_HORIZON_DAYS,
   WEATHER_SENSITIVE_TYPES,
   weatherDedupeKey,
 } from '../weather-alert/weather-alert.constants';
 import { CrowdAlertService } from '../crowd-alert/crowd-alert.service';
 import {
+  CONCENTRATION_HORIZON_DAYS,
   CROWD_SENSITIVE_TYPES,
   crowdDedupeKey,
 } from '../crowd-alert/crowd-alert.constants';
@@ -119,16 +122,50 @@ export class DemoConsoleService implements OnModuleInit, OnModuleDestroy {
     this.redis.disconnect();
   }
 
-  /** 콘솔 상단에 띄우는 현재 상태 — 대상 여행·일정·서버가 들고 있는 위치. */
-  async status(user: UserEntity, now: Date = new Date()): Promise<DemoConsoleStatusDto> {
-    const trip = await this.findTrip(user);
-    const day = trip ? this.resolveDay(trip, undefined, now) : null;
+  /**
+   * 콘솔 상단에 띄우는 현재 상태 — 고를 수 있는 여행 목록, 선택된 여행의 대상 일차 일정,
+   * 서버가 들고 있는 위치.
+   *
+   * `dto.tripId` 를 주면 그 여행을 보여준다 — 심사위원이 즉석에서 만든 여행에 시나리오를
+   * 걸 수 있어야 하므로, 시드 여행은 "기본 선택"일 뿐 유일한 대상이 아니다.
+   */
+  async status(
+    user: UserEntity,
+    dto: DemoScenarioRequestDto = {},
+    now: Date = new Date(),
+  ): Promise<DemoConsoleStatusDto> {
+    const trip = await this.findTrip(user, dto.tripId);
+    const day = trip ? this.resolveDay(trip, dto.day, now) : null;
 
     return {
       user: { id: user.id, email: user.email ?? null, nickname: user.nickname },
       trip: trip && day ? await this.summarize(trip, day, now) : null,
+      trips: await this.listTripOptions(user),
       location: await this.locationSummary(user, now),
     };
+  }
+
+  /**
+   * 고를 수 있는 여행 목록. draft 처럼 스캐너가 보지 않는 상태도 함께 내려보낸다 —
+   * 목록에서 감추면 "내 여행이 왜 없지" 가 되고, 실으면 화면이 이유를 먼저 보여줄 수 있다.
+   */
+  private async listTripOptions(user: UserEntity): Promise<DemoTripOptionDto[]> {
+    const trips = await this.tripsRepo.find({
+      where: { userId: user.id },
+      order: { startDate: 'DESC' },
+      take: 20,
+    });
+
+    return trips.map((trip) => ({
+      tripId: trip.id,
+      title: trip.title,
+      startDate: trip.startDate,
+      endDate: trip.endDate,
+      days: countTripDays(trip.startDate, trip.endDate),
+      status: trip.status,
+      seeded: trip.title === DEMO_TRIP_TITLE,
+      scannable: ACTIVE_STATUSES.includes(trip.status as (typeof ACTIVE_STATUSES)[number]),
+    }));
   }
 
   /**
@@ -217,9 +254,9 @@ export class DemoConsoleService implements OnModuleInit, OnModuleDestroy {
     );
     await this.clearKeys([arrivalDedupeKey(trip.id, user.id, day)]);
 
-    // 정기 스캔(5분 주기)과 같은 호출이다 — 전체 due 항목을 훑되, 판정은 사용자별 위치로
-    // 하므로 위치를 주입한 이 사용자만 걸린다.
-    const alerted = await this.arrivalAlert.scanDueItems(now);
+    // 정기 스캔(5분 주기)과 같은 호출이되 대상 여행으로 좁힌다 — 발표자 계정에 진행 중인
+    // 여행이 여럿이면 주입한 위치 하나로 다른 여행까지 미도착이 잡혀 알림이 섞인다.
+    const alerted = await this.arrivalAlert.scanDueItems(now, { tripIds: [trip.id] });
 
     return this.result('arrival', trip, alerted, [
       `${day}일차 '${target.name}'`,
@@ -235,7 +272,7 @@ export class DemoConsoleService implements OnModuleInit, OnModuleDestroy {
     now: Date = new Date(),
   ): Promise<DemoScenarioResultDto> {
     const { trip, day, iso, items } = await this.resolveTarget(user, dto, now);
-    this.assertScannable(trip, iso, now);
+    this.assertScannable(trip, iso, now, FORECAST_HORIZON_DAYS, '예보');
     this.assertHasType(items, WEATHER_SENSITIVE_TYPES, day, '야외(관광지) 일정');
 
     this.forecastSource.setRainyDates([iso.replace(/-/g, '')]);
@@ -252,7 +289,7 @@ export class DemoConsoleService implements OnModuleInit, OnModuleDestroy {
     now: Date = new Date(),
   ): Promise<DemoScenarioResultDto> {
     const { trip, day, iso, items } = await this.resolveTarget(user, dto, now);
-    this.assertScannable(trip, iso, now);
+    this.assertScannable(trip, iso, now, CONCENTRATION_HORIZON_DAYS, '집중률 예측');
     this.assertHasType(items, CROWD_SENSITIVE_TYPES, day, '관광지 일정');
 
     this.concentrationSource.setCrowdedDates(
@@ -290,7 +327,7 @@ export class DemoConsoleService implements OnModuleInit, OnModuleDestroy {
 
     await this.clearKeys(keys);
     this.logger.warn(`[시연] 상태 초기화 — user ${user.id}, 키 ${keys.length}개`);
-    return this.status(user, now);
+    return this.status(user, {}, now);
   }
 
   /** 대상 여행·일차·그 일차의 일정을 한 번에 해석한다. */
@@ -376,14 +413,28 @@ export class DemoConsoleService implements OnModuleInit, OnModuleDestroy {
    * 스캐너가 볼 수 있는 조건인지 먼저 확인한다 — 무대에서 "0건" 을 보고 원인을 찾는 대신,
    * 버튼을 누른 즉시 왜 안 되는지 알려준다.
    */
-  private assertScannable(trip: TripEntity, iso: string, now: Date): void {
+  private assertScannable(
+    trip: TripEntity,
+    iso: string,
+    now: Date,
+    horizonDays: number,
+    horizonLabel: string,
+  ): void {
     if (!ACTIVE_STATUSES.includes(trip.status as (typeof ACTIVE_STATUSES)[number])) {
       throw new BadRequestException(
         `여행 상태가 '${trip.status}' 라 알림 대상이 아닙니다(확정 또는 진행 중이어야 합니다).`,
       );
     }
-    if (iso < toKstIsoDate(now)) {
+    const today = toKstIsoDate(now);
+    if (iso < today) {
       throw new BadRequestException('지난 일자는 알림 대상이 아닙니다. 오늘 이후 일차를 고르세요.');
+    }
+    // 스캐너는 예측 구간 밖 일자를 아예 조회하지 않는다 — 여기서 막지 않으면 "0건" 만 보고
+    // 무대에서 원인을 찾게 된다.
+    if (iso > addDaysToIsoDate(today, horizonDays)) {
+      throw new BadRequestException(
+        `${horizonLabel} 구간(오늘 +${horizonDays}일) 밖의 일자라 알림 대상이 아닙니다.`,
+      );
     }
   }
 

@@ -22,7 +22,7 @@ export const queryKeys = {
     me: ['user', 'me'] as const,
   },
   demoConsole: {
-    status: ['demo-console', 'status'] as const,
+    status: (tripId = '', day = 0) => ['demo-console', 'status', tripId, day] as const,
   },
   planner: {
     trips: ['planner', 'trips'] as const,
