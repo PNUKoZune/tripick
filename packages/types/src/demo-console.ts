@@ -41,7 +41,12 @@ export interface DemoLocationSummaryDto {
   fresh: boolean;
 }
 
-/** 콘솔에서 고를 수 있는 여행 1건. 시드 여행뿐 아니라 사용자가 직접 만든 여행도 대상이다. */
+/**
+ * 콘솔에서 고를 수 있는 여행 1건.
+ *
+ * 시드 여행뿐 아니라 직접 만든 여행, 참여자(accepted)로 들어가 있는 남의 여행도 대상이다 —
+ * 심사위원이 자기 계정으로 만든 여행에 발표자가 조건을 걸 수 있어야 하기 때문.
+ */
 export interface DemoTripOptionDto {
   tripId: string;
   title: string;
@@ -52,6 +57,8 @@ export interface DemoTripOptionDto {
   status: TripStatus;
   /** 콘솔이 시드한 시연 여행인지 */
   seeded: boolean;
+  /** 내가 owner 인 여행인지 — false 면 참여자로 들어가 있는 남의 여행이다 */
+  owned: boolean;
   /** 알림 스캐너가 보는 상태(확정·진행 중)인지 — 아니면 알림이 나가지 않는다 */
   scannable: boolean;
 }

@@ -4,6 +4,7 @@ import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ItineraryItemEntity } from '../itinerary/itinerary-item.entity';
 import { TripEntity } from '../trips/trip.entity';
+import { TripMemberEntity } from '../trip-members/trip-member.entity';
 import { ArrivalAlertModule } from '../arrival-alert/arrival-alert.module';
 import { LiveLocationModule } from '../arrival-alert/live-location.module';
 import { InboxModule } from '../inbox/inbox.module';
@@ -40,7 +41,7 @@ export function isDemoConsoleEnabled(env: NodeJS.ProcessEnv = process.env): bool
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([TripEntity, ItineraryItemEntity]),
+    TypeOrmModule.forFeature([TripEntity, ItineraryItemEntity, TripMemberEntity]),
     ArrivalAlertModule,
     LiveLocationModule,
     InboxModule,

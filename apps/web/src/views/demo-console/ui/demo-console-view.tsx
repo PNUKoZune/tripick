@@ -128,6 +128,7 @@ export function DemoConsoleView() {
                 {trips.map((option) => (
                   <option key={option.tripId} value={option.tripId}>
                     {option.seeded ? '[시드] ' : ''}
+                    {option.owned ? '' : '[참여] '}
                     {option.title} ({option.startDate})
                     {option.scannable ? '' : ` · ${option.status}`}
                   </option>
@@ -148,6 +149,14 @@ export function DemoConsoleView() {
                 )}
               </select>
             </div>
+
+            {selected && !selected.owned ? (
+              <p className="mt-2 text-[12px] text-[color:var(--text-secondary)]">
+                참여 중인 남의 여행입니다 — 날씨·혼잡 알림은 소유자 기기에도 갑니다. 미도착은
+                위치를 주입한 내 계정 기준으로 판정되고, 판정 창에 든 항목이 없으면 소유자의
+                일정 시각이 옮겨집니다.
+              </p>
+            ) : null}
 
             {selected && !selected.scannable ? (
               <p className="mt-2 text-[12px] text-[color:var(--danger)]">

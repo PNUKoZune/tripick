@@ -69,16 +69,25 @@ function item(overrides: Record<string, unknown> = {}) {
   } as any;
 }
 
-function build(opts: { trip?: any; items?: any[]; arrivalAlerted?: number } = {}) {
+function build(
+  opts: { trip?: any; items?: any[]; arrivalAlerted?: number; memberOf?: any[] } = {},
+) {
   const saved: any[] = [];
+  // 소유 여행 조회 → 참여 여행 조회 순으로 불린다(visibleTrips).
+  const owned = opts.trip === null ? [] : [opts.trip ?? trip()];
   const tripsRepo = {
-    findOneBy: jest.fn(async () => opts.trip ?? trip()),
-    findOne: jest.fn(async () => opts.trip ?? trip()),
-    find: jest.fn(async () => [opts.trip ?? trip()]),
+    findOneBy: jest.fn(async () => owned[0] ?? null),
+    findOne: jest.fn(async () => owned[0] ?? null),
+    find: jest.fn(async (query: any) => {
+      // where 가 배열이면 참여 여행 id 조회다.
+      if (Array.isArray(query?.where)) return opts.memberOf ?? [];
+      return owned;
+    }),
     delete: jest.fn(async () => ({ affected: 1 })),
     create: jest.fn((value: any) => value),
     save: jest.fn(async (value: any) => ({ id: 'trip-seeded', ...value })),
   } as any;
+  const membersRepo = { find: jest.fn(async () => []) } as any;
   const itemsRepo = {
     find: jest.fn(async () => opts.items ?? [item()]),
     create: jest.fn((value: any) => value),
@@ -103,6 +112,7 @@ function build(opts: { trip?: any; items?: any[]; arrivalAlerted?: number } = {}
   const service = new DemoConsoleService(
     tripsRepo,
     itemsRepo,
+    membersRepo,
     liveLocation,
     arrivalAlert,
     weatherAlert,
@@ -115,6 +125,7 @@ function build(opts: { trip?: any; items?: any[]; arrivalAlerted?: number } = {}
   return {
     service,
     tripsRepo,
+    membersRepo,
     itemsRepo,
     liveLocation,
     arrivalAlert,
@@ -263,9 +274,7 @@ describe('DemoConsoleService', () => {
     });
 
     it('시연 대상 여행이 없으면 시드부터 하라고 알린다', async () => {
-      const { service, tripsRepo } = build();
-      tripsRepo.findOneBy.mockResolvedValue(null);
-      tripsRepo.findOne.mockResolvedValue(null);
+      const { service } = build({ trip: null });
 
       await expect(service.runWeather(user, {}, NOW)).rejects.toBeInstanceOf(NotFoundException);
     });
@@ -291,14 +300,33 @@ describe('DemoConsoleService', () => {
     });
 
     it('tripId 를 주면 시드 여행 대신 그 여행을 대상으로 삼는다', async () => {
-      const { service, tripsRepo } = build({
+      const { service } = build({
         trip: trip({ id: 'trip-judge', title: '심사위원이 만든 여행' }),
       });
 
       const result = await service.runWeather(user, { tripId: 'trip-judge' }, NOW);
 
-      expect(tripsRepo.findOneBy).toHaveBeenCalledWith({ id: 'trip-judge', userId: 'u1' });
       expect(result.tripId).toBe('trip-judge');
+    });
+
+    it('참여자(accepted)로 들어가 있는 남의 여행도 대상이 된다', async () => {
+      const judgeTrip = trip({ id: 'trip-judge', userId: 'judge', title: '심사위원 여행' });
+      const { service, membersRepo } = build({ trip: null, memberOf: [judgeTrip] });
+      membersRepo.find.mockResolvedValue([{ tripId: 'trip-judge', userId: 'u1' }]);
+
+      const status = await service.status(user, {}, NOW);
+      const result = await service.runWeather(user, { tripId: 'trip-judge' }, NOW);
+
+      expect(status.trips[0]).toMatchObject({ tripId: 'trip-judge', owned: false, seeded: false });
+      expect(result.tripId).toBe('trip-judge');
+    });
+
+    it('소유하지도 참여하지도 않은 여행은 tripId 를 줘도 대상이 아니다', async () => {
+      const { service } = build();
+
+      await expect(
+        service.runWeather(user, { tripId: 'trip-남의것' }, NOW),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('예보 구간(오늘 +10일) 밖 일자는 0건 대신 이유를 알려준다', async () => {

@@ -10,7 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Redis } from 'ioredis';
-import { In, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import {
   addDaysToIsoDate,
   countTripDays,
@@ -29,6 +29,7 @@ import type {
 import { redisConnection } from '../common/redis.config';
 import { ItineraryItemEntity } from '../itinerary/itinerary-item.entity';
 import { TripEntity } from '../trips/trip.entity';
+import { TripMemberEntity } from '../trip-members/trip-member.entity';
 import { UserEntity } from '../users/user.entity';
 import { ArrivalAlertService } from '../arrival-alert/arrival-alert.service';
 import { LiveLocationService } from '../arrival-alert/live-location.service';
@@ -94,6 +95,8 @@ export class DemoConsoleService implements OnModuleInit, OnModuleDestroy {
     private readonly tripsRepo: Repository<TripEntity>,
     @InjectRepository(ItineraryItemEntity)
     private readonly itemsRepo: Repository<ItineraryItemEntity>,
+    @InjectRepository(TripMemberEntity)
+    private readonly membersRepo: Repository<TripMemberEntity>,
     private readonly liveLocation: LiveLocationService,
     private readonly arrivalAlert: ArrivalAlertService,
     @Inject(DEMO_WEATHER_ALERT)
@@ -150,11 +153,7 @@ export class DemoConsoleService implements OnModuleInit, OnModuleDestroy {
    * 목록에서 감추면 "내 여행이 왜 없지" 가 되고, 실으면 화면이 이유를 먼저 보여줄 수 있다.
    */
   private async listTripOptions(user: UserEntity): Promise<DemoTripOptionDto[]> {
-    const trips = await this.tripsRepo.find({
-      where: { userId: user.id },
-      order: { startDate: 'DESC' },
-      take: 20,
-    });
+    const trips = (await this.visibleTrips(user)).slice(0, 20);
 
     return trips.map((trip) => ({
       tripId: trip.id,
@@ -163,9 +162,33 @@ export class DemoConsoleService implements OnModuleInit, OnModuleDestroy {
       endDate: trip.endDate,
       days: countTripDays(trip.startDate, trip.endDate),
       status: trip.status,
-      seeded: trip.title === DEMO_TRIP_TITLE,
+      seeded: trip.userId === user.id && trip.title === DEMO_TRIP_TITLE,
+      owned: trip.userId === user.id,
       scannable: ACTIVE_STATUSES.includes(trip.status as (typeof ACTIVE_STATUSES)[number]),
     }));
+  }
+
+  /**
+   * 조작할 수 있는 여행: 내가 owner 인 것 + accepted 멤버로 참여 중인 것.
+   *
+   * 참여 여행까지 넣는 건 시연 때문이다 — 심사위원이 자기 계정으로 만든 여행에 발표자가
+   * 조건을 걸려면 발표자가 그 여행의 참여자여야 하고, 그때 알림은 owner(심사위원) 기기에도
+   * 간다. 여행 조회 권한(TripsService.findVisible)과 같은 기준이라 콘솔이 더 넓게 보지 않는다.
+   */
+  private async visibleTrips(user: UserEntity): Promise<TripEntity[]> {
+    const owned = await this.tripsRepo.find({ where: { userId: user.id } });
+    const memberRows = await this.membersRepo.find({
+      where: { userId: user.id, status: 'accepted' },
+    });
+    const joinedIds = memberRows
+      .map((row) => row.tripId)
+      .filter((tripId) => !owned.some((trip) => trip.id === tripId));
+    const joined =
+      joinedIds.length > 0
+        ? await this.tripsRepo.find({ where: joinedIds.map((id) => ({ id })) })
+        : [];
+
+    return [...owned, ...joined].sort((a, b) => b.startDate.localeCompare(a.startDate));
   }
 
   /**
@@ -241,6 +264,12 @@ export class DemoConsoleService implements OnModuleInit, OnModuleDestroy {
     const due = positioned.find((item) => this.isInDueWindow(item.scheduledAt, now));
     const target = due ?? (await this.moveIntoDueWindow(this.nearestItem(positioned, now), now));
     const shifted = !due;
+    if (shifted && trip.userId !== user.id) {
+      // 참여 중인 남의 여행은 일정 시각이 바뀐 걸 owner 가 알 길이 없다 — 최소한 로그엔 남긴다.
+      this.logger.warn(
+        `[시연] 참여 중인 여행의 일정 시각 이동 — trip ${trip.id}(owner ${trip.userId}), 조작 ${user.id}`,
+      );
+    }
 
     const distanceKm = dto.distanceKm ?? DEFAULT_DEVIATION_KM;
     await this.liveLocation.record(
@@ -349,37 +378,33 @@ export class DemoConsoleService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 시연 대상 여행: 명시한 여행 → 시드 여행 → 오늘 진행 중인 여행 → 다가오는 여행 순.
-   * 본인 여행만 대상으로 한다(콘솔은 발표자 계정으로 자기 데이터를 조작하는 도구다).
+   * 시연 대상 여행: 명시한 여행 → 시드 여행 → 오늘 진행 중인 여행 → 가장 가까운 예정 여행 순.
+   * 내가 owner 이거나 참여자(accepted)인 여행만 대상이다.
    */
   private async findTrip(user: UserEntity, tripId?: string): Promise<TripEntity | null> {
+    const visible = await this.visibleTrips(user);
     if (tripId) {
-      return this.tripsRepo.findOneBy({ id: tripId, userId: user.id });
+      return visible.find((trip) => trip.id === tripId) ?? null;
     }
 
-    const seeded = await this.tripsRepo.findOneBy({ userId: user.id, title: DEMO_TRIP_TITLE });
+    const seeded = visible.find(
+      (trip) => trip.userId === user.id && trip.title === DEMO_TRIP_TITLE,
+    );
     if (seeded) return seeded;
 
     const today = toKstIsoDate();
-    const ongoing = await this.tripsRepo.findOne({
-      where: {
-        userId: user.id,
-        status: In([...ACTIVE_STATUSES]),
-        startDate: LessThanOrEqual(today),
-        endDate: MoreThanOrEqual(today),
-      },
-      order: { createdAt: 'DESC' },
-    });
+    const active = visible.filter((trip) =>
+      ACTIVE_STATUSES.includes(trip.status as (typeof ACTIVE_STATUSES)[number]),
+    );
+    const ongoing = active.find((trip) => trip.startDate <= today && trip.endDate >= today);
     if (ongoing) return ongoing;
 
-    return this.tripsRepo.findOne({
-      where: {
-        userId: user.id,
-        status: In([...ACTIVE_STATUSES]),
-        endDate: MoreThanOrEqual(today),
-      },
-      order: { startDate: 'ASC' },
-    });
+    // 예정 여행 중에서는 가장 먼저 시작하는 것 — "다음 여행" 이 기본값으로 자연스럽다.
+    return (
+      active
+        .filter((trip) => trip.endDate >= today)
+        .sort((a, b) => a.startDate.localeCompare(b.startDate))[0] ?? null
+    );
   }
 
   private async requireTrip(user: UserEntity, tripId?: string): Promise<TripEntity> {
