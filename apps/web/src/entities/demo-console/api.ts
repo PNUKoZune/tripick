@@ -30,6 +30,6 @@ export function runDemoScenario(scenario: DemoScenario, body: DemoScenarioReques
   return api.post<DemoScenarioResultDto>(`/demo/scenarios/${scenario}`, body);
 }
 
-export function resetDemoState() {
-  return api.post<DemoConsoleStatusDto>('/demo/reset', {});
+export function resetDemoState(target: DemoScenarioRequestDto = {}) {
+  return api.post<DemoConsoleStatusDto>('/demo/reset', target);
 }

@@ -65,7 +65,8 @@ export function useDemoConsole() {
   });
 
   const reset = useMutation<DemoConsoleStatusDto, Error, void>({
-    mutationFn: () => resetDemoState(),
+    // 보고 있는 여행의 흔적을 지운다 — 비우면 서버는 기본 대상(시드 여행)만 정리한다.
+    mutationFn: () => resetDemoState(target),
     onSuccess: invalidateStatus,
   });
 

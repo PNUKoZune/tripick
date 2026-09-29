@@ -223,6 +223,18 @@ describe('DemoConsoleService', () => {
       expect(inDueWindow(moved.scheduledAt)).toBe(true);
     });
 
+    it('스캐너가 보지 않는 상태(draft)면 일정 시각을 옮기지 않고 이유를 알린다', async () => {
+      const { service, saved, arrivalAlert, liveLocation } = build({
+        trip: trip({ status: 'draft' }),
+        items: [item({ scheduledAt: new Date(NOW.getTime() + 3 * 60 * 60_000) })],
+      });
+
+      await expect(service.runArrival(user, {}, NOW)).rejects.toBeInstanceOf(BadRequestException);
+      expect(saved).toHaveLength(0);
+      expect(liveLocation.record).not.toHaveBeenCalled();
+      expect(arrivalAlert.scanDueItems).not.toHaveBeenCalled();
+    });
+
     it('좌표가 없는 일정뿐이면 판정할 수 없다고 알린다', async () => {
       const { service } = build({ items: [item({ coordinates: null })] });
 
@@ -339,10 +351,35 @@ describe('DemoConsoleService', () => {
   });
 
   describe('초기화', () => {
+    it('선택한 여행의 억제 키를 지운다(기본 대상이 아니라)', async () => {
+      const judgeTrip = trip({ id: 'trip-judge', userId: 'judge', title: '심사위원 여행' });
+      const { service, membersRepo } = build({ memberOf: [judgeTrip] });
+      membersRepo.find.mockResolvedValue([{ tripId: 'trip-judge', userId: 'u1' }]);
+
+      await service.reset(user, { tripId: 'trip-judge' }, NOW);
+
+      expect(deleted).toEqual(
+        expect.arrayContaining([
+          arrivalDedupeKey('trip-judge', 'u1', 1),
+          weatherDedupeKey('trip-judge', TODAY),
+          crowdDedupeKey('trip-judge', TODAY),
+        ]),
+      );
+      expect(deleted).not.toContain(weatherDedupeKey('trip-1', TODAY));
+    });
+
+    it('볼 수 없는 여행을 지정하면 거부한다', async () => {
+      const { service } = build();
+
+      await expect(
+        service.reset(user, { tripId: 'trip-남의것' }, NOW),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
     it('주입 위치와 세 알림의 중복 억제 키를 함께 지운다', async () => {
       const { service } = build();
 
-      await service.reset(user, NOW);
+      await service.reset(user, {}, NOW);
 
       expect(deleted).toEqual(
         expect.arrayContaining([

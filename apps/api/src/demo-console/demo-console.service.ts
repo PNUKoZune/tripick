@@ -252,6 +252,8 @@ export class DemoConsoleService implements OnModuleInit, OnModuleDestroy {
     now: Date = new Date(),
   ): Promise<DemoScenarioResultDto> {
     const { trip, day, items } = await this.resolveTarget(user, dto, now);
+    // 일정 시각을 옮기기 전에 막는다 — 스캐너가 보지 않는 여행이면 일정만 바뀌고 "0건" 으로 끝난다.
+    this.assertActive(trip);
     const positioned = items.filter(
       (item) => item.coordinates?.lat != null && item.coordinates?.lng != null,
     );
@@ -337,9 +339,16 @@ export class DemoConsoleService implements OnModuleInit, OnModuleDestroy {
    * 시나리오 버튼은 각자 자기 억제 키를 풀고 돌기 때문에 여러 번 눌러도 매번 알림이 나간다.
    * 여기서 더 지우는 건 (1) 주입해 둔 가짜 위치 — 남겨 두면 정기 스캔이 그 위치로 계속
    * 미도착을 판정한다 — 와 (2) 정기 스캐너가 이미 선점해 둔 다른 일자의 키다.
+   *
+   * 키는 콘솔에서 **선택한 여행**(`dto.tripId`) 기준으로 지운다 — 기본 대상만 지우면 다른
+   * 여행으로 리허설한 흔적이 그대로 남는다.
    */
-  async reset(user: UserEntity, now: Date = new Date()): Promise<DemoConsoleStatusDto> {
-    const trip = await this.findTrip(user);
+  async reset(
+    user: UserEntity,
+    dto: DemoScenarioRequestDto = {},
+    now: Date = new Date(),
+  ): Promise<DemoConsoleStatusDto> {
+    const trip = dto.tripId ? await this.requireTrip(user, dto.tripId) : await this.findTrip(user);
     const keys = [liveLocationKey(user.id)];
 
     if (trip) {
@@ -356,7 +365,7 @@ export class DemoConsoleService implements OnModuleInit, OnModuleDestroy {
 
     await this.clearKeys(keys);
     this.logger.warn(`[시연] 상태 초기화 — user ${user.id}, 키 ${keys.length}개`);
-    return this.status(user, {}, now);
+    return this.status(user, dto, now);
   }
 
   /** 대상 여행·일차·그 일차의 일정을 한 번에 해석한다. */
@@ -434,6 +443,15 @@ export class DemoConsoleService implements OnModuleInit, OnModuleDestroy {
     return 1;
   }
 
+  /** 세 스캐너 모두 확정·진행 중 여행만 본다 — 그 밖의 상태면 버튼을 누르자마자 이유를 알린다. */
+  private assertActive(trip: TripEntity): void {
+    if (!ACTIVE_STATUSES.includes(trip.status as (typeof ACTIVE_STATUSES)[number])) {
+      throw new BadRequestException(
+        `여행 상태가 '${trip.status}' 라 알림 대상이 아닙니다(확정 또는 진행 중이어야 합니다).`,
+      );
+    }
+  }
+
   /**
    * 스캐너가 볼 수 있는 조건인지 먼저 확인한다 — 무대에서 "0건" 을 보고 원인을 찾는 대신,
    * 버튼을 누른 즉시 왜 안 되는지 알려준다.
@@ -445,11 +463,7 @@ export class DemoConsoleService implements OnModuleInit, OnModuleDestroy {
     horizonDays: number,
     horizonLabel: string,
   ): void {
-    if (!ACTIVE_STATUSES.includes(trip.status as (typeof ACTIVE_STATUSES)[number])) {
-      throw new BadRequestException(
-        `여행 상태가 '${trip.status}' 라 알림 대상이 아닙니다(확정 또는 진행 중이어야 합니다).`,
-      );
-    }
+    this.assertActive(trip);
     const today = toKstIsoDate(now);
     if (iso < today) {
       throw new BadRequestException('지난 일자는 알림 대상이 아닙니다. 오늘 이후 일차를 고르세요.');

@@ -57,7 +57,7 @@ export class DemoConsoleController {
   @Post('reset')
   @HttpCode(200)
   @ApiOperation({ summary: '재시연 준비 — 주입 위치·알림 중복 억제 키 삭제' })
-  reset(@CurrentUser() user: UserEntity) {
-    return this.demoConsole.reset(user);
+  reset(@CurrentUser() user: UserEntity, @Body() dto: DemoScenarioDto) {
+    return this.demoConsole.reset(user, dto);
   }
 }
