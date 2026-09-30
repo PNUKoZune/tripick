@@ -36,8 +36,10 @@
       android:theme="@style/AppTheme"
       android:usesCleartextTraffic="${usesCleartextTraffic}"
       android:supportsRtl="true">
+      <!-- 삭제 마커이므로 서비스 클래스가 앱에 존재할 필요는 없다. -->
       <service
           android:name="app.notifee.core.ForegroundService"
+          tools:ignore="MissingClass"
           tools:node="remove" />
       <activity
         android:name=".MainActivity"
