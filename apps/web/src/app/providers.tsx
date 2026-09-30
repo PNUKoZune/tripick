@@ -8,6 +8,7 @@ import { ThemeProvider } from '@/shared/theme';
 import { WebPush } from '@/shared/web-push';
 import { ActiveTripFab } from '@/widgets/active-trip-fab';
 import { SessionFlashToast } from '@/features/notify-session-flash';
+import { PullToRefresh } from '@/features/refresh-on-pull';
 import { InboxToast } from '@/features/subscribe-inbox-toast';
 import { InboxUnreadBadgeProvider } from '@/features/subscribe-inbox-unread';
 
@@ -23,6 +24,7 @@ export function Providers({ children }: { children: ReactNode }) {
         <ActiveTripFab />
         <InboxToast />
         <SessionFlashToast />
+        <PullToRefresh />
       </ThemeProvider>
     </QueryClientProvider>
   );

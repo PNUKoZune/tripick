@@ -234,7 +234,11 @@ function MapPickerContent({
         </button>
       </div>
 
-      <div className="relative h-[300px] w-full overflow-hidden rounded-[16px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#F7F8FA)]">
+      {/* 지도 드래그를 당겨서 새로고침으로 오인하지 않게 제외한다(features/refresh-on-pull). */}
+      <div
+        data-pull-refresh-ignore
+        className="relative h-[300px] w-full overflow-hidden rounded-[16px] border border-[color:var(--line,#E5E8EB)] bg-[color:var(--card-soft,#F7F8FA)]"
+      >
         <div ref={containerRef} className="h-full w-full" />
         {!ready ? (
           <div className="absolute inset-0 flex items-center justify-center text-[13px] text-[color:var(--ink-faint,#B0B8C1)]">
