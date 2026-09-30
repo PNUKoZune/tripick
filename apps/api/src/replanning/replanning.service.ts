@@ -1,11 +1,12 @@
 import {
+  ForbiddenException,
   Injectable,
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Queue } from 'bullmq';
+import { Job, Queue } from 'bullmq';
 import { Repository } from 'typeorm';
 import { haversineMeters } from '@tripick/utils';
 import { withTimeout } from '../common/with-timeout';
@@ -74,6 +75,7 @@ export class ReplanningService {
       trigger: dto.trigger,
       status: 'pending',
       createdAt: new Date().toISOString(),
+      ...(dto.targetDays?.length ? { targetDays: dto.targetDays } : {}),
     };
   }
 
@@ -91,11 +93,7 @@ export class ReplanningService {
   private async findInFlight(dto: ReplanRequestDto): Promise<ReplanJobDto | null> {
     // Redis 무응답이면 조회가 매달린다 — 실패는 "진행 중 없음" 으로 보고 뒤이은 add 에 맡긴다
     // (한 요청에서 두 번 기다리지 않도록). 최악이라도 예전처럼 잡이 하나 더 도는 것뿐이다.
-    const jobs = await withTimeout(
-      this.queue.getJobs(['active', 'waiting', 'waiting-children', 'delayed']),
-      REPLAN_QUEUE_TIMEOUT_MS,
-      '진행 중 재계획 잡 조회 응답 없음',
-    ).catch((err: unknown) => {
+    const jobs = await this.listInFlightJobs().catch((err: unknown) => {
       this.logger.warn(
         `진행 중 재계획 조회 실패 — dedup 없이 등록한다: ${err instanceof Error ? err.message : String(err)}`,
       );
@@ -110,16 +108,54 @@ export class ReplanningService {
 
     // 조회와 여기 사이에 끝났을 수 있다. 끝난 잡을 "진행 중" 이라고 돌려주면 클라이언트는
     // 이미 지나간 WS 결과를 영영 기다린다 — 그 경우엔 정상 등록으로 흘려보낸다.
-    const state = await running.getState().catch(() => 'waiting');
+    const inFlight = await this.toInFlightDto(running);
+    return inFlight ? { ...inFlight, deduped: true } : null;
+  }
+
+  /**
+   * 이 여행에서 지금 대기·실행 중인 재계획 잡. 없으면 null.
+   *
+   * 결과는 WS 로만 오므로 요청 뒤에 화면을 연 사람(플래너 → Live 이동, 새로고침, 다른 멤버)은
+   * 재계획이 돌고 있는지 알 길이 없다. 웹이 화면 마운트·소켓 재연결 때 이걸로 "다시 짜는 중" 을
+   * 복원한다. 진행 표시일 뿐이라 멤버면 누구나 본다(요청은 owner 만).
+   */
+  async findActive(userId: string, tripId: string): Promise<ReplanJobDto | null> {
+    if (!(await this.tripMembersService.canAccessTrip(tripId, userId))) {
+      throw new ForbiddenException();
+    }
+
+    // 조회 실패는 "진행 중 없음" 으로 — 진행 표시가 빠질 뿐, 결과는 WS·인박스로 그대로 온다.
+    const jobs = await this.listInFlightJobs().catch((err: unknown) => {
+      this.logger.warn(
+        `진행 중 재계획 조회 실패 (trip ${tripId}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null;
+    });
+    const running = jobs?.find((job) => job?.data?.tripId === tripId);
+    return running ? this.toInFlightDto(running) : null;
+  }
+
+  /** 대기·실행 중인 재계획 잡 전체. getJobs 가 상태 순서대로 돌려주므로 실행 중(active)이 앞선다. */
+  private listInFlightJobs() {
+    return withTimeout(
+      this.queue.getJobs(['active', 'waiting', 'waiting-children', 'delayed']),
+      REPLAN_QUEUE_TIMEOUT_MS,
+      '진행 중 재계획 잡 조회 응답 없음',
+    );
+  }
+
+  /** 조회 직후 끝났을 수 있으니 상태를 다시 확인해, 아직 도는 잡만 DTO 로 바꾼다. */
+  private async toInFlightDto(job: Job<ReplanRequestDto>): Promise<ReplanJobDto | null> {
+    const state = await job.getState().catch(() => 'waiting');
     if (state === 'completed' || state === 'failed' || state === 'unknown') return null;
 
     return {
-      jobId: String(running.id),
-      tripId: dto.tripId,
-      trigger: running.data.trigger,
+      jobId: String(job.id),
+      tripId: job.data.tripId,
+      trigger: job.data.trigger,
       status: state === 'active' ? 'processing' : 'pending',
-      createdAt: new Date(running.timestamp).toISOString(),
-      deduped: true,
+      createdAt: new Date(job.timestamp).toISOString(),
+      ...(job.data.targetDays?.length ? { targetDays: job.data.targetDays } : {}),
     };
   }
 

@@ -55,11 +55,18 @@ export interface ReplanJobDto {
   trigger: ReplanTrigger;
   status: ReplanStatus;
   createdAt: string;
+  /** 다시 짜는 일차(1-based). 생략이면 전체 일정 */
+  targetDays?: number[];
   /**
    * 새 잡을 만들지 않고 **이미 진행 중인 잡**을 돌려줬음(같은 일차를 다시 짜는 요청).
    * 이번 요청의 note·필수 장소는 반영되지 않으므로 클라이언트는 "진행 중" 으로 안내해야 한다.
    */
   deduped?: boolean;
+}
+
+/** 여행에서 대기·실행 중인 재계획 잡. 없으면 job 이 null */
+export interface ActiveReplanDto {
+  job: ReplanJobDto | null;
 }
 
 export interface ReplanResultDto {

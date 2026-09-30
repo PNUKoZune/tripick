@@ -5,7 +5,6 @@ import { LuSparkles } from 'react-icons/lu';
 import type {
   PlannerDayDto,
   ReplanBudget,
-  ReplanJobDto,
   ReplanPace,
   ReplanPlaceDto,
   ReplanPreferencesDto,
@@ -24,11 +23,6 @@ type Props = {
   days?: PlannerDayDto[];
   /** 모달을 열 때 기본 선택할 일차 (보통 화면에서 보고 있는 일차) */
   defaultDay?: number;
-  /**
-   * 재계획 요청 전송 성공 시 호출 (토스트 등). scopeLabel 은 "2일차 일정"·"전체 일정".
-   * `deduped` 면 새 잡이 아니라 **이미 도는 재계획**에 합쳐진 것 — 이번 입력은 반영되지 않는다.
-   */
-  onRequested?: (scopeLabel: string, deduped: boolean) => void;
   /** owner 면 즉시 재계획, 아니면 owner 승인 대기 제안으로 보낸다 */
   isOwner?: boolean;
   /** 재계획 트리거. 기본 'manual'. 알림 배너에서 열리면 weather·crowd·deviation 로 넘어온다 */
@@ -55,7 +49,6 @@ export function ReplanModal({
   onClose,
   days = [],
   defaultDay,
-  onRequested,
   isOwner = true,
   trigger = 'manual',
   onProposed,
@@ -104,8 +97,6 @@ export function ReplanModal({
 
   // 단일 일차 여행이거나 "전체 일정"이면 targetDays 를 아예 보내지 않는다(= 전체 재계획).
   const targetDays = multiDay && scope === 'days' ? selectedDays : [];
-  // 뒤에 조사 "을"이 붙는 문구라 두 경우 모두 "…일정"으로 끝나게 맞춘다.
-  const scopeLabel = targetDays.length > 0 ? `${targetDays.join('·')}일차 일정` : '전체 일정';
   // 일차를 고르는 모드인데 하나도 안 골랐으면 보낼 게 없다.
   const canSubmit = !(multiDay && scope === 'days' && selectedDays.length === 0);
 
@@ -123,11 +114,9 @@ export function ReplanModal({
       preferences,
     };
     mutation.mutate(payload, {
-      onSuccess: (result) => {
-        // owner 만 "AI가 다시 짜는 중" 토스트. 제안 모드는 훅이 onProposed 로 알린다.
-        if (isOwner) onRequested?.(scopeLabel, Boolean((result as ReplanJobDto).deduped));
-        onClose();
-      },
+      // "AI가 다시 짜는 중" 토스트는 ReplanToast 가 진행 중 잡 캐시로 띄운다(결과까지 유지).
+      // 제안 모드는 훅이 onProposed 로 알린다.
+      onSuccess: onClose,
     });
   }
 

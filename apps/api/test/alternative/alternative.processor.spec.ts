@@ -51,8 +51,8 @@ describe('AlternativeProcessor', () => {
     expect(planner.replan).toHaveBeenCalledWith(
       expect.objectContaining({ tripId: 'trip-1', trigger: 'deviation' }),
     );
-    expect(gateway.pushReplanResult).toHaveBeenCalledTimes(1);
-    const result = gateway.pushReplanResult.mock.calls[0][0];
+    expect(gateway.pushReplanResult).toHaveBeenCalledTimes(2);
+    const result = gateway.pushReplanResult.mock.calls[1][0];
     expect(result).toMatchObject({
       jobId: 'job-1',
       tripId: 'trip-1',
@@ -90,25 +90,49 @@ describe('AlternativeProcessor', () => {
     ]);
   });
 
-  it('pushes a failed result and rethrows so BullMQ retries', async () => {
+  it('pushes processing before the replan starts — the web shows progress until the result', async () => {
+    let pushedBeforeReplan: unknown[] = [];
+    planner.replan.mockImplementation(async () => {
+      pushedBeforeReplan = gateway.pushReplanResult.mock.calls.map((call) => call[0]);
+      return [];
+    });
+
+    await processor.process(job());
+
+    expect(pushedBeforeReplan).toEqual([
+      { jobId: 'job-1', tripId: 'trip-1', status: 'processing' },
+    ]);
+  });
+
+  it('pushes processing again on each retry attempt', async () => {
+    planner.replan.mockResolvedValue([]);
+
+    await processor.process(job({ attemptsMade: 1 }));
+
+    expect(gateway.pushReplanResult.mock.calls[0][0]).toMatchObject({ status: 'processing' });
+  });
+
+  it('stays silent on a mid-retry failure (not the final attempt) and rethrows so BullMQ retries', async () => {
     planner.replan.mockRejectedValue(new Error('llm timeout'));
 
-    await expect(processor.process(job())).rejects.toThrow('llm timeout');
+    await expect(processor.process(job({ attemptsMade: 0 }))).rejects.toThrow('llm timeout');
 
-    expect(gateway.pushReplanResult).toHaveBeenCalledTimes(1);
-    expect(gateway.pushReplanResult.mock.calls[0][0]).toMatchObject({
+    // 중간 실패에 failed 를 보내면 곧 재시도로 완료될 잡에 실패 토스트가 먼저 뜬다
+    const statuses = gateway.pushReplanResult.mock.calls.map((call) => call[0].status);
+    expect(statuses).toEqual(['processing']);
+    expect(inbox.create).not.toHaveBeenCalled();
+  });
+
+  it('pushes a failed result once retries are exhausted', async () => {
+    planner.replan.mockRejectedValue(new Error('llm timeout'));
+
+    await expect(processor.process(job({ attemptsMade: 2 }))).rejects.toThrow('llm timeout');
+
+    expect(gateway.pushReplanResult.mock.calls.at(-1)[0]).toMatchObject({
       jobId: 'job-1',
       tripId: 'trip-1',
       status: 'failed',
     });
-  });
-
-  it('stays silent on a mid-retry failure (not the final attempt)', async () => {
-    planner.replan.mockRejectedValue(new Error('llm timeout'));
-
-    await expect(processor.process(job({ attemptsMade: 0 }))).rejects.toThrow();
-
-    expect(inbox.create).not.toHaveBeenCalled();
   });
 
   it('notifies recipients only once retries are exhausted', async () => {
