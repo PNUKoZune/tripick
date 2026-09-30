@@ -1,4 +1,5 @@
 import type {
+  ActiveReplanDto,
   AddTripMemberRequestDto,
   CreateTripRequestDto,
   DestinationSuggestionDto,
@@ -169,4 +170,9 @@ export function reportLiveLocation(body: UpdateLiveLocationDto) {
 /** 대안 팝업 자유 텍스트 요청 → 재계획 트리거 (manual, BullMQ 잡 등록) */
 export function requestTripReplan(body: ReplanRequestDto) {
   return api.post<ReplanJobDto>('/alternative/request', body);
+}
+
+/** 여행에서 대기·실행 중인 재계획 잡 (요청 뒤에 연 화면에서 진행 표시 복원용) */
+export function fetchActiveReplan(tripId: string) {
+  return api.get<ActiveReplanDto>(`/replanning/trips/${tripId}/active`);
 }

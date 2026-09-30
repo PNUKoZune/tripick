@@ -14,6 +14,11 @@ export const queryKeys = {
   inbox: {
     list: ['inbox', 'list'] as const,
   },
+  replan: {
+    // planner.trip(tripId) 접두사 밖에 둔다 — 완료 시 trip 캐시를 무효화할 때 같이 다시 불리면,
+    // 워커가 잡을 끝내기 직전이라 아직 "실행 중" 으로 읽혀 진행 토스트가 되살아난다.
+    active: (tripId: string) => ['replan', 'active', tripId] as const,
+  },
   scheduleChanges: {
     list: (tripId: string) => ['schedule-changes', tripId] as const,
     detail: (id: string) => ['schedule-changes', 'detail', id] as const,

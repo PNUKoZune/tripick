@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
+  ActiveReplanDto,
   ReplanJobDto,
   ReplanRequestDto,
   ReplanTrigger,
@@ -46,7 +47,12 @@ export function useRequestReplan(tripId: string, options: Options = {}) {
             payload: { kind: 'replan', body: { trigger, ...payload } },
           }),
     onSuccess: (result) => {
-      if (!isOwner) {
+      if (isOwner) {
+        // 잡이 걸린 즉시 진행 토스트를 띄운다 — 워커의 processing 신호나 조회를 기다리지 않는다.
+        queryClient.setQueryData<ActiveReplanDto>(queryKeys.replan.active(tripId), {
+          job: result as ReplanJobDto,
+        });
+      } else {
         queryClient.invalidateQueries({ queryKey: queryKeys.scheduleChanges.list(tripId) });
         onProposed?.((result as ScheduleChangeProposalDto).summary);
       }

@@ -135,9 +135,11 @@ describe('Travel planner integration E2E', () => {
     expect(job.status).toBe('pending');
     expect(job.trigger).toBe('deviation');
 
-    const result = await pushed;
+    const { result, seen } = await pushed;
     socket.close();
 
+    // 결과 전에 진행 신호가 먼저 온다 — 웹이 "다시 짜는 중" 토스트·핀을 띄우는 근거.
+    expect(seen).toEqual(['processing', 'completed']);
     expect(result.status).toBe('completed');
     expect(result.tripId).toBe(trip.id);
     expect(result.updatedItems?.length).toBeGreaterThanOrEqual(3);
@@ -250,15 +252,24 @@ function connectSocket(token: string, tripId: string): Promise<Socket> {
   });
 }
 
-function waitForReplan(socket: Socket): Promise<ReplanResultDto> {
+/**
+ * 재계획 최종 결과(completed·failed)를 기다린다. 워커는 시작할 때 processing 을 먼저 보내므로
+ * 첫 이벤트로 끝내면 진행 신호를 결과로 오인한다 — 지나온 상태는 `seen` 에 남긴다.
+ */
+function waitForReplan(
+  socket: Socket,
+): Promise<{ result: ReplanResultDto; seen: ReplanResultDto['status'][] }> {
   return new Promise((resolve, reject) => {
+    const seen: ReplanResultDto['status'][] = [];
     const timer = setTimeout(() => {
-      reject(new Error('replan_result timed out'));
+      reject(new Error(`replan_result timed out (seen: ${seen.join(', ') || 'none'})`));
     }, 60000);
 
     socket.on('replan_result', (result: ReplanResultDto) => {
+      seen.push(result.status);
+      if (result.status !== 'completed' && result.status !== 'failed') return;
       clearTimeout(timer);
-      resolve(result);
+      resolve({ result, seen });
     });
   });
 }

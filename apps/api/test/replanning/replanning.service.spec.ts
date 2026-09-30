@@ -60,6 +60,7 @@ function build(
   } as any;
   const tripMembersService = {
     assertTripOwner: jest.fn(async () => { if (opts.canAccess === false) throw new ForbiddenException(); }),
+    canAccessTrip: jest.fn(async () => opts.canAccess !== false),
   } as any;
   const liveLocation = { getFresh: jest.fn(async () => opts.location ?? null) } as any;
 
@@ -286,6 +287,48 @@ describe('ReplanningService — 진행 중 재계획 dedup', () => {
     // 정렬해 한 범위가 한 키로 모인다
     expect(jobKey(day23.queue)).toBe('trip-1-2.3');
     expect(jobKey(whole.queue)).toBe('trip-1-all');
+  });
+});
+
+describe('ReplanningService — 진행 중 재계획 조회(findActive)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('실행 중인 잡은 processing 으로 돌려준다 — dedup 표시는 붙이지 않는다', async () => {
+    const { service } = build({ inFlight: [inFlightJob({ tripId: 'trip-1', targetDays: [2] })] });
+
+    const job = await service.findActive('u1', 'trip-1');
+
+    expect(job).toMatchObject({ jobId: 'job-running', tripId: 'trip-1', status: 'processing' });
+    expect(job?.deduped).toBeUndefined();
+  });
+
+  it('대기 중인 잡은 pending 으로 돌려준다', async () => {
+    const { service } = build({
+      inFlight: [inFlightJob({ tripId: 'trip-1' }, { state: 'waiting' })],
+    });
+
+    await expect(service.findActive('u1', 'trip-1')).resolves.toMatchObject({ status: 'pending' });
+  });
+
+  it('다른 여행의 잡이나 조회 사이에 끝난 잡은 없음으로 본다', async () => {
+    const other = build({ inFlight: [inFlightJob({ tripId: 'trip-2' })] });
+    await expect(other.service.findActive('u1', 'trip-1')).resolves.toBeNull();
+
+    const done = build({ inFlight: [inFlightJob({ tripId: 'trip-1' }, { state: 'completed' })] });
+    await expect(done.service.findActive('u1', 'trip-1')).resolves.toBeNull();
+  });
+
+  it('큐 조회가 실패하면(Redis 무응답) 에러 대신 없음으로 — 진행 표시만 빠진다', async () => {
+    const { service } = build({ inFlight: 'fail' });
+
+    await expect(service.findActive('u1', 'trip-1')).resolves.toBeNull();
+  });
+
+  it('여행 멤버가 아니면 큐를 보기 전에 거절한다', async () => {
+    const { service, queue } = build({ canAccess: false, inFlight: [inFlightJob({ tripId: 'trip-1' })] });
+
+    await expect(service.findActive('u1', 'trip-1')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(queue.getJobs).not.toHaveBeenCalled();
   });
 });
 
