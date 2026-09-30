@@ -32,6 +32,10 @@ export class AlternativeProcessor extends WorkerHost {
     const { tripId, trigger } = job.data;
     this.logger.log(`Processing replan job ${job.id} — trip: ${tripId}, trigger: ${trigger}`);
 
+    // 결과만 보내면 웹은 요청 직후부터 완료까지(분 단위) 진행 상태를 모른다. 재시도마다 다시
+    // 보내므로, 앞 시도가 실패한 뒤에도 화면은 "다시 짜는 중" 으로 돌아온다.
+    this.realtimeGateway.pushReplanResult({ jobId: String(job.id), tripId, status: 'processing' });
+
     try {
       const updatedItems = await this.plannerService.replan(job.data);
 
@@ -47,15 +51,16 @@ export class AlternativeProcessor extends WorkerHost {
       await this.notifyRecipients(tripId, 'completed', String(job.id), trigger);
     } catch (err) {
       this.logger.error(`Replan job ${job.id} failed:`, err);
-      this.realtimeGateway.pushReplanResult({
-        jobId: String(job.id),
-        tripId,
-        status: 'failed',
-        completedAt: new Date().toISOString(),
-      });
 
       // 재시도가 모두 소진된 최종 실패에서만 사용자에게 알린다(중간 재시도는 조용히).
+      // WS 도 마찬가지 — 중간 실패를 보내면 곧 재시도로 완료될 잡에 "실패" 토스트가 먼저 뜬다.
       if (this.isFinalAttempt(job)) {
+        this.realtimeGateway.pushReplanResult({
+          jobId: String(job.id),
+          tripId,
+          status: 'failed',
+          completedAt: new Date().toISOString(),
+        });
         await this.notifyRecipients(tripId, 'failed', String(job.id), trigger);
       }
       throw err; // BullMQ 재시도 트리거

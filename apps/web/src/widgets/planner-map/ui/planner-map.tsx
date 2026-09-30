@@ -347,7 +347,8 @@ export function PlannerMap({
   const innerClass = fill ? 'relative h-full w-full' : `relative w-full ${aspect}`;
 
   return (
-    <div className={outerClass}>
+    // 지도 드래그를 당겨서 새로고침으로 오인하지 않게 제외한다(features/refresh-on-pull).
+    <div className={outerClass} data-pull-refresh-ignore>
       <div ref={containerRef} className={innerClass}>
         {showFallback ? (
           <FallbackMap
