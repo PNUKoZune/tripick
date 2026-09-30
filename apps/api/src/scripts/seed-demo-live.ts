@@ -23,7 +23,8 @@ import { ItineraryItemEntity } from '../itinerary/itinerary-item.entity';
 import { TripEntity } from '../trips/trip.entity';
 import { UserEntity } from '../users/user.entity';
 import { toKstIsoDate } from '@tripick/utils';
-import type { ItineraryItemType } from '@tripick/types';
+import { DEMO_PLACES, clockScheduledAt } from '../demo-console/demo-trip.fixture';
+import { DEMO_TRIP_TITLE } from '../demo-console/demo-console.constants';
 
 // 의존성 없이 apps/api/.env 의 값을 process.env 로 주입 (이미 설정된 값은 유지)
 function loadEnv() {
@@ -41,28 +42,6 @@ function loadEnv() {
 }
 
 loadEnv();
-
-const SEED_TITLE = '성수·한강 당일 여행 (데모)';
-
-interface SeedPlace {
-  hour: number;
-  minute: number;
-  type: ItineraryItemType;
-  name: string;
-  address: string;
-  lat: number;
-  lng: number;
-  durationMin: number;
-}
-
-const PLACES: SeedPlace[] = [
-  { hour: 9, minute: 30, type: 'attraction', name: '성수 서울숲', address: '서울 성동구 뚝섬로 273', lat: 37.5446, lng: 127.0375, durationMin: 90 },
-  { hour: 11, minute: 30, type: 'cafe', name: '성수 감도 카페', address: '서울 성동구 연무장길 45', lat: 37.5441, lng: 127.0541, durationMin: 60 },
-  { hour: 13, minute: 30, type: 'restaurant', name: '을지로 한식 다이닝', address: '서울 중구 수표로 48', lat: 37.5667, lng: 126.9913, durationMin: 80 },
-  { hour: 15, minute: 30, type: 'attraction', name: '국립중앙박물관', address: '서울 용산구 서빙고로 137', lat: 37.523, lng: 126.9804, durationMin: 90 },
-  { hour: 17, minute: 30, type: 'attraction', name: '한강 노들섬', address: '서울 용산구 양녕로 445', lat: 37.5177, lng: 126.9574, durationMin: 70 },
-  { hour: 19, minute: 30, type: 'restaurant', name: '북촌 골목 한정식', address: '서울 종로구 계동길 37', lat: 37.5826, lng: 126.9831, durationMin: 80 },
-];
 
 /** 오늘(KST) 을 YYYY-MM-DD 로. 서버 TZ 와 무관하게 데모 여행이 "오늘(KST)"에 떨어지게 한다. */
 function ymd(date: Date): string {
@@ -100,13 +79,13 @@ async function main() {
     }
 
     // 기존 시드 여행 정리 (items 는 onDelete CASCADE 로 함께 삭제)
-    await tripsRepo.delete({ userId: demo.id, title: SEED_TITLE });
+    await tripsRepo.delete({ userId: demo.id, title: DEMO_TRIP_TITLE });
 
     const today = new Date();
     const trip = await tripsRepo.save(
       tripsRepo.create({
         userId: demo.id,
-        title: SEED_TITLE,
+        title: DEMO_TRIP_TITLE,
         destination: '서울',
         startDate: ymd(today),
         endDate: ymd(today),
@@ -119,7 +98,7 @@ async function main() {
     );
 
     await itemsRepo.save(
-      PLACES.map((place, index) =>
+      DEMO_PLACES.map((place, index) =>
         itemsRepo.create({
           tripId: trip.id,
           day: 1,
@@ -128,10 +107,8 @@ async function main() {
           name: place.name,
           address: place.address,
           coordinates: { lat: place.lat, lng: place.lng },
-          // 오늘(KST) HH:mm 의 절대 시각. 로컬 TZ Date 생성자를 쓰면 UTC 서버에서 시각이 밀린다.
-          scheduledAt: new Date(
-            `${ymd(today)}T${String(place.hour).padStart(2, '0')}:${String(place.minute).padStart(2, '0')}:00+09:00`,
-          ),
+          // 기준 시각표 그대로 배치한다. 지금 기준으로 당겨 배치하는 건 시연 콘솔 쪽 시드다.
+          scheduledAt: clockScheduledAt(place, ymd(today)),
           durationMin: place.durationMin,
         }),
       ),
@@ -141,7 +118,7 @@ async function main() {
       `✅ 데모 Live 데이터 생성 완료\n` +
         `   user: ${demo.nickname} (${demo.id})\n` +
         `   trip: ${trip.title} (${trip.id})\n` +
-        `   날짜: ${ymd(today)} · 일정 ${PLACES.length}개`,
+        `   날짜: ${ymd(today)} · 일정 ${DEMO_PLACES.length}개`,
     );
   } finally {
     await dataSource.destroy();

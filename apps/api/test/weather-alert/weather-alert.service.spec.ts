@@ -385,4 +385,14 @@ describe('WeatherAlertService', () => {
     expect(await service.scanUpcomingTrips(NOW)).toBe(1);
     expect(inboxService.create).toHaveBeenCalledTimes(1);
   });
+  it('tripIds 를 주면 그 여행만 조회한다 (시연 콘솔이 남의 여행까지 훑지 않도록)', async () => {
+    const { service, tripsRepo } = build({
+      items: [item(1, 'attraction', '불국사')],
+      forecasts: forecastMap('20260719', 4),
+    });
+
+    await service.scanUpcomingTrips(NOW, { tripIds: ['trip-1'] });
+
+    expect(tripsRepo.find.mock.calls[0][0].where).toHaveProperty('id');
+  });
 });

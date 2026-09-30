@@ -57,3 +57,11 @@ export const MIN_DEDUPE_TTL_SEC = 60;
  * transport 는 이동 자체라, 관광지(attraction)가 있는 날만 알릴 가치가 있다.
  */
 export const WEATHER_SENSITIVE_TYPES: ReadonlyArray<ItineraryItemType> = ['attraction'];
+
+/**
+ * 날씨 알림 중복 억제 키. 발송 선점(WeatherAlertService)과 시연 콘솔의 재시연용 해제가
+ * 같은 키를 봐야 하므로 여기 한 곳에서 만든다.
+ */
+export function weatherDedupeKey(tripId: string, iso: string): string {
+  return `weather:alert:sent:${tripId}:${iso}`;
+}

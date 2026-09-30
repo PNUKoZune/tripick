@@ -21,6 +21,9 @@ export const queryKeys = {
   user: {
     me: ['user', 'me'] as const,
   },
+  demoConsole: {
+    status: (tripId = '', day = 0) => ['demo-console', 'status', tripId, day] as const,
+  },
   planner: {
     trips: ['planner', 'trips'] as const,
     trip: (tripId: string) => ['planner', 'trips', tripId] as const,

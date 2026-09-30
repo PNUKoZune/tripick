@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
 import { redisConnection } from '../common/redis.config';
-import { LOCATION_TTL_SEC } from './arrival-alert.constants';
+import { arrivalDedupeKey, liveLocationKey, LOCATION_TTL_SEC } from './arrival-alert.constants';
 
 /** 서버에 보관되는 사용자 최신 위치 1건. */
 export interface LiveLocation {
@@ -52,7 +52,7 @@ export class LiveLocationService implements OnModuleInit, OnModuleDestroy {
       ts: now.getTime(),
     };
     try {
-      await this.redis.set(this.locationKey(userId), JSON.stringify(value), 'EX', LOCATION_TTL_SEC);
+      await this.redis.set(liveLocationKey(userId), JSON.stringify(value), 'EX', LOCATION_TTL_SEC);
     } catch {
       // 위치 캐시 실패는 다음 보고에서 복구된다.
     }
@@ -65,7 +65,7 @@ export class LiveLocationService implements OnModuleInit, OnModuleDestroy {
   async getFresh(userId: string, maxAgeMs: number, now: Date = new Date()): Promise<LiveLocation | null> {
     let raw: string | null;
     try {
-      raw = await this.redis.get(this.locationKey(userId));
+      raw = await this.redis.get(liveLocationKey(userId));
     } catch {
       return null;
     }
@@ -87,7 +87,7 @@ export class LiveLocationService implements OnModuleInit, OnModuleDestroy {
   async claimAlert(tripId: string, userId: string, day: number, ttlSec: number): Promise<boolean> {
     try {
       const res = await this.redis.set(
-        this.dedupeKey(tripId, userId, day),
+        arrivalDedupeKey(tripId, userId, day),
         '1',
         'EX',
         ttlSec,
@@ -97,13 +97,5 @@ export class LiveLocationService implements OnModuleInit, OnModuleDestroy {
     } catch {
       return true;
     }
-  }
-
-  private locationKey(userId: string): string {
-    return `live:location:${userId}`;
-  }
-
-  private dedupeKey(tripId: string, userId: string, day: number): string {
-    return `arrival:alert:sent:${tripId}:${userId}:${day}`;
   }
 }

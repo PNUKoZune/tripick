@@ -47,10 +47,16 @@ export class ArrivalAlertService {
    * "시작+유예"를 막 지난 일정 항목을 훑어, 근처에 없는 사용자에게 미도착 알림을 보낸다.
    * 한 항목/사용자의 실패가 나머지를 막지 않는다.
    *
+   * `options.tripIds` 를 주면 그 여행의 항목만 본다 — 정기 스캔은 전체를 보고, 시연 콘솔은
+   * 대상 여행 하나로 좁힌다(한 사용자가 여러 여행을 열어 둬도 그 여행만 알림이 나가게).
+   *
    * @returns 발송한 알림 건수
    */
-  async scanDueItems(now: Date = new Date()): Promise<number> {
-    const items = await this.findDueItems(now);
+  async scanDueItems(
+    now: Date = new Date(),
+    options: { tripIds?: string[] } = {},
+  ): Promise<number> {
+    const items = await this.findDueItems(now, options.tripIds);
     if (items.length === 0) return 0;
 
     // 후보 항목이 걸린 여행 중 알림 대상(active) 만 남긴다.
@@ -89,11 +95,15 @@ export class ArrivalAlertService {
    * 판정 대상 항목: scheduledAt 이 [now-유예-지각상한, now-유예] 구간에 든 것.
    * 즉 "시작+유예"를 막 지났고 지각 상한을 넘지 않은 항목. 좌표가 없으면 판정 불가라 제외한다.
    */
-  private async findDueItems(now: Date): Promise<ItineraryItemEntity[]> {
+  private async findDueItems(now: Date, tripIds?: string[]): Promise<ItineraryItemEntity[]> {
     const upper = new Date(now.getTime() - ARRIVAL_GRACE_MIN * 60_000);
     const lower = new Date(upper.getTime() - ARRIVAL_LATE_LIMIT_MIN * 60_000);
+    if (tripIds && tripIds.length === 0) return [];
     const items = await this.itemsRepo.find({
-      where: { scheduledAt: Between(lower, upper) },
+      where: {
+        ...(tripIds ? { tripId: In(tripIds) } : {}),
+        scheduledAt: Between(lower, upper),
+      },
     });
     return items.filter((item) => item.coordinates?.lat != null && item.coordinates?.lng != null);
   }
