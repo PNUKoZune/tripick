@@ -49,6 +49,11 @@ export interface PlannerAgentOptions {
    * 우천 배려가 통째로 사라진다.
    */
   rainyDayIndexes?: number[];
+  /**
+   * 사용자가 요청 문장으로 시각을 지정한 방문(day 는 프롬프트 기준 1..dayCount). 서버가
+   * 순서·시각을 다시 고정하므로 LLM 에겐 그 시각 앞뒤 흐름을 맞추라는 힌트다.
+   */
+  timeAnchors?: Array<{ day: number; time: string; candidateId?: string; category?: string }>;
 }
 
 export interface PlannedCandidate {
@@ -58,6 +63,11 @@ export interface PlannedCandidate {
   durationMin: number;
   memo: string;
   aiGenerated: boolean;
+  /**
+   * 사용자가 지정한 방문 시각("HH:MM", KST). 있으면 `buildDraft` 가 누적 시각 대신 이 시각에
+   * 도착하게 맞춘다(일찍 닿으면 기다리고, 앞 항목은 그 전에 끝나게 줄인다).
+   */
+  pinnedAt?: string;
 }
 
 interface LlmPlanResponse {
@@ -188,6 +198,11 @@ export class PlannerAgentService {
         '이동시간까지 고려했을 때 마지막 일정이 sleepTime 30-90분 전에 끝나는 종일 동선을 목표로 한다.',
         '짧은 cafe/restaurant 위주로 일찍 끝나는 일정을 만들지 말고, 긴 체류 attraction을 중심축으로 둔다.',
         'Respect wake/sleep/opening hours as much as possible.',
+        ...(options.timeAnchors?.length
+          ? [
+              'trip.timeAnchors 는 사용자가 시각을 지정한 방문이다 — candidateId 가 있으면 그 후보를, 없으면 그 category 후보를 해당 day 에 반드시 넣고, 그 시각 전후로 동선이 이어지도록 order 를 정한다.',
+            ]
+          : []),
         ...(anchoredDays.length > 0
           ? [
               'trip.days[].startTime 이 wakeTime 보다 늦은 day 는 이미 하루가 진행된 날이다 — 그 시각 이후에 갈 수 있는 슬롯만 채우고, 아침 시간대(카페 브런치 등)를 다시 배치하지 않는다.',
@@ -237,6 +252,7 @@ export class PlannerAgentService {
         notes: options.notes ?? null,
         taste,
         weatherHint: options.weatherHint,
+        ...(options.timeAnchors?.length ? { timeAnchors: options.timeAnchors } : {}),
       },
       candidates,
     });

@@ -15,6 +15,14 @@ import {
 } from './helpers/itinerary-density';
 import { fillDaySlots } from './helpers/day-slot-planner';
 import { rainyDates } from './helpers/weather-exposure';
+import {
+  applyTimeAnchors,
+  describeTimeAnchor,
+  matchCandidateByName,
+  parseTimeAnchors,
+  pinnedDayCapacity,
+  type TimeAnchor,
+} from './helpers/time-anchor';
 import { ARRIVAL_RADIUS_M } from '../arrival-alert/arrival-alert.constants';
 import { ConstraintEngine, type ValidationResult } from './constraint/constraint.engine';
 import { PlannerAgentService } from './agent/planner-agent.service';
@@ -30,6 +38,7 @@ import {
   haversineMeters,
   minutesSinceWake,
   minutesToTime,
+  timeToMinutes,
   toKstIsoDate,
 } from '@tripick/utils';
 import type {
@@ -78,6 +87,12 @@ const REPLAN_START_LEAD_MIN = 10;
 const MIN_FITTING_VISIT_MIN = 45;
 
 /**
+ * 사용자가 지정한 시각보다 이만큼 늦게 도착하면 "시각 고정을 못 지켰다" 로 본다(분).
+ * 일찍 닿으면 기다리게 하므로 이른 쪽은 볼 필요가 없다.
+ */
+const PIN_LATE_TOLERANCE_MIN = 15;
+
+/**
  * 오늘 일차의 재계획 앵커.
  *
  * 하루가 이미 진행된 상태에서 다시 짜면 아침부터 채워선 안 된다 — 지난 시각에 일정이 박히고
@@ -113,7 +128,9 @@ interface DraftAttempt {
   validation: ValidationResult;
   /** 배치안 대비 하루 끝에 걸려 잘려 나간 항목 수. */
   shortfall: number;
-  /** 그대로 저장해도 되는 안인지 (제약 통과 + 잘려 나간 항목 없음). */
+  /** 사용자가 지정한 시각에 못 들어간(빠졌거나 늦은) 고정 항목 수. */
+  pinMisses: number;
+  /** 그대로 저장해도 되는 안인지 (제약 통과 + 잘려 나간 항목 없음 + 고정 시각 준수). */
   accepted: boolean;
 }
 
@@ -130,6 +147,8 @@ interface DraftBuildContext {
   options: GenerateOptions;
   /** 활동 구간에 비 예보가 걸린 일차(1-based). 볼거리 슬롯이 실내를 먼저 집는다. */
   rainyDays: ReadonlySet<number>;
+  /** 요청 문장에서 뽑은 시각 고정. 모든 배치 경로가 같은 값을 심는다. */
+  timeAnchors: TimeAnchor[];
 }
 
 @Injectable()
@@ -315,6 +334,19 @@ export class PlannerService {
       throw new BadRequestException('No place candidates found for itinerary generation');
     }
 
+    // "카페 12시에 추가해줘" 같은 시각 지정. 여행 고정 노트(trip.notes)는 매 재계획에 붙는
+    // 일반 선호라 여기선 이번 요청 문장만 본다.
+    const timeAnchors = this.resolveTimeAnchors({
+      tripId: trip.id,
+      note: options.note,
+      candidates,
+      planDays,
+      anchorByDay,
+      wakeTime,
+      sleepTime,
+    });
+    this.widenAnchoredDaysForPins(anchorByDay, timeAnchors, candidates, wakeTime, sleepTime);
+
     await options.onProgress?.('building_itinerary', 65);
 
     // 다시 짜는 일차의 실제 날짜. 프롬프트 day↔날짜 매핑과 날씨 힌트 범위가 이걸 공유한다.
@@ -364,6 +396,14 @@ export class PlannerService {
             rainyDayIndexes: planDays
               .map((day, index) => (rainyDays.has(day) ? index : -1))
               .filter((index) => index >= 0),
+            ...(timeAnchors.length > 0
+              ? {
+                  timeAnchors: timeAnchors.map((anchor) => ({
+                    ...anchor,
+                    day: planDays.indexOf(anchor.day) + 1,
+                  })),
+                }
+              : {}),
             ...(tasteTags !== undefined ? { tasteTags } : {}),
             ...(options.trigger !== undefined ? { trigger: options.trigger } : {}),
           }),
@@ -380,41 +420,67 @@ export class PlannerService {
       sleepTime,
       options,
       rainyDays,
+      timeAnchors,
     };
+    // 시각 고정을 심을 때 종류만 지정된 요청("12시 카페")을 채울 그 일차 후보 풀.
+    const poolForDay = (day: number): CandidatePlace[] =>
+      perDayMode ? (poolsByDay![planDays.indexOf(day)] ?? []) : candidates;
     // LLM 이 필수 포함 장소를 누락했으면 강제로 주입한다(시드+프롬프트는 best-effort 라 보장 안 됨).
-    const guaranteedPlan = this.enforceMustInclude(agentPlan, mustCandidates, planDays, perDayMode);
+    // 시각 고정은 그 뒤에 심는다 — 필수 장소가 먼저 들어와야 "12시에 OO" 가 그 장소를 잡는다.
+    const guaranteedPlan = this.pinTimeAnchors(
+      this.enforceMustInclude(agentPlan, mustCandidates, planDays, perDayMode),
+      draftContext,
+      poolForDay,
+      candidates,
+      true,
+    );
     const aiAttempt = await this.evaluateDraft(guaranteedPlan, draftContext);
     // 검증 실패 시 근접 후보 우선 재정렬 기반 결정적 재생성. 모드에 맞는 배치 생성기를 넘긴다.
     const rebuildAttempts = perDayMode
       ? Math.min(3, Math.max(1, ...poolsByDay!.map((pool) => pool.length)))
       : Math.min(3, candidates.length);
     const planFactory = perDayMode
-      ? (attempt: number) =>
-          this.enforceMustInclude(
-            this.buildPerDayDeterministicPlan(
-              // 풀은 이미 그 일차 지역으로 좁혀져 있지만, 지역 안에서도 흩어질 수 있어 같은 기준으로 잇는다.
-              poolsByDay!.map((pool, index) =>
-                this.orderByProximity(pool, attempt, this.dayOrigin(draftContext, planDays[index]!)),
-              ),
-              itemsPerDay,
-              planDays,
-              anchorByDay,
-              wakeTime,
-              rainyDays,
-            ),
-            mustCandidates,
-            planDays,
-            true,
-          )
-      : (attempt: number) =>
-          this.enforceMustInclude(
-            this.buildDeterministicPlan(
-              this.orderByProximity(candidates, attempt, this.dayOrigin(draftContext, planDays[0]!)),
-              draftContext,
-            ),
-            mustCandidates,
-            planDays,
+      ? (attempt: number) => {
+          // 풀은 이미 그 일차 지역으로 좁혀져 있지만, 지역 안에서도 흩어질 수 있어 같은 기준으로 잇는다.
+          const orderedPools = poolsByDay!.map((pool, index) =>
+            this.orderByProximity(pool, attempt, this.dayOrigin(draftContext, planDays[index]!)),
           );
+          return this.pinTimeAnchors(
+            this.enforceMustInclude(
+              this.buildPerDayDeterministicPlan(
+                orderedPools,
+                itemsPerDay,
+                planDays,
+                anchorByDay,
+                wakeTime,
+                rainyDays,
+              ),
+              mustCandidates,
+              planDays,
+              true,
+            ),
+            draftContext,
+            (day) => orderedPools[planDays.indexOf(day)] ?? [],
+            candidates,
+          );
+        }
+      : (attempt: number) => {
+          const ordered = this.orderByProximity(
+            candidates,
+            attempt,
+            this.dayOrigin(draftContext, planDays[0]!),
+          );
+          return this.pinTimeAnchors(
+            this.enforceMustInclude(
+              this.buildDeterministicPlan(ordered, draftContext),
+              mustCandidates,
+              planDays,
+            ),
+            draftContext,
+            () => ordered,
+            candidates,
+          );
+        };
     const finalItems = aiAttempt.accepted
       ? aiAttempt.validation.items
       : await this.rebuildValidDraft(planFactory, draftContext, aiAttempt, rebuildAttempts);
@@ -518,6 +584,151 @@ export class PlannerService {
       });
     }
     return anchors;
+  }
+
+  /**
+   * 요청 문장의 시각 지정을 이번에 다시 짜는 일차의 고정으로 푼다.
+   *
+   * 일차를 안 짚었으면 오늘(앵커된 일차)을, 없으면 다시 짜는 첫 일차를 쓴다 — 재계획 범위의
+   * 기본값이 보고 있던 일차라 사용자가 말하는 "12시" 는 대개 그 날이다.
+   * 못 지키는 요청은 여기서 버린다: 이미 지난 시각(오늘의 시작 앵커 이전), 활동 구간 밖,
+   * 대상 일차가 이번 재계획 범위 밖, 무엇을 할지 알 수 없는 경우("12시에 추가해줘").
+   */
+  private resolveTimeAnchors(params: {
+    tripId: string;
+    note: string | undefined;
+    candidates: CandidatePlace[];
+    planDays: number[];
+    anchorByDay: Map<number, DayAnchor>;
+    wakeTime: string;
+    sleepTime: string;
+  }): TimeAnchor[] {
+    const { tripId, note, candidates, planDays, anchorByDay, wakeTime, sleepTime } = params;
+    const requests = parseTimeAnchors(note);
+    if (requests.length === 0) return [];
+
+    const window = getAwakeWindow(wakeTime, sleepTime);
+    const defaultDay = planDays.find((day) => anchorByDay.has(day)) ?? planDays[0]!;
+    const anchors: TimeAnchor[] = [];
+    const skipped: string[] = [];
+    for (const request of requests) {
+      const day = request.day ?? defaultDay;
+      const time = minutesToTime(request.minutes);
+      if (!planDays.includes(day)) {
+        skipped.push(`${day}일차 ${time}(재계획 범위 밖)`);
+        continue;
+      }
+      const startSinceWake = minutesSinceWake(
+        timeToMinutes(this.dayStartTime(anchorByDay, day, wakeTime)),
+        window.wakeMinutes,
+      );
+      const pinSinceWake = minutesSinceWake(request.minutes, window.wakeMinutes);
+      if (
+        pinSinceWake < startSinceWake ||
+        pinSinceWake + MIN_FITTING_VISIT_MIN > window.lengthMinutes
+      ) {
+        skipped.push(`${day}일차 ${time}(지났거나 활동 시간 밖)`);
+        continue;
+      }
+      const place = matchCandidateByName(request.text, candidates);
+      if (!place && !request.category) {
+        skipped.push(`${day}일차 ${time}(대상 불명)`);
+        continue;
+      }
+      if (anchors.some((anchor) => anchor.day === day && anchor.time === time)) continue;
+      anchors.push({
+        day,
+        time,
+        ...(place ? { candidateId: place.id } : { category: request.category! }),
+      });
+    }
+
+    if (anchors.length > 0) {
+      this.logger.log(
+        `Trip ${tripId} 시각 고정: ${anchors.map((anchor) => describeTimeAnchor(anchor, candidates)).join(', ')}`,
+      );
+    }
+    if (skipped.length > 0) {
+      this.logger.warn(`Trip ${tripId} 반영하지 못한 시각 지정: ${skipped.join(', ')}`);
+    }
+    return anchors;
+  }
+
+  /**
+   * 오늘 일차의 개수 상한을 고정 시각 기준으로 다시 센다.
+   *
+   * 상한은 남은 시간을 끊김 없는 하루로 보고 정했으므로, 고정 항목이 그 자리를 먼저 차지하면
+   * 고정 시각 앞 빈 시간이 통째로 빈다. 틈마다 따로 세서 담을 수 있는 만큼 넓힌다.
+   * 오늘이 아닌 일차는 강도별 목표 개수가 이미 하루 전체를 채우므로 건드리지 않는다.
+   * 검색 limit 은 이미 이전 상한으로 나갔지만 여유분(+4, 최소 12)이 한두 개 차이를 덮는다.
+   */
+  private widenAnchoredDaysForPins(
+    anchorByDay: Map<number, DayAnchor>,
+    timeAnchors: TimeAnchor[],
+    candidates: CandidatePlace[],
+    wakeTime: string,
+    sleepTime: string,
+  ): void {
+    if (timeAnchors.length === 0) return;
+    const window = getAwakeWindow(wakeTime, sleepTime);
+    const sinceWake = (time: string) => minutesSinceWake(timeToMinutes(time), window.wakeMinutes);
+    for (const [day, anchor] of anchorByDay) {
+      const pins = timeAnchors.filter((pin) => pin.day === day);
+      if (pins.length === 0) continue;
+      const maxItems = pinnedDayCapacity({
+        startMin: sinceWake(anchor.startTime),
+        endMin: window.lengthMinutes,
+        pins: pins.map((pin) => ({
+          atMin: sinceWake(pin.time),
+          durationMin: defaultVisitDuration(
+            candidates.find((place) => place.id === pin.candidateId)?.category ??
+              (pin.category === 'sightseeing' ? 'attraction' : (pin.category ?? 'attraction')),
+          ),
+        })),
+      });
+      if (maxItems > anchor.maxItems) {
+        anchorByDay.set(day, { ...anchor, maxItems });
+      }
+    }
+  }
+
+  /**
+   * 배치안에 시각 고정을 심는다. AI·결정적 폴백·제약 재생성·일자별 지역 경로가 전부 이걸 거쳐야
+   * 한다 — 한 경로라도 빠지면 그 경로를 타는 순간 사용자가 지정한 시각이 조용히 사라진다.
+   */
+  private pinTimeAnchors(
+    plan: PlannedCandidate[],
+    context: DraftBuildContext,
+    poolForDay: (day: number) => readonly CandidatePlace[],
+    allCandidates: readonly CandidatePlace[],
+    logUnresolved = false,
+  ): PlannedCandidate[] {
+    if (context.timeAnchors.length === 0) return plan;
+    const { plan: pinned, unresolved } = applyTimeAnchors({
+      plan,
+      anchors: context.timeAnchors,
+      poolForDay,
+      allCandidates,
+      dayStartTime: (day) => this.dayStartTime(context.anchorByDay, day, context.wakeTime),
+      dayItemTarget: (day) => this.dayItemTarget(context.anchorByDay, day, context.itemsPerDay),
+    });
+    if (logUnresolved && unresolved.length > 0) {
+      this.logger.warn(
+        `Trip ${context.trip.id} 시각 고정 대상 후보 없음: ${unresolved
+          .map((anchor) => describeTimeAnchor(anchor, allCandidates))
+          .join(', ')}`,
+      );
+    }
+    return pinned;
+  }
+
+  /**
+   * 그 일차의 고정 시각을 절대 시각으로. 취침이 자정을 넘는 여행에서 기상 전 시각(00:30)은
+   * 그 일차의 다음 날짜다.
+   */
+  private pinDateTime(context: DraftBuildContext, day: number, time: string): Date {
+    const nextDay = timeToMinutes(time) < timeToMinutes(context.wakeTime) ? 1 : 0;
+    return this.makeDateTime(this.offsetDate(context.trip.startDate, day - 1 + nextDay), time);
   }
 
   /**
@@ -700,8 +911,12 @@ export class PlannerService {
           ? await this.estimateTravelTime(from, seed.coordinates, trip.transportMode)
           : 0;
 
+        // 시각이 고정된 항목은 일찍 닿아도 그 시각까지 기다린다.
+        const pinAt = planned.pinnedAt
+          ? this.pinDateTime(context, day, planned.pinnedAt).getTime()
+          : 0;
         const arrivalAt = this.alignToOpeningHours(
-          new Date(currentAt.getTime() + travelTimeMin * 60000),
+          new Date(Math.max(currentAt.getTime() + travelTimeMin * 60000, pinAt)),
           seed.openingHours,
         );
 
@@ -724,6 +939,22 @@ export class PlannerService {
           // 45분짜리 방문으로 눌린 채 저장된다).
           if (!anchored) break;
           durationMin = remainMin;
+        }
+        // 뒤에 시각 고정 항목이 있으면 그 시각에 닿도록 이 방문을 그 전에 끝낸다. 보통 일차도
+        // 줄인다 — 여기서 빼기만 하면 사용자가 지정한 시각 앞이 통째로 비어 버린다.
+        const nextPinned = planned.pinnedAt
+          ? undefined
+          : dayPlan.slice(order + 1).find((next) => next.pinnedAt);
+        if (nextPinned) {
+          const toPinMin = await this.estimateTravelTime(
+            seed.coordinates,
+            nextPinned.candidate.coordinates,
+            trip.transportMode,
+          );
+          const nextPinAt = this.pinDateTime(context, day, nextPinned.pinnedAt!).getTime();
+          const roomMin = Math.floor((nextPinAt - arrivalAt.getTime()) / 60_000) - toPinMin;
+          if (roomMin < MIN_FITTING_VISIT_MIN) continue;
+          durationMin = Math.min(durationMin, roomMin);
         }
 
         const item: CreateItineraryItemDto = {
@@ -807,7 +1038,35 @@ export class PlannerService {
       validation.issues.push('No visits fit within the available activity and opening hours');
     }
     const shortfall = Math.max(0, this.plannedItemCount(plan, context) - items.length);
-    return { validation, shortfall, accepted: validation.valid && shortfall === 0 };
+    const pinMisses = this.countPinMisses(plan, items, context);
+    return {
+      validation,
+      shortfall,
+      pinMisses,
+      accepted: validation.valid && shortfall === 0 && pinMisses === 0,
+    };
+  }
+
+  /**
+   * 시각 고정 항목 중 일정에서 빠졌거나 지정 시각보다 늦게 잡힌 수. 제약 위반은 아니라서
+   * `ConstraintEngine` 이 못 잡는다 — 따로 세어 재생성 신호로 쓴다.
+   */
+  private countPinMisses(
+    plan: PlannedCandidate[],
+    items: ItineraryItemDto[],
+    context: DraftBuildContext,
+  ): number {
+    return plan.filter((planned) => {
+      if (!planned.pinnedAt || !context.planDays.includes(planned.day)) return false;
+      const item = items.find(
+        (candidate) => candidate.day === planned.day && candidate.name === planned.candidate.name,
+      );
+      if (!item) return true;
+      const lateMs =
+        new Date(item.scheduledAt).getTime() -
+        this.pinDateTime(context, planned.day, planned.pinnedAt).getTime();
+      return lateMs > PIN_LATE_TOLERANCE_MIN * 60_000;
+    }).length;
   }
 
   /** 배치안이 담으려 한 항목 수(일차별 상한 적용 후) — `buildDraft` 의 slice 와 같은 기준. */
@@ -842,7 +1101,7 @@ export class PlannerService {
         );
         return candidate.validation.items;
       }
-      if (candidate.validation.valid && (!best || candidate.shortfall < best.shortfall)) {
+      if (candidate.validation.valid && (!best || this.isBetterFallback(candidate, best))) {
         best = candidate;
       }
       last = candidate;
@@ -850,7 +1109,7 @@ export class PlannerService {
 
     if (best) {
       this.logger.warn(
-        `Trip ${context.trip.id}: 하루에 다 담지 못해 항목 ${best.shortfall}개를 줄여 저장합니다.`,
+        `Trip ${context.trip.id}: 완전한 안을 못 찾아 가장 나은 안으로 저장합니다 — ${this.describeAttempt(best)}`,
       );
       return best.validation.items;
     }
@@ -897,9 +1156,19 @@ export class PlannerService {
     );
   }
 
+  /**
+   * 완전한 안이 없을 때 남길 안 고르기. 사용자가 콕 집은 시각을 지킨 쪽이 먼저고,
+   * 그다음이 덜 잘려 나간 쪽이다 — 명시한 요청을 어긴 긴 하루보다 요청을 지킨 짧은 하루가 낫다.
+   */
+  private isBetterFallback(candidate: DraftAttempt, best: DraftAttempt): boolean {
+    if (candidate.pinMisses !== best.pinMisses) return candidate.pinMisses < best.pinMisses;
+    return candidate.shortfall < best.shortfall;
+  }
+
   private describeAttempt(attempt: DraftAttempt): string {
     const parts = [...attempt.validation.issues];
     if (attempt.shortfall > 0) parts.push(`하루에 안 들어간 항목 ${attempt.shortfall}개`);
+    if (attempt.pinMisses > 0) parts.push(`지정 시각을 못 지킨 항목 ${attempt.pinMisses}개`);
     return parts.join('; ');
   }
 

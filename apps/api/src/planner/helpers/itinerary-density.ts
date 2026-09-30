@@ -16,7 +16,7 @@ const TARGET_WINDOW_COVERAGE: Record<ReplanPace, number> = {
 const MAX_ITEMS_PER_DAY = 7;
 const ESTIMATED_VISIT_MINUTES = 120;
 export const ESTIMATED_TRAVEL_MINUTES = 30;
-const MIN_VISIT_MINUTES = 45;
+export const MIN_VISIT_MINUTES = 45;
 const MAX_VISIT_MINUTES = 150;
 
 /**
@@ -76,6 +76,20 @@ export function itemsFittingRemaining(remainingMin: number): number {
   const fitting = Math.floor((remainingMin + ESTIMATED_TRAVEL_MINUTES) / slotSpan);
   // 체류시간을 최소치까지 줄이면 한 곳은 들어가므로 1 을 하한으로 둔다.
   return Math.min(MAX_ITEMS_PER_DAY, Math.max(1, fitting));
+}
+
+/**
+ * 앞뒤가 막힌 틈(분)에 들어가는 항목 수 — 시각이 고정된 방문 앞의 빈 시간처럼 들어가는 이동과
+ * 나오는 이동을 둘 다 틈 안에서 해결해야 하는 구간이다.
+ *
+ * `itemsFittingRemaining` 은 끝이 열린 구간(나머지 하루)용이라 나오는 이동이 없다. 그걸 틈에
+ * 쓰면 고정 시각에 늦는 개수를 센다. 한 곳은 체류를 최소치까지 줄여서라도 넣는다 — 두 시간
+ * 틈을 통째로 비워 두는 게 45분 방문보다 나쁘다.
+ */
+export function itemsFittingGap(gapMin: number): number {
+  if (gapMin < MIN_VISIT_MINUTES + 2 * ESTIMATED_TRAVEL_MINUTES) return 0;
+  const slotSpan = ESTIMATED_VISIT_MINUTES + ESTIMATED_TRAVEL_MINUTES;
+  return Math.max(1, Math.floor((gapMin - ESTIMATED_TRAVEL_MINUTES) / slotSpan));
 }
 
 /**
