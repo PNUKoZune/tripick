@@ -65,6 +65,8 @@ const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 /** 분석 잡 상태를 다시 물어보는 간격. 사진 1장에 30초 넘게 걸려 촘촘히 볼 이유가 없다. */
 const JOB_POLL_INTERVAL_MS = 3000;
+/** 표시용 서명 URL(15분)이 만료되기 전에 다시 받는다. */
+const PHOTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 /** 잡이 만료·삭제돼 더 볼 게 없는 상태(404)인지. 그 외 오류는 일시적인 것으로 본다. */
 function isJobGone(error: unknown): boolean {
@@ -85,8 +87,13 @@ export function PreferenceSetupForm() {
   const [savedPhotos, setSavedPhotos] = useState<PreferencePhotoRefDto[]>([]);
   // 추가/삭제 후 아직 분석에 반영되지 않은 사진이 있는지
   const [photosDirty, setPhotosDirty] = useState(false);
-  // 확대 보기(라이트박스)로 띄운 이미지 URL. null 이면 닫힘.
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  // 저장된 사진은 키로 선택해, 확대 보기에도 갱신된 서명 URL 을 쓴다.
+  const [lightboxPhoto, setLightboxPhoto] = useState<{ key: string } | { url: string } | null>(null);
+  const lightboxUrl =
+    lightboxPhoto &&
+    ('key' in lightboxPhoto
+      ? savedPhotos.find((photo) => photo.key === lightboxPhoto.key)?.url
+      : lightboxPhoto.url);
   // 진행 중인 분석 잡. 페이지를 떠났다 돌아와도 localStorage 에서 복원한다.
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -110,8 +117,18 @@ export function PreferenceSetupForm() {
       return getMyPreferences(session.tokens.accessToken);
     },
     enabled: hasSession,
-    staleTime: 5 * 60 * 1000,
+    staleTime: PHOTO_REFRESH_INTERVAL_MS,
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) =>
+      query.state.data?.photos?.length ? PHOTO_REFRESH_INTERVAL_MS : false,
   });
+
+  useEffect(() => {
+    if (!preferenceQuery.data) return;
+    // 폼의 1회 초기화와 분리해야 재조회된 서명 URL 이 화면에도 반영된다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 서버 사진 목록·서명 URL 을 재조회할 때 동기화
+    setSavedPhotos(preferenceQuery.data.photos ?? []);
+  }, [preferenceQuery.data]);
 
   useEffect(() => {
     if (!preferenceQuery.data?.profile || hydrated.current) {
@@ -127,7 +144,6 @@ export function PreferenceSetupForm() {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 서버 취향 데이터로 폼을 1회 하이드레이트
       setAnalyzedTags(tags);
     }
-    setSavedPhotos(preferenceQuery.data.photos ?? []);
   }, [preferenceQuery.data]);
 
   useEffect(() => {
@@ -316,6 +332,7 @@ export function PreferenceSetupForm() {
       setHasSession(true);
       // 사진은 이미 서버에 보관됐고, 태그 분석만 잡에서 이어진다.
       setSavedPhotos(job.photos);
+      queryClient.invalidateQueries({ queryKey: queryKeys.preferences.me });
       setPhotos([]);
       setPhotosDirty(false);
       rememberAnalysisJob(job.jobId);
@@ -568,7 +585,7 @@ export function PreferenceSetupForm() {
               <button
                 key={key}
                 type="button"
-                onClick={() => setLightboxUrl(url)}
+                onClick={() => setLightboxPhoto({ key })}
                 aria-label="사진 크게 보기"
                 className="relative aspect-square overflow-hidden rounded-[16px] bg-[color:var(--card-soft)]"
               >
@@ -589,7 +606,7 @@ export function PreferenceSetupForm() {
               >
                 <button
                   type="button"
-                  onClick={() => setLightboxUrl(url)}
+                  onClick={() => setLightboxPhoto({ url })}
                   aria-label="사진 크게 보기"
                   className="size-full"
                 >
@@ -775,7 +792,7 @@ export function PreferenceSetupForm() {
                         togglePhotoTagMutation.mutate({ key, tag, enabled })
                       }
                       onDelete={() => deletePhotoMutation.mutate(key)}
-                      onZoom={() => setLightboxUrl(url)}
+                      onZoom={() => setLightboxPhoto({ key })}
                     />
                   );
                 })}
@@ -916,7 +933,7 @@ export function PreferenceSetupForm() {
       />
 
       {lightboxUrl ? (
-        <ImageLightbox src={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+        <ImageLightbox src={lightboxUrl} onClose={() => setLightboxPhoto(null)} />
       ) : null}
     </div>
   );
