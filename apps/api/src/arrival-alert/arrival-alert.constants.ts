@@ -54,3 +54,19 @@ export const SCHEDULE_RETRY_BASE_MS = 5_000;
 
 /** 등록 재시도 백오프 상한(ms). */
 export const SCHEDULE_RETRY_MAX_MS = 5 * 60_000;
+
+/**
+ * 미도착 알림 중복 억제 키. 발송 선점(LiveLocationService)과 시연 콘솔의 재시연용 해제가
+ * 같은 키를 봐야 하므로 여기 한 곳에서 만든다.
+ */
+export function arrivalDedupeKey(tripId: string, userId: string, day: number): string {
+  return `arrival:alert:sent:${tripId}:${userId}:${day}`;
+}
+
+/**
+ * 사용자 최신 위치 캐시 키. 인제스트(LiveLocationService)와 시연 콘솔의 초기화가 같은 키를
+ * 봐야 하므로 여기 한 곳에서 만든다.
+ */
+export function liveLocationKey(userId: string): string {
+  return `live:location:${userId}`;
+}
