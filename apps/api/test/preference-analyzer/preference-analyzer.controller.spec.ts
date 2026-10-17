@@ -1,9 +1,10 @@
 /// <reference types="jest" />
 
+import { createTestVisionAnalyzer } from '../helpers/inference-resource.mock';
+
 import { BadRequestException, ServiceUnavailableException, NotFoundException } from '@nestjs/common';
 import type { TasteTagDto } from '@tripick/types';
 import { PreferenceAnalyzerController } from '../../src/preference-analyzer/preference-analyzer.controller';
-import { VisionAnalyzer } from '../../src/preference-analyzer/vision.analyzer';
 import type { UserEntity } from '../../src/users/user.entity';
 
 function tags(partial: Partial<TasteTagDto> = {}): TasteTagDto {
@@ -28,7 +29,7 @@ function makeController(overrides: {
   deletePrivateObject?: jest.Mock;
   signedUrls?: jest.Mock;
 } = {}) {
-  const visionAnalyzer = new VisionAnalyzer({ get: <T>(_k: string, d?: T) => d } as any);
+  const visionAnalyzer = createTestVisionAnalyzer({ get: <T>(_k: string, d?: T) => d } as any);
   const analysisService = {
     enqueue: overrides.enqueue ?? jest.fn().mockResolvedValue({ jobId: 'job-1', status: 'queued' }),
     getStatus: overrides.getStatus ?? jest.fn().mockResolvedValue(null),

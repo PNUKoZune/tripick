@@ -1,91 +1,69 @@
 /// <reference types="jest" />
-
 import { BadRequestException } from '@nestjs/common';
 import { TripGenerationService } from '../../src/trip-generation/trip-generation.service';
+import { GenerationRequestEntity } from '../../src/trip-generation/generation-request.entity';
 
-interface FakeJob {
-  id: string;
-  data: { tripId: string; userId: string };
-  opts: { attempts: number };
-  attemptsMade: number;
-  progress: number | { stage: string; progress: number };
-  failedReason: string | undefined;
-  getState: jest.Mock<Promise<string>, []>;
-  remove: jest.Mock<Promise<void>, []>;
+function request(over: Partial<GenerationRequestEntity> = {}): GenerationRequestEntity {
+  return { id: 'request-1', tripId: 'trip-1', userId: 'user-1', state: 'queued', attempt: 0,
+    maxAttempts: 3, version: 0, error: null, ...over } as GenerationRequestEntity;
 }
-
-function makeJob(over: Partial<FakeJob> = {}): FakeJob {
-  return {
-    id: 'trip-generation-trip-1',
-    data: { tripId: 'trip-1', userId: 'user-1' },
-    opts: { attempts: 3 },
-    attemptsMade: 0,
-    progress: 0,
-    failedReason: undefined,
-    getState: jest.fn().mockResolvedValue('waiting'),
-    remove: jest.fn().mockResolvedValue(undefined),
-    ...over,
+function setup(row: GenerationRequestEntity | null = request()) {
+  const queue = { getJob: jest.fn().mockResolvedValue(null), add: jest.fn().mockResolvedValue({}) };
+  const ledger = { latest: jest.fn().mockResolvedValue(row), retry: jest.fn().mockResolvedValue(row),
+    cancel: jest.fn().mockResolvedValue(row), publishPending: jest.fn(async (publish: (value: GenerationRequestEntity) => Promise<boolean>) => {
+      if (row) await publish(row);
+    }),
   };
+  const service = new TripGenerationService(queue as never, ledger as never);
+  return { service, queue, ledger };
 }
 
-function createHarness(existing?: FakeJob) {
-  const added = makeJob();
-  const queue = {
-    getJob: jest.fn().mockResolvedValue(existing),
-    add: jest.fn().mockResolvedValue(added),
-  };
-  return { service: new TripGenerationService(queue as never), queue, added };
-}
-
-describe('TripGenerationService', () => {
-  it('uses one deterministic job id and exposes queued progress', async () => {
-    const { service, queue } = createHarness();
-    const result = await service.enqueue({ tripId: 'trip-1', userId: 'user-1' });
-
-    expect(queue.add).toHaveBeenCalledWith(
-      'generate-trip',
-      { tripId: 'trip-1', userId: 'user-1' },
-      expect.objectContaining({ jobId: 'trip-generation-trip-1' }),
-    );
-    expect(result).toMatchObject({ status: 'queued', stage: 'queued', progress: 5 });
+describe('TripGenerationService durable publisher', () => {
+  it('uses immutable request id instead of trip id for a retry delivery', async () => {
+    const { service, queue } = setup();
+    await service.publishPending();
+    expect(queue.add).toHaveBeenCalledWith('generate-trip', { tripId: 'trip-1', userId: 'user-1', generationId: 'request-1' },
+      expect.objectContaining({ jobId: 'trip-generation-request-1', attempts: 3 }));
   });
-
-  it('coalesces an already-active job instead of registering duplicate LLM work', async () => {
-    const active = makeJob({
-      attemptsMade: 1,
-      progress: { stage: 'building_itinerary', progress: 65 },
-      getState: jest.fn().mockResolvedValue('active'),
-    });
-    const { service, queue } = createHarness(active);
-
-    const result = await service.enqueue({ tripId: 'trip-1', userId: 'user-1' });
-
+  it('keeps an accepted request queued while Redis publication fails', async () => {
+    const { service, queue } = setup();
+    queue.add.mockRejectedValue(new Error('redis offline'));
+    await expect(service.publishPending()).resolves.toBeUndefined();
+    await expect(service.getStatus('trip-1', 'generating')).resolves.toMatchObject({ requestState: 'queued', canCancel: true });
+  });
+  it('recreates a completed delivery only when its persisted request still waits', async () => {
+    const { service, queue } = setup();
+    const job = { getState: jest.fn().mockResolvedValue('completed'), remove: jest.fn().mockResolvedValue(undefined) };
+    queue.getJob.mockResolvedValue(job);
+    await service.publishPending();
+    expect(job.remove).toHaveBeenCalledTimes(1);
+    expect(queue.add).toHaveBeenCalledTimes(1);
+  });
+  it('refuses direct queue registration without durable admission', async () => {
+    const { service, queue } = setup();
+    await expect(service.enqueue({ tripId: 'trip-1', userId: 'user-1' })).rejects.toBeInstanceOf(BadRequestException);
     expect(queue.add).not.toHaveBeenCalled();
-    expect(result).toMatchObject({
-      status: 'retrying',
-      stage: 'building_itinerary',
-      progress: 65,
-      attempt: 2,
-    });
   });
+});
 
-  it('uses persisted trip completion even after the queue job expires', async () => {
-    const { service, queue } = createHarness();
-    await expect(service.getStatus('trip-1', 'confirmed')).resolves.toMatchObject({
-      status: 'completed',
-      stage: 'completed',
-      progress: 100,
-    });
+describe('TripGenerationService DB-owned status', () => {
+  it.each(['cancel_requested', 'cancelled', 'reconciling', 'failed'] as const)('exposes %s without Redis', async (state) => {
+    const { service, queue } = setup(request({ state }));
+    await expect(service.getStatus('trip-1', 'generating')).resolves.toMatchObject({ status: state, requestState: state, canCancel: false });
     expect(queue.getJob).not.toHaveBeenCalled();
   });
-
-  it('keeps final failure retryable when Redis no longer has the job', async () => {
-    const { service } = createHarness();
-    await expect(service.getStatus('trip-1', 'generation_failed')).resolves.toMatchObject({
-      status: 'failed',
-      progress: 0,
-    });
-    expect(() => service.assertRetryable('generation_failed')).not.toThrow();
-    expect(() => service.assertRetryable('generating')).toThrow(BadRequestException);
+  it('does not replace succeeded state with a stale failed queue job', async () => {
+    const { service, queue } = setup(request({ state: 'succeeded' }));
+    await expect(service.getStatus('trip-1', 'confirmed')).resolves.toMatchObject({ status: 'completed', progress: 100 });
+    expect(queue.getJob).not.toHaveBeenCalled();
+  });
+  it('keeps DB running state when Redis progress lookup fails', async () => {
+    const { service, queue } = setup(request({ state: 'running', attempt: 1 }));
+    queue.getJob.mockRejectedValue(new Error('redis offline'));
+    await expect(service.getStatus('trip-1', 'generating')).resolves.toMatchObject({ status: 'processing', requestState: 'running', attempt: 1 });
+  });
+  it('reads legacy completion from the trip when no ledger exists', async () => {
+    const { service } = setup(null);
+    await expect(service.getStatus('trip-1', 'confirmed')).resolves.toMatchObject({ status: 'completed', progress: 100 });
   });
 });

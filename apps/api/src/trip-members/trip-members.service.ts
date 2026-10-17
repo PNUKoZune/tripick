@@ -7,7 +7,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { PreferencesService } from '../preferences/preferences.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { InboxService } from '../inbox/inbox.service';
@@ -206,19 +206,24 @@ export class TripMembersService {
     tripId: string,
     userId: string,
     friend: ResolvedFriendDto,
+    manager?: EntityManager,
   ): Promise<TripMemberDto> {
-    await this.assertTripOwner(tripId, userId);
-    const existing = await this.membersRepo.findOneBy({ tripId, friendId: friend.id });
+    const trips = manager?.getRepository(TripEntity) ?? this.tripsRepo;
+    const members = manager?.getRepository(TripMemberEntity) ?? this.membersRepo;
+    const trip = await trips.findOneBy({ id: tripId });
+    if (!trip) throw new NotFoundException(`Trip ${tripId} not found`);
+    if (trip.userId !== userId) throw new ForbiddenException();
+    const existing = await members.findOneBy({ tripId, friendId: friend.id });
     if (existing) {
       throw new BadRequestException('이미 여행에 추가된 친구입니다.');
     }
 
-    const count = await this.membersRepo.count({ where: { tripId } });
-    const preferenceTags = await this.preferenceFromFriend(friend, count);
+    const count = await members.count({ where: { tripId } });
+    const preferenceTags = await this.preferenceFromFriend(friend, count, manager);
     // 친구가 실제 사용자(friendUserId)와 매칭된 경우 'pending' 으로 초대.
     // 단순 핸들 등록(매칭 안 됨)은 알릴 곳이 없으므로 즉시 accepted.
     const invitedUserId = friend.friendUserId ?? null;
-    const member = this.membersRepo.create({
+    const member = members.create({
       tripId,
       userId: invitedUserId,
       friendId: friend.id,
@@ -231,7 +236,7 @@ export class TripMembersService {
       color: friend.color || MEMBER_COLORS[count % MEMBER_COLORS.length] || MEMBER_COLORS[0]!,
       preferenceTags,
     });
-    return this.toDto(await this.membersRepo.save(member));
+    return this.toDto(await members.save(member));
   }
 
   /** 초대받은 사용자가 trip 멤버 자격 수락 */
@@ -511,9 +516,10 @@ export class TripMembersService {
   private async preferenceFromFriend(
     friend: ResolvedFriendDto,
     seedIndex: number,
+    manager?: EntityManager,
   ): Promise<TripMemberPreferenceDto> {
     if (friend.friendUserId) {
-      const preference = await this.preferencesService.findByUser(friend.friendUserId);
+      const preference = await this.preferencesService.findByUser(friend.friendUserId, manager);
       return this.fromTasteTags(preference?.tasteTags);
     }
 

@@ -1,0 +1,155 @@
+{
+  "date": "2026-10-18",
+  "timezone": "Asia/Seoul",
+  "evidenceType": "policy-integration-stub",
+  "success": true,
+  "passed": 22,
+  "failed": 0,
+  "durationMs": 2851,
+  "infrastructure": {
+    "postgres": "dedicated Docker service 127.0.0.1:54970",
+    "schema": "resource_policy_integration",
+    "migrationSchema": "resource_policy_migration_integration",
+    "redis": "dedicated Docker service 127.0.0.1:54848",
+    "redisPersistence": "Disabled for this disposable test instance after its Docker disk reported ENOSPC",
+    "cleanup": "Test schemas dropped and only randomly named test BullMQ queue removed"
+  },
+  "actualInferencePerformed": false,
+  "actualGpuMeasured": false,
+  "limitations": [
+    "Successful model operations are async stubs. One real Axios loopback connection-refused failure was observed, without invoking an inference server. Resource devices are test configuration, not measured hardware.",
+    "PostgreSQL/Redis and BullMQ storage are real. Redis outage and lost DB acknowledgement are injected callback failures, not network partitions or server crash durability tests.",
+    "Two service instances in one Node process exercise database locks; operating-system process termination and remote model completion are not measured.",
+    "Migration checks execute the two new migrations up/down in an isolated schema with a minimal trips table, not the full historical production migration chain.",
+    "No production P50/P95, GPU VRAM, CUDA utilization, or physical CPU/GPU isolation can be inferred from these results.",
+    "Owner process termination references are fixture evidence. The tests enforce the contract but do not physically stop a prior process or establish inference-server-side fencing; pre-dispatch database ownership recheck is best effort."
+  ],
+  "cases": [
+    {
+      "name": "admits exactly one unfinished request per user under concurrent submissions",
+      "status": "passed",
+      "durationMs": 68
+    },
+    {
+      "name": "replays concurrent identical keys without creating additional trips",
+      "status": "passed",
+      "durationMs": 39
+    },
+    {
+      "name": "rejects a key reused with different input and accepts canonical object key order",
+      "status": "passed",
+      "durationMs": 16
+    },
+    {
+      "name": "enforces the global 20-waiter cap atomically and frees queued cancellation capacity",
+      "status": "passed",
+      "durationMs": 137
+    },
+    {
+      "name": "publishes FIFO to real Redis and persists no acknowledgement for a failed oldest delivery",
+      "status": "passed",
+      "durationMs": 50
+    },
+    {
+      "name": "recovers committed admission after Redis failure and deduplicates a lost publish acknowledgement",
+      "status": "passed",
+      "durationMs": 34
+    },
+    {
+      "name": "fences a late result after cancellation and retains the user slot until worker unwind",
+      "status": "passed",
+      "durationMs": 31
+    },
+    {
+      "name": "restores a previously acknowledged queued delivery lost from Redis",
+      "status": "passed",
+      "durationMs": 22
+    },
+    {
+      "name": "commits the current execution once and rolls back a failed result transaction",
+      "status": "passed",
+      "durationMs": 26
+    },
+    {
+      "name": "enforces the database attempt budget after fresh Redis deliveries reset attemptsMade",
+      "status": "passed",
+      "durationMs": 52
+    },
+    {
+      "name": "quarantines a duplicate worker claim and blocks other work until evidence reconciliation",
+      "status": "passed",
+      "durationMs": 36
+    },
+    {
+      "name": "quarantines a running execution whose Redis delivery disappeared and fences its late commit",
+      "status": "passed",
+      "durationMs": 37
+    },
+    {
+      "name": "executes chat and vision sharing a resource at maximum concurrency one across service instances",
+      "status": "passed",
+      "durationMs": 309
+    },
+    {
+      "name": "uses distinct configured resources concurrently without forcing embedding behind chat",
+      "status": "passed",
+      "durationMs": 23
+    },
+    {
+      "name": "rejects a cancelled ledger execution waiting for a model slot before any HTTP dispatch",
+      "status": "passed",
+      "durationMs": 58
+    },
+    {
+      "name": "expires bounded model waiters without releasing a healthy current owner",
+      "status": "passed",
+      "durationMs": 102
+    },
+    {
+      "name": "rechecks database ownership after the last execution guard before model dispatch",
+      "status": "passed",
+      "durationMs": 16
+    },
+    {
+      "name": "keeps timeout completion uncertainty DRAINING, blocks queued and new work, requires evidence to release",
+      "status": "passed",
+      "durationMs": 64
+    },
+    {
+      "name": "never treats a stale owner heartbeat as permission for automatic takeover",
+      "status": "passed",
+      "durationMs": 12
+    },
+    {
+      "name": "allows a confirmed HTTP 4xx rejection to release the resource but quarantines proxy 504",
+      "status": "passed",
+      "durationMs": 32
+    },
+    {
+      "name": "releases ownership after a real loopback connection refusal establishes that HTTP never dispatched",
+      "status": "passed",
+      "durationMs": 34
+    },
+    {
+      "name": "validates real migration up/down, duplicate active-owner protection, and legacy generating-trip refusal",
+      "status": "passed",
+      "durationMs": 46
+    }
+  ],
+  "sourceSha256": {
+    "apps/api/test/resource-policy/resource-policy.integration-spec.ts": "33564da7217451adc7ef7d734af6baa9b360bf47d7b75a4418bf475f622b2d4b",
+    "apps/api/src/trip-generation/generation-ledger.service.ts": "54ed56cf9e4d1a478cb762d3fe71b5a62aa9652a5962bfc98f67bfd1d668241b",
+    "apps/api/src/inference-resource/inference-resource.service.ts": "0f485dfe53ce163db11de024ce2a1e5d403e178ad8b92306b39b43ee51b19c49",
+    "apps/api/src/database/migrations/1792250000000-GenerationRequestLedger.ts": "a366bee85645a83d41b92359e56adba9736bf0a09d905bf7e8876298b18b6d0a",
+    "apps/api/src/database/migrations/1792300001000-InferenceResourceGate.ts": "89358588e47901f22bc6a71ee680207104b7b933cc9663e087931d7992b9031c",
+    "apps/api/src/inference-resource/inference-transport-outcome.ts": "7421f728481f502e260787225677e079ac69f95897499621dfdfc4d68dc6ca8b",
+    "apps/api/src/inference-resource/inference-execution-context.ts": "112ce8a75f57703a63e0cce55f14086fa07170fbdcb94293888277a74850f9f5",
+    "apps/api/src/inference-resource/inference-resource.config.ts": "0fd61d851bc79c77b74fae6b86e4e5fab4df4ea4e075e25369f98aa8854053e0",
+    "apps/api/src/trip-generation/generation-request.entity.ts": "73b3424327b4522be4cc4a020fcc77efb69d7ec4074b661bbfcb1f1548dc89f2"
+  },
+  "eslint": "passed for the test suite and standalone test runner",
+  "runtime": {
+    "node": "v24.19.0",
+    "executable": "/Users/junbookpro/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node"
+  }
+}

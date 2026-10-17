@@ -1,10 +1,11 @@
 /// <reference types="jest" />
 
+import { createTestVisionAnalyzer } from '../helpers/inference-resource.mock';
+
 import { ServiceUnavailableException } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import type { TasteTagDto } from '@tripick/types';
 import { PreferenceAnalysisService } from '../../src/preference-analyzer/preference-analysis.service';
-import { VisionAnalyzer } from '../../src/preference-analyzer/vision.analyzer';
 import type { AnalyzePhotosJobData } from '../../src/preference-analyzer/preference-analyzer.constants';
 
 function tags(partial: Partial<TasteTagDto> = {}): TasteTagDto {
@@ -31,7 +32,7 @@ function makeService(overrides: {
   queue?: Partial<{ add: jest.Mock; getJob: jest.Mock; getJobs: jest.Mock }>;
 } = {}) {
   // aggregate 는 실제 구현을 쓴다 — 재집계 결과가 이 서비스의 핵심 산출물이라서.
-  const visionAnalyzer = new VisionAnalyzer({ get: <T>(_k: string, d?: T) => d } as any);
+  const visionAnalyzer = createTestVisionAnalyzer({ get: <T>(_k: string, d?: T) => d } as any);
   visionAnalyzer.analyzePhoto = overrides.analyzePhoto ?? jest.fn().mockResolvedValue(ok());
 
   const preferencesService = {

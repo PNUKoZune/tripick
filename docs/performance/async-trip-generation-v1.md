@@ -1,5 +1,9 @@
 # 초기 AI 일정 생성 비동기화 v1
 
+> 아래는 최초 비동기화 구현 기록이다. 현재 접수 원장·발행 복구·전역 한도·취소 정책은
+> [다중 사용자 자원 배분 v1](./resource-allocation-v1.md)을 따른다. 특히 큐 장애 때 여행을
+> 삭제하는 정책과 trip ID만 사용하는 job ID는 요청 원장과 immutable generation ID로 대체됐다.
+
 ## 문제
 
 기존 `POST /main-planner/trips`는 장소 검색, 날씨 조회, LLM 계획, 제약 검증, DB 저장을 모두

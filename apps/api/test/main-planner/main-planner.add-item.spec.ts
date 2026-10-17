@@ -29,8 +29,10 @@ function setup(opts: { db?: string | null; kto?: string | undefined } = {}) {
     }),
   };
 
+  const trip = { id: 'trip-1', startDate: '2026-07-20', endDate: '2026-07-20', status: 'confirmed' };
   const tripsService = {
-    findOne: jest.fn().mockResolvedValue({ id: 'trip-1', startDate: '2026-07-20' }),
+    findOne: jest.fn().mockResolvedValue(trip),
+    mutateItinerary: jest.fn(async (_id, _userId, write) => write(trip, { getRepository: () => itemsRepo })),
   };
 
   const noop = {} as never;

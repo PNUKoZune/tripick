@@ -1,9 +1,71 @@
 /// <reference types="jest" />
 
 import { BadRequestException, Logger } from '@nestjs/common';
-import { PlannerService } from '../../src/planner/planner.service';
+import { PlannerService, type PlannerExecutionGuard } from '../../src/planner/planner.service';
 import type { CandidatePlace } from '../../src/planner/retrieval/types';
 import type { ItineraryItemDto } from '@tripick/types';
+import { GenerationNotRunnableError } from '../../src/trip-generation/generation-errors';
+import type { EntityManager } from 'typeorm';
+
+describe('PlannerService guarded generation', () => {
+  it('stores itinerary items in the ledger transaction without a separate trip save', async () => {
+    const harness = createHarness();
+    harness.constraintEngine.validate.mockImplementation(async (items: ItineraryItemDto[]) => ({
+      valid: true, issues: [], items,
+    }));
+    const manager = {} as EntityManager;
+    const guard = {
+      assertRunnable: jest.fn().mockResolvedValue(undefined),
+      commit: jest.fn(async (write: (manager: EntityManager) => Promise<unknown>) => write(manager)) as PlannerExecutionGuard['commit'],
+    };
+
+    await harness.service.generateItinerary(TRIP.id, undefined, guard);
+
+    expect(guard.commit).toHaveBeenCalledTimes(1);
+    expect(harness.itineraryService.replaceTripItems).toHaveBeenCalledWith(TRIP.id, expect.any(Array), manager);
+    expect(harness.tripsRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects a late model result after cancellation before validation or storing', async () => {
+    const harness = createHarness();
+    let cancelled = false;
+    const guard = {
+      assertRunnable: jest.fn(async () => {
+        if (cancelled) throw new GenerationNotRunnableError();
+      }),
+      commit: jest.fn(),
+    };
+    harness.plannerAgent.plan.mockImplementation(async () => {
+      cancelled = true;
+      return [];
+    });
+
+    await expect(harness.service.generateItinerary(TRIP.id, undefined, guard))
+      .rejects.toBeInstanceOf(GenerationNotRunnableError);
+
+    expect(harness.constraintEngine.validate).not.toHaveBeenCalled();
+    expect(harness.itineraryService.replaceTripItems).not.toHaveBeenCalled();
+    expect(harness.tripsRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('does not write when cancellation wins the commit row lock', async () => {
+    const harness = createHarness();
+    harness.constraintEngine.validate.mockImplementation(async (items: ItineraryItemDto[]) => ({
+      valid: true, issues: [], items,
+    }));
+    const guard = {
+      assertRunnable: jest.fn().mockResolvedValue(undefined),
+      commit: jest.fn().mockRejectedValue(new GenerationNotRunnableError()),
+    };
+
+    await expect(harness.service.generateItinerary(TRIP.id, undefined, guard))
+      .rejects.toBeInstanceOf(GenerationNotRunnableError);
+
+    expect(guard.commit).toHaveBeenCalledTimes(1);
+    expect(harness.itineraryService.replaceTripItems).not.toHaveBeenCalled();
+    expect(harness.tripsRepo.save).not.toHaveBeenCalled();
+  });
+});
 
 describe('PlannerService hard constraints', () => {
   it('uses the accepted group profile for initial retrieval instead of the owner alone', async () => {

@@ -25,6 +25,10 @@
     "test": "jest",
     "test:e2e": "jest --config test/jest-e2e.json --runInBand --forceExit --silent",
     "test:integration": "jest --config test/jest-integration.json --runInBand --forceExit",
+    "ops:reconcile-generation": "ts-node -r tsconfig-paths/register src/scripts/reconcile-generation.ts",
+    "ops:reconcile-inference": "ts-node -r tsconfig-paths/register src/scripts/reconcile-inference-resource.ts",
+    "test:resource-queue": "node scripts/resource-queue-load.cjs",
+    "test:resource-integration": "node scripts/test-resource-integration.cjs",
     "migrate:photo-objects": "ts-node -r tsconfig-paths/register src/scripts/migrate-photo-objects.ts"
   },
   "dependencies": {

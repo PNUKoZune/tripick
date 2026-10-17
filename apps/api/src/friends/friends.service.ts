@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { InboxService } from '../inbox/inbox.service';
 import { UserEntity } from '../users/user.entity';
 import { FriendEntity } from './friend.entity';
@@ -127,8 +127,8 @@ export class FriendsService {
     }
   }
 
-  async findAcceptedById(ownerId: string, id: string): Promise<ResolvedFriendDto> {
-    const friend = await this.findOwned(id, ownerId);
+  async findAcceptedById(ownerId: string, id: string, manager?: EntityManager): Promise<ResolvedFriendDto> {
+    const friend = await this.findOwned(id, ownerId, manager);
     if (friend.status !== 'accepted') {
       throw new ForbiddenException('아직 여행에 추가할 수 있는 친구가 아닙니다.');
     }
@@ -170,8 +170,8 @@ export class FriendsService {
     this.inboxService.pushInboxRefresh(recipient.id);
   }
 
-  private async findOwned(id: string, ownerId: string): Promise<FriendEntity> {
-    const friend = await this.friendsRepo.findOne({
+  private async findOwned(id: string, ownerId: string, manager?: EntityManager): Promise<FriendEntity> {
+    const friend = await (manager?.getRepository(FriendEntity) ?? this.friendsRepo).findOne({
       where: { id },
       relations: { friendUser: true },
     });

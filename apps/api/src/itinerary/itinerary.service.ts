@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { ItineraryItemEntity } from './itinerary-item.entity';
 import { TripEntity } from '../trips/trip.entity';
 import type { CreateItineraryItemDto } from '@tripick/types';
@@ -22,9 +22,13 @@ export class ItineraryService {
     });
   }
 
-  async replaceTripItems(tripId: string, items: CreateItineraryItemDto[]): Promise<ItineraryItemEntity[]> {
-    return this.repo.manager.transaction(async (manager) => {
-      const repo = manager.getRepository(ItineraryItemEntity);
+  async replaceTripItems(
+    tripId: string,
+    items: CreateItineraryItemDto[],
+    manager?: EntityManager,
+  ): Promise<ItineraryItemEntity[]> {
+    const replace = async (transaction: EntityManager) => {
+      const repo = transaction.getRepository(ItineraryItemEntity);
       await repo.delete({ tripId });
       const entities = items.map((item) => repo.create({
         ...item,
@@ -32,7 +36,8 @@ export class ItineraryService {
         scheduledAt: new Date(item.scheduledAt),
       }));
       return entities.length > 0 ? repo.save(entities) : [];
-    });
+    };
+    return manager ? replace(manager) : this.repo.manager.transaction(replace);
   }
 
   /**
@@ -44,19 +49,22 @@ export class ItineraryService {
     tripId: string,
     days: number[],
     items: CreateItineraryItemDto[],
+    manager?: EntityManager,
   ): Promise<ItineraryItemEntity[]> {
     if (days.length === 0) return [];
-    return this.repo.manager.transaction(async (manager) => {
-      const repo = manager.getRepository(ItineraryItemEntity);
+    const replace = async (transaction: EntityManager) => {
+      const repo = transaction.getRepository(ItineraryItemEntity);
       await repo.delete({ tripId, day: In(days) });
       const entities = items.map((item) =>
         repo.create({
           ...item,
+          tripId,
           scheduledAt: new Date(item.scheduledAt),
         }),
       );
       return entities.length > 0 ? repo.save(entities) : [];
-    });
+    };
+    return manager ? replace(manager) : this.repo.manager.transaction(replace);
   }
 
   async deleteByTrip(tripId: string): Promise<void> {

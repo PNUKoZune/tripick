@@ -73,8 +73,10 @@ export function fetchRecommendedDestinations() {
   return api.get<DestinationSuggestionDto[]>('/main-planner/destinations/recommended');
 }
 
-export function createTrip(body: CreateTripRequestDto) {
-  return api.post<TripSummaryDto>('/main-planner/trips', body);
+export function createTrip(body: CreateTripRequestDto, idempotencyKey: string) {
+  return api.post<TripSummaryDto>('/main-planner/trips', body, undefined, {
+    'Idempotency-Key': idempotencyKey,
+  });
 }
 
 /** BullMQ Worker가 보고한 초기 AI 일정 생성 단계. 시간 기반 가짜 progress를 만들지 않는다. */
@@ -82,8 +84,14 @@ export function fetchTripGeneration(tripId: string) {
   return api.get<TripGenerationJobDto>(`/trips/${tripId}/generation`);
 }
 
-export function retryTripGeneration(tripId: string) {
-  return api.post<TripGenerationJobDto>(`/trips/${tripId}/generation/retry`, {});
+export function retryTripGeneration(tripId: string, idempotencyKey: string) {
+  return api.post<TripGenerationJobDto>(`/trips/${tripId}/generation/retry`, {}, undefined, {
+    'Idempotency-Key': idempotencyKey,
+  });
+}
+
+export function cancelTripGeneration(tripId: string) {
+  return api.post<TripGenerationJobDto>(`/trips/${tripId}/generation/cancel`, {});
 }
 
 /** 여행 삭제 (owner 만) */

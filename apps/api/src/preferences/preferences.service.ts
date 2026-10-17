@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { PreferenceEntity } from './preference.entity';
 import { PreferenceEmbeddingRepository } from './preference-embedding.repository';
 import { buildPreferenceText } from './preference-text';
@@ -37,8 +37,8 @@ export class PreferencesService {
     private readonly preferenceEmbeddings: PreferenceEmbeddingRepository,
   ) {}
 
-  async findByUser(userId: string): Promise<PreferenceEntity | null> {
-    const preference = await this.repo.findOneBy({ userId });
+  async findByUser(userId: string, manager?: EntityManager): Promise<PreferenceEntity | null> {
+    const preference = await (manager?.getRepository(PreferenceEntity) ?? this.repo).findOneBy({ userId });
     if (!preference) return null;
     // Also discard invalid legacy references before signing, deleting or analyzing them.
     preference.photoKeys = ownedPreferencePhotos(userId, preference.photoKeys ?? []);

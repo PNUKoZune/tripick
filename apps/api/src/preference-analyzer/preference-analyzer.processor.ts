@@ -2,6 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PreferenceAnalysisService } from './preference-analysis.service';
+import { runWithInferenceExecutionContext } from '../inference-resource/inference-execution-context';
 import {
   ANALYZE_PHOTOS_JOB,
   PREFERENCE_ANALYSIS_QUEUE,
@@ -29,7 +30,10 @@ export class PreferenceAnalyzerProcessor extends WorkerHost {
     if (job.name !== ANALYZE_PHOTOS_JOB) return { analyzed: 0, photoKeys: [] };
 
     const started = Date.now();
-    const result = await this.analysisService.runJob(job);
+    const result = await runWithInferenceExecutionContext(
+      { requestId: `preference:${job.id ?? 'unknown'}`, attempt: job.attemptsMade + 1 },
+      () => this.analysisService.runJob(job),
+    );
     this.logger.log(
       `취향 분석 잡 ${job.id} 완료 — 사진 ${result.analyzed}장, ${Date.now() - started}ms`,
     );

@@ -1,5 +1,7 @@
 /// <reference types="jest" />
 
+import { createTestTextEmbedding } from '../helpers/inference-resource.mock';
+
 import axios from 'axios';
 import type { ConfigService } from '@nestjs/config';
 import { TextEmbeddingService } from '../../src/embedding/text-embedding.service';
@@ -11,7 +13,7 @@ function makeService(overrides: Record<string, string> = {}): TextEmbeddingServi
   const config = {
     get: (key: string, def?: unknown) => (key in overrides ? overrides[key] : def),
   } as unknown as ConfigService;
-  return new TextEmbeddingService(config);
+  return createTestTextEmbedding(config);
 }
 
 describe('TextEmbeddingService.embedWithSource', () => {
@@ -67,7 +69,7 @@ describe('TextEmbeddingService embedding endpoint routing', () => {
     expect(mockedPost).toHaveBeenCalledWith(
       'http://localhost:8081/v1/embeddings',
       expect.anything(),
-      expect.anything(),
+      expect.objectContaining({ maxRedirects: 0 }),
     );
   });
 
@@ -77,7 +79,7 @@ describe('TextEmbeddingService embedding endpoint routing', () => {
     expect(mockedPost).toHaveBeenCalledWith(
       'http://localhost:8080/v1/embeddings',
       expect.anything(),
-      expect.anything(),
+      expect.objectContaining({ maxRedirects: 0 }),
     );
   });
 });

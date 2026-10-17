@@ -1,7 +1,8 @@
 /// <reference types="jest" />
 
+import { createTestPlannerAgent } from '../../helpers/inference-resource.mock';
+
 import axios from 'axios';
-import { PlannerAgentService } from '../../../src/planner/agent/planner-agent.service';
 import type { PlannerAgentOptions } from '../../../src/planner/agent/planner-agent.service';
 import type { CandidatePlace } from '../../../src/planner/retrieval/types';
 
@@ -32,7 +33,7 @@ describe('PlannerAgentService', () => {
       },
     });
 
-    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
+    const service = createTestPlannerAgent(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
     const plan = await service.plan(baseOptions());
 
     expect(mockedAxios.post).toHaveBeenCalledWith(
@@ -43,6 +44,7 @@ describe('PlannerAgentService', () => {
       }),
       expect.objectContaining({
         headers: { Authorization: 'Bearer local' },
+        maxRedirects: 0,
       }),
     );
     expect(plan).toHaveLength(2);
@@ -69,7 +71,7 @@ describe('PlannerAgentService', () => {
       },
     });
 
-    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
+    const service = createTestPlannerAgent(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
     await service.plan(baseOptions());
 
     expect(mockedAxios.post).toHaveBeenCalledWith(
@@ -103,7 +105,7 @@ describe('PlannerAgentService', () => {
       data: { choices: [{ message: { content: JSON.stringify({ items: [] }) } }] },
     });
 
-    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
+    const service = createTestPlannerAgent(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
     // 오늘을 15:10 부터 다시 짜는 재계획 — 남은 시간에 한 곳만 들어간다.
     await service.plan({ ...baseOptions(), dayStartTimes: ['15:10'], dayItemTargets: [1] });
 
@@ -119,7 +121,7 @@ describe('PlannerAgentService', () => {
       data: { choices: [{ message: { content: JSON.stringify({ items: [] }) } }] },
     });
 
-    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
+    const service = createTestPlannerAgent(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
     await service.plan(baseOptions());
 
     const prompt = (mockedAxios.post.mock.calls[0]![1] as any).messages[1].content as string;
@@ -128,7 +130,7 @@ describe('PlannerAgentService', () => {
   });
 
   it('slices the deterministic fallback per day target instead of a fixed size', async () => {
-    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'false' }));
+    const service = createTestPlannerAgent(fakeConfig({ LLM_PLANNER_ENABLED: 'false' }));
     const plan = await service.plan({
       ...baseOptions(),
       dayDates: ['2026-07-01', '2026-07-02'],
@@ -162,7 +164,7 @@ describe('PlannerAgentService', () => {
       },
     });
 
-    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
+    const service = createTestPlannerAgent(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
     const plan = await service.plan(baseOptions());
 
     expect(plan).toHaveLength(2);
@@ -174,7 +176,7 @@ describe('PlannerAgentService', () => {
   });
 
   it('결정적 폴백도 식사 슬롯을 먼저 채운다', async () => {
-    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'false' }));
+    const service = createTestPlannerAgent(fakeConfig({ LLM_PLANNER_ENABLED: 'false' }));
     const plan = await service.plan({
       ...baseOptions(),
       itemsPerDay: 3,
@@ -192,7 +194,7 @@ describe('PlannerAgentService', () => {
   });
 
   it('falls back to deterministic CRAG order when the LLM is disabled', async () => {
-    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'false' }));
+    const service = createTestPlannerAgent(fakeConfig({ LLM_PLANNER_ENABLED: 'false' }));
     const plan = await service.plan(baseOptions());
 
     expect(mockedAxios.post).not.toHaveBeenCalled();
@@ -223,7 +225,7 @@ describe('PlannerAgentService', () => {
       },
     });
 
-    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
+    const service = createTestPlannerAgent(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
     const plan = await service.plan(baseOptions());
 
     expect(plan[0]!.durationMin).toBe(90); // cafe
@@ -235,7 +237,7 @@ describe('PlannerAgentService', () => {
       data: { choices: [{ message: { content: JSON.stringify({ items: [] }) } }] },
     });
 
-    const service = new PlannerAgentService(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
+    const service = createTestPlannerAgent(fakeConfig({ LLM_PLANNER_ENABLED: 'true' }));
     await service.plan(baseOptions());
 
     const body = mockedAxios.post.mock.calls[0]![1] as {
@@ -251,7 +253,7 @@ describe('PlannerAgentService', () => {
    * 안 거치므로 구조화된 일차 목록을 따로 받아야 한다.
    */
   it('LLM 이 꺼져 있어도 비 오는 일차는 실내를 먼저 집는다', async () => {
-    const service = new PlannerAgentService(fakeConfig({}));
+    const service = createTestPlannerAgent(fakeConfig({}));
     const options = {
       ...baseOptions(),
       itemsPerDay: 1,
@@ -269,7 +271,7 @@ describe('PlannerAgentService', () => {
   });
 
   it('비 예보가 없으면 종전 순위 그대로', async () => {
-    const service = new PlannerAgentService(fakeConfig({}));
+    const service = createTestPlannerAgent(fakeConfig({}));
     const options = {
       ...baseOptions(),
       itemsPerDay: 1,

@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { MainPlannerService } from '../../src/main-planner/main-planner.service';
 import type { CandidatePlace } from '../../src/planner/retrieval/types';
 
@@ -84,6 +84,7 @@ function setup(opts: {
   const tripsService = {
     findOne: jest.fn(async () => trip),
     findOneForViewer: jest.fn(async () => trip),
+    mutateItinerary: jest.fn(async (_id, _userId, write) => write(trip, { getRepository: () => itemsRepo })),
   };
   const preferencesService = {
     findByUser: jest.fn(async () => null),
@@ -133,6 +134,27 @@ function setup(opts: {
     saved,
   };
 }
+
+describe('MainPlannerService guarded manual mutations', () => {
+  it.each(['swap', 'add', 'update', 'delete', 'reorder'])('%s cannot write while generation owns the itinerary', async (action) => {
+    const { service, user, tripsService, itemsRepo, routeHelper } = setup();
+    tripsService.mutateItinerary.mockRejectedValue(new ConflictException('일정 생성이 진행 중입니다.'));
+    const actions: Record<string, () => Promise<unknown>> = {
+      swap: () => service.swap(user, 'trip-1', { itemId: 'item-1', place: {} } as never),
+      add: () => service.addItem(user, 'trip-1', { day: 1, name: '새 장소', scheduledAt: '10:00' } as never),
+      update: () => service.updateItem(user, 'trip-1', 'item-1', { memo: '예약' }),
+      delete: () => service.deleteItem(user, 'trip-1', 'item-1'),
+      reorder: () => service.reorderItems(user, 'trip-1', { day: 1, orderedItemIds: [] }),
+    };
+
+    await expect(actions[action]!()).rejects.toBeInstanceOf(ConflictException);
+    expect(tripsService.mutateItinerary).toHaveBeenCalledWith('trip-1', 'u1', expect.any(Function));
+    expect(itemsRepo.find).not.toHaveBeenCalled();
+    expect(itemsRepo.findOneBy).not.toHaveBeenCalled();
+    expect(itemsRepo.save).not.toHaveBeenCalled();
+    expect(routeHelper.getEta).not.toHaveBeenCalled();
+  });
+});
 
 describe('MainPlannerService.swap', () => {
   it('항목의 장소·좌표·카테고리를 교체하고 이전 장소를 보관·알린다', async () => {

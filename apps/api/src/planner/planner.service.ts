@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { ItineraryService } from '../itinerary/itinerary.service';
 import type { ItineraryItemEntity } from '../itinerary/itinerary-item.entity';
 import { PreferencesService } from '../preferences/preferences.service';
@@ -106,6 +106,13 @@ interface GenerateOptions {
   preferences?: ReplanRequestDto['preferences'];
   /** 초기 생성 Worker가 실제 처리 단계를 BullMQ progress로 보고할 때만 사용한다. */
   onProgress?: (stage: TripGenerationStage, progress: number) => Promise<void> | void;
+  executionGuard?: PlannerExecutionGuard;
+}
+
+/** 초기 생성 실행의 취소·버전을 확인하고 원장과 결과를 같은 트랜잭션에 확정한다. */
+export interface PlannerExecutionGuard {
+  assertRunnable(): Promise<void>;
+  commit<T>(write: (manager: EntityManager) => Promise<T>): Promise<T>;
 }
 
 /** 초안 한 회차의 판정 결과. 하드 제약 위반과 "다 못 담음"을 나눠 들고 있다. */
@@ -154,18 +161,25 @@ export class PlannerService {
   async generateItinerary(
     tripId: string,
     onProgress?: GenerateOptions['onProgress'],
+    executionGuard?: PlannerExecutionGuard,
   ): Promise<ItineraryItemDto[]> {
+    await executionGuard?.assertRunnable();
     const trip = await this.tripsRepo.findOneBy({ id: tripId });
     if (!trip) {
       throw new NotFoundException(`Trip ${tripId} not found`);
     }
 
+    await executionGuard?.assertRunnable();
     await onProgress?.('preparing', 15);
     const items = await this.buildAndStoreItinerary(trip, {
       ...(onProgress ? { onProgress } : {}),
+      ...(executionGuard ? { executionGuard } : {}),
     });
-    trip.status = 'confirmed';
-    await this.tripsRepo.save(trip);
+    // Worker 생성은 guard.commit이 일정 저장과 confirmed를 함께 확정한다.
+    if (!executionGuard) {
+      trip.status = 'confirmed';
+      await this.tripsRepo.save(trip);
+    }
     return items;
   }
 
@@ -188,11 +202,13 @@ export class PlannerService {
   }
 
   private async buildAndStoreItinerary(trip: TripEntity, options: GenerateOptions): Promise<ItineraryItemDto[]> {
+    await options.executionGuard?.assertRunnable();
     this.assertTripWindow(trip);
     const [preference, groupPreference] = await Promise.all([
       this.preferencesService.findByUser(trip.userId),
       this.groupPreferences.forTrip(trip.id, trip.userId),
     ]);
+    await options.executionGuard?.assertRunnable();
     const tasteTags = groupPreference?.tasteTags ?? preference?.tasteTags;
     // accepted 그룹의 centroid로 후보를 찾고, 개별 벡터는 평균+최저 만족 리랭킹에 쓴다.
     // 그룹 서비스는 멤버 행이 없어도 owner-only 프로필을 반환한다.
@@ -225,9 +241,12 @@ export class PlannerService {
       this.logger.log(
         `Skipped replan for trip ${trip.id} — 대상 일차(${requestedDays.join(',')})에 남은 활동 시간이 없음`,
       );
-      return [...existingItems]
+      const unchanged = [...existingItems]
         .sort((a, b) => a.day - b.day || a.order - b.order)
         .map((item) => this.toItemDto(item));
+      return options.executionGuard
+        ? options.executionGuard.commit(async () => unchanged)
+        : unchanged;
     }
     const partial = planDays.length < dayCount;
     // 여행 고정 노트 + 재계획 요청 노트 + 구조화 옵션을 하나의 지시문으로 합쳐 검색·프롬프트에 반영
@@ -278,7 +297,7 @@ export class PlannerService {
     // 부분 재계획이라고 단일 풀(결합 라벨 destination) 경로로 떨어뜨리면 안 된다.
     const perDayMode = new Set(dayRegions.flat()).size > 1;
 
-    await options.onProgress?.('discovering_places', 35);
+    await this.reportProgress(options, 'discovering_places', 35);
 
     let candidates: CandidatePlace[];
     let poolsByDay: CandidatePlace[][] | null = null;
@@ -289,7 +308,7 @@ export class PlannerService {
       // 일차별 날짜를 함께 넘겨 그 날 열리는 행사만 그 일차 후보로 들어가게 한다.
       const planDayDates = planDays.map((day) => this.offsetDate(trip.startDate, day - 1));
       poolsByDay = (
-        await this.retrievePerDay(planDayRegions, sharedRetrieval, itemsPerDay, planDayDates)
+        await this.retrievePerDay(planDayRegions, sharedRetrieval, itemsPerDay, planDayDates, options.executionGuard)
       ).map((pool) => this.excludeKeptPlaces(pool, untouchedItems));
       candidates = [...mustCandidates, ...poolsByDay.flat()];
       traceLabel = `per-day[${planDayRegions.map((regions) => regions.join('/')).join(' | ')}]`;
@@ -315,7 +334,7 @@ export class PlannerService {
       throw new BadRequestException('No place candidates found for itinerary generation');
     }
 
-    await options.onProgress?.('building_itinerary', 65);
+    await this.reportProgress(options, 'building_itinerary', 65);
 
     // 다시 짜는 일차의 실제 날짜. 프롬프트 day↔날짜 매핑과 날씨 힌트 범위가 이걸 공유한다.
     const planDates = planDays.map((day) => this.offsetDate(trip.startDate, day - 1));
@@ -323,6 +342,7 @@ export class PlannerService {
     const forecast = firstCandidate
       ? await this.weatherHelper.getExtendedForecast(firstCandidate.coordinates.lat, firstCandidate.coordinates.lng)
       : new Map();
+    await options.executionGuard?.assertRunnable();
     // 예보맵 키는 기상청 포맷(YYYYMMDD)이라 하이픈을 뗀다. 대상 일차 예보만 힌트에 싣는다.
     const forecastDates = planDates.map((date) => date.replace(/-/g, ''));
     const weatherHint = this.weatherHelper.buildWeatherHint(forecast, forecastDates);
@@ -457,11 +477,14 @@ export class PlannerService {
     const storePayload = [...doneStoreItems, ...toStore].sort(
       (a, b) => a.day - b.day || a.order - b.order,
     );
-    await options.onProgress?.('saving', 90);
+    await this.reportProgress(options, 'saving', 90);
     // 부분 재계획은 대상 일차만 갈아끼운다. 전체 재계획은 기존대로 통째로 교체.
-    const saved = partial
-      ? await this.itineraryService.replaceDayItems(trip.id, planDays, storePayload)
-      : await this.itineraryService.replaceTripItems(trip.id, storePayload);
+    const write = (manager?: EntityManager) => partial
+      ? this.itineraryService.replaceDayItems(trip.id, planDays, storePayload, manager)
+      : this.itineraryService.replaceTripItems(trip.id, storePayload, manager);
+    const saved = options.executionGuard
+      ? await options.executionGuard.commit(write)
+      : await write();
     this.logger.log(
       `Generated ${saved.length} itinerary items for trip ${trip.id} (days ${planDays.join(',')}) using CRAG ${traceLabel}`,
     );
@@ -470,6 +493,15 @@ export class PlannerService {
     return [...keptItems, ...saved]
       .sort((a, b) => a.day - b.day || a.order - b.order)
       .map((item) => this.toItemDto(item));
+  }
+
+  private async reportProgress(
+    options: GenerateOptions,
+    stage: TripGenerationStage,
+    progress: number,
+  ): Promise<void> {
+    await options.executionGuard?.assertRunnable();
+    await options.onProgress?.(stage, progress);
   }
 
   /**
@@ -687,6 +719,7 @@ export class PlannerService {
       const dayEndAt = this.dayEndAt(context, day);
 
       for (let order = 0; order < dayPlan.length; order += 1) {
+        await options.executionGuard?.assertRunnable();
         const planned = dayPlan[order]!;
         const seed = planned.candidate;
         const previous = created[created.length - 1];
@@ -800,8 +833,11 @@ export class PlannerService {
     plan: PlannedCandidate[],
     context: DraftBuildContext,
   ): Promise<DraftAttempt> {
+    await context.options.executionGuard?.assertRunnable();
     const items = await this.buildDraft(plan, context);
+    await context.options.executionGuard?.assertRunnable();
     const validation = await this.validateDraft(items, context);
+    await context.options.executionGuard?.assertRunnable();
     if (items.length === 0 && plan.length > 0) {
       validation.valid = false;
       validation.issues.push('No visits fit within the available activity and opening hours');
@@ -982,11 +1018,13 @@ export class PlannerService {
     itemsPerDay: number,
     /** dayRegions 와 1:1 인 일차 날짜('YYYY-MM-DD'). 기간 있는 행사를 그 날로 좁히는 데 쓴다. */
     dayDates: string[],
+    executionGuard?: PlannerExecutionGuard,
   ): Promise<CandidatePlace[][]> {
     const perRegionLimit = Math.max(itemsPerDay + 3, 8);
     // 여행 전체의 실제 지역 목록(폴백 후보). 결합 라벨이 아닌 개별 지역만 담긴다.
     const allRegions = [...new Set(dayRegions.flat().map((r) => r.trim()).filter(Boolean))];
     const retrieveRegion = async (region: string, date?: string): Promise<CandidatePlace[]> => {
+      await executionGuard?.assertRunnable();
       const result = await this.placeRetrieval.retrieve({
         ...sharedRetrieval,
         destination: region,
@@ -996,6 +1034,7 @@ export class PlannerService {
         // 그 일차 하루가 곧 방문 구간이다. 날짜를 모르면 여행 전체 구간(sharedRetrieval)을 쓴다.
         ...(date ? { visitWindow: { from: date, to: date } } : {}),
       });
+      await executionGuard?.assertRunnable();
       return result.places;
     };
     // region 순서대로 id dedupe (앞 지역 우선). 병렬 조회 결과를 순서대로 합쳐 결정성을 유지한다.
@@ -1006,14 +1045,14 @@ export class PlannerService {
         }
       }
     };
-    return Promise.all(
+    return this.awaitAllSettled(
       dayRegions.map(async (regions, dayIndex) => {
         const date = dayDates[dayIndex];
         const merged = new Map<string, CandidatePlace>();
         // 한 일차의 여러 지역은 서로 독립이라 병렬 조회한다.
         mergeOrdered(
           merged,
-          await Promise.all(regions.map((region) => retrieveRegion(region, date))),
+          await this.awaitAllSettled(regions.map((region) => retrieveRegion(region, date))),
         );
         // 그 날 지역이 0건이면 여행 내 다른 지역으로 채운다 (이미 조회한 그 날 지역은 건너뜀).
         if (merged.size === 0) {
@@ -1026,6 +1065,19 @@ export class PlannerService {
         return [...merged.values()];
       }),
     );
+  }
+
+  /** 한 지역이 실패해도 함께 시작한 검색이 끝날 때까지 실행 점유를 유지한다. */
+  private async awaitAllSettled<T>(pending: Promise<T>[]): Promise<T[]> {
+    const results = await Promise.allSettled(pending);
+    const failures = results.filter((result) => result.status === 'rejected');
+    if (failures.length > 1) {
+      throw new AggregateError(failures.map((failure) => failure.reason), '병렬 장소 검색에 실패했습니다.');
+    }
+    return results.map((result) => {
+      if (result.status === 'rejected') throw result.reason;
+      return result.value;
+    });
   }
 
   /**

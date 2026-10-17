@@ -1,7 +1,8 @@
 /// <reference types="jest" />
 
+import { createTestVisionAnalyzer } from '../helpers/inference-resource.mock';
+
 import axios from 'axios';
-import { VisionAnalyzer } from '../../src/preference-analyzer/vision.analyzer';
 import type { TasteTagDto } from '@tripick/types';
 
 jest.mock('axios');
@@ -29,7 +30,7 @@ describe('VisionAnalyzer.analyzePhoto 응답 파싱', () => {
       tagReply({ food: ['cafe'], mood: ['healing'], environment: ['nature'], confidence: 0.9 }),
     );
 
-    const tags = (await new VisionAnalyzer(config()).analyzePhoto('data:image/jpeg;base64,AAAA')).tags;
+    const tags = (await createTestVisionAnalyzer(config()).analyzePhoto('data:image/jpeg;base64,AAAA')).tags;
 
     expect(tags).toEqual({
       food: ['cafe'],
@@ -42,7 +43,7 @@ describe('VisionAnalyzer.analyzePhoto 응답 파싱', () => {
   it('sends the image as an image_url part to the configured vision model', async () => {
     mockedAxios.post.mockResolvedValue(tagReply({ food: ['cafe'], confidence: 0.5 }));
 
-    await new VisionAnalyzer(
+    await createTestVisionAnalyzer(
       config({ LLM_BASE_URL: 'http://llm:8080/v1', LLM_MODEL: 'gemma-4' }),
     ).analyzePhoto('data:image/png;base64,BBBB');
 
@@ -54,12 +55,13 @@ describe('VisionAnalyzer.analyzePhoto 응답 파싱', () => {
       image_url: { url: 'data:image/png;base64,BBBB' },
     });
     expect(options.timeout).toBe(90000);
+    expect(options.maxRedirects).toBe(0);
   });
 
   it('falls back to a dedicated vision server when configured', async () => {
     mockedAxios.post.mockResolvedValue(tagReply({ mood: ['healing'], confidence: 0.5 }));
 
-    await new VisionAnalyzer(
+    await createTestVisionAnalyzer(
       config({
         LLM_BASE_URL: 'http://llm:8080/v1',
         LLM_VISION_BASE_URL: 'http://vision:8082/v1',
@@ -77,7 +79,7 @@ describe('VisionAnalyzer.analyzePhoto 응답 파싱', () => {
       llmReply('```json\n{"food":["cafe"],"mood":[],"environment":[],"confidence":0.7}\n```'),
     );
 
-    const tags = (await new VisionAnalyzer(config()).analyzePhoto('data:image/jpeg;base64,AAAA')).tags;
+    const tags = (await createTestVisionAnalyzer(config()).analyzePhoto('data:image/jpeg;base64,AAAA')).tags;
 
     expect(tags.food).toEqual(['cafe']);
     expect(tags.confidence).toBe(0.7);
@@ -90,7 +92,7 @@ describe('VisionAnalyzer.analyzePhoto 응답 파싱', () => {
       ),
     );
 
-    const tags = (await new VisionAnalyzer(config()).analyzePhoto('data:image/jpeg;base64,AAAA')).tags;
+    const tags = (await createTestVisionAnalyzer(config()).analyzePhoto('data:image/jpeg;base64,AAAA')).tags;
 
     expect(tags.food).toEqual(['cafe']);
     expect(tags.mood).toEqual(['healing']);
@@ -100,7 +102,7 @@ describe('VisionAnalyzer.analyzePhoto 응답 파싱', () => {
   it('clamps out-of-range confidence', async () => {
     mockedAxios.post.mockResolvedValue(tagReply({ food: ['cafe'], confidence: 4.2 }));
 
-    const tags = (await new VisionAnalyzer(config()).analyzePhoto('data:image/jpeg;base64,AAAA')).tags;
+    const tags = (await createTestVisionAnalyzer(config()).analyzePhoto('data:image/jpeg;base64,AAAA')).tags;
 
     expect(tags.confidence).toBe(1);
   });
@@ -110,7 +112,7 @@ describe('VisionAnalyzer.analyzePhoto 응답 파싱', () => {
       llmReply('{"food":["pizza"],"mood":[],"environment":[],"confidence":0.9}'),
     );
 
-    const tags = (await new VisionAnalyzer(config()).analyzePhoto('data:image/jpeg;base64,AAAA')).tags;
+    const tags = (await createTestVisionAnalyzer(config()).analyzePhoto('data:image/jpeg;base64,AAAA')).tags;
 
     expect(tags).toEqual({ food: [], mood: [], environment: [], confidence: 0 });
   });
@@ -118,7 +120,7 @@ describe('VisionAnalyzer.analyzePhoto 응답 파싱', () => {
   it('returns empty tags when the model answers with prose only', async () => {
     mockedAxios.post.mockResolvedValue(llmReply('죄송하지만 이미지를 분석할 수 없습니다.'));
 
-    const tags = (await new VisionAnalyzer(config()).analyzePhoto('data:image/jpeg;base64,AAAA')).tags;
+    const tags = (await createTestVisionAnalyzer(config()).analyzePhoto('data:image/jpeg;base64,AAAA')).tags;
 
     expect(tags).toEqual({ food: [], mood: [], environment: [], confidence: 0 });
   });
@@ -126,7 +128,7 @@ describe('VisionAnalyzer.analyzePhoto 응답 파싱', () => {
   it('returns empty tags with zero confidence when the call fails', async () => {
     mockedAxios.post.mockRejectedValue(new Error('llm down'));
 
-    const tags = (await new VisionAnalyzer(config()).analyzePhoto('data:image/jpeg;base64,AAAA')).tags;
+    const tags = (await createTestVisionAnalyzer(config()).analyzePhoto('data:image/jpeg;base64,AAAA')).tags;
 
     expect(tags).toEqual({ food: [], mood: [], environment: [], confidence: 0 });
   });
@@ -140,7 +142,7 @@ describe('VisionAnalyzer.analyzePhoto 성공·실패 구분', () => {
       llmReply('{"food":[],"mood":[],"environment":[],"confidence":0.4}'),
     );
 
-    const result = await new VisionAnalyzer(config()).analyzePhoto('data:image/png;base64,AAAA');
+    const result = await createTestVisionAnalyzer(config()).analyzePhoto('data:image/png;base64,AAAA');
 
     // "분석했으나 취향 없음" 은 유효한 결론이라 재시도 대상이 아니다
     expect(result.ok).toBe(true);
@@ -150,7 +152,7 @@ describe('VisionAnalyzer.analyzePhoto 성공·실패 구분', () => {
   it('marks a failed call as not ok so the caller can retry', async () => {
     mockedAxios.post.mockRejectedValue(new Error('timeout of 90000ms exceeded'));
 
-    const result = await new VisionAnalyzer(config()).analyzePhoto('data:image/png;base64,AAAA');
+    const result = await createTestVisionAnalyzer(config()).analyzePhoto('data:image/png;base64,AAAA');
 
     expect(result.ok).toBe(false);
     expect(result.tags).toEqual({ food: [], mood: [], environment: [], confidence: 0 });
@@ -165,7 +167,7 @@ describe('VisionAnalyzer.aggregate', () => {
     confidence: 0,
     ...partial,
   });
-  const analyzer = () => new VisionAnalyzer(config());
+  const analyzer = () => createTestVisionAnalyzer(config());
 
   it('keeps tags reaching the agreement threshold and averages confidence', () => {
     const tags = analyzer().aggregate([

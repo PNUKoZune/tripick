@@ -8,7 +8,7 @@ import { PlaceEmbeddingRepository } from './place-embedding.repository';
 import { PlaceIngestionService } from './place-ingestion.service';
 import { KeywordPlaceService } from './keyword-place.service';
 import { PopularPlaceService } from './popular-place.service';
-import { TextEmbeddingService } from '../../embedding/text-embedding.service';
+import { EmbeddingModule } from '../../embedding/embedding.module';
 import { TourApiService } from './tour-api.service';
 
 /**
@@ -18,6 +18,7 @@ import { TourApiService } from './tour-api.service';
  */
 @Module({
   imports: [
+    EmbeddingModule,
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -38,7 +39,6 @@ import { TourApiService } from './tour-api.service';
     NaverSearchService,
     KeywordPlaceService,
     PopularPlaceService,
-    TextEmbeddingService,
     PlaceEmbeddingRepository,
     IngestCursorRepository,
     PlaceIngestionService,

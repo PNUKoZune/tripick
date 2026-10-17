@@ -25,8 +25,12 @@ interface Props {
   loadingStatus: boolean;
   connectionError: string | null;
   retrying: boolean;
+  retryAfter: number;
   retryError: string | null;
+  cancelling: boolean;
+  cancelError: string | null;
   onRetry: () => void;
+  onCancel: () => void;
   onRefresh: () => void;
 }
 
@@ -36,12 +40,21 @@ export function TripCreateLoading({
   loadingStatus,
   connectionError,
   retrying,
+  retryAfter,
   retryError,
+  cancelling,
+  cancelError,
   onRetry,
+  onCancel,
   onRefresh,
 }: Props) {
   const failed = job?.status === 'failed';
+  const cancelled = job?.status === 'cancelled';
+  const cancelRequested = job?.status === 'cancel_requested';
+  const reconciling = job?.status === 'reconciling';
   const unavailable = job?.status === 'unavailable' || Boolean(connectionError);
+  const showProgress = !failed && !unavailable && !cancelled && !cancelRequested && !reconciling;
+  const canCancel = Boolean(job?.canCancel) && showProgress && job?.status !== 'completed';
   const currentIndex = STAGE_INDEX[job?.stage ?? 'queued'];
   const progress = job?.progress ?? 5;
   const retryLabel =
@@ -52,7 +65,9 @@ export function TripCreateLoading({
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-[color:var(--card,#fff)] px-8">
       <div className="relative flex size-16 items-center justify-center">
-        {failed || unavailable ? (
+        {cancelled ? (
+          <LuCheck className="size-10 text-[color:var(--primary,#3182F6)]" aria-hidden />
+        ) : failed || unavailable ? (
           <LuCircleAlert className="size-10 text-[color:var(--danger,#F04452)]" aria-hidden />
         ) : (
           <>
@@ -62,24 +77,36 @@ export function TripCreateLoading({
         )}
       </div>
 
-      <div className="text-center">
+      <div role="status" aria-live="polite" className="text-center">
         <p className="text-[17px] font-bold text-[color:var(--ink,#191F28)]">
-          {failed
-            ? '일정을 완성하지 못했어요'
-            : unavailable
-              ? '생성 상태를 확인하지 못했어요'
-              : 'AI가 여행을 만들고 있어요'}
+          {cancelled
+            ? '일정 생성을 취소했어요'
+            : cancelRequested
+              ? '일정 생성 취소를 요청했어요'
+              : reconciling
+                ? '작업 종료를 확인하고 있어요'
+                : failed
+                  ? '일정을 완성하지 못했어요'
+                  : unavailable
+                    ? '생성 상태를 확인하지 못했어요'
+                    : 'AI가 여행을 만들고 있어요'}
         </p>
         <p className="mt-1.5 max-w-[320px] text-[13px] leading-5 text-[color:var(--ink-sub,#6B7684)]">
-          {failed
-            ? job.error
-            : unavailable
-              ? connectionError || job?.error
-              : retryLabel || '화면을 새로고침해도 작업은 계속되고, 같은 상태로 복구됩니다.'}
+          {cancelled
+            ? '작업이 종료됐어요. 내 여행에서 새 일정을 만들 수 있어요.'
+            : cancelRequested
+              ? '실행 중인 작업의 종료를 기다리고 있어요. 종료가 확인되면 취소가 완료돼요.'
+              : reconciling
+                ? '실행 기록과 실제 작업 상태를 확인하고 있어요. 종료가 확인되면 상태가 갱신돼요.'
+                : failed
+                  ? job.error
+                  : unavailable
+                    ? connectionError || job?.error
+                    : retryLabel || '화면을 새로고침해도 작업은 계속되고, 같은 상태로 복구됩니다.'}
         </p>
       </div>
 
-      {!failed && !unavailable ? (
+      {showProgress ? (
         <>
           <div
             className="h-2 w-full max-w-[300px] overflow-hidden rounded-full bg-[color:var(--line,#E5E8EB)]"
@@ -132,19 +159,21 @@ export function TripCreateLoading({
             })}
           </ol>
         </>
-      ) : (
+      ) : failed || unavailable ? (
         <div className="w-full max-w-[300px] space-y-2">
           <button
             type="button"
             onClick={failed ? onRetry : onRefresh}
-            disabled={retrying || loadingStatus}
+            disabled={retrying || loadingStatus || (failed && retryAfter > 0)}
             className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-[14px] bg-[color:var(--primary,#3182F6)] text-[14px] font-bold text-white disabled:opacity-50"
           >
             <LuRotateCcw className={`size-4 ${retrying || loadingStatus ? 'animate-spin' : ''}`} />
             {failed
               ? retrying
                 ? '다시 등록하는 중…'
-                : 'AI 일정 다시 만들기'
+                : retryAfter > 0
+                  ? `${retryAfter}초 후 다시 요청`
+                  : 'AI 일정 다시 만들기'
               : '상태 다시 확인하기'}
           </button>
           {retryError ? (
@@ -159,7 +188,32 @@ export function TripCreateLoading({
             내 여행으로 돌아가기
           </Link>
         </div>
-      )}
+      ) : cancelled ? (
+        <Link
+          href="/trips"
+          className="inline-flex h-11 items-center justify-center text-[13px] font-semibold text-[color:var(--ink-sub,#6B7684)]"
+        >
+          내 여행으로 돌아가기
+        </Link>
+      ) : null}
+
+      {canCancel ? (
+        <div className="w-full max-w-[300px] text-center">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={cancelling}
+            className="inline-flex h-11 items-center justify-center text-[13px] font-semibold text-[color:var(--ink-sub,#6B7684)] disabled:opacity-50"
+          >
+            {cancelling ? '취소 요청 중…' : '일정 생성 취소'}
+          </button>
+          {cancelError ? (
+            <p role="alert" className="text-[12px] text-[color:var(--danger,#F04452)]">
+              {cancelError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

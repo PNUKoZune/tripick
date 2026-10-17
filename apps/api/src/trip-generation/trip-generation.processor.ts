@@ -1,11 +1,12 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Job } from 'bullmq';
-import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
+import { Job, UnrecoverableError } from 'bullmq';
 import type { TripGenerationStage } from '@tripick/types';
-import { PlannerService } from '../planner/planner.service';
-import { TripEntity } from '../trips/trip.entity';
+import { PlannerService, type PlannerExecutionGuard } from '../planner/planner.service';
+import { runWithInferenceExecutionContext } from '../inference-resource/inference-execution-context';
+import { GenerationNotRunnableError } from './generation-errors';
+import { GenerationLedgerService } from './generation-ledger.service';
 import {
   GENERATE_TRIP_JOB,
   TRIP_GENERATION_QUEUE,
@@ -13,16 +14,17 @@ import {
   type TripGenerationJobResult,
 } from './trip-generation.constants';
 
-// chat 모델은 단일 llama.cpp 인스턴스다. HTTP 요청은 큐로 즉시 반환하되 GPU 추론은 직렬화해
-// 컨텍스트 경합과 타임아웃 연쇄를 막는다.
-@Processor(TRIP_GENERATION_QUEUE, { concurrency: 1 })
+const DEFAULT_DEADLINE_MS = 5 * 60_000;
+
+// Shared queue concurrency is verified before TripGenerationQueuePolicy starts this worker.
+@Processor(TRIP_GENERATION_QUEUE, { concurrency: 1, autorun: false })
 export class TripGenerationProcessor extends WorkerHost {
   private readonly logger = new Logger(TripGenerationProcessor.name);
 
   constructor(
-    @InjectRepository(TripEntity)
-    private readonly tripsRepo: Repository<TripEntity>,
     private readonly plannerService: PlannerService,
+    private readonly ledger: GenerationLedgerService,
+    private readonly config: ConfigService,
   ) {
     super();
   }
@@ -34,44 +36,121 @@ export class TripGenerationProcessor extends WorkerHost {
       throw new Error(`지원하지 않는 일정 생성 잡입니다: ${job.name}`);
     }
 
-    const trip = await this.tripsRepo.findOneBy({ id: job.data.tripId });
-    if (!trip) return { tripId: job.data.tripId, itemCount: 0, skipped: true };
-    if (trip.userId !== job.data.userId) {
-      throw new Error(`일정 생성 잡 소유자 불일치: trip=${trip.id}`);
-    }
-    // DB 확정 이후 Worker만 재시도된 경우 결과를 다시 덮어쓰지 않는다.
-    if (['confirmed', 'in_progress', 'completed'].includes(trip.status)) {
-      await this.report(job, 'completed', 100);
-      return { tripId: trip.id, itemCount: 0, skipped: true };
-    }
-    if (trip.status === 'cancelled') {
-      return { tripId: trip.id, itemCount: 0, skipped: true };
-    }
+    const execution = await this.ledger.claim(job.data);
+    if (!execution) return { tripId: job.data.tripId, itemCount: 0, skipped: true };
 
     const startedAt = Date.now();
+    const startedCpu = process.cpuUsage();
+    let lastStageAt = startedAt;
+    let outcome = 'failed';
+    const configured = Number(this.config.get('TRIP_GENERATION_DEADLINE_MS', DEFAULT_DEADLINE_MS));
+    const deadlineMs = Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_DEADLINE_MS;
+    const deadlineAt = startedAt + deadlineMs;
+    const deadlineError = new UnrecoverableError('일정 생성 전체 실행 제한 시간을 초과했습니다.');
+    let expired = false;
+    let expiration: Promise<void> | undefined;
+    const fence = (): Promise<void> => {
+      expiration ??= this.ledger.expire(execution);
+      // The planner remains awaited. A deadline fences writes but never releases a live run.
+      void expiration.catch((error: unknown) => this.logger.error(
+        `Generation deadline fencing failed: ${error instanceof Error ? error.message : String(error)}`,
+      ));
+      return expiration;
+    };
+    const expire = (): Promise<void> => {
+      expired = true;
+      return fence();
+    };
+    const assertDeadline = () => {
+      if (expired || Date.now() >= deadlineAt) throw deadlineError;
+    };
+    const guard: PlannerExecutionGuard = {
+      assertRunnable: async () => {
+        if (expired || Date.now() >= deadlineAt) {
+          await expire();
+          throw deadlineError;
+        }
+        await this.ledger.assertRunnable(execution);
+        assertDeadline();
+      },
+      commit: async (write) => {
+        await guard.assertRunnable();
+        return this.ledger.commit(execution, async (manager) => {
+          // Waiting for the row lock also counts towards the whole-run deadline.
+          assertDeadline();
+          const result = await write(manager);
+          assertDeadline();
+          return result;
+        });
+      },
+    };
+    const timer = setTimeout(() => { void expire(); }, deadlineMs);
+    timer.unref?.();
+    const report = async (stage: TripGenerationStage, progress: number): Promise<void> => {
+      const now = Date.now();
+      const stageElapsedMs = now - lastStageAt;
+      lastStageAt = now;
+      await this.report(job, stage, progress, stageElapsedMs);
+    };
+    this.logger.log(JSON.stringify({
+      event: 'trip_generation_started', requestId: execution.id, version: execution.version,
+      tripId: job.data.tripId, queueWaitMs: Math.max(0, startedAt - job.timestamp),
+    }));
+
     try {
-      const items = await this.plannerService.generateItinerary(trip.id, (stage, progress) =>
-        this.report(job, stage, progress),
+      const items = await runWithInferenceExecutionContext(
+        { requestId: execution.id, attempt: execution.version, assertRunnable: () => guard.assertRunnable() },
+        () => this.plannerService.generateItinerary(job.data.tripId, report, guard),
       );
-      await this.report(job, 'completed', 100);
-      this.logger.log(
-        `Trip ${trip.id} 초기 일정 ${items.length}개 생성 완료 (${Date.now() - startedAt}ms)`,
-      );
-      return { tripId: trip.id, itemCount: items.length };
+      await report('completed', 100);
+      outcome = 'completed';
+      this.logger.log(JSON.stringify({
+        event: 'trip_generation_completed', requestId: execution.id,
+        tripId: job.data.tripId, itemCount: items.length, durationMs: Date.now() - startedAt,
+      }));
+      return { tripId: job.data.tripId, itemCount: items.length };
     } catch (error) {
-      if (this.isFinalAttempt(job)) {
-        await this.tripsRepo.update({ id: trip.id }, { status: 'generation_failed' });
+      const uncertain = this.isUncertainModelCompletion(error);
+      if (expired || this.containsError(error, (candidate) => candidate === deadlineError)) await expire();
+      if (uncertain) await fence();
+      const cancelled = this.containsError(error, (candidate) => candidate instanceof GenerationNotRunnableError);
+      await this.ledger.fail(execution, error, expired || uncertain || cancelled || this.isFinalAttempt(job));
+      if (expired) throw deadlineError;
+      if (uncertain) throw new UnrecoverableError(error instanceof Error ? error.message : String(error));
+      if (cancelled) {
+        outcome = 'cancelled';
+        return { tripId: job.data.tripId, itemCount: 0, skipped: true };
       }
       throw error;
+    } finally {
+      clearTimeout(timer);
+      const cpu = process.cpuUsage(startedCpu);
+      this.logger.log(JSON.stringify({
+        event: 'trip_generation_finished', requestId: execution.id, tripId: job.data.tripId,
+        outcome, runMs: Date.now() - startedAt, cpuUserMs: cpu.user / 1000,
+        cpuSystemMs: cpu.system / 1000, rssBytes: process.memoryUsage().rss,
+      }));
     }
   }
 
-  private report(
+  private async report(
     job: Job<TripGenerationJobData, TripGenerationJobResult>,
     stage: TripGenerationStage,
     progress: number,
+    stageElapsedMs: number,
   ): Promise<void> {
-    return job.updateProgress({ stage, progress });
+    this.logger.log(JSON.stringify({ event: 'trip_generation_stage', tripId: job.data.tripId, stage, progress, stageElapsedMs }));
+    await job.updateProgress({ stage, progress });
+  }
+
+  private isUncertainModelCompletion(error: unknown): boolean {
+    return this.containsError(error, (candidate) => candidate instanceof Error && 'code' in candidate &&
+      ['MODEL_COMPLETION_UNCERTAIN', 'RESOURCE_RECONCILIATION_REQUIRED'].includes(String(candidate.code)));
+  }
+
+  private containsError(error: unknown, predicate: (candidate: unknown) => boolean): boolean {
+    return predicate(error) || (error instanceof AggregateError &&
+      error.errors.some((nested: unknown) => this.containsError(nested, predicate)));
   }
 
   private isFinalAttempt(job: Job): boolean {

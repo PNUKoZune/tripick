@@ -25,9 +25,11 @@ import { TripEntity } from '../trips/trip.entity';
 import { TripDayEntity } from '../trips/trip-day.entity';
 import { TripMemberEntity } from '../trip-members/trip-member.entity';
 import { GroupPreferenceService } from './retrieval/group-preference.service';
+import { InferenceResourceModule } from '../inference-resource/inference-resource.module';
 
 @Module({
   imports: [
+    InferenceResourceModule,
     TypeOrmModule.forFeature([TripEntity, TripDayEntity, TripMemberEntity]),
     ItineraryModule,
     PreferencesModule,

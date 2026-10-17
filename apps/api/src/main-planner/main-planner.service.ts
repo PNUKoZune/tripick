@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
 import { HH_MM } from '../common/validation/patterns';
 import { FriendsService } from '../friends/friends.service';
@@ -129,7 +129,7 @@ export class MainPlannerService {
     });
   }
 
-  async createTrip(user: UserEntity, dto: CreateTripRequestDto): Promise<TripSummaryDto> {
+  async createTrip(user: UserEntity, dto: CreateTripRequestDto, requestKey?: string): Promise<TripSummaryDto> {
     this.assertCreateTrip(dto);
     const preference = await this.preferencesService.findByUser(user.id);
     const notes = this.composeCreateTripNotes(dto);
@@ -150,19 +150,21 @@ export class MainPlannerService {
         ...(notes ? { notes } : {}),
       } satisfies CreateTripDto,
       {
+        ...(requestKey !== undefined ? { requestKey } : {}),
+        requestInput: dto,
         // Worker가 즉시 잡을 집어도 멤버가 먼저 보이게 큐 등록 전에 저장한다.
-        beforeEnqueue: async (savedTrip) => {
-          draftMembers = await this.addDraftMembers(savedTrip, user, dto.members);
+        beforeEnqueue: async (savedTrip, manager) => {
+          draftMembers = await this.addDraftMembers(savedTrip, user, dto.members, manager);
         },
       },
     );
 
-    // 큐 등록이 확정된 뒤에만 초대한다. 등록 실패로 trip이 롤백됐는데 죽은 링크 알림이 남지 않는다.
+    // 여행·멤버·발행 의도가 DB에 커밋된 뒤 초대한다.
     for (const member of draftMembers) {
       try {
         await this.notifyTripInvite(trip, user, member);
       } catch (error) {
-        // 일정 생성 잡은 이미 등록됐다. 알림 실패 때문에 생성 요청을 실패로 보이거나 잡을 중복 등록하지 않는다.
+        // 접수는 이미 커밋됐다. 알림 실패가 재접수나 중복 초대를 만들지 않게 한다.
         this.logger.warn(
           `Trip ${trip.id} 초대 알림 실패: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -409,68 +411,71 @@ export class MainPlannerService {
     tripId: string,
     dto: PlannerSwapRequestDto,
   ): Promise<PlannerSwapResponseDto> {
-    const trip = await this.tripsService.findOne(tripId, user.id);
-    const item = await this.findItem(tripId, dto.itemId);
+    const { response, previousName } = await this.tripsService.mutateItinerary(tripId, user.id, async (trip, manager) => {
+      const itemsRepo = manager.getRepository(ItineraryItemEntity);
+      const item = await this.findItem(tripId, dto.itemId, itemsRepo);
 
-    const place = dto.place;
-    const previousName = item.name;
-    // P3-10: 되돌리기용으로 바뀌기 직전 장소를 보관
-    const previousPlace: PlannerSwapPlaceDto = {
-      name: item.name,
-      category: this.toPlannerItemType(item.type),
-      address: item.address,
-      lat: item.coordinates.lat,
-      lng: item.coordinates.lng,
-      ...(item.kakaoPlaceId ? { kakaoPlaceId: item.kakaoPlaceId } : {}),
-    };
-    item.name = place.name;
-    item.address = place.address?.trim() || `${place.name} 인근`;
-    item.coordinates = { lat: place.lat, lng: place.lng };
-    // 새 장소의 카카오 ID 로 교체(없으면 이전 ID 를 남기지 않도록 비운다)
-    (item as { kakaoPlaceId?: string | null }).kakaoPlaceId = place.kakaoPlaceId ?? null;
-    if (place.category) {
-      // P1-2: 카테고리도 함께 반영해 라벨·이모지 표시가 어긋나지 않게 한다
-      item.type = place.category;
-    }
+      const place = dto.place;
+      const previousName = item.name;
+      // P3-10: 되돌리기용으로 바뀌기 직전 장소를 보관
+      const previousPlace: PlannerSwapPlaceDto = {
+        name: item.name,
+        category: this.toPlannerItemType(item.type),
+        address: item.address,
+        lat: item.coordinates.lat,
+        lng: item.coordinates.lng,
+        ...(item.kakaoPlaceId ? { kakaoPlaceId: item.kakaoPlaceId } : {}),
+      };
+      item.name = place.name;
+      item.address = place.address?.trim() || `${place.name} 인근`;
+      item.coordinates = { lat: place.lat, lng: place.lng };
+      // 새 장소의 카카오 ID 로 교체(없으면 이전 ID 를 남기지 않도록 비운다)
+      (item as { kakaoPlaceId?: string | null }).kakaoPlaceId = place.kakaoPlaceId ?? null;
+      if (place.category) {
+        // P1-2: 카테고리도 함께 반영해 라벨·이모지 표시가 어긋나지 않게 한다
+        item.type = place.category;
+      }
 
-    // P1-1: 앞/뒤 항목과의 이동시간을 다시 계산하고 실현가능성(시간 여유)을 검증한다
-    const dayItems = (await this.itemsRepo.find({ where: { tripId, day: item.day } })).sort(
-      (a, b) => a.order - b.order,
-    );
-    const idx = dayItems.findIndex((entry) => entry.id === item.id);
-    const prev = idx > 0 ? dayItems[idx - 1] : null;
-    const next = idx >= 0 && idx < dayItems.length - 1 ? dayItems[idx + 1] : null;
-    const warnings: string[] = [];
+      // P1-1: 앞/뒤 항목과의 이동시간을 다시 계산하고 실현가능성(시간 여유)을 검증한다
+      const dayItems = (await itemsRepo.find({ where: { tripId, day: item.day } })).sort(
+        (a, b) => a.order - b.order,
+      );
+      const idx = dayItems.findIndex((entry) => entry.id === item.id);
+      const prev = idx > 0 ? dayItems[idx - 1] : null;
+      const next = idx >= 0 && idx < dayItems.length - 1 ? dayItems[idx + 1] : null;
+      const warnings: string[] = [];
 
-    if (prev) {
-      const inbound = await this.travelMinutes(trip, prev.coordinates, item.coordinates);
-      item.travelTimeMin = inbound;
-      this.pushGapWarning(warnings, prev, item, inbound);
-    }
-    await this.itemsRepo.save(item);
+      if (prev) {
+        const inbound = await this.travelMinutes(trip, prev.coordinates, item.coordinates);
+        item.travelTimeMin = inbound;
+        this.pushGapWarning(warnings, prev, item, inbound);
+      }
+      await itemsRepo.save(item);
 
-    if (next) {
-      const outbound = await this.travelMinutes(trip, item.coordinates, next.coordinates);
-      next.travelTimeMin = outbound;
-      await this.itemsRepo.save(next);
-      this.pushGapWarning(warnings, item, next, outbound);
-    }
+      if (next) {
+        const outbound = await this.travelMinutes(trip, item.coordinates, next.coordinates);
+        next.travelTimeMin = outbound;
+        await itemsRepo.save(next);
+        this.pushGapWarning(warnings, item, next, outbound);
+      }
 
+      const response: PlannerSwapResponseDto = {
+        tripId,
+        swappedItemId: dto.itemId,
+        newItemName: place.name,
+        previousPlace,
+        ...(warnings.length > 0 ? { warnings } : {}),
+      };
+      return { response, previousName };
+    });
     await this.inboxService.create({
       userId: user.id,
       category: 'replan_ready',
       title: '대안 일정 반영 완료',
-      body: `"${previousName}" 일정이 "${place.name}"(으)로 바뀌었어요.`,
+      body: `"${previousName}" 일정이 "${dto.place.name}"(으)로 바뀌었어요.`,
       payload: { tripId, itemId: dto.itemId },
     });
-
-    return {
-      tripId,
-      swappedItemId: dto.itemId,
-      newItemName: place.name,
-      previousPlace,
-      ...(warnings.length > 0 ? { warnings } : {}),
-    };
+    return response;
   }
 
   /** 일정 항목 신규 추가 (해당 일차 끝에 붙이고 이동시간 재계산) */
@@ -479,43 +484,45 @@ export class MainPlannerService {
     tripId: string,
     dto: PlannerAddItemRequestDto,
   ): Promise<PlannerItineraryItemDto> {
-    const trip = await this.tripsService.findOne(tripId, user.id);
-    const name = dto.name?.trim();
-    if (!name) throw new BadRequestException('장소 이름을 입력해 주세요.');
-    if (!Number.isInteger(dto.day) || dto.day < 1 || dto.day > this.tripDayCount(trip)) {
-      throw new BadRequestException('유효한 일차가 아닙니다.');
-    }
-    const dayItems = await this.itemsRepo.find({ where: { tripId, day: dto.day } });
-    const maxOrder = dayItems.reduce((max, entry) => Math.max(max, entry.order), 0);
-    const fallback =
-      dayItems[dayItems.length - 1]?.coordinates ??
-      (await this.itemsRepo.findOne({ where: { tripId }, order: { day: 'ASC', order: 'ASC' } }))
-        ?.coordinates ??
-      MainPlannerService.DEFAULT_COORDINATES;
+    return this.tripsService.mutateItinerary(tripId, user.id, async (trip, manager) => {
+      const itemsRepo = manager.getRepository(ItineraryItemEntity);
+      const name = dto.name?.trim();
+      if (!name) throw new BadRequestException('장소 이름을 입력해 주세요.');
+      if (!Number.isInteger(dto.day) || dto.day < 1 || dto.day > this.tripDayCount(trip)) {
+        throw new BadRequestException('유효한 일차가 아닙니다.');
+      }
+      const dayItems = await itemsRepo.find({ where: { tripId, day: dto.day } });
+      const maxOrder = dayItems.reduce((max, entry) => Math.max(max, entry.order), 0);
+      const fallback =
+        dayItems[dayItems.length - 1]?.coordinates ??
+        (await itemsRepo.findOne({ where: { tripId }, order: { day: 'ASC', order: 'ASC' } }))
+          ?.coordinates ??
+        MainPlannerService.DEFAULT_COORDINATES;
 
-    const hasCoords = dto.lat !== undefined && dto.lng !== undefined;
-    const coordinates = hasCoords ? { lat: dto.lat!, lng: dto.lng! } : fallback;
+      const hasCoords = dto.lat !== undefined && dto.lng !== undefined;
+      const coordinates = hasCoords ? { lat: dto.lat!, lng: dto.lng! } : fallback;
 
-    const kakaoPlaceId = dto.kakaoPlaceId?.trim();
-    const openingHours = await this.resolveManualOpeningHours(name, kakaoPlaceId, hasCoords ? coordinates : null);
+      const kakaoPlaceId = dto.kakaoPlaceId?.trim();
+      const openingHours = await this.resolveManualOpeningHours(name, kakaoPlaceId, hasCoords ? coordinates : null);
 
-    const item = this.itemsRepo.create({
-      tripId,
-      day: dto.day,
-      order: maxOrder + 1,
-      type: dto.type ?? 'attraction',
-      name,
-      address: dto.address?.trim() || `${name} 인근`,
-      coordinates,
-      scheduledAt: this.combineScheduledAt(this.dayBaseDate(trip, dto.day), dto.scheduledAt),
-      durationMin: dto.durationMin ?? 60,
-      ...(dto.memo?.trim() ? { memo: dto.memo.trim() } : {}),
-      ...(kakaoPlaceId ? { kakaoPlaceId } : {}),
-      ...(openingHours ? { openingHours } : {}),
+      const item = itemsRepo.create({
+        tripId,
+        day: dto.day,
+        order: maxOrder + 1,
+        type: dto.type ?? 'attraction',
+        name,
+        address: dto.address?.trim() || `${name} 인근`,
+        coordinates,
+        scheduledAt: this.combineScheduledAt(this.dayBaseDate(trip, dto.day), dto.scheduledAt),
+        durationMin: dto.durationMin ?? 60,
+        ...(dto.memo?.trim() ? { memo: dto.memo.trim() } : {}),
+        ...(kakaoPlaceId ? { kakaoPlaceId } : {}),
+        ...(openingHours ? { openingHours } : {}),
+      });
+      const saved = await itemsRepo.save(item);
+      await this.recomputeDayTravelTimes(trip, dto.day, itemsRepo);
+      return this.toPlannerItem(await this.findItem(tripId, saved.id, itemsRepo));
     });
-    const saved = await this.itemsRepo.save(item);
-    await this.recomputeDayTravelTimes(trip, dto.day);
-    return this.toPlannerItem(await this.findItem(tripId, saved.id));
   }
 
   /**
@@ -547,38 +554,42 @@ export class MainPlannerService {
     itemId: string,
     dto: PlannerUpdateItemRequestDto,
   ): Promise<PlannerItineraryItemDto> {
-    await this.tripsService.findOne(tripId, user.id);
-    const item = await this.findItem(tripId, itemId);
+    return this.tripsService.mutateItinerary(tripId, user.id, async (trip, manager) => {
+      const itemsRepo = manager.getRepository(ItineraryItemEntity);
+      const item = await this.findItem(tripId, itemId, itemsRepo);
 
-    if (dto.name !== undefined) {
-      const name = dto.name.trim();
-      if (!name) throw new BadRequestException('장소 이름은 비울 수 없어요.');
-      item.name = name;
-    }
-    if (dto.scheduledAt !== undefined) {
-      item.scheduledAt = this.combineScheduledAt(this.kstDateString(item.scheduledAt), dto.scheduledAt);
-    }
-    if (dto.durationMin !== undefined) {
-      if (!Number.isInteger(dto.durationMin) || dto.durationMin < 0) {
-        throw new BadRequestException('체류 시간이 올바르지 않습니다.');
+      if (dto.name !== undefined) {
+        const name = dto.name.trim();
+        if (!name) throw new BadRequestException('장소 이름은 비울 수 없어요.');
+        item.name = name;
       }
-      item.durationMin = dto.durationMin;
-    }
-    if (dto.memo !== undefined) {
-      (item as { memo?: string | null }).memo = dto.memo.trim() || null;
-    }
-    await this.itemsRepo.save(item);
-    return this.toPlannerItem(await this.findItem(tripId, itemId));
+      if (dto.scheduledAt !== undefined) {
+        item.scheduledAt = this.combineScheduledAt(this.kstDateString(item.scheduledAt), dto.scheduledAt);
+      }
+      if (dto.durationMin !== undefined) {
+        if (!Number.isInteger(dto.durationMin) || dto.durationMin < 0) {
+          throw new BadRequestException('체류 시간이 올바르지 않습니다.');
+        }
+        item.durationMin = dto.durationMin;
+      }
+      if (dto.memo !== undefined) {
+        (item as { memo?: string | null }).memo = dto.memo.trim() || null;
+      }
+      await itemsRepo.save(item);
+      return this.toPlannerItem(await this.findItem(tripId, itemId, itemsRepo));
+    });
   }
 
   /** 일정 항목 삭제 (남은 항목 순서 재정렬 + 이동시간 재계산) */
   async deleteItem(user: UserEntity, tripId: string, itemId: string): Promise<void> {
-    const trip = await this.tripsService.findOne(tripId, user.id);
-    const item = await this.findItem(tripId, itemId);
-    const day = item.day;
-    await this.itemsRepo.remove(item);
-    await this.resequenceDay(tripId, day);
-    await this.recomputeDayTravelTimes(trip, day);
+    return this.tripsService.mutateItinerary(tripId, user.id, async (trip, manager) => {
+      const itemsRepo = manager.getRepository(ItineraryItemEntity);
+      const item = await this.findItem(tripId, itemId, itemsRepo);
+      const day = item.day;
+      await itemsRepo.remove(item);
+      await this.resequenceDay(tripId, day, itemsRepo);
+      await this.recomputeDayTravelTimes(trip, day, itemsRepo);
+    });
   }
 
   /** 일정 항목 순서 변경 (드래그&드롭). 시간 슬롯은 유지하고 장소만 재배치한다. */
@@ -587,51 +598,57 @@ export class MainPlannerService {
     tripId: string,
     dto: PlannerReorderItemsRequestDto,
   ): Promise<void> {
-    const trip = await this.tripsService.findOne(tripId, user.id);
-    if (!Number.isInteger(dto.day) || dto.day < 1 || dto.day > this.tripDayCount(trip)) {
-      throw new BadRequestException('유효한 일차가 아닙니다.');
-    }
-    const dayItems = await this.itemsRepo.find({ where: { tripId, day: dto.day } });
-    const byId = new Map(dayItems.map((entry) => [entry.id, entry]));
-    if (
-      dto.orderedItemIds.length !== dayItems.length ||
-      new Set(dto.orderedItemIds).size !== dayItems.length ||
-      !dto.orderedItemIds.every((id) => byId.has(id))
-    ) {
-      throw new BadRequestException('순서 정보가 현재 일정과 일치하지 않습니다.');
-    }
+    return this.tripsService.mutateItinerary(tripId, user.id, async (trip, manager) => {
+      const itemsRepo = manager.getRepository(ItineraryItemEntity);
+      if (!Number.isInteger(dto.day) || dto.day < 1 || dto.day > this.tripDayCount(trip)) {
+        throw new BadRequestException('유효한 일차가 아닙니다.');
+      }
+      const dayItems = await itemsRepo.find({ where: { tripId, day: dto.day } });
+      const byId = new Map(dayItems.map((entry) => [entry.id, entry]));
+      if (
+        dto.orderedItemIds.length !== dayItems.length ||
+        new Set(dto.orderedItemIds).size !== dayItems.length ||
+        !dto.orderedItemIds.every((id) => byId.has(id))
+      ) {
+        throw new BadRequestException('순서 정보가 현재 일정과 일치하지 않습니다.');
+      }
 
-    // 기존 시작 시간을 시간순으로 모아 새 위치에 그대로 배정 (타임라인이 오름차순 유지)
-    const slotTimes = dayItems
-      .map((entry) => entry.scheduledAt)
-      .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+      // 기존 시작 시간을 시간순으로 모아 새 위치에 그대로 배정 (타임라인이 오름차순 유지)
+      const slotTimes = dayItems
+        .map((entry) => entry.scheduledAt)
+        .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
 
-    const reordered = dto.orderedItemIds.map((id, index) => {
-      const entry = byId.get(id)!;
-      entry.order = index + 1;
-      entry.scheduledAt = slotTimes[index]!;
-      return entry;
+      const reordered = dto.orderedItemIds.map((id, index) => {
+        const entry = byId.get(id)!;
+        entry.order = index + 1;
+        entry.scheduledAt = slotTimes[index]!;
+        return entry;
+      });
+      await itemsRepo.save(reordered);
+      await this.recomputeDayTravelTimes(trip, dto.day, itemsRepo);
     });
-    await this.itemsRepo.save(reordered);
-    await this.recomputeDayTravelTimes(trip, dto.day);
   }
 
   private static readonly DEFAULT_COORDINATES = { lat: 37.5665, lng: 126.978 };
 
   /** 해당 일차 항목의 order 를 1..n 으로 다시 매긴다. */
-  private async resequenceDay(tripId: string, day: number): Promise<void> {
-    const items = (await this.itemsRepo.find({ where: { tripId, day } })).sort(
+  private async resequenceDay(
+    tripId: string, day: number, repo = this.itemsRepo,
+  ): Promise<void> {
+    const items = (await repo.find({ where: { tripId, day } })).sort(
       (a, b) => a.order - b.order,
     );
     items.forEach((entry, index) => {
       entry.order = index + 1;
     });
-    if (items.length > 0) await this.itemsRepo.save(items);
+    if (items.length > 0) await repo.save(items);
   }
 
   /** 해당 일차 항목의 이동시간(travelTimeMin)을 순서대로 다시 계산한다. */
-  private async recomputeDayTravelTimes(trip: TripEntity, day: number): Promise<void> {
-    const items = (await this.itemsRepo.find({ where: { tripId: trip.id, day } })).sort(
+  private async recomputeDayTravelTimes(
+    trip: TripEntity, day: number, repo = this.itemsRepo,
+  ): Promise<void> {
+    const items = (await repo.find({ where: { tripId: trip.id, day } })).sort(
       (a, b) => a.order - b.order,
     );
     for (let i = 0; i < items.length; i += 1) {
@@ -646,7 +663,7 @@ export class MainPlannerService {
         );
       }
     }
-    if (items.length > 0) await this.itemsRepo.save(items);
+    if (items.length > 0) await repo.save(items);
   }
 
   /** trip.startDate 기준 day 번째 날의 달력 날짜(YYYY-MM-DD). */
@@ -715,6 +732,7 @@ export class MainPlannerService {
     trip: TripEntity,
     inviter: UserEntity,
     members: PlannerMemberDto[],
+    manager?: EntityManager,
   ): Promise<TripMemberDto[]> {
     const friendIds = members
       .map((member) => member.friendId ?? this.friendIdFromDraftMemberId(member.id))
@@ -722,9 +740,9 @@ export class MainPlannerService {
 
     const createdMembers: TripMemberDto[] = [];
     for (const friendId of [...new Set(friendIds)]) {
-      const friend = await this.friendsService.findAcceptedById(inviter.id, friendId);
+      const friend = await this.friendsService.findAcceptedById(inviter.id, friendId, manager);
       const created = await this.tripMembersService
-        .createFromFriend(trip.id, inviter.id, friend)
+        .createFromFriend(trip.id, inviter.id, friend, manager)
         .catch((error) => {
           if (error instanceof BadRequestException) {
             return null;
@@ -1097,8 +1115,10 @@ export class MainPlannerService {
     });
   }
 
-  private async findItem(tripId: string, itemId: string): Promise<ItineraryItemEntity> {
-    const item = await this.itemsRepo.findOneBy({ id: itemId, tripId });
+  private async findItem(
+    tripId: string, itemId: string, repo = this.itemsRepo,
+  ): Promise<ItineraryItemEntity> {
+    const item = await repo.findOneBy({ id: itemId, tripId });
     if (!item) {
       throw new NotFoundException('itinerary item not found');
     }

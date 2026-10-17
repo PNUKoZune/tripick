@@ -2,26 +2,25 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { TripEntity } from './trip.entity';
 import { TripDayEntity } from './trip-day.entity';
 import { TripMemberEntity } from '../trip-members/trip-member.entity';
 import { TripGenerationService } from '../trip-generation/trip-generation.service';
 import type { CreateTripDto, TripGenerationJobDto, UpdateTripDto } from '@tripick/types';
 
-interface CreateTripOptions {
+export interface CreateTripOptions {
   /** 생성 잡이 시작되기 전에 동행자처럼 검색 입력에 필요한 연관 데이터를 저장한다. */
-  beforeEnqueue?: (trip: TripEntity) => Promise<void>;
+  beforeEnqueue?: (trip: TripEntity, manager: EntityManager) => Promise<void>;
+  requestKey?: string;
+  requestInput?: unknown;
 }
 
 @Injectable()
 export class TripsService {
-  private readonly logger = new Logger(TripsService.name);
-
   constructor(
     @InjectRepository(TripEntity)
     private readonly repo: Repository<TripEntity>,
@@ -79,43 +78,34 @@ export class TripsService {
     options: CreateTripOptions = {},
   ): Promise<TripEntity> {
     this.assertTrip(dto.startDate, dto.endDate, dto.wakeTime, dto.sleepTime);
-    const trip = this.repo.create({
-      userId,
-      ...dto,
-      status: 'generating',
-      transportMode: dto.transportMode ?? 'transit',
-      wakeTime: dto.wakeTime ?? '08:30',
-      sleepTime: dto.sleepTime ?? '22:00',
-    });
-    const saved = await this.repo.save(trip);
-    // 일자별 지역은 반드시 일정 생성 전에 저장한다 — planner 가 generateItinerary 안에서
-    // trip_days 를 읽어 각 일차를 해당 지역 후보로 채우기 때문. 롤백 시 trip 삭제의 CASCADE 로 함께 제거된다.
-    if (dto.dayRegions?.length) {
-      await this.tripDaysRepo.save(
-        dto.dayRegions.flatMap((regions, dayIndex) =>
-          regions.map((region, sortOrder) =>
-            this.tripDaysRepo.create({
-              tripId: saved.id,
-              day: dayIndex + 1,
-              region,
-              sortOrder,
-            }),
-          ),
-        ),
-      );
-    }
-    try {
-      await options.beforeEnqueue?.(saved);
-      await this.tripGeneration.enqueue({ tripId: saved.id, userId });
-    } catch (error) {
-      // 큐 등록 전 실패는 백그라운드에서 되살릴 수 없다. 연관 행까지 CASCADE로 정리한다.
-      await this.repo.delete(saved.id);
-      this.logger.warn(
-        `Trip ${saved.id} creation rolled back before enqueue: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      throw error;
-    }
-    return this.findOne(saved.id, userId);
+    const accepted = await this.tripGeneration.ledger.admit(
+      userId, options.requestKey, options.requestInput ?? dto, async (manager) => {
+        const trips = manager.getRepository(TripEntity);
+        const tripDays = manager.getRepository(TripDayEntity);
+        const trip = trips.create({
+          userId,
+          ...dto,
+          status: 'generating',
+          transportMode: dto.transportMode ?? 'transit',
+          wakeTime: dto.wakeTime ?? '08:30',
+          sleepTime: dto.sleepTime ?? '22:00',
+        });
+        const saved = await trips.save(trip);
+        // 검색 입력과 접수 원장이 함께 커밋되어 worker가 불완전한 입력을 읽지 않는다.
+        if (dto.dayRegions?.length) {
+          await tripDays.save(dto.dayRegions.flatMap((regions, dayIndex) =>
+            regions.map((region, sortOrder) => tripDays.create({
+              tripId: saved.id, day: dayIndex + 1, region, sortOrder,
+            })),
+          ));
+        }
+        await options.beforeEnqueue?.(saved, manager);
+        return saved;
+      },
+    );
+    // Redis is a delivery mechanism: its failure must never delete a committed trip.
+    void this.tripGeneration.publishPending();
+    return accepted.trip;
   }
 
   async getGenerationStatus(
@@ -123,33 +113,44 @@ export class TripsService {
     userId: string,
   ): Promise<TripGenerationJobDto> {
     const trip = await this.findOneForViewer(id, userId);
-    return this.tripGeneration.getStatus(trip.id, trip.status);
+    const status = await this.tripGeneration.getStatus(trip.id, trip.status);
+    return { ...status, canCancel: trip.userId === userId && Boolean(status.canCancel) };
   }
 
-  async retryGeneration(id: string, userId: string): Promise<TripGenerationJobDto> {
+  async retryGeneration(id: string, userId: string, requestKey?: string): Promise<TripGenerationJobDto> {
+    await this.findOne(id, userId);
+    return this.tripGeneration.retry(id, userId, requestKey);
+  }
+
+  async cancelGeneration(id: string, userId: string): Promise<TripGenerationJobDto> {
     const trip = await this.findOne(id, userId);
-    this.tripGeneration.assertRetryable(trip.status);
-    trip.status = 'generating';
-    await this.repo.save(trip);
-    try {
-      return await this.tripGeneration.enqueue({ tripId: trip.id, userId });
-    } catch (error) {
-      trip.status = 'generation_failed';
-      await this.repo.save(trip);
-      throw error;
-    }
+    return this.tripGeneration.cancel(id, userId, trip.status);
   }
 
   async update(id: string, userId: string, dto: UpdateTripDto): Promise<TripEntity> {
-    const trip = await this.findOne(id, userId);
-    this.assertTrip(trip.startDate, trip.endDate, dto.wakeTime ?? trip.wakeTime, dto.sleepTime ?? trip.sleepTime);
-    Object.assign(trip, dto);
-    return this.repo.save(trip);
+    await this.findOne(id, userId);
+    return this.tripGeneration.ledger.mutateTrip(id, async (manager) => {
+      const trips = manager.getRepository(TripEntity);
+      const trip = await trips.findOneByOrFail({ id, userId });
+      this.assertTrip(trip.startDate, trip.endDate, dto.wakeTime ?? trip.wakeTime, dto.sleepTime ?? trip.sleepTime);
+      Object.assign(trip, dto);
+      return trips.save(trip);
+    });
+  }
+
+  async mutateItinerary<T>(id: string, userId: string, write: (trip: TripEntity, manager: EntityManager) => Promise<T>): Promise<T> {
+    await this.findOne(id, userId);
+    return this.tripGeneration.ledger.mutateTrip(id, async (manager) => {
+      const trip = await manager.getRepository(TripEntity).findOneByOrFail({ id, userId });
+      return write(trip, manager);
+    });
   }
 
   async remove(id: string, userId: string): Promise<void> {
-    const trip = await this.findOne(id, userId);
-    await this.repo.remove(trip);
+    await this.findOne(id, userId);
+    await this.tripGeneration.ledger.mutateTrip(id, async (manager) => {
+      await manager.getRepository(TripEntity).delete({ id, userId });
+    });
   }
 
   private assertTrip(startDate: string, endDate: string, wakeTime?: string, sleepTime?: string): void {

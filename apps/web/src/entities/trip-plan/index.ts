@@ -10,6 +10,7 @@ export {
   createTrip,
   fetchTripGeneration,
   retryTripGeneration,
+  cancelTripGeneration,
   deleteTrip,
   fetchTripShareStatus,
   enableTripShare,

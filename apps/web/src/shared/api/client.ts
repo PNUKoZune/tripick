@@ -178,6 +178,18 @@ function normalizeErrorMessage(payload: unknown, status: number, isAuthEndpoint 
   if (status === 401 && !isAuthEndpoint) {
     return '로그인이 만료됐어요. 다시 로그인해주세요.';
   }
+  // 생성 접수 거절은 사용자가 기존 작업을 완료·취소할 수 있도록 원인을 유지한다.
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    'code' in payload &&
+    ['USER_GENERATION_LIMIT', 'GENERATION_QUEUE_FULL', 'GENERATION_ADMISSION_PAUSED'].includes(
+      String(payload.code),
+    )
+  ) {
+    const message = extractMessages(payload)[0]?.trim();
+    if (message) return message;
+  }
   // throttler 기본 본문이 영문("ThrottlerException: Too many requests") 이라 서버 메시지를 안 쓴다.
   if (status === 429) {
     return RATE_LIMIT_ERROR;
@@ -223,11 +235,11 @@ export const api = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     }),
 
-  post: <T>(path: string, body: unknown, token?: string) =>
+  post: <T>(path: string, body: unknown, token?: string, headers?: Record<string, string>) =>
     fetcher<T>(path, {
       method: 'POST',
       body: JSON.stringify(body),
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: { ...headers, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     }),
 
   put: <T>(path: string, body: unknown, token?: string) =>

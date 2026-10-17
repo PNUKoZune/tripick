@@ -9,6 +9,8 @@ import {
   maxVisitDuration,
 } from '../helpers/itinerary-density';
 import { fillDaySlots } from '../helpers/day-slot-planner';
+import { InferenceResourceService } from '../../inference-resource/inference-resource.service';
+import { shouldPropagateInferenceError } from '../../inference-resource/inference-resource.errors';
 
 export interface PlannerAgentOptions {
   destination: string;
@@ -74,7 +76,10 @@ interface LlmPlanResponse {
 export class PlannerAgentService {
   private readonly logger = new Logger(PlannerAgentService.name);
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly inference: InferenceResourceService,
+  ) {}
 
   async plan(options: PlannerAgentOptions): Promise<PlannedCandidate[]> {
     const fallback = this.buildFallbackPlan(options);
@@ -102,6 +107,7 @@ export class PlannerAgentService {
       );
       return completed;
     } catch (error) {
+      if (shouldPropagateInferenceError(error)) throw error;
       this.logger.warn(
         `AI planner unavailable, using deterministic fallback: ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -117,7 +123,7 @@ export class PlannerAgentService {
     // 폴백으로 떨어졌다(실측: 후보 16개 JSON 생성에 15~40초, 콜드스타트면 그 이상).
     const timeout = this.readNumber('LLM_PLANNER_TIMEOUT_MS', 90000);
 
-    const res = await axios.post<{
+    const res = await this.inference.execute('chat', () => axios.post<{
       choices: Array<{ message: { content: string } }>;
     }>(
       `${baseUrl}/chat/completions`,
@@ -137,8 +143,8 @@ export class PlannerAgentService {
         temperature: this.readNumber('LLM_PLANNER_TEMPERATURE', 0.2),
         response_format: { type: 'json_object' },
       },
-      { headers: { Authorization: `Bearer ${apiKey}` }, timeout },
-    );
+      { headers: { Authorization: `Bearer ${apiKey}` }, timeout, maxRedirects: 0 },
+    ));
 
     return res.data.choices[0]?.message.content ?? '{}';
   }

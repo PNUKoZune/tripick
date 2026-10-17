@@ -10,6 +10,8 @@ import {
   Post,
   Query,
   UseGuards,
+  UseFilters,
+  Headers,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -23,6 +25,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UserEntity } from '../users/user.entity';
 import { DestinationsService } from './destinations.service';
 import { MainPlannerService } from './main-planner.service';
+import { GenerationAdmissionFilter } from '../trip-generation/generation-errors';
 import {
   AddTripMemberRequestBodyDto,
   CreateTripRequestBodyDto,
@@ -36,6 +39,7 @@ import {
 @ApiTags('Main Planner')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+@UseFilters(GenerationAdmissionFilter)
 @Controller('main-planner')
 export class MainPlannerController {
   constructor(
@@ -66,8 +70,8 @@ export class MainPlannerController {
   // 실제 LLM 처리는 큐에서 실행하지만 등록 폭주가 GPU 대기열을 무한히 늘리므로 제한은 유지한다.
   @Throttle(LLM_GENERATION_LIMIT)
   @ApiOperation({ summary: '신규 여행 저장 및 초기 AI 일정 생성 큐 등록' })
-  createTrip(@CurrentUser() user: UserEntity, @Body() dto: CreateTripRequestBodyDto) {
-    return this.mainPlannerService.createTrip(user, dto);
+  createTrip(@CurrentUser() user: UserEntity, @Body() dto: CreateTripRequestBodyDto, @Headers('idempotency-key') requestKey?: string) {
+    return this.mainPlannerService.createTrip(user, dto, requestKey);
   }
 
   @Get('trips/:tripId')

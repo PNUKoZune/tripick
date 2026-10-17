@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TextEmbeddingService } from './text-embedding.service';
+import { InferenceResourceModule } from '../inference-resource/inference-resource.module';
 
 /**
  * 텍스트 → 벡터 임베딩 공용 모듈.
@@ -7,6 +8,7 @@ import { TextEmbeddingService } from './text-embedding.service';
  * TextEmbeddingService 를 단일 provider 로 노출한다.
  */
 @Module({
+  imports: [InferenceResourceModule],
   providers: [TextEmbeddingService],
   exports: [TextEmbeddingService],
 })

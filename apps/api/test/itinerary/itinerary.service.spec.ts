@@ -3,6 +3,7 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ItineraryService } from '../../src/itinerary/itinerary.service';
 import type { CreateItineraryItemDto } from '@tripick/types';
+import type { EntityManager } from 'typeorm';
 
 function createHarness() {
   const repo = {
@@ -59,6 +60,22 @@ describe('ItineraryService.findByTrip', () => {
 });
 
 describe('ItineraryService.replaceTripItems', () => {
+  it('uses the supplied ledger manager without opening an independent transaction', async () => {
+    const { service, repo } = createHarness();
+    const transactionRepo = {
+      delete: jest.fn().mockResolvedValue({ affected: 1 }),
+      create: jest.fn((value) => value),
+      save: jest.fn(async (value) => value),
+    };
+    const manager = { getRepository: jest.fn().mockReturnValue(transactionRepo) } as unknown as EntityManager;
+
+    await service.replaceTripItems('trip-1', [item()], manager);
+
+    expect(transactionRepo.delete).toHaveBeenCalledWith({ tripId: 'trip-1' });
+    expect(transactionRepo.save).toHaveBeenCalledTimes(1);
+    expect(repo.delete).not.toHaveBeenCalled();
+    expect(repo.save).not.toHaveBeenCalled();
+  });
   it('clears existing items then persists new ones with a Date scheduledAt', async () => {
     const { service, repo } = createHarness();
 
@@ -86,6 +103,24 @@ describe('ItineraryService.replaceTripItems', () => {
 
     await service.replaceTripItems('trip-1', [item()]);
     expect(calls).toEqual(['delete', 'save']);
+  });
+});
+
+describe('ItineraryService.replaceDayItems', () => {
+  it('keeps the ledger transaction and scopes inserted rows to the requested trip', async () => {
+    const { service, repo } = createHarness();
+    const transactionRepo = {
+      delete: jest.fn().mockResolvedValue({ affected: 1 }),
+      create: jest.fn((value) => value),
+      save: jest.fn(async (value) => value),
+    };
+    const manager = { getRepository: jest.fn().mockReturnValue(transactionRepo) } as unknown as EntityManager;
+
+    await service.replaceDayItems('trip-1', [2], [item({ tripId: 'other-trip', day: 2 })], manager);
+
+    expect(transactionRepo.delete).toHaveBeenCalledWith({ tripId: 'trip-1', day: expect.anything() });
+    expect(transactionRepo.create).toHaveBeenCalledWith(expect.objectContaining({ tripId: 'trip-1', day: 2 }));
+    expect(repo.delete).not.toHaveBeenCalled();
   });
 });
 

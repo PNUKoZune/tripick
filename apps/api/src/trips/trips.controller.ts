@@ -9,6 +9,8 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Headers,
+  UseFilters,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -18,10 +20,12 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserEntity } from '../users/user.entity';
 import { TripsService } from './trips.service';
 import { CreateTripBodyDto, UpdateTripBodyDto } from './dto/trip.dto';
+import { GenerationAdmissionFilter } from '../trip-generation/generation-errors';
 
 @ApiTags('Trips')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+@UseFilters(GenerationAdmissionFilter)
 @Controller('trips')
 export class TripsController {
   constructor(private readonly tripsService: TripsService) {}
@@ -48,8 +52,15 @@ export class TripsController {
   @HttpCode(HttpStatus.ACCEPTED)
   @Throttle(LLM_GENERATION_LIMIT)
   @ApiOperation({ summary: '최종 실패한 초기 AI 일정 생성 재시도' })
-  retryGeneration(@CurrentUser() user: UserEntity, @Param('id') id: string) {
-    return this.tripsService.retryGeneration(id, user.id);
+  retryGeneration(@CurrentUser() user: UserEntity, @Param('id') id: string, @Headers('idempotency-key') requestKey?: string) {
+    return this.tripsService.retryGeneration(id, user.id, requestKey);
+  }
+
+  @Post(':id/generation/cancel')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: '초기 AI 일정 생성 취소 요청 (owner)' })
+  cancelGeneration(@CurrentUser() user: UserEntity, @Param('id') id: string) {
+    return this.tripsService.cancelGeneration(id, user.id);
   }
 
   @Post()
@@ -57,8 +68,8 @@ export class TripsController {
   // 실제 LLM 처리는 큐에서 실행하지만 등록 폭주가 GPU 대기열을 무한히 늘리므로 제한은 유지한다.
   @Throttle(LLM_GENERATION_LIMIT)
   @ApiOperation({ summary: '여행 저장 및 초기 AI 일정 생성 큐 등록' })
-  create(@CurrentUser() user: UserEntity, @Body() dto: CreateTripBodyDto) {
-    return this.tripsService.create(user.id, dto);
+  create(@CurrentUser() user: UserEntity, @Body() dto: CreateTripBodyDto, @Headers('idempotency-key') requestKey?: string) {
+    return this.tripsService.create(user.id, dto, { ...(requestKey !== undefined ? { requestKey } : {}) });
   }
 
   @Patch(':id')

@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { InferenceResourceService } from '../inference-resource/inference-resource.service';
+import { shouldPropagateInferenceError } from '../inference-resource/inference-resource.errors';
 
 /** 임베딩 벡터 출처. 'hash' 는 원격 서버 실패 시 결정적 폴백을 의미. */
 export type EmbeddingSource = 'remote' | 'hash';
@@ -21,7 +23,10 @@ export interface EmbeddingResult {
 export class TextEmbeddingService {
   private readonly logger = new Logger(TextEmbeddingService.name);
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly inference: InferenceResourceService,
+  ) {}
 
   async embed(text: string): Promise<number[]> {
     return (await this.embedWithSource(text)).vector;
@@ -69,13 +74,14 @@ export class TextEmbeddingService {
     const model = this.config.get<string>('LLM_EMBEDDING_MODEL', 'text-embedding-model');
 
     try {
-      const res = await axios.post<{ data: Array<{ embedding: number[] }> }>(
+      const res = await this.inference.execute('embedding', () => axios.post<{ data: Array<{ embedding: number[] }> }>(
         `${baseUrl}/embeddings`,
         { input: text, model },
-        { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 7000 },
-      );
+        { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 7000, maxRedirects: 0 },
+      ));
       return res.data.data[0]?.embedding ?? [];
     } catch (error) {
+      if (shouldPropagateInferenceError(error)) throw error;
       this.logger.warn(
         `Embedding endpoint unavailable, using deterministic local embedding: ${error instanceof Error ? error.message : String(error)}`,
       );

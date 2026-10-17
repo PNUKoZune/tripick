@@ -8,9 +8,11 @@ import { PREFERENCE_ANALYSIS_QUEUE } from './preference-analyzer.constants';
 import { PreferencesModule } from '../preferences/preferences.module';
 import { StorageModule } from '../storage/storage.module';
 import { InboxModule } from '../inbox/inbox.module';
+import { InferenceResourceModule } from '../inference-resource/inference-resource.module';
 
 @Module({
   imports: [
+    InferenceResourceModule,
     BullModule.registerQueue({ name: PREFERENCE_ANALYSIS_QUEUE }),
     PreferencesModule,
     StorageModule,

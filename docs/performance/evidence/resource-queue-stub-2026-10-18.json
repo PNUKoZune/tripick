@@ -1,0 +1,1069 @@
+{
+  "measuredAt": "2026-10-17T15:16:01.602Z",
+  "nodeVersion": "v24.19.0",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "scope": "isolated Redis, real BullMQ workers, timer stub; excludes GPU/model and DB admission",
+  "results": [
+    {
+      "users": 1,
+      "workers": 1,
+      "workload": "equal-20ms-stub",
+      "effectiveGlobalConcurrency": 1,
+      "maximumActive": 1,
+      "fifo": true,
+      "completed": 1,
+      "queueWaitP50Ms": 4,
+      "queueWaitP95Ms": 4,
+      "runP50Ms": 21.99,
+      "runP95Ms": 21.99,
+      "eventLoopP95Ms": 11.82,
+      "cpuUserMs": 19.127,
+      "cpuSystemMs": 2.24,
+      "processRssBytes": 81035264,
+      "timeline": [
+        {
+          "user": 0,
+          "worker": 0,
+          "waitMs": 4,
+          "startedMs": 20,
+          "runMs": 21.99266700000001,
+          "endedMs": 42
+        }
+      ]
+    },
+    {
+      "users": 1,
+      "workers": 1,
+      "workload": "mixed-20-80ms-stub",
+      "effectiveGlobalConcurrency": 1,
+      "maximumActive": 1,
+      "fifo": true,
+      "completed": 1,
+      "queueWaitP50Ms": 3,
+      "queueWaitP95Ms": 3,
+      "runP50Ms": 81.88,
+      "runP95Ms": 81.88,
+      "eventLoopP95Ms": 12.04,
+      "cpuUserMs": 7.105,
+      "cpuSystemMs": 1.046,
+      "processRssBytes": 81395712,
+      "timeline": [
+        {
+          "user": 0,
+          "worker": 0,
+          "waitMs": 3,
+          "startedMs": 9,
+          "runMs": 81.87974999999999,
+          "endedMs": 91
+        }
+      ]
+    },
+    {
+      "users": 1,
+      "workers": 2,
+      "workload": "equal-20ms-stub",
+      "effectiveGlobalConcurrency": 1,
+      "maximumActive": 1,
+      "fifo": true,
+      "completed": 1,
+      "queueWaitP50Ms": 3,
+      "queueWaitP95Ms": 3,
+      "runP50Ms": 20.32,
+      "runP95Ms": 20.32,
+      "eventLoopP95Ms": 12.03,
+      "cpuUserMs": 7.482,
+      "cpuSystemMs": 1.146,
+      "processRssBytes": 83492864,
+      "timeline": [
+        {
+          "user": 0,
+          "worker": 1,
+          "waitMs": 3,
+          "startedMs": 13,
+          "runMs": 20.32245800000001,
+          "endedMs": 33
+        }
+      ]
+    },
+    {
+      "users": 1,
+      "workers": 2,
+      "workload": "mixed-20-80ms-stub",
+      "effectiveGlobalConcurrency": 1,
+      "maximumActive": 1,
+      "fifo": true,
+      "completed": 1,
+      "queueWaitP50Ms": 2,
+      "queueWaitP95Ms": 2,
+      "runP50Ms": 80.72,
+      "runP95Ms": 80.72,
+      "eventLoopP95Ms": 12.16,
+      "cpuUserMs": 6.785,
+      "cpuSystemMs": 1.045,
+      "processRssBytes": 84967424,
+      "timeline": [
+        {
+          "user": 0,
+          "worker": 0,
+          "waitMs": 2,
+          "startedMs": 11,
+          "runMs": 80.72466700000001,
+          "endedMs": 91
+        }
+      ]
+    },
+    {
+      "users": 5,
+      "workers": 1,
+      "workload": "equal-20ms-stub",
+      "effectiveGlobalConcurrency": 1,
+      "maximumActive": 1,
+      "fifo": true,
+      "completed": 5,
+      "queueWaitP50Ms": 46,
+      "queueWaitP95Ms": 91,
+      "runP50Ms": 20.8,
+      "runP95Ms": 21.89,
+      "eventLoopP95Ms": 12.03,
+      "cpuUserMs": 8.272,
+      "cpuSystemMs": 1.372,
+      "processRssBytes": 86016000,
+      "timeline": [
+        {
+          "user": 0,
+          "worker": 0,
+          "waitMs": 4,
+          "startedMs": 10,
+          "runMs": 21.88958299999996,
+          "endedMs": 32
+        },
+        {
+          "user": 1,
+          "worker": 0,
+          "waitMs": 25,
+          "startedMs": 34,
+          "runMs": 20.72595799999999,
+          "endedMs": 55
+        },
+        {
+          "user": 2,
+          "worker": 0,
+          "waitMs": 46,
+          "startedMs": 56,
+          "runMs": 19.89387499999998,
+          "endedMs": 76
+        },
+        {
+          "user": 3,
+          "worker": 0,
+          "waitMs": 68,
+          "startedMs": 78,
+          "runMs": 21.654665999999963,
+          "endedMs": 99
+        },
+        {
+          "user": 4,
+          "worker": 0,
+          "waitMs": 91,
+          "startedMs": 102,
+          "runMs": 20.797208000000012,
+          "endedMs": 123
+        }
+      ]
+    },
+    {
+      "users": 5,
+      "workers": 1,
+      "workload": "mixed-20-80ms-stub",
+      "effectiveGlobalConcurrency": 1,
+      "maximumActive": 1,
+      "fifo": true,
+      "completed": 5,
+      "queueWaitP50Ms": 108,
+      "queueWaitP95Ms": 155,
+      "runP50Ms": 22.79,
+      "runP95Ms": 80.1,
+      "eventLoopP95Ms": 12.18,
+      "cpuUserMs": 8.584,
+      "cpuSystemMs": 1.461,
+      "processRssBytes": 88244224,
+      "timeline": [
+        {
+          "user": 0,
+          "worker": 0,
+          "waitMs": 1,
+          "startedMs": 7,
+          "runMs": 79.96162500000003,
+          "endedMs": 87
+        },
+        {
+          "user": 1,
+          "worker": 0,
+          "waitMs": 84,
+          "startedMs": 91,
+          "runMs": 21.966916999999967,
+          "endedMs": 113
+        },
+        {
+          "user": 2,
+          "worker": 0,
+          "waitMs": 108,
+          "startedMs": 115,
+          "runMs": 22.788875000000075,
+          "endedMs": 137
+        },
+        {
+          "user": 3,
+          "worker": 0,
+          "waitMs": 131,
+          "startedMs": 139,
+          "runMs": 21.770457999999962,
+          "endedMs": 161
+        },
+        {
+          "user": 4,
+          "worker": 0,
+          "waitMs": 155,
+          "startedMs": 163,
+          "runMs": 80.10283399999992,
+          "endedMs": 243
+        }
+      ]
+    },
+    {
+      "users": 5,
+      "workers": 2,
+      "workload": "equal-20ms-stub",
+      "effectiveGlobalConcurrency": 1,
+      "maximumActive": 1,
+      "fifo": true,
+      "completed": 5,
+      "queueWaitP50Ms": 49,
+      "queueWaitP95Ms": 93,
+      "runP50Ms": 20.39,
+      "runP95Ms": 21.85,
+      "eventLoopP95Ms": 12.28,
+      "cpuUserMs": 7.346,
+      "cpuSystemMs": 1.309,
+      "processRssBytes": 88391680,
+      "timeline": [
+        {
+          "user": 0,
+          "worker": 0,
+          "waitMs": 2,
+          "startedMs": 11,
+          "runMs": 21.849250000000097,
+          "endedMs": 33
+        },
+        {
+          "user": 1,
+          "worker": 0,
+          "waitMs": 27,
+          "startedMs": 38,
+          "runMs": 20.36587499999996,
+          "endedMs": 58
+        },
+        {
+          "user": 2,
+          "worker": 0,
+          "waitMs": 49,
+          "startedMs": 60,
+          "runMs": 20.286500000000046,
+          "endedMs": 80
+        },
+        {
+          "user": 3,
+          "worker": 0,
+          "waitMs": 70,
+          "startedMs": 82,
+          "runMs": 21.330917,
+          "endedMs": 103
+        },
+        {
+          "user": 4,
+          "worker": 0,
+          "waitMs": 93,
+          "startedMs": 105,
+          "runMs": 20.38666599999999,
+          "endedMs": 125
+        }
+      ]
+    },
+    {
+      "users": 5,
+      "workers": 2,
+      "workload": "mixed-20-80ms-stub",
+      "effectiveGlobalConcurrency": 1,
+      "maximumActive": 1,
+      "fifo": true,
+      "completed": 5,
+      "queueWaitP50Ms": 106,
+      "queueWaitP95Ms": 149,
+      "runP50Ms": 20.56,
+      "runP95Ms": 80.4,
+      "eventLoopP95Ms": 12.05,
+      "cpuUserMs": 18.229,
+      "cpuSystemMs": 3.028,
+      "processRssBytes": 91062272,
+      "timeline": [
+        {
+          "user": 0,
+          "worker": 1,
+          "waitMs": 3,
+          "startedMs": 12,
+          "runMs": 80.39862500000004,
+          "endedMs": 92
+        },
+        {
+          "user": 1,
+          "worker": 1,
+          "waitMs": 83,
+          "startedMs": 94,
+          "runMs": 20.563333000000057,
+          "endedMs": 115
+        },
+        {
+          "user": 2,
+          "worker": 1,
+          "waitMs": 106,
+          "startedMs": 118,
+          "runMs": 19.949333000000024,
+          "endedMs": 137
+        },
+        {
+          "user": 3,
+          "worker": 1,
+          "waitMs": 127,
+          "startedMs": 139,
+          "runMs": 20.076582999999914,
+          "endedMs": 159
+        },
+        {
+          "user": 4,
+          "worker": 1,
+          "waitMs": 149,
+          "startedMs": 162,
+          "runMs": 79.75683300000014,
+          "endedMs": 241
+        }
+      ]
+    },
+    {
+      "users": 20,
+      "workers": 1,
+      "workload": "equal-20ms-stub",
+      "effectiveGlobalConcurrency": 1,
+      "maximumActive": 1,
+      "fifo": true,
+      "completed": 20,
+      "queueWaitP50Ms": 203,
+      "queueWaitP95Ms": 409,
+      "runP50Ms": 20.75,
+      "runP95Ms": 21.66,
+      "eventLoopP95Ms": 12.17,
+      "cpuUserMs": 24.158,
+      "cpuSystemMs": 4.282,
+      "processRssBytes": 91340800,
+      "timeline": [
+        {
+          "user": 0,
+          "worker": 0,
+          "waitMs": 2,
+          "startedMs": 13,
+          "runMs": 20.933041999999887,
+          "endedMs": 33
+        },
+        {
+          "user": 1,
+          "worker": 0,
+          "waitMs": 23,
+          "startedMs": 35,
+          "runMs": 20.974750000000085,
+          "endedMs": 55
+        },
+        {
+          "user": 2,
+          "worker": 0,
+          "waitMs": 44,
+          "startedMs": 56,
+          "runMs": 20.80962499999987,
+          "endedMs": 77
+        },
+        {
+          "user": 3,
+          "worker": 0,
+          "waitMs": 66,
+          "startedMs": 78,
+          "runMs": 21.839375000000018,
+          "endedMs": 100
+        },
+        {
+          "user": 4,
+          "worker": 0,
+          "waitMs": 89,
+          "startedMs": 102,
+          "runMs": 21.65929200000005,
+          "endedMs": 124
+        },
+        {
+          "user": 5,
+          "worker": 0,
+          "waitMs": 112,
+          "startedMs": 126,
+          "runMs": 20.745832999999948,
+          "endedMs": 146
+        },
+        {
+          "user": 6,
+          "worker": 0,
+          "waitMs": 135,
+          "startedMs": 149,
+          "runMs": 20.89458300000001,
+          "endedMs": 170
+        },
+        {
+          "user": 7,
+          "worker": 0,
+          "waitMs": 157,
+          "startedMs": 172,
+          "runMs": 19.791082999999844,
+          "endedMs": 192
+        },
+        {
+          "user": 8,
+          "worker": 0,
+          "waitMs": 178,
+          "startedMs": 194,
+          "runMs": 21.62895800000001,
+          "endedMs": 215
+        },
+        {
+          "user": 9,
+          "worker": 0,
+          "waitMs": 203,
+          "startedMs": 218,
+          "runMs": 20.277041999999938,
+          "endedMs": 239
+        },
+        {
+          "user": 10,
+          "worker": 0,
+          "waitMs": 225,
+          "startedMs": 241,
+          "runMs": 21.3795419999999,
+          "endedMs": 263
+        },
+        {
+          "user": 11,
+          "worker": 0,
+          "waitMs": 248,
+          "startedMs": 265,
+          "runMs": 21.55512500000009,
+          "endedMs": 286
+        },
+        {
+          "user": 12,
+          "worker": 0,
+          "waitMs": 272,
+          "startedMs": 290,
+          "runMs": 20.45962499999996,
+          "endedMs": 310
+        },
+        {
+          "user": 13,
+          "worker": 0,
+          "waitMs": 294,
+          "startedMs": 313,
+          "runMs": 20.485165999999936,
+          "endedMs": 333
+        },
+        {
+          "user": 14,
+          "worker": 0,
+          "waitMs": 318,
+          "startedMs": 336,
+          "runMs": 20.383833000000095,
+          "endedMs": 357
+        },
+        {
+          "user": 15,
+          "worker": 0,
+          "waitMs": 340,
+          "startedMs": 360,
+          "runMs": 19.90579099999991,
+          "endedMs": 380
+        },
+        {
+          "user": 16,
+          "worker": 0,
+          "waitMs": 363,
+          "startedMs": 383,
+          "runMs": 20.62525000000005,
+          "endedMs": 403
+        },
+        {
+          "user": 17,
+          "worker": 0,
+          "waitMs": 387,
+          "startedMs": 407,
+          "runMs": 20.75595800000019,
+          "endedMs": 428
+        },
+        {
+          "user": 18,
+          "worker": 0,
+          "waitMs": 409,
+          "startedMs": 430,
+          "runMs": 20.687374999999975,
+          "endedMs": 451
+        },
+        {
+          "user": 19,
+          "worker": 0,
+          "waitMs": 432,
+          "startedMs": 453,
+          "runMs": 20.169624999999996,
+          "endedMs": 473
+        }
+      ]
+    },
+    {
+      "users": 20,
+      "workers": 1,
+      "workload": "mixed-20-80ms-stub",
+      "effectiveGlobalConcurrency": 1,
+      "maximumActive": 1,
+      "fifo": true,
+      "completed": 20,
+      "queueWaitP50Ms": 397,
+      "queueWaitP95Ms": 731,
+      "runP50Ms": 20.91,
+      "runP95Ms": 81.62,
+      "eventLoopP95Ms": 12.12,
+      "cpuUserMs": 40.237,
+      "cpuSystemMs": 7.705,
+      "processRssBytes": 92405760,
+      "timeline": [
+        {
+          "user": 0,
+          "worker": 0,
+          "waitMs": 3,
+          "startedMs": 18,
+          "runMs": 80.44550000000004,
+          "endedMs": 98
+        },
+        {
+          "user": 1,
+          "worker": 0,
+          "waitMs": 86,
+          "startedMs": 103,
+          "runMs": 20.828000000000202,
+          "endedMs": 123
+        },
+        {
+          "user": 2,
+          "worker": 0,
+          "waitMs": 110,
+          "startedMs": 127,
+          "runMs": 20.58787499999994,
+          "endedMs": 148
+        },
+        {
+          "user": 3,
+          "worker": 0,
+          "waitMs": 132,
+          "startedMs": 151,
+          "runMs": 20.91466700000001,
+          "endedMs": 172
+        },
+        {
+          "user": 4,
+          "worker": 0,
+          "waitMs": 156,
+          "startedMs": 175,
+          "runMs": 82.2165,
+          "endedMs": 257
+        },
+        {
+          "user": 5,
+          "worker": 0,
+          "waitMs": 243,
+          "startedMs": 263,
+          "runMs": 20.40041700000006,
+          "endedMs": 283
+        },
+        {
+          "user": 6,
+          "worker": 0,
+          "waitMs": 265,
+          "startedMs": 286,
+          "runMs": 21.117083000000093,
+          "endedMs": 307
+        },
+        {
+          "user": 7,
+          "worker": 0,
+          "waitMs": 290,
+          "startedMs": 312,
+          "runMs": 20.41258300000004,
+          "endedMs": 332
+        },
+        {
+          "user": 8,
+          "worker": 0,
+          "waitMs": 315,
+          "startedMs": 337,
+          "runMs": 80.22487500000011,
+          "endedMs": 418
+        },
+        {
+          "user": 9,
+          "worker": 0,
+          "waitMs": 397,
+          "startedMs": 420,
+          "runMs": 21.059125000000222,
+          "endedMs": 441
+        },
+        {
+          "user": 10,
+          "worker": 0,
+          "waitMs": 420,
+          "startedMs": 444,
+          "runMs": 20.852416999999605,
+          "endedMs": 464
+        },
+        {
+          "user": 11,
+          "worker": 0,
+          "waitMs": 445,
+          "startedMs": 469,
+          "runMs": 20.654375000000073,
+          "endedMs": 490
+        },
+        {
+          "user": 12,
+          "worker": 0,
+          "waitMs": 468,
+          "startedMs": 493,
+          "runMs": 81.61629099999982,
+          "endedMs": 575
+        },
+        {
+          "user": 13,
+          "worker": 0,
+          "waitMs": 552,
+          "startedMs": 578,
+          "runMs": 21.892041999999947,
+          "endedMs": 600
+        },
+        {
+          "user": 14,
+          "worker": 0,
+          "waitMs": 577,
+          "startedMs": 603,
+          "runMs": 19.646417000000383,
+          "endedMs": 623
+        },
+        {
+          "user": 15,
+          "worker": 0,
+          "waitMs": 598,
+          "startedMs": 626,
+          "runMs": 20.27454200000011,
+          "endedMs": 646
+        },
+        {
+          "user": 16,
+          "worker": 0,
+          "waitMs": 620,
+          "startedMs": 649,
+          "runMs": 80.81254200000012,
+          "endedMs": 730
+        },
+        {
+          "user": 17,
+          "worker": 0,
+          "waitMs": 707,
+          "startedMs": 737,
+          "runMs": 22.050416999999925,
+          "endedMs": 759
+        },
+        {
+          "user": 18,
+          "worker": 0,
+          "waitMs": 731,
+          "startedMs": 762,
+          "runMs": 20.71545900000001,
+          "endedMs": 783
+        },
+        {
+          "user": 19,
+          "worker": 0,
+          "waitMs": 757,
+          "startedMs": 789,
+          "runMs": 21.216750000000047,
+          "endedMs": 810
+        }
+      ]
+    },
+    {
+      "users": 20,
+      "workers": 2,
+      "workload": "equal-20ms-stub",
+      "effectiveGlobalConcurrency": 1,
+      "maximumActive": 1,
+      "fifo": true,
+      "completed": 20,
+      "queueWaitP50Ms": 201,
+      "queueWaitP95Ms": 407,
+      "runP50Ms": 20.84,
+      "runP95Ms": 22.17,
+      "eventLoopP95Ms": 12.44,
+      "cpuUserMs": 30.39,
+      "cpuSystemMs": 6.269,
+      "processRssBytes": 96845824,
+      "timeline": [
+        {
+          "user": 0,
+          "worker": 1,
+          "waitMs": 4,
+          "startedMs": 22,
+          "runMs": 20.524207999999817,
+          "endedMs": 42
+        },
+        {
+          "user": 1,
+          "worker": 1,
+          "waitMs": 24,
+          "startedMs": 44,
+          "runMs": 20.555459000000155,
+          "endedMs": 64
+        },
+        {
+          "user": 2,
+          "worker": 1,
+          "waitMs": 45,
+          "startedMs": 66,
+          "runMs": 20.297833000000082,
+          "endedMs": 86
+        },
+        {
+          "user": 3,
+          "worker": 1,
+          "waitMs": 66,
+          "startedMs": 87,
+          "runMs": 20.837625000000116,
+          "endedMs": 108
+        },
+        {
+          "user": 4,
+          "worker": 1,
+          "waitMs": 86,
+          "startedMs": 109,
+          "runMs": 22.05666599999995,
+          "endedMs": 131
+        },
+        {
+          "user": 5,
+          "worker": 1,
+          "waitMs": 109,
+          "startedMs": 133,
+          "runMs": 20.530957999999828,
+          "endedMs": 153
+        },
+        {
+          "user": 6,
+          "worker": 1,
+          "waitMs": 133,
+          "startedMs": 158,
+          "runMs": 21.358750000000327,
+          "endedMs": 179
+        },
+        {
+          "user": 7,
+          "worker": 1,
+          "waitMs": 155,
+          "startedMs": 182,
+          "runMs": 20.255749999999807,
+          "endedMs": 202
+        },
+        {
+          "user": 8,
+          "worker": 1,
+          "waitMs": 178,
+          "startedMs": 204,
+          "runMs": 21.777791999999863,
+          "endedMs": 226
+        },
+        {
+          "user": 9,
+          "worker": 1,
+          "waitMs": 201,
+          "startedMs": 229,
+          "runMs": 22.16958300000033,
+          "endedMs": 251
+        },
+        {
+          "user": 10,
+          "worker": 1,
+          "waitMs": 225,
+          "startedMs": 253,
+          "runMs": 22.605083000000377,
+          "endedMs": 276
+        },
+        {
+          "user": 11,
+          "worker": 1,
+          "waitMs": 248,
+          "startedMs": 278,
+          "runMs": 21.615125000000262,
+          "endedMs": 299
+        },
+        {
+          "user": 12,
+          "worker": 1,
+          "waitMs": 270,
+          "startedMs": 301,
+          "runMs": 21.636708000000453,
+          "endedMs": 322
+        },
+        {
+          "user": 13,
+          "worker": 1,
+          "waitMs": 292,
+          "startedMs": 324,
+          "runMs": 21.93454100000008,
+          "endedMs": 346
+        },
+        {
+          "user": 14,
+          "worker": 1,
+          "waitMs": 316,
+          "startedMs": 348,
+          "runMs": 21.360584000000017,
+          "endedMs": 370
+        },
+        {
+          "user": 15,
+          "worker": 1,
+          "waitMs": 338,
+          "startedMs": 371,
+          "runMs": 21.750958000000082,
+          "endedMs": 393
+        },
+        {
+          "user": 16,
+          "worker": 1,
+          "waitMs": 361,
+          "startedMs": 395,
+          "runMs": 20.5954999999999,
+          "endedMs": 416
+        },
+        {
+          "user": 17,
+          "worker": 1,
+          "waitMs": 384,
+          "startedMs": 420,
+          "runMs": 20.591750000000047,
+          "endedMs": 440
+        },
+        {
+          "user": 18,
+          "worker": 1,
+          "waitMs": 407,
+          "startedMs": 443,
+          "runMs": 19.86183400000027,
+          "endedMs": 463
+        },
+        {
+          "user": 19,
+          "worker": 1,
+          "waitMs": 428,
+          "startedMs": 464,
+          "runMs": 20.067958999999973,
+          "endedMs": 484
+        }
+      ]
+    },
+    {
+      "users": 20,
+      "workers": 2,
+      "workload": "mixed-20-80ms-stub",
+      "effectiveGlobalConcurrency": 1,
+      "maximumActive": 1,
+      "fifo": true,
+      "completed": 20,
+      "queueWaitP50Ms": 386,
+      "queueWaitP95Ms": 710,
+      "runP50Ms": 21.44,
+      "runP95Ms": 81.15,
+      "eventLoopP95Ms": 12.06,
+      "cpuUserMs": 15.211,
+      "cpuSystemMs": 3.434,
+      "processRssBytes": 98811904,
+      "timeline": [
+        {
+          "user": 0,
+          "worker": 1,
+          "waitMs": 2,
+          "startedMs": 10,
+          "runMs": 80.59016700000029,
+          "endedMs": 91
+        },
+        {
+          "user": 1,
+          "worker": 1,
+          "waitMs": 85,
+          "startedMs": 95,
+          "runMs": 20.17837499999996,
+          "endedMs": 115
+        },
+        {
+          "user": 2,
+          "worker": 1,
+          "waitMs": 107,
+          "startedMs": 117,
+          "runMs": 20.886749999999665,
+          "endedMs": 138
+        },
+        {
+          "user": 3,
+          "worker": 1,
+          "waitMs": 131,
+          "startedMs": 141,
+          "runMs": 21.395958000000064,
+          "endedMs": 162
+        },
+        {
+          "user": 4,
+          "worker": 1,
+          "waitMs": 153,
+          "startedMs": 164,
+          "runMs": 81.50883300000032,
+          "endedMs": 246
+        },
+        {
+          "user": 5,
+          "worker": 1,
+          "waitMs": 236,
+          "startedMs": 248,
+          "runMs": 20.820666000000074,
+          "endedMs": 269
+        },
+        {
+          "user": 6,
+          "worker": 1,
+          "waitMs": 259,
+          "startedMs": 270,
+          "runMs": 21.538332999999966,
+          "endedMs": 292
+        },
+        {
+          "user": 7,
+          "worker": 1,
+          "waitMs": 281,
+          "startedMs": 293,
+          "runMs": 21.436125000000175,
+          "endedMs": 315
+        },
+        {
+          "user": 8,
+          "worker": 1,
+          "waitMs": 304,
+          "startedMs": 317,
+          "runMs": 81.15124999999989,
+          "endedMs": 398
+        },
+        {
+          "user": 9,
+          "worker": 1,
+          "waitMs": 386,
+          "startedMs": 399,
+          "runMs": 22.558333000000403,
+          "endedMs": 422
+        },
+        {
+          "user": 10,
+          "worker": 1,
+          "waitMs": 410,
+          "startedMs": 424,
+          "runMs": 21.42937499999971,
+          "endedMs": 445
+        },
+        {
+          "user": 11,
+          "worker": 1,
+          "waitMs": 433,
+          "startedMs": 446,
+          "runMs": 22.51179200000024,
+          "endedMs": 469
+        },
+        {
+          "user": 12,
+          "worker": 1,
+          "waitMs": 456,
+          "startedMs": 471,
+          "runMs": 79.84370799999988,
+          "endedMs": 551
+        },
+        {
+          "user": 13,
+          "worker": 1,
+          "waitMs": 539,
+          "startedMs": 553,
+          "runMs": 20.549041999999645,
+          "endedMs": 573
+        },
+        {
+          "user": 14,
+          "worker": 1,
+          "waitMs": 561,
+          "startedMs": 576,
+          "runMs": 20.393416999999772,
+          "endedMs": 596
+        },
+        {
+          "user": 15,
+          "worker": 1,
+          "waitMs": 583,
+          "startedMs": 599,
+          "runMs": 20.40808399999969,
+          "endedMs": 619
+        },
+        {
+          "user": 16,
+          "worker": 1,
+          "waitMs": 606,
+          "startedMs": 621,
+          "runMs": 80.89512500000001,
+          "endedMs": 702
+        },
+        {
+          "user": 17,
+          "worker": 1,
+          "waitMs": 689,
+          "startedMs": 704,
+          "runMs": 21.278291999999965,
+          "endedMs": 726
+        },
+        {
+          "user": 18,
+          "worker": 1,
+          "waitMs": 710,
+          "startedMs": 727,
+          "runMs": 21.683916999999838,
+          "endedMs": 749
+        },
+        {
+          "user": 19,
+          "worker": 1,
+          "waitMs": 734,
+          "startedMs": 751,
+          "runMs": 21.586166999999932,
+          "endedMs": 772
+        }
+      ]
+    }
+  ]
+}

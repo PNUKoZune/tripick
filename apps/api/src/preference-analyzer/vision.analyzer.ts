@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { InferenceResourceService } from '../inference-resource/inference-resource.service';
+import { shouldPropagateInferenceError } from '../inference-resource/inference-resource.errors';
 import {
   ENVIRONMENT_PREFERENCES as ENVIRONMENT_TAGS,
   FOOD_PREFERENCES as FOOD_TAGS,
@@ -36,7 +38,10 @@ export interface VisionResult {
 export class VisionAnalyzer {
   private readonly logger = new Logger(VisionAnalyzer.name);
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly inference: InferenceResourceService,
+  ) {}
 
   /** 사진 한 장을 분석한다. 여러 장은 호출자(분석 잡)가 순차로 돌린다. */
   async analyzePhoto(imageUrl: string): Promise<VisionResult> {
@@ -55,7 +60,7 @@ export class VisionAnalyzer {
     const timeout = this.readNumber('LLM_VISION_TIMEOUT_MS', 90000);
 
     try {
-      const res = await axios.post<{
+      const res = await this.inference.execute('vision', () => axios.post<{
         choices: Array<{ message: { content: string } }>;
       }>(
         `${baseUrl}/chat/completions`,
@@ -78,13 +83,14 @@ export class VisionAnalyzer {
           temperature: this.readNumber('LLM_VISION_TEMPERATURE', 0.1),
           response_format: { type: 'json_object' },
         },
-        { headers: { Authorization: `Bearer ${apiKey}` }, timeout },
-      );
+        { headers: { Authorization: `Bearer ${apiKey}` }, timeout, maxRedirects: 0 },
+      ));
 
       const content = res.data.choices[0]?.message.content ?? '';
       // 응답은 받았으니 성공 — 태그가 비어도 "이 사진엔 뚜렷한 취향이 없다"는 유효한 결론이다.
       return { tags: this.parseTasteTags(content), ok: true };
     } catch (err) {
+      if (shouldPropagateInferenceError(err)) throw err;
       this.logger.error(
         `Vision 분석 실패: ${err instanceof Error ? err.message : String(err)}`,
       );

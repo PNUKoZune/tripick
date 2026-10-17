@@ -13,7 +13,14 @@ export type TripGenerationStatus =
   | 'retrying'
   | 'completed'
   | 'failed'
+  | 'cancel_requested'
+  | 'cancelled'
+  | 'reconciling'
   | 'unavailable';
+
+export type TripGenerationRequestState =
+  | 'queued' | 'running' | 'cancel_requested' | 'cancelled'
+  | 'reconciling' | 'failed' | 'succeeded';
 
 export type TripGenerationStage =
   | 'queued'
@@ -26,6 +33,9 @@ export type TripGenerationStage =
 /** BullMQ 초기 일정 생성 작업의 실제 상태. 웹은 이 값을 폴링해 진행 화면을 그린다. */
 export interface TripGenerationJobDto {
   tripId: string;
+  generationId?: string;
+  requestState?: TripGenerationRequestState;
+  canCancel?: boolean;
   status: TripGenerationStatus;
   stage: TripGenerationStage;
   /** 워커가 현재 시도에서 보고한 진행률(0~100). 시간 기반 추정치가 아니다. */

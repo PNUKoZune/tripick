@@ -8,7 +8,13 @@ import { ko } from 'react-day-picker/locale';
 import { format } from 'date-fns';
 import { LuChevronDown, LuChevronLeft, LuPlus, LuX } from 'react-icons/lu';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { PlannerMemberDto, ReplanBudget, ReplanPace, ReplanPlaceDto } from '@tripick/types';
+import type {
+  CreateTripRequestDto,
+  PlannerMemberDto,
+  ReplanBudget,
+  ReplanPace,
+  ReplanPlaceDto,
+} from '@tripick/types';
 
 import { fetchFriends } from '@/entities/friend';
 import { SessionGuard } from '@/entities/session';
@@ -16,9 +22,11 @@ import {
   createTrip,
   fetchTripGeneration,
   retryTripGeneration,
+  cancelTripGeneration,
 } from '@/entities/trip-plan';
 import { DestinationSearchInput, DestinationMapPicker } from '@/features/destination-search';
 import { queryKeys } from '@/shared/api/query-keys';
+import { useRetryCountdown } from '@/shared/lib';
 import { Button, PlaceSearchPicker, SegmentToggle, Switch, TimeField } from '@/shared/ui';
 import { AppFrame } from '@/shared/ui/app-frame';
 
@@ -137,12 +145,16 @@ function TripCreateContent({
   const [notes, setNotes] = useState('');
   const navigationStarted = useRef(false);
   const [generationTripId, setGenerationTripId] = useState(initialGenerationTripId ?? '');
+  const createRequest = useRef<{ fingerprint: string; key: string } | null>(null);
+  const retryRequestKey = useRef<string | null>(null);
 
   const NOTES_MAX = 200;
 
   const { mutate, isPending, error } = useMutation({
-    mutationFn: createTrip,
+    mutationFn: ({ body, key }: { body: CreateTripRequestDto; key: string }) =>
+      createTrip(body, key),
     onSuccess: (trip) => {
+      createRequest.current = null;
       setGenerationTripId(trip.id);
       // URL에 잡 식별자를 남겨 생성 중 새로고침해도 같은 큐 상태를 복구한다.
       router.replace(`/trips/new?generationTripId=${encodeURIComponent(trip.id)}`, {
@@ -157,24 +169,38 @@ function TripCreateContent({
     enabled: Boolean(generationTripId),
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      return status === 'completed' || status === 'failed' ? false : 1_000;
+      return status === 'completed' || status === 'failed' || status === 'cancelled'
+        ? false
+        : 1_000;
     },
     retry: 2,
   });
 
   const retryGeneration = useMutation({
-    mutationFn: () => retryTripGeneration(generationTripId),
-    onSuccess: (next) => {
+    mutationFn: () => {
+      retryRequestKey.current ??= crypto.randomUUID();
+      return retryTripGeneration(generationTripId, retryRequestKey.current);
+    },
+    onSuccess: async (next) => {
+      retryRequestKey.current = null;
+      await queryClient.cancelQueries({ queryKey: queryKeys.planner.generation(generationTripId) });
       queryClient.setQueryData(queryKeys.planner.generation(generationTripId), next);
     },
   });
 
+  const cancelGeneration = useMutation({
+    mutationFn: () => cancelTripGeneration(generationTripId),
+    onSuccess: async (next) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.planner.generation(generationTripId) });
+      queryClient.setQueryData(queryKeys.planner.generation(generationTripId), next);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.planner.trips });
+    },
+  });
+  const createRetryAfter = useRetryCountdown(error);
+  const generationRetryAfter = useRetryCountdown(retryGeneration.error);
+
   useEffect(() => {
-    if (
-      !generationTripId ||
-      generation.data?.status !== 'completed' ||
-      navigationStarted.current
-    ) {
+    if (!generationTripId || generation.data?.status !== 'completed' || navigationStarted.current) {
       return;
     }
     navigationStarted.current = true;
@@ -185,6 +211,11 @@ function TripCreateContent({
   }, [generation.data?.status, generationTripId, queryClient, router]);
 
   const showLoading = isPending || Boolean(generationTripId);
+  const createLabel = showLoading
+    ? '생성 중…'
+    : createRetryAfter > 0
+      ? `${createRetryAfter}초 후 다시 요청`
+      : '여행 만들기';
 
   const errorMessage = error instanceof Error ? error.message : null;
 
@@ -264,14 +295,14 @@ function TripCreateContent({
   }
 
   function handleSubmit() {
-    if (!canSubmit || showLoading) return;
+    if (!canSubmit || showLoading || createRetryAfter > 0) return;
     const trimmedNotes = notes.trim();
     const dayRegions = sameRegion ? undefined : dayRegionsList.slice(0, dayCount);
     // 대표 지역: 일자별이면 고유 지역을 합쳐 라벨로(80자 제한), 단일이면 입력값 그대로.
     const representative = sameRegion
       ? destination.trim()
       : [...new Set((dayRegions ?? []).flat())].join(' · ').slice(0, 80) || destination.trim();
-    mutate({
+    const body: CreateTripRequestDto = {
       title: title.trim(),
       destination: representative,
       ...(dayRegions ? { dayRegions } : {}),
@@ -285,7 +316,12 @@ function TripCreateContent({
       ...(transportMode ? { transportMode } : {}),
       ...(mustPlaces.length > 0 ? { mustIncludePlaces: mustPlaces } : {}),
       ...(trimmedNotes ? { notes: trimmedNotes } : {}),
-    });
+    };
+    const fingerprint = JSON.stringify(body);
+    if (createRequest.current?.fingerprint !== fingerprint) {
+      createRequest.current = { fingerprint, key: crypto.randomUUID() };
+    }
+    mutate({ body, key: createRequest.current.key });
   }
 
   const dayDateShort = (index: number) => {
@@ -468,6 +504,7 @@ function TripCreateContent({
           className="mt-6 rounded-[16px] border border-[color:var(--danger-border)] bg-[color:var(--danger-tint)] p-4 text-[14px] text-[color:var(--danger)]"
         >
           {errorMessage}
+          {createRetryAfter > 0 ? ` ${createRetryAfter}초 후 다시 요청할 수 있어요.` : null}
         </div>
       ) : null}
     </div>
@@ -510,10 +547,10 @@ function TripCreateContent({
               <Button
                 size="sm"
                 className="px-5 shadow-[var(--shadow-btn)] disabled:shadow-none"
-                disabled={!canSubmit || showLoading}
+                disabled={!canSubmit || showLoading || createRetryAfter > 0}
                 onClick={handleSubmit}
               >
-                {showLoading ? '생성 중…' : '여행 만들기'}
+                {createLabel}
               </Button>
             </div>
           </div>
@@ -530,10 +567,10 @@ function TripCreateContent({
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={!canSubmit || showLoading}
+              disabled={!canSubmit || showLoading || createRetryAfter > 0}
               className="inline-flex h-14 shrink-0 items-center justify-center rounded-[16px] bg-[color:var(--btn-bg)] px-8 text-[16px] font-semibold text-[color:var(--btn-text)] shadow-[var(--shadow-btn)] transition-colors hover:bg-[color:var(--btn-bg-press)] disabled:cursor-not-allowed disabled:bg-[color:var(--line)] disabled:text-[color:var(--ink-faint)] disabled:shadow-none"
             >
-              {showLoading ? '생성 중…' : '여행 만들기'}
+              {createLabel}
             </button>
           </div>
         </div>
@@ -544,10 +581,10 @@ function TripCreateContent({
             size="lg"
             fullWidth
             className="shadow-[var(--shadow-btn)] disabled:shadow-none"
-            disabled={!canSubmit || showLoading}
+            disabled={!canSubmit || showLoading || createRetryAfter > 0}
             onClick={handleSubmit}
           >
-            {showLoading ? '생성 중…' : '여행 만들기'}
+            {createLabel}
           </Button>
           {ctaHelper ? (
             <p className="mt-2 text-center text-[12.5px] text-[color:var(--ink-faint)]">
@@ -562,10 +599,22 @@ function TripCreateContent({
             loadingStatus={generation.isLoading || isPending}
             connectionError={generation.error instanceof Error ? generation.error.message : null}
             retrying={retryGeneration.isPending}
+            retryAfter={generationRetryAfter}
             retryError={
               retryGeneration.error instanceof Error ? retryGeneration.error.message : null
             }
-            onRetry={() => retryGeneration.mutate()}
+            onRetry={() => {
+              if (generationRetryAfter === 0 && !retryGeneration.isPending)
+                retryGeneration.mutate();
+            }}
+            cancelling={cancelGeneration.isPending}
+            cancelError={
+              cancelGeneration.error instanceof Error ? cancelGeneration.error.message : null
+            }
+            onCancel={() => {
+              if (generation.data?.canCancel && !cancelGeneration.isPending)
+                cancelGeneration.mutate();
+            }}
             onRefresh={() => void generation.refetch()}
           />
         ) : null}
