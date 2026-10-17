@@ -1,0 +1,2799 @@
+{
+  "schemaVersion": "1",
+  "fixtureVersion": "synthetic-frozen-network-v1",
+  "baselineCommit": "7b50fbea052c1539efb82933c79e3c06a420af95",
+  "integrationBaseCommit": "01c71fd3bb77ecb01ae612771d626a2dd2e0b405",
+  "evidence": {
+    "kind": "offline_synthetic",
+    "evaluator": "ConstraintEngine + ScheduleConstraint + fixture-only reflow",
+    "routes": "frozen directed ETA matrix; no live route or model calls",
+    "B": "Extracted proximity ordering within unlocked same-day segments, fixture timeline validated and reflowed with the same evaluator as D; not a full legacy PlannerService replay.",
+    "D": "Same initial visits, same evaluator, same-day bounded swap/insertion local search; no candidate replacement.",
+    "limitations": [
+      "Synthetic frozen cases do not establish live model quality, production latency, real route accuracy, or user preference gains.",
+      "Unknown opening hours are reported separately and never counted as fully confirmed constraints.",
+      "Runtime durations vary; fixture inputs, metrics, and search order are deterministic unless the time budget expires.",
+      "Development and evaluation cases share scenario templates; this is a fixed coverage split, not an independent real-world sample.",
+      "Elapsed times are local harness measurements; financial cost is not measured. Live API and model calls are zero.",
+      "Aggregate travelTimeMin includes invalid schedules when routes are known; valid-only ETA totals and their counts are reported separately.",
+      "Item travelTimeMin is the outgoing leg. Locked metadata stays exactly as captured; aggregate ETA is recomputed from the frozen matrix rather than summed from stored item fields."
+    ]
+  },
+  "modes": {
+    "A": {
+      "status": "not_run",
+      "reason": "No captured pre-refactor full runtime snapshot with the required candidate, route, model and preference evidence."
+    },
+    "B": {
+      "status": "completed"
+    },
+    "C": {
+      "status": "not_run",
+      "reason": "No captured live agent/tool/model execution. Offline search is not evidence of live tool orchestration."
+    },
+    "D": {
+      "status": "completed"
+    }
+  },
+  "budget": {
+    "maxEvaluations": 50,
+    "timeBudgetMs": 2000
+  },
+  "totals": {
+    "B": {
+      "denominator": 30,
+      "completedCount": 30,
+      "failureCount": 0,
+      "validCount": 18,
+      "validRate": 0.6,
+      "fullyConfirmedCount": 15,
+      "fullyConfirmedRate": 0.5,
+      "unknownCaseCount": 6,
+      "lockedItemsPreservedCount": 30,
+      "casesWithLocks": 6,
+      "lockedCasePreservedCount": 6,
+      "metricAvailableCount": 30,
+      "pinMisses": 0,
+      "shortfall": 0,
+      "targetShortfall": 15,
+      "travelTimeMin": 9324,
+      "travelTimeAvailableCount": 27,
+      "travelTimeValidOnlyMin": 4299,
+      "travelTimeValidAvailableCount": 18,
+      "meanPreferenceScore": 0.6833333333333333,
+      "evaluations": 30,
+      "routeCalls": 264,
+      "modelCalls": 0,
+      "durationMs": 13.109250000000202
+    },
+    "D": {
+      "denominator": 30,
+      "completedCount": 30,
+      "failureCount": 0,
+      "validCount": 24,
+      "validRate": 0.8,
+      "fullyConfirmedCount": 21,
+      "fullyConfirmedRate": 0.7,
+      "unknownCaseCount": 6,
+      "lockedItemsPreservedCount": 30,
+      "casesWithLocks": 6,
+      "lockedCasePreservedCount": 6,
+      "metricAvailableCount": 30,
+      "pinMisses": 0,
+      "shortfall": 0,
+      "targetShortfall": 15,
+      "travelTimeMin": 2949,
+      "travelTimeAvailableCount": 27,
+      "travelTimeValidOnlyMin": 2664,
+      "travelTimeValidAvailableCount": 24,
+      "meanPreferenceScore": 0.6833333333333333,
+      "evaluations": 882,
+      "routeCalls": 8964,
+      "modelCalls": 0,
+      "durationMs": 388.80542
+    },
+    "comparison": {
+      "denominator": 30,
+      "completedPairCount": 30,
+      "failedPairCount": 0,
+      "classificationIncomparableCount": 0,
+      "becameValid": 6,
+      "becameInvalid": 0,
+      "remainedInvalid": 6,
+      "bothValid": 18,
+      "matchedTravelPairCount": 18,
+      "travelIncomparableCount": 12,
+      "unknownTravelBothValidCount": 0,
+      "travelImproved": 15,
+      "travelEqual": 3,
+      "travelWorse": 0,
+      "matchedBeforeTravelMin": 4299,
+      "matchedAfterTravelMin": 2094
+    }
+  },
+  "splits": {
+    "development": {
+      "B": {
+        "denominator": 20,
+        "completedCount": 20,
+        "failureCount": 0,
+        "validCount": 12,
+        "validRate": 0.6,
+        "fullyConfirmedCount": 10,
+        "fullyConfirmedRate": 0.5,
+        "unknownCaseCount": 4,
+        "lockedItemsPreservedCount": 20,
+        "casesWithLocks": 4,
+        "lockedCasePreservedCount": 4,
+        "metricAvailableCount": 20,
+        "pinMisses": 0,
+        "shortfall": 0,
+        "targetShortfall": 10,
+        "travelTimeMin": 6123,
+        "travelTimeAvailableCount": 18,
+        "travelTimeValidOnlyMin": 2818,
+        "travelTimeValidAvailableCount": 12,
+        "meanPreferenceScore": 0.6656250000000001,
+        "evaluations": 20,
+        "routeCalls": 176,
+        "modelCalls": 0,
+        "durationMs": 9.700874000000113
+      },
+      "D": {
+        "denominator": 20,
+        "completedCount": 20,
+        "failureCount": 0,
+        "validCount": 16,
+        "validRate": 0.8,
+        "fullyConfirmedCount": 14,
+        "fullyConfirmedRate": 0.7,
+        "unknownCaseCount": 4,
+        "lockedItemsPreservedCount": 20,
+        "casesWithLocks": 4,
+        "lockedCasePreservedCount": 4,
+        "metricAvailableCount": 20,
+        "pinMisses": 0,
+        "shortfall": 0,
+        "targetShortfall": 10,
+        "travelTimeMin": 1888,
+        "travelTimeAvailableCount": 18,
+        "travelTimeValidOnlyMin": 1708,
+        "travelTimeValidAvailableCount": 16,
+        "meanPreferenceScore": 0.6656250000000001,
+        "evaluations": 588,
+        "routeCalls": 5976,
+        "modelCalls": 0,
+        "durationMs": 262.97971000000007
+      },
+      "comparison": {
+        "denominator": 20,
+        "completedPairCount": 20,
+        "failedPairCount": 0,
+        "classificationIncomparableCount": 0,
+        "becameValid": 4,
+        "becameInvalid": 0,
+        "remainedInvalid": 4,
+        "bothValid": 12,
+        "matchedTravelPairCount": 12,
+        "travelIncomparableCount": 8,
+        "unknownTravelBothValidCount": 0,
+        "travelImproved": 10,
+        "travelEqual": 2,
+        "travelWorse": 0,
+        "matchedBeforeTravelMin": 2818,
+        "matchedAfterTravelMin": 1348
+      }
+    },
+    "evaluation": {
+      "B": {
+        "denominator": 10,
+        "completedCount": 10,
+        "failureCount": 0,
+        "validCount": 6,
+        "validRate": 0.6,
+        "fullyConfirmedCount": 5,
+        "fullyConfirmedRate": 0.5,
+        "unknownCaseCount": 2,
+        "lockedItemsPreservedCount": 10,
+        "casesWithLocks": 2,
+        "lockedCasePreservedCount": 2,
+        "metricAvailableCount": 10,
+        "pinMisses": 0,
+        "shortfall": 0,
+        "targetShortfall": 5,
+        "travelTimeMin": 3201,
+        "travelTimeAvailableCount": 9,
+        "travelTimeValidOnlyMin": 1481,
+        "travelTimeValidAvailableCount": 6,
+        "meanPreferenceScore": 0.7187500000000001,
+        "evaluations": 10,
+        "routeCalls": 88,
+        "modelCalls": 0,
+        "durationMs": 3.4083760000000893
+      },
+      "D": {
+        "denominator": 10,
+        "completedCount": 10,
+        "failureCount": 0,
+        "validCount": 8,
+        "validRate": 0.8,
+        "fullyConfirmedCount": 7,
+        "fullyConfirmedRate": 0.7,
+        "unknownCaseCount": 2,
+        "lockedItemsPreservedCount": 10,
+        "casesWithLocks": 2,
+        "lockedCasePreservedCount": 2,
+        "metricAvailableCount": 10,
+        "pinMisses": 0,
+        "shortfall": 0,
+        "targetShortfall": 5,
+        "travelTimeMin": 1061,
+        "travelTimeAvailableCount": 9,
+        "travelTimeValidOnlyMin": 956,
+        "travelTimeValidAvailableCount": 8,
+        "meanPreferenceScore": 0.7187500000000001,
+        "evaluations": 294,
+        "routeCalls": 2988,
+        "modelCalls": 0,
+        "durationMs": 125.82570999999996
+      },
+      "comparison": {
+        "denominator": 10,
+        "completedPairCount": 10,
+        "failedPairCount": 0,
+        "classificationIncomparableCount": 0,
+        "becameValid": 2,
+        "becameInvalid": 0,
+        "remainedInvalid": 2,
+        "bothValid": 6,
+        "matchedTravelPairCount": 6,
+        "travelIncomparableCount": 4,
+        "unknownTravelBothValidCount": 0,
+        "travelImproved": 5,
+        "travelEqual": 1,
+        "travelWorse": 0,
+        "matchedBeforeTravelMin": 1481,
+        "matchedAfterTravelMin": 746
+      }
+    }
+  },
+  "durationMs": 403.9133750000001,
+  "cases": [
+    {
+      "id": "development-short-1",
+      "split": "development",
+      "scenario": "short",
+      "fixtureSha256": "fbcb68ac1ba1dbbf19fea37722963e398df9c9f471fd5cdf8cd720626f45de15",
+      "snapshotId": "snapshot-development-short-1",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "development-short-1-item-0",
+        "development-short-1-item-1",
+        "development-short-1-item-2"
+      ],
+      "baselineOrderIds": [
+        "development-short-1-item-0",
+        "development-short-1-item-1",
+        "development-short-1-item-2"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 115,
+          "preferenceScore": 0.6
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 4,
+        "modelCalls": 0,
+        "durationMs": 1.8253330000000005,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-short-1-item-0",
+          "development-short-1-item-1",
+          "development-short-1-item-2"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 65,
+          "preferenceScore": 0.6
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 6,
+        "routeCalls": 24,
+        "modelCalls": 0,
+        "durationMs": 2.6532499999999573,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "development-short-1-item-1",
+          "development-short-1-item-2",
+          "development-short-1-item-0"
+        ]
+      }
+    },
+    {
+      "id": "development-multi-day-1",
+      "split": "development",
+      "scenario": "multi-day",
+      "fixtureSha256": "fcdcce988f8cedee734dacfbf878c8b1aab3de817712abd7b0bffa46bb47afad",
+      "snapshotId": "snapshot-development-multi-day-1",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "development-multi-day-1-item-0",
+        "development-multi-day-1-item-1",
+        "development-multi-day-1-item-2",
+        "development-multi-day-1-item-3",
+        "development-multi-day-1-item-4",
+        "development-multi-day-1-item-5",
+        "development-multi-day-1-item-6",
+        "development-multi-day-1-item-7"
+      ],
+      "baselineOrderIds": [
+        "development-multi-day-1-item-0",
+        "development-multi-day-1-item-1",
+        "development-multi-day-1-item-2",
+        "development-multi-day-1-item-3",
+        "development-multi-day-1-item-4",
+        "development-multi-day-1-item-5",
+        "development-multi-day-1-item-6",
+        "development-multi-day-1-item-7"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 2,
+          "travelTimeMin": 340,
+          "preferenceScore": 0.6625
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 12,
+        "modelCalls": 0,
+        "durationMs": 0.49233299999991686,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-multi-day-1-item-0",
+          "development-multi-day-1-item-1",
+          "development-multi-day-1-item-2",
+          "development-multi-day-1-item-3",
+          "development-multi-day-1-item-4",
+          "development-multi-day-1-item-5",
+          "development-multi-day-1-item-6",
+          "development-multi-day-1-item-7"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 2,
+          "travelTimeMin": 160,
+          "preferenceScore": 0.6625
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 50,
+        "routeCalls": 600,
+        "modelCalls": 0,
+        "durationMs": 29.45120899999995,
+        "terminationReason": "EVALUATION_LIMIT",
+        "outputOrderIds": [
+          "development-multi-day-1-item-0",
+          "development-multi-day-1-item-2",
+          "development-multi-day-1-item-1",
+          "development-multi-day-1-item-3",
+          "development-multi-day-1-item-4",
+          "development-multi-day-1-item-6",
+          "development-multi-day-1-item-5",
+          "development-multi-day-1-item-7"
+        ]
+      }
+    },
+    {
+      "id": "development-overnight-1",
+      "split": "development",
+      "scenario": "overnight",
+      "fixtureSha256": "f46b2ebed7fb16485de91e1f4728beac0ad40216033e2ca15f8cf68f76b709cc",
+      "snapshotId": "snapshot-development-overnight-1",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "development-overnight-1-item-0",
+        "development-overnight-1-item-1",
+        "development-overnight-1-item-2",
+        "development-overnight-1-item-3",
+        "development-overnight-1-item-4",
+        "development-overnight-1-item-5"
+      ],
+      "baselineOrderIds": [
+        "development-overnight-1-item-0",
+        "development-overnight-1-item-1",
+        "development-overnight-1-item-2",
+        "development-overnight-1-item-3",
+        "development-overnight-1-item-4",
+        "development-overnight-1-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 290,
+          "preferenceScore": 0.6666666666666666
+        },
+        "violations": [
+          "INSUFFICIENT_TRAVEL_TIME"
+        ],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.6140420000000404,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-overnight-1-item-0",
+          "development-overnight-1-item-1",
+          "development-overnight-1-item-2",
+          "development-overnight-1-item-3",
+          "development-overnight-1-item-4",
+          "development-overnight-1-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 85,
+          "preferenceScore": 0.6666666666666666
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 44,
+        "routeCalls": 440,
+        "modelCalls": 0,
+        "durationMs": 20.245625000000018,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "development-overnight-1-item-1",
+          "development-overnight-1-item-4",
+          "development-overnight-1-item-2",
+          "development-overnight-1-item-0",
+          "development-overnight-1-item-3",
+          "development-overnight-1-item-5"
+        ]
+      }
+    },
+    {
+      "id": "development-scattered-1",
+      "split": "development",
+      "scenario": "scattered",
+      "fixtureSha256": "5827ff6b3f31585983626ec1ebc79fc60a4dba4012d9b7ad8f59b2e0f4cde101",
+      "snapshotId": "snapshot-development-scattered-1",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "development-scattered-1-item-0",
+        "development-scattered-1-item-1",
+        "development-scattered-1-item-2",
+        "development-scattered-1-item-3",
+        "development-scattered-1-item-4",
+        "development-scattered-1-item-5"
+      ],
+      "baselineOrderIds": [
+        "development-scattered-1-item-0",
+        "development-scattered-1-item-1",
+        "development-scattered-1-item-2",
+        "development-scattered-1-item-3",
+        "development-scattered-1-item-4",
+        "development-scattered-1-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 1050,
+          "preferenceScore": 0.6666666666666666
+        },
+        "violations": [
+          "DAY_WINDOW",
+          "EXCESSIVE_TRAVEL_TIME",
+          "EXCESSIVE_TRAVEL_TIME",
+          "EXCESSIVE_TRAVEL_TIME",
+          "INSUFFICIENT_TRAVEL_TIME",
+          "EXCESSIVE_TRAVEL_TIME",
+          "EXCESSIVE_TRAVEL_TIME"
+        ],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.6206250000000182,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-scattered-1-item-0",
+          "development-scattered-1-item-1",
+          "development-scattered-1-item-2",
+          "development-scattered-1-item-3",
+          "development-scattered-1-item-4",
+          "development-scattered-1-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 85,
+          "preferenceScore": 0.6666666666666666
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 44,
+        "routeCalls": 440,
+        "modelCalls": 0,
+        "durationMs": 18.288999999999987,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "development-scattered-1-item-1",
+          "development-scattered-1-item-4",
+          "development-scattered-1-item-2",
+          "development-scattered-1-item-0",
+          "development-scattered-1-item-3",
+          "development-scattered-1-item-5"
+        ]
+      }
+    },
+    {
+      "id": "development-few-candidates-1",
+      "split": "development",
+      "scenario": "few-candidates",
+      "fixtureSha256": "62ebb413bebf7378aeec2032fbe590164d91845a2130f9cf6a4db23a6791953c",
+      "snapshotId": "snapshot-development-few-candidates-1",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "development-few-candidates-1-item-0",
+        "development-few-candidates-1-item-1"
+      ],
+      "baselineOrderIds": [
+        "development-few-candidates-1-item-0",
+        "development-few-candidates-1-item-1"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 3,
+          "travelTimeMin": 60,
+          "preferenceScore": 0.55
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 2,
+        "modelCalls": 0,
+        "durationMs": 0.18041600000003655,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-few-candidates-1-item-0",
+          "development-few-candidates-1-item-1"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 3,
+          "travelTimeMin": 60,
+          "preferenceScore": 0.55
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 2,
+        "routeCalls": 4,
+        "modelCalls": 0,
+        "durationMs": 0.36474999999995816,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "development-few-candidates-1-item-0",
+          "development-few-candidates-1-item-1"
+        ]
+      }
+    },
+    {
+      "id": "development-locked-1",
+      "split": "development",
+      "scenario": "locked",
+      "fixtureSha256": "7eb481a1a7dea1e03a3d21e803d48ee41bc18ba2c5903cd39f0a9a1925365c8e",
+      "snapshotId": "snapshot-development-locked-1",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": true,
+      "inputOrderIds": [
+        "development-locked-1-item-0",
+        "development-locked-1-item-1",
+        "development-locked-1-item-2",
+        "development-locked-1-item-3",
+        "development-locked-1-item-4",
+        "development-locked-1-item-5"
+      ],
+      "baselineOrderIds": [
+        "development-locked-1-item-0",
+        "development-locked-1-item-1",
+        "development-locked-1-item-2",
+        "development-locked-1-item-3",
+        "development-locked-1-item-4",
+        "development-locked-1-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 290,
+          "preferenceScore": 0.6666666666666666
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.40800000000001546,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-locked-1-item-0",
+          "development-locked-1-item-1",
+          "development-locked-1-item-2",
+          "development-locked-1-item-3",
+          "development-locked-1-item-4",
+          "development-locked-1-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 145,
+          "preferenceScore": 0.6666666666666666
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 8,
+        "routeCalls": 80,
+        "modelCalls": 0,
+        "durationMs": 3.122708999999986,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "development-locked-1-item-1",
+          "development-locked-1-item-0",
+          "development-locked-1-item-2",
+          "development-locked-1-item-4",
+          "development-locked-1-item-3",
+          "development-locked-1-item-5"
+        ]
+      }
+    },
+    {
+      "id": "development-past-1",
+      "split": "development",
+      "scenario": "past",
+      "fixtureSha256": "4d4a7f7f8902c2d4ec4e46fda0dd2e895ac729c546a8a3398d5a1389331d4d4f",
+      "snapshotId": "snapshot-development-past-1",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": true,
+      "inputOrderIds": [
+        "development-past-1-item-0",
+        "development-past-1-item-1",
+        "development-past-1-item-2",
+        "development-past-1-item-3",
+        "development-past-1-item-4",
+        "development-past-1-item-5"
+      ],
+      "baselineOrderIds": [
+        "development-past-1-item-0",
+        "development-past-1-item-1",
+        "development-past-1-item-2",
+        "development-past-1-item-3",
+        "development-past-1-item-4",
+        "development-past-1-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 290,
+          "preferenceScore": 0.6666666666666666
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.46258399999999256,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-past-1-item-0",
+          "development-past-1-item-1",
+          "development-past-1-item-2",
+          "development-past-1-item-3",
+          "development-past-1-item-4",
+          "development-past-1-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 135,
+          "preferenceScore": 0.6666666666666669
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 16,
+        "routeCalls": 160,
+        "modelCalls": 0,
+        "durationMs": 6.669667000000004,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "development-past-1-item-0",
+          "development-past-1-item-1",
+          "development-past-1-item-3",
+          "development-past-1-item-5",
+          "development-past-1-item-2",
+          "development-past-1-item-4"
+        ]
+      }
+    },
+    {
+      "id": "development-opening-unknown-1",
+      "split": "development",
+      "scenario": "opening-unknown",
+      "fixtureSha256": "5fa2f16a5280e977111817113e595b30ffe2f87e6976814f59eec5d9b49b6ebe",
+      "snapshotId": "snapshot-development-opening-unknown-1",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "development-opening-unknown-1-item-0",
+        "development-opening-unknown-1-item-1",
+        "development-opening-unknown-1-item-2",
+        "development-opening-unknown-1-item-3",
+        "development-opening-unknown-1-item-4",
+        "development-opening-unknown-1-item-5"
+      ],
+      "baselineOrderIds": [
+        "development-opening-unknown-1-item-0",
+        "development-opening-unknown-1-item-1",
+        "development-opening-unknown-1-item-2",
+        "development-opening-unknown-1-item-3",
+        "development-opening-unknown-1-item-4",
+        "development-opening-unknown-1-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 290,
+          "preferenceScore": 0.6666666666666666
+        },
+        "violations": [],
+        "unknownConstraints": [
+          "OPENING_HOURS_MISSING",
+          "OPENING_HOURS_UNPARSEABLE"
+        ],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.47524999999996,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-opening-unknown-1-item-0",
+          "development-opening-unknown-1-item-1",
+          "development-opening-unknown-1-item-2",
+          "development-opening-unknown-1-item-3",
+          "development-opening-unknown-1-item-4",
+          "development-opening-unknown-1-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 85,
+          "preferenceScore": 0.6666666666666666
+        },
+        "violations": [],
+        "unknownConstraints": [
+          "OPENING_HOURS_MISSING",
+          "OPENING_HOURS_UNPARSEABLE"
+        ],
+        "evaluations": 44,
+        "routeCalls": 440,
+        "modelCalls": 0,
+        "durationMs": 20.652000000000044,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "development-opening-unknown-1-item-1",
+          "development-opening-unknown-1-item-4",
+          "development-opening-unknown-1-item-2",
+          "development-opening-unknown-1-item-0",
+          "development-opening-unknown-1-item-3",
+          "development-opening-unknown-1-item-5"
+        ]
+      }
+    },
+    {
+      "id": "development-opening-closed-1",
+      "split": "development",
+      "scenario": "opening-closed",
+      "fixtureSha256": "94bac6eeaac141db70ead1daa61bd2b323be995152ef1c816b2cdc63eed8b207",
+      "snapshotId": "snapshot-development-opening-closed-1",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "development-opening-closed-1-item-0",
+        "development-opening-closed-1-item-1",
+        "development-opening-closed-1-item-2",
+        "development-opening-closed-1-item-3",
+        "development-opening-closed-1-item-4",
+        "development-opening-closed-1-item-5"
+      ],
+      "baselineOrderIds": [
+        "development-opening-closed-1-item-0",
+        "development-opening-closed-1-item-1",
+        "development-opening-closed-1-item-2",
+        "development-opening-closed-1-item-3",
+        "development-opening-closed-1-item-4",
+        "development-opening-closed-1-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 290,
+          "preferenceScore": 0.6666666666666666
+        },
+        "violations": [
+          "OPENING_HOURS"
+        ],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.4583750000000464,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-opening-closed-1-item-0",
+          "development-opening-closed-1-item-1",
+          "development-opening-closed-1-item-2",
+          "development-opening-closed-1-item-3",
+          "development-opening-closed-1-item-4",
+          "development-opening-closed-1-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 85,
+          "preferenceScore": 0.6666666666666666
+        },
+        "violations": [
+          "OPENING_HOURS"
+        ],
+        "unknownConstraints": [],
+        "evaluations": 44,
+        "routeCalls": 440,
+        "modelCalls": 0,
+        "durationMs": 17.769792000000052,
+        "terminationReason": "NO_VALID_CANDIDATE",
+        "outputOrderIds": [
+          "development-opening-closed-1-item-1",
+          "development-opening-closed-1-item-4",
+          "development-opening-closed-1-item-2",
+          "development-opening-closed-1-item-0",
+          "development-opening-closed-1-item-3",
+          "development-opening-closed-1-item-5"
+        ]
+      }
+    },
+    {
+      "id": "development-route-failure-1",
+      "split": "development",
+      "scenario": "route-failure",
+      "fixtureSha256": "830a98d4c03f90c922e9f4f1538a171cf775277fce93f5cd47320ae7d1cce6b6",
+      "snapshotId": "snapshot-development-route-failure-1",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "development-route-failure-1-item-0",
+        "development-route-failure-1-item-1",
+        "development-route-failure-1-item-2",
+        "development-route-failure-1-item-3",
+        "development-route-failure-1-item-4",
+        "development-route-failure-1-item-5"
+      ],
+      "baselineOrderIds": [
+        "development-route-failure-1-item-0",
+        "development-route-failure-1-item-1",
+        "development-route-failure-1-item-2",
+        "development-route-failure-1-item-3",
+        "development-route-failure-1-item-4",
+        "development-route-failure-1-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": null,
+          "preferenceScore": 0.6666666666666666
+        },
+        "violations": [
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE"
+        ],
+        "unknownConstraints": [
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE"
+        ],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.5593750000000455,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-route-failure-1-item-0",
+          "development-route-failure-1-item-1",
+          "development-route-failure-1-item-2",
+          "development-route-failure-1-item-3",
+          "development-route-failure-1-item-4",
+          "development-route-failure-1-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": null,
+          "preferenceScore": 0.6666666666666666
+        },
+        "violations": [
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE"
+        ],
+        "unknownConstraints": [
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE"
+        ],
+        "evaluations": 36,
+        "routeCalls": 360,
+        "modelCalls": 0,
+        "durationMs": 15.492999999999938,
+        "terminationReason": "NO_VALID_CANDIDATE",
+        "outputOrderIds": [
+          "development-route-failure-1-item-0",
+          "development-route-failure-1-item-1",
+          "development-route-failure-1-item-2",
+          "development-route-failure-1-item-3",
+          "development-route-failure-1-item-4",
+          "development-route-failure-1-item-5"
+        ]
+      }
+    },
+    {
+      "id": "development-short-2",
+      "split": "development",
+      "scenario": "short",
+      "fixtureSha256": "4178a5bb89d0f5fb008ce96c5c74ae23991caf59f68dacaf529930f7b19a0b7d",
+      "snapshotId": "snapshot-development-short-2",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "development-short-2-item-0",
+        "development-short-2-item-1",
+        "development-short-2-item-2"
+      ],
+      "baselineOrderIds": [
+        "development-short-2-item-0",
+        "development-short-2-item-1",
+        "development-short-2-item-2"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 119,
+          "preferenceScore": 0.6999999999999998
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 4,
+        "modelCalls": 0,
+        "durationMs": 0.20783300000005056,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-short-2-item-0",
+          "development-short-2-item-1",
+          "development-short-2-item-2"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 69,
+          "preferenceScore": 0.7000000000000001
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 6,
+        "routeCalls": 24,
+        "modelCalls": 0,
+        "durationMs": 1.2057080000000724,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "development-short-2-item-1",
+          "development-short-2-item-2",
+          "development-short-2-item-0"
+        ]
+      }
+    },
+    {
+      "id": "development-multi-day-2",
+      "split": "development",
+      "scenario": "multi-day",
+      "fixtureSha256": "1f7ff046f9e3b30cec8681e009726a79815896eb5d3f00dfaa5b41158943ead7",
+      "snapshotId": "snapshot-development-multi-day-2",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "development-multi-day-2-item-0",
+        "development-multi-day-2-item-1",
+        "development-multi-day-2-item-2",
+        "development-multi-day-2-item-3",
+        "development-multi-day-2-item-4",
+        "development-multi-day-2-item-5",
+        "development-multi-day-2-item-6",
+        "development-multi-day-2-item-7"
+      ],
+      "baselineOrderIds": [
+        "development-multi-day-2-item-0",
+        "development-multi-day-2-item-1",
+        "development-multi-day-2-item-2",
+        "development-multi-day-2-item-3",
+        "development-multi-day-2-item-4",
+        "development-multi-day-2-item-5",
+        "development-multi-day-2-item-6",
+        "development-multi-day-2-item-7"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 2,
+          "travelTimeMin": 352,
+          "preferenceScore": 0.7
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 12,
+        "modelCalls": 0,
+        "durationMs": 0.5023340000000189,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-multi-day-2-item-0",
+          "development-multi-day-2-item-1",
+          "development-multi-day-2-item-2",
+          "development-multi-day-2-item-3",
+          "development-multi-day-2-item-4",
+          "development-multi-day-2-item-5",
+          "development-multi-day-2-item-6",
+          "development-multi-day-2-item-7"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 2,
+          "travelTimeMin": 172,
+          "preferenceScore": 0.6999999999999998
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 50,
+        "routeCalls": 600,
+        "modelCalls": 0,
+        "durationMs": 33.547166999999945,
+        "terminationReason": "EVALUATION_LIMIT",
+        "outputOrderIds": [
+          "development-multi-day-2-item-0",
+          "development-multi-day-2-item-2",
+          "development-multi-day-2-item-1",
+          "development-multi-day-2-item-3",
+          "development-multi-day-2-item-4",
+          "development-multi-day-2-item-6",
+          "development-multi-day-2-item-5",
+          "development-multi-day-2-item-7"
+        ]
+      }
+    },
+    {
+      "id": "development-overnight-2",
+      "split": "development",
+      "scenario": "overnight",
+      "fixtureSha256": "e55438c52be8bd8821b968248daa3191383d1a70a49bc5987a3bd9bad3a0ed5e",
+      "snapshotId": "snapshot-development-overnight-2",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "development-overnight-2-item-0",
+        "development-overnight-2-item-1",
+        "development-overnight-2-item-2",
+        "development-overnight-2-item-3",
+        "development-overnight-2-item-4",
+        "development-overnight-2-item-5"
+      ],
+      "baselineOrderIds": [
+        "development-overnight-2-item-0",
+        "development-overnight-2-item-1",
+        "development-overnight-2-item-2",
+        "development-overnight-2-item-3",
+        "development-overnight-2-item-4",
+        "development-overnight-2-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 300,
+          "preferenceScore": 0.6833333333333332
+        },
+        "violations": [
+          "INSUFFICIENT_TRAVEL_TIME",
+          "INSUFFICIENT_TRAVEL_TIME"
+        ],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.42999999999995,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-overnight-2-item-0",
+          "development-overnight-2-item-1",
+          "development-overnight-2-item-2",
+          "development-overnight-2-item-3",
+          "development-overnight-2-item-4",
+          "development-overnight-2-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 95,
+          "preferenceScore": 0.6833333333333332
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 44,
+        "routeCalls": 440,
+        "modelCalls": 0,
+        "durationMs": 16.981583,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "development-overnight-2-item-1",
+          "development-overnight-2-item-4",
+          "development-overnight-2-item-2",
+          "development-overnight-2-item-0",
+          "development-overnight-2-item-3",
+          "development-overnight-2-item-5"
+        ]
+      }
+    },
+    {
+      "id": "development-scattered-2",
+      "split": "development",
+      "scenario": "scattered",
+      "fixtureSha256": "cf658c6b13c8a1c8f41bce08105b0ce5f84b539e991f507ecb9e15f56b7c185c",
+      "snapshotId": "snapshot-development-scattered-2",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "development-scattered-2-item-0",
+        "development-scattered-2-item-1",
+        "development-scattered-2-item-2",
+        "development-scattered-2-item-3",
+        "development-scattered-2-item-4",
+        "development-scattered-2-item-5"
+      ],
+      "baselineOrderIds": [
+        "development-scattered-2-item-0",
+        "development-scattered-2-item-1",
+        "development-scattered-2-item-2",
+        "development-scattered-2-item-3",
+        "development-scattered-2-item-4",
+        "development-scattered-2-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 1075,
+          "preferenceScore": 0.6833333333333332
+        },
+        "violations": [
+          "DAY_WINDOW",
+          "EXCESSIVE_TRAVEL_TIME",
+          "EXCESSIVE_TRAVEL_TIME",
+          "INSUFFICIENT_TRAVEL_TIME",
+          "EXCESSIVE_TRAVEL_TIME",
+          "INSUFFICIENT_TRAVEL_TIME",
+          "EXCESSIVE_TRAVEL_TIME",
+          "EXCESSIVE_TRAVEL_TIME"
+        ],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.475208000000066,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-scattered-2-item-0",
+          "development-scattered-2-item-1",
+          "development-scattered-2-item-2",
+          "development-scattered-2-item-3",
+          "development-scattered-2-item-4",
+          "development-scattered-2-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 95,
+          "preferenceScore": 0.6833333333333332
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 44,
+        "routeCalls": 440,
+        "modelCalls": 0,
+        "durationMs": 17.276707999999985,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "development-scattered-2-item-1",
+          "development-scattered-2-item-4",
+          "development-scattered-2-item-2",
+          "development-scattered-2-item-0",
+          "development-scattered-2-item-3",
+          "development-scattered-2-item-5"
+        ]
+      }
+    },
+    {
+      "id": "development-few-candidates-2",
+      "split": "development",
+      "scenario": "few-candidates",
+      "fixtureSha256": "8f5f75c8ee3cc6c3737dcc52d52f53dce7c13cb79d5c0c19ea44524b99ed2be7",
+      "snapshotId": "snapshot-development-few-candidates-2",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "development-few-candidates-2-item-0",
+        "development-few-candidates-2-item-1"
+      ],
+      "baselineOrderIds": [
+        "development-few-candidates-2-item-0",
+        "development-few-candidates-2-item-1"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 3,
+          "travelTimeMin": 62,
+          "preferenceScore": 0.6499999999999999
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 2,
+        "modelCalls": 0,
+        "durationMs": 0.13808299999993778,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-few-candidates-2-item-0",
+          "development-few-candidates-2-item-1"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 3,
+          "travelTimeMin": 62,
+          "preferenceScore": 0.6499999999999999
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 2,
+        "routeCalls": 4,
+        "modelCalls": 0,
+        "durationMs": 0.32662500000003547,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "development-few-candidates-2-item-0",
+          "development-few-candidates-2-item-1"
+        ]
+      }
+    },
+    {
+      "id": "development-locked-2",
+      "split": "development",
+      "scenario": "locked",
+      "fixtureSha256": "76c7e202f987f17c5fc82fe683475e002dee239bfdd318482223c76a90cd5a0a",
+      "snapshotId": "snapshot-development-locked-2",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": true,
+      "inputOrderIds": [
+        "development-locked-2-item-0",
+        "development-locked-2-item-1",
+        "development-locked-2-item-2",
+        "development-locked-2-item-3",
+        "development-locked-2-item-4",
+        "development-locked-2-item-5"
+      ],
+      "baselineOrderIds": [
+        "development-locked-2-item-0",
+        "development-locked-2-item-1",
+        "development-locked-2-item-2",
+        "development-locked-2-item-3",
+        "development-locked-2-item-4",
+        "development-locked-2-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 300,
+          "preferenceScore": 0.6833333333333332
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.3554159999999911,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-locked-2-item-0",
+          "development-locked-2-item-1",
+          "development-locked-2-item-2",
+          "development-locked-2-item-3",
+          "development-locked-2-item-4",
+          "development-locked-2-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 155,
+          "preferenceScore": 0.6833333333333332
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 8,
+        "routeCalls": 80,
+        "modelCalls": 0,
+        "durationMs": 3.1683750000000828,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "development-locked-2-item-1",
+          "development-locked-2-item-0",
+          "development-locked-2-item-2",
+          "development-locked-2-item-4",
+          "development-locked-2-item-3",
+          "development-locked-2-item-5"
+        ]
+      }
+    },
+    {
+      "id": "development-past-2",
+      "split": "development",
+      "scenario": "past",
+      "fixtureSha256": "17051ba9e8ec334de1bd4ee72d618879fb96fc1ea93383406a3bcb9afc848ddf",
+      "snapshotId": "snapshot-development-past-2",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": true,
+      "inputOrderIds": [
+        "development-past-2-item-0",
+        "development-past-2-item-1",
+        "development-past-2-item-2",
+        "development-past-2-item-3",
+        "development-past-2-item-4",
+        "development-past-2-item-5"
+      ],
+      "baselineOrderIds": [
+        "development-past-2-item-0",
+        "development-past-2-item-1",
+        "development-past-2-item-2",
+        "development-past-2-item-3",
+        "development-past-2-item-4",
+        "development-past-2-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 300,
+          "preferenceScore": 0.6833333333333332
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.3963329999999132,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-past-2-item-0",
+          "development-past-2-item-1",
+          "development-past-2-item-2",
+          "development-past-2-item-3",
+          "development-past-2-item-4",
+          "development-past-2-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 145,
+          "preferenceScore": 0.6833333333333332
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 16,
+        "routeCalls": 160,
+        "modelCalls": 0,
+        "durationMs": 11.504625000000033,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "development-past-2-item-0",
+          "development-past-2-item-1",
+          "development-past-2-item-3",
+          "development-past-2-item-5",
+          "development-past-2-item-2",
+          "development-past-2-item-4"
+        ]
+      }
+    },
+    {
+      "id": "development-opening-unknown-2",
+      "split": "development",
+      "scenario": "opening-unknown",
+      "fixtureSha256": "2ed06734ca5162fe090deddc964ec3de21ba500e86b40f22827facc1d629dfd2",
+      "snapshotId": "snapshot-development-opening-unknown-2",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "development-opening-unknown-2-item-0",
+        "development-opening-unknown-2-item-1",
+        "development-opening-unknown-2-item-2",
+        "development-opening-unknown-2-item-3",
+        "development-opening-unknown-2-item-4",
+        "development-opening-unknown-2-item-5"
+      ],
+      "baselineOrderIds": [
+        "development-opening-unknown-2-item-0",
+        "development-opening-unknown-2-item-1",
+        "development-opening-unknown-2-item-2",
+        "development-opening-unknown-2-item-3",
+        "development-opening-unknown-2-item-4",
+        "development-opening-unknown-2-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 300,
+          "preferenceScore": 0.6833333333333332
+        },
+        "violations": [],
+        "unknownConstraints": [
+          "OPENING_HOURS_MISSING",
+          "OPENING_HOURS_UNPARSEABLE"
+        ],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.3098340000000235,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-opening-unknown-2-item-0",
+          "development-opening-unknown-2-item-1",
+          "development-opening-unknown-2-item-2",
+          "development-opening-unknown-2-item-3",
+          "development-opening-unknown-2-item-4",
+          "development-opening-unknown-2-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 95,
+          "preferenceScore": 0.6833333333333332
+        },
+        "violations": [],
+        "unknownConstraints": [
+          "OPENING_HOURS_MISSING",
+          "OPENING_HOURS_UNPARSEABLE"
+        ],
+        "evaluations": 44,
+        "routeCalls": 440,
+        "modelCalls": 0,
+        "durationMs": 14.136334000000033,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "development-opening-unknown-2-item-1",
+          "development-opening-unknown-2-item-4",
+          "development-opening-unknown-2-item-2",
+          "development-opening-unknown-2-item-0",
+          "development-opening-unknown-2-item-3",
+          "development-opening-unknown-2-item-5"
+        ]
+      }
+    },
+    {
+      "id": "development-opening-closed-2",
+      "split": "development",
+      "scenario": "opening-closed",
+      "fixtureSha256": "0fbbb285193a963289bb2f38b46c1aa531614d5bcb016fd1409f0ed684e48aef",
+      "snapshotId": "snapshot-development-opening-closed-2",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "development-opening-closed-2-item-0",
+        "development-opening-closed-2-item-1",
+        "development-opening-closed-2-item-2",
+        "development-opening-closed-2-item-3",
+        "development-opening-closed-2-item-4",
+        "development-opening-closed-2-item-5"
+      ],
+      "baselineOrderIds": [
+        "development-opening-closed-2-item-0",
+        "development-opening-closed-2-item-1",
+        "development-opening-closed-2-item-2",
+        "development-opening-closed-2-item-3",
+        "development-opening-closed-2-item-4",
+        "development-opening-closed-2-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 300,
+          "preferenceScore": 0.6833333333333332
+        },
+        "violations": [
+          "OPENING_HOURS"
+        ],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.35200000000008913,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-opening-closed-2-item-0",
+          "development-opening-closed-2-item-1",
+          "development-opening-closed-2-item-2",
+          "development-opening-closed-2-item-3",
+          "development-opening-closed-2-item-4",
+          "development-opening-closed-2-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 95,
+          "preferenceScore": 0.6833333333333332
+        },
+        "violations": [
+          "OPENING_HOURS"
+        ],
+        "unknownConstraints": [],
+        "evaluations": 44,
+        "routeCalls": 440,
+        "modelCalls": 0,
+        "durationMs": 16.3142499999999,
+        "terminationReason": "NO_VALID_CANDIDATE",
+        "outputOrderIds": [
+          "development-opening-closed-2-item-1",
+          "development-opening-closed-2-item-4",
+          "development-opening-closed-2-item-2",
+          "development-opening-closed-2-item-0",
+          "development-opening-closed-2-item-3",
+          "development-opening-closed-2-item-5"
+        ]
+      }
+    },
+    {
+      "id": "development-route-failure-2",
+      "split": "development",
+      "scenario": "route-failure",
+      "fixtureSha256": "e7250a70aa667a3fd90c75c8eedc129edc7177f02ccde6b68c40e61300b8e50f",
+      "snapshotId": "snapshot-development-route-failure-2",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "development-route-failure-2-item-0",
+        "development-route-failure-2-item-1",
+        "development-route-failure-2-item-2",
+        "development-route-failure-2-item-3",
+        "development-route-failure-2-item-4",
+        "development-route-failure-2-item-5"
+      ],
+      "baselineOrderIds": [
+        "development-route-failure-2-item-0",
+        "development-route-failure-2-item-1",
+        "development-route-failure-2-item-2",
+        "development-route-failure-2-item-3",
+        "development-route-failure-2-item-4",
+        "development-route-failure-2-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": null,
+          "preferenceScore": 0.6833333333333332
+        },
+        "violations": [
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE"
+        ],
+        "unknownConstraints": [
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE"
+        ],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.4375,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "development-route-failure-2-item-0",
+          "development-route-failure-2-item-1",
+          "development-route-failure-2-item-2",
+          "development-route-failure-2-item-3",
+          "development-route-failure-2-item-4",
+          "development-route-failure-2-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": null,
+          "preferenceScore": 0.6833333333333332
+        },
+        "violations": [
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE"
+        ],
+        "unknownConstraints": [
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE"
+        ],
+        "evaluations": 36,
+        "routeCalls": 360,
+        "modelCalls": 0,
+        "durationMs": 13.807333000000085,
+        "terminationReason": "NO_VALID_CANDIDATE",
+        "outputOrderIds": [
+          "development-route-failure-2-item-0",
+          "development-route-failure-2-item-1",
+          "development-route-failure-2-item-2",
+          "development-route-failure-2-item-3",
+          "development-route-failure-2-item-4",
+          "development-route-failure-2-item-5"
+        ]
+      }
+    },
+    {
+      "id": "evaluation-short-3",
+      "split": "evaluation",
+      "scenario": "short",
+      "fixtureSha256": "b8d225c8e0ad0719cc17ec60c590c7ec966b6a5628d22ce80b218aeb24ddba1a",
+      "snapshotId": "snapshot-evaluation-short-3",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "evaluation-short-3-item-0",
+        "evaluation-short-3-item-1",
+        "evaluation-short-3-item-2"
+      ],
+      "baselineOrderIds": [
+        "evaluation-short-3-item-0",
+        "evaluation-short-3-item-1",
+        "evaluation-short-3-item-2"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 123,
+          "preferenceScore": 0.7999999999999999
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 4,
+        "modelCalls": 0,
+        "durationMs": 0.20241599999997106,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "evaluation-short-3-item-0",
+          "evaluation-short-3-item-1",
+          "evaluation-short-3-item-2"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 73,
+          "preferenceScore": 0.8000000000000002
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 6,
+        "routeCalls": 24,
+        "modelCalls": 0,
+        "durationMs": 1.2934169999999767,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "evaluation-short-3-item-1",
+          "evaluation-short-3-item-2",
+          "evaluation-short-3-item-0"
+        ]
+      }
+    },
+    {
+      "id": "evaluation-multi-day-3",
+      "split": "evaluation",
+      "scenario": "multi-day",
+      "fixtureSha256": "92cbb4466ba75fe620c26b156dee4b0de2eb1fb6d65cca8a16fd50e69f384739",
+      "snapshotId": "snapshot-evaluation-multi-day-3",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "evaluation-multi-day-3-item-0",
+        "evaluation-multi-day-3-item-1",
+        "evaluation-multi-day-3-item-2",
+        "evaluation-multi-day-3-item-3",
+        "evaluation-multi-day-3-item-4",
+        "evaluation-multi-day-3-item-5",
+        "evaluation-multi-day-3-item-6",
+        "evaluation-multi-day-3-item-7"
+      ],
+      "baselineOrderIds": [
+        "evaluation-multi-day-3-item-0",
+        "evaluation-multi-day-3-item-1",
+        "evaluation-multi-day-3-item-2",
+        "evaluation-multi-day-3-item-3",
+        "evaluation-multi-day-3-item-4",
+        "evaluation-multi-day-3-item-5",
+        "evaluation-multi-day-3-item-6",
+        "evaluation-multi-day-3-item-7"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 2,
+          "travelTimeMin": 364,
+          "preferenceScore": 0.7375
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 12,
+        "modelCalls": 0,
+        "durationMs": 0.4339999999999691,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "evaluation-multi-day-3-item-0",
+          "evaluation-multi-day-3-item-1",
+          "evaluation-multi-day-3-item-2",
+          "evaluation-multi-day-3-item-3",
+          "evaluation-multi-day-3-item-4",
+          "evaluation-multi-day-3-item-5",
+          "evaluation-multi-day-3-item-6",
+          "evaluation-multi-day-3-item-7"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 2,
+          "travelTimeMin": 184,
+          "preferenceScore": 0.7375000000000002
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 50,
+        "routeCalls": 600,
+        "modelCalls": 0,
+        "durationMs": 29.042791999999963,
+        "terminationReason": "EVALUATION_LIMIT",
+        "outputOrderIds": [
+          "evaluation-multi-day-3-item-0",
+          "evaluation-multi-day-3-item-2",
+          "evaluation-multi-day-3-item-1",
+          "evaluation-multi-day-3-item-3",
+          "evaluation-multi-day-3-item-4",
+          "evaluation-multi-day-3-item-6",
+          "evaluation-multi-day-3-item-5",
+          "evaluation-multi-day-3-item-7"
+        ]
+      }
+    },
+    {
+      "id": "evaluation-overnight-3",
+      "split": "evaluation",
+      "scenario": "overnight",
+      "fixtureSha256": "79a41ea90676543cd2504395691e2465bc55ad85b5c8b0331cc81543e6f4dd33",
+      "snapshotId": "snapshot-evaluation-overnight-3",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "evaluation-overnight-3-item-0",
+        "evaluation-overnight-3-item-1",
+        "evaluation-overnight-3-item-2",
+        "evaluation-overnight-3-item-3",
+        "evaluation-overnight-3-item-4",
+        "evaluation-overnight-3-item-5"
+      ],
+      "baselineOrderIds": [
+        "evaluation-overnight-3-item-0",
+        "evaluation-overnight-3-item-1",
+        "evaluation-overnight-3-item-2",
+        "evaluation-overnight-3-item-3",
+        "evaluation-overnight-3-item-4",
+        "evaluation-overnight-3-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 310,
+          "preferenceScore": 0.7000000000000001
+        },
+        "violations": [
+          "INSUFFICIENT_TRAVEL_TIME",
+          "INSUFFICIENT_TRAVEL_TIME"
+        ],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.38866700000005494,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "evaluation-overnight-3-item-0",
+          "evaluation-overnight-3-item-1",
+          "evaluation-overnight-3-item-2",
+          "evaluation-overnight-3-item-3",
+          "evaluation-overnight-3-item-4",
+          "evaluation-overnight-3-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 105,
+          "preferenceScore": 0.7000000000000001
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 44,
+        "routeCalls": 440,
+        "modelCalls": 0,
+        "durationMs": 15.977957999999944,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "evaluation-overnight-3-item-1",
+          "evaluation-overnight-3-item-4",
+          "evaluation-overnight-3-item-2",
+          "evaluation-overnight-3-item-0",
+          "evaluation-overnight-3-item-3",
+          "evaluation-overnight-3-item-5"
+        ]
+      }
+    },
+    {
+      "id": "evaluation-scattered-3",
+      "split": "evaluation",
+      "scenario": "scattered",
+      "fixtureSha256": "82366d7afbd7bfa1931396f4377fbedb00381db7d0ff84b7e0fa07fc44736ad2",
+      "snapshotId": "snapshot-evaluation-scattered-3",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "evaluation-scattered-3-item-0",
+        "evaluation-scattered-3-item-1",
+        "evaluation-scattered-3-item-2",
+        "evaluation-scattered-3-item-3",
+        "evaluation-scattered-3-item-4",
+        "evaluation-scattered-3-item-5"
+      ],
+      "baselineOrderIds": [
+        "evaluation-scattered-3-item-0",
+        "evaluation-scattered-3-item-1",
+        "evaluation-scattered-3-item-2",
+        "evaluation-scattered-3-item-3",
+        "evaluation-scattered-3-item-4",
+        "evaluation-scattered-3-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 1100,
+          "preferenceScore": 0.7000000000000001
+        },
+        "violations": [
+          "DAY_WINDOW",
+          "EXCESSIVE_TRAVEL_TIME",
+          "EXCESSIVE_TRAVEL_TIME",
+          "INSUFFICIENT_TRAVEL_TIME",
+          "EXCESSIVE_TRAVEL_TIME",
+          "INSUFFICIENT_TRAVEL_TIME",
+          "EXCESSIVE_TRAVEL_TIME",
+          "EXCESSIVE_TRAVEL_TIME"
+        ],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.41687500000011823,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "evaluation-scattered-3-item-0",
+          "evaluation-scattered-3-item-1",
+          "evaluation-scattered-3-item-2",
+          "evaluation-scattered-3-item-3",
+          "evaluation-scattered-3-item-4",
+          "evaluation-scattered-3-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 105,
+          "preferenceScore": 0.7000000000000001
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 44,
+        "routeCalls": 440,
+        "modelCalls": 0,
+        "durationMs": 21.440624999999955,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "evaluation-scattered-3-item-1",
+          "evaluation-scattered-3-item-4",
+          "evaluation-scattered-3-item-2",
+          "evaluation-scattered-3-item-0",
+          "evaluation-scattered-3-item-3",
+          "evaluation-scattered-3-item-5"
+        ]
+      }
+    },
+    {
+      "id": "evaluation-few-candidates-3",
+      "split": "evaluation",
+      "scenario": "few-candidates",
+      "fixtureSha256": "853c20883a96ea840ad73dc6bb6423e5f7d4c766fff7bf25e72f61592a96c2f3",
+      "snapshotId": "snapshot-evaluation-few-candidates-3",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "evaluation-few-candidates-3-item-0",
+        "evaluation-few-candidates-3-item-1"
+      ],
+      "baselineOrderIds": [
+        "evaluation-few-candidates-3-item-0",
+        "evaluation-few-candidates-3-item-1"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 3,
+          "travelTimeMin": 64,
+          "preferenceScore": 0.75
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 2,
+        "modelCalls": 0,
+        "durationMs": 0.18554200000016863,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "evaluation-few-candidates-3-item-0",
+          "evaluation-few-candidates-3-item-1"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 3,
+          "travelTimeMin": 64,
+          "preferenceScore": 0.75
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 2,
+        "routeCalls": 4,
+        "modelCalls": 0,
+        "durationMs": 0.5261250000000928,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "evaluation-few-candidates-3-item-0",
+          "evaluation-few-candidates-3-item-1"
+        ]
+      }
+    },
+    {
+      "id": "evaluation-locked-3",
+      "split": "evaluation",
+      "scenario": "locked",
+      "fixtureSha256": "187791608822ab1a8669c7efe71d8bba447f34fe7d44ff89cf491f87c9031b34",
+      "snapshotId": "snapshot-evaluation-locked-3",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": true,
+      "inputOrderIds": [
+        "evaluation-locked-3-item-0",
+        "evaluation-locked-3-item-1",
+        "evaluation-locked-3-item-2",
+        "evaluation-locked-3-item-3",
+        "evaluation-locked-3-item-4",
+        "evaluation-locked-3-item-5"
+      ],
+      "baselineOrderIds": [
+        "evaluation-locked-3-item-0",
+        "evaluation-locked-3-item-1",
+        "evaluation-locked-3-item-2",
+        "evaluation-locked-3-item-3",
+        "evaluation-locked-3-item-4",
+        "evaluation-locked-3-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 310,
+          "preferenceScore": 0.7000000000000001
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.38733400000000984,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "evaluation-locked-3-item-0",
+          "evaluation-locked-3-item-1",
+          "evaluation-locked-3-item-2",
+          "evaluation-locked-3-item-3",
+          "evaluation-locked-3-item-4",
+          "evaluation-locked-3-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 165,
+          "preferenceScore": 0.7000000000000001
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 8,
+        "routeCalls": 80,
+        "modelCalls": 0,
+        "durationMs": 2.683999999999969,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "evaluation-locked-3-item-1",
+          "evaluation-locked-3-item-0",
+          "evaluation-locked-3-item-2",
+          "evaluation-locked-3-item-4",
+          "evaluation-locked-3-item-3",
+          "evaluation-locked-3-item-5"
+        ]
+      }
+    },
+    {
+      "id": "evaluation-past-3",
+      "split": "evaluation",
+      "scenario": "past",
+      "fixtureSha256": "93ce8ddb21548340ba779c58f762db3140263717eb3233da9af3e1ce390756ff",
+      "snapshotId": "snapshot-evaluation-past-3",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": true,
+      "inputOrderIds": [
+        "evaluation-past-3-item-0",
+        "evaluation-past-3-item-1",
+        "evaluation-past-3-item-2",
+        "evaluation-past-3-item-3",
+        "evaluation-past-3-item-4",
+        "evaluation-past-3-item-5"
+      ],
+      "baselineOrderIds": [
+        "evaluation-past-3-item-0",
+        "evaluation-past-3-item-1",
+        "evaluation-past-3-item-2",
+        "evaluation-past-3-item-3",
+        "evaluation-past-3-item-4",
+        "evaluation-past-3-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 310,
+          "preferenceScore": 0.7000000000000001
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.31724999999983083,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "evaluation-past-3-item-0",
+          "evaluation-past-3-item-1",
+          "evaluation-past-3-item-2",
+          "evaluation-past-3-item-3",
+          "evaluation-past-3-item-4",
+          "evaluation-past-3-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": true,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 155,
+          "preferenceScore": 0.7000000000000001
+        },
+        "violations": [],
+        "unknownConstraints": [],
+        "evaluations": 16,
+        "routeCalls": 160,
+        "modelCalls": 0,
+        "durationMs": 5.613292000000001,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "evaluation-past-3-item-0",
+          "evaluation-past-3-item-1",
+          "evaluation-past-3-item-3",
+          "evaluation-past-3-item-5",
+          "evaluation-past-3-item-2",
+          "evaluation-past-3-item-4"
+        ]
+      }
+    },
+    {
+      "id": "evaluation-opening-unknown-3",
+      "split": "evaluation",
+      "scenario": "opening-unknown",
+      "fixtureSha256": "8be64f0a439f7575785c458207f177d484209ac72dda4b75825739b008a6e302",
+      "snapshotId": "snapshot-evaluation-opening-unknown-3",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "evaluation-opening-unknown-3-item-0",
+        "evaluation-opening-unknown-3-item-1",
+        "evaluation-opening-unknown-3-item-2",
+        "evaluation-opening-unknown-3-item-3",
+        "evaluation-opening-unknown-3-item-4",
+        "evaluation-opening-unknown-3-item-5"
+      ],
+      "baselineOrderIds": [
+        "evaluation-opening-unknown-3-item-0",
+        "evaluation-opening-unknown-3-item-1",
+        "evaluation-opening-unknown-3-item-2",
+        "evaluation-opening-unknown-3-item-3",
+        "evaluation-opening-unknown-3-item-4",
+        "evaluation-opening-unknown-3-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 310,
+          "preferenceScore": 0.7000000000000001
+        },
+        "violations": [],
+        "unknownConstraints": [
+          "OPENING_HOURS_MISSING",
+          "OPENING_HOURS_UNPARSEABLE"
+        ],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.2790829999999005,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "evaluation-opening-unknown-3-item-0",
+          "evaluation-opening-unknown-3-item-1",
+          "evaluation-opening-unknown-3-item-2",
+          "evaluation-opening-unknown-3-item-3",
+          "evaluation-opening-unknown-3-item-4",
+          "evaluation-opening-unknown-3-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": true,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 105,
+          "preferenceScore": 0.7000000000000001
+        },
+        "violations": [],
+        "unknownConstraints": [
+          "OPENING_HOURS_MISSING",
+          "OPENING_HOURS_UNPARSEABLE"
+        ],
+        "evaluations": 44,
+        "routeCalls": 440,
+        "modelCalls": 0,
+        "durationMs": 14.268041999999923,
+        "terminationReason": "LOCAL_OPTIMUM",
+        "outputOrderIds": [
+          "evaluation-opening-unknown-3-item-1",
+          "evaluation-opening-unknown-3-item-4",
+          "evaluation-opening-unknown-3-item-2",
+          "evaluation-opening-unknown-3-item-0",
+          "evaluation-opening-unknown-3-item-3",
+          "evaluation-opening-unknown-3-item-5"
+        ]
+      }
+    },
+    {
+      "id": "evaluation-opening-closed-3",
+      "split": "evaluation",
+      "scenario": "opening-closed",
+      "fixtureSha256": "97533e1337db334b9a4a4d0a641ae4fff02acb09694fa04f6bb97064a0e5072e",
+      "snapshotId": "snapshot-evaluation-opening-closed-3",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "evaluation-opening-closed-3-item-0",
+        "evaluation-opening-closed-3-item-1",
+        "evaluation-opening-closed-3-item-2",
+        "evaluation-opening-closed-3-item-3",
+        "evaluation-opening-closed-3-item-4",
+        "evaluation-opening-closed-3-item-5"
+      ],
+      "baselineOrderIds": [
+        "evaluation-opening-closed-3-item-0",
+        "evaluation-opening-closed-3-item-1",
+        "evaluation-opening-closed-3-item-2",
+        "evaluation-opening-closed-3-item-3",
+        "evaluation-opening-closed-3-item-4",
+        "evaluation-opening-closed-3-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 310,
+          "preferenceScore": 0.7000000000000001
+        },
+        "violations": [
+          "OPENING_HOURS"
+        ],
+        "unknownConstraints": [],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.35491700000011406,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "evaluation-opening-closed-3-item-0",
+          "evaluation-opening-closed-3-item-1",
+          "evaluation-opening-closed-3-item-2",
+          "evaluation-opening-closed-3-item-3",
+          "evaluation-opening-closed-3-item-4",
+          "evaluation-opening-closed-3-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": 105,
+          "preferenceScore": 0.7000000000000001
+        },
+        "violations": [
+          "OPENING_HOURS"
+        ],
+        "unknownConstraints": [],
+        "evaluations": 44,
+        "routeCalls": 440,
+        "modelCalls": 0,
+        "durationMs": 15.663416999999981,
+        "terminationReason": "NO_VALID_CANDIDATE",
+        "outputOrderIds": [
+          "evaluation-opening-closed-3-item-1",
+          "evaluation-opening-closed-3-item-4",
+          "evaluation-opening-closed-3-item-2",
+          "evaluation-opening-closed-3-item-0",
+          "evaluation-opening-closed-3-item-3",
+          "evaluation-opening-closed-3-item-5"
+        ]
+      }
+    },
+    {
+      "id": "evaluation-route-failure-3",
+      "split": "evaluation",
+      "scenario": "route-failure",
+      "fixtureSha256": "e145ce16e8269fd2ca333787418ff598f98fa3734876090d9b7534bf18af7a95",
+      "snapshotId": "snapshot-evaluation-route-failure-3",
+      "snapshotVersion": "frozen-v1",
+      "hasLocks": false,
+      "inputOrderIds": [
+        "evaluation-route-failure-3-item-0",
+        "evaluation-route-failure-3-item-1",
+        "evaluation-route-failure-3-item-2",
+        "evaluation-route-failure-3-item-3",
+        "evaluation-route-failure-3-item-4",
+        "evaluation-route-failure-3-item-5"
+      ],
+      "baselineOrderIds": [
+        "evaluation-route-failure-3-item-0",
+        "evaluation-route-failure-3-item-1",
+        "evaluation-route-failure-3-item-2",
+        "evaluation-route-failure-3-item-3",
+        "evaluation-route-failure-3-item-4",
+        "evaluation-route-failure-3-item-5"
+      ],
+      "B": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": null,
+          "preferenceScore": 0.7000000000000001
+        },
+        "violations": [
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE"
+        ],
+        "unknownConstraints": [
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE"
+        ],
+        "evaluations": 1,
+        "routeCalls": 10,
+        "modelCalls": 0,
+        "durationMs": 0.44229199999995217,
+        "terminationReason": "BASELINE_VALIDATED",
+        "outputOrderIds": [
+          "evaluation-route-failure-3-item-0",
+          "evaluation-route-failure-3-item-1",
+          "evaluation-route-failure-3-item-2",
+          "evaluation-route-failure-3-item-3",
+          "evaluation-route-failure-3-item-4",
+          "evaluation-route-failure-3-item-5"
+        ]
+      },
+      "D": {
+        "status": "completed",
+        "valid": false,
+        "fullyConfirmed": false,
+        "lockedItemsPreserved": true,
+        "metrics": {
+          "pinMisses": 0,
+          "shortfall": 0,
+          "targetShortfall": 0,
+          "travelTimeMin": null,
+          "preferenceScore": 0.7000000000000001
+        },
+        "violations": [
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE"
+        ],
+        "unknownConstraints": [
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE",
+          "ROUTE_UNAVAILABLE"
+        ],
+        "evaluations": 36,
+        "routeCalls": 360,
+        "modelCalls": 0,
+        "durationMs": 19.316042000000152,
+        "terminationReason": "NO_VALID_CANDIDATE",
+        "outputOrderIds": [
+          "evaluation-route-failure-3-item-0",
+          "evaluation-route-failure-3-item-1",
+          "evaluation-route-failure-3-item-2",
+          "evaluation-route-failure-3-item-3",
+          "evaluation-route-failure-3-item-4",
+          "evaluation-route-failure-3-item-5"
+        ]
+      }
+    }
+  ]
+}

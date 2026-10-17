@@ -52,6 +52,13 @@ import type {
 } from '@tripick/types';
 import type { CandidatePlace, PoolCategoryQuota, RetrievalContext } from './retrieval/types';
 import { GroupPreferenceService } from './retrieval/group-preference.service';
+import {
+  draftShortfall,
+  isAcceptedDraft,
+  isBetterLegacyFallback,
+  orderByProximity,
+  plannedItemCount,
+} from './algorithm/baseline';
 
 /**
  * 일차 수에 맞춘 후보 풀 종류별 하한. 하루에 필요한 건 끼니 2 + 휴식(카페) 1 이고, 볼거리는
@@ -1037,13 +1044,13 @@ export class PlannerService {
       validation.valid = false;
       validation.issues.push('No visits fit within the available activity and opening hours');
     }
-    const shortfall = Math.max(0, this.plannedItemCount(plan, context) - items.length);
+    const shortfall = draftShortfall(this.plannedItemCount(plan, context), items.length);
     const pinMisses = this.countPinMisses(plan, items, context);
     return {
       validation,
       shortfall,
       pinMisses,
-      accepted: validation.valid && shortfall === 0 && pinMisses === 0,
+      accepted: isAcceptedDraft(validation.valid, shortfall, pinMisses),
     };
   }
 
@@ -1071,11 +1078,7 @@ export class PlannerService {
 
   /** 배치안이 담으려 한 항목 수(일차별 상한 적용 후) — `buildDraft` 의 slice 와 같은 기준. */
   private plannedItemCount(plan: PlannedCandidate[], context: DraftBuildContext): number {
-    return context.planDays.reduce((sum, day) => {
-      const dayTarget = this.dayItemTarget(context.anchorByDay, day, context.itemsPerDay);
-      const dayPlanned = plan.filter((item) => item.day === day).length;
-      return sum + Math.min(dayPlanned, dayTarget);
-    }, 0);
+    return plannedItemCount(plan, context);
   }
 
   private async rebuildValidDraft(
@@ -1161,8 +1164,7 @@ export class PlannerService {
    * 그다음이 덜 잘려 나간 쪽이다 — 명시한 요청을 어긴 긴 하루보다 요청을 지킨 짧은 하루가 낫다.
    */
   private isBetterFallback(candidate: DraftAttempt, best: DraftAttempt): boolean {
-    if (candidate.pinMisses !== best.pinMisses) return candidate.pinMisses < best.pinMisses;
-    return candidate.shortfall < best.shortfall;
+    return isBetterLegacyFallback(candidate, best);
   }
 
   private describeAttempt(attempt: DraftAttempt): string {
@@ -1539,34 +1541,7 @@ export class PlannerService {
     attempt: number,
     origin?: PlaceDto['coordinates'],
   ): T[] {
-    if (candidates.length === 0) return [];
-
-    // 시드 후보 순서: origin 이 있으면 거기서 가까운 순, 없으면 CRAG 순위 그대로.
-    const seedOrder = origin
-      ? [...candidates].sort(
-          (a, b) =>
-            haversineMeters(origin, a.coordinates) - haversineMeters(origin, b.coordinates),
-        )
-      : candidates;
-    const remaining = [...candidates];
-    const seed = seedOrder[attempt % seedOrder.length]!;
-    const ordered: T[] = remaining.splice(remaining.indexOf(seed), 1);
-
-    while (remaining.length > 0) {
-      const from = ordered[ordered.length - 1]!.coordinates;
-      let bestIndex = 0;
-      let bestDistance = Infinity;
-      remaining.forEach((candidate, index) => {
-        const distance = haversineMeters(from, candidate.coordinates);
-        // 부등호가 `<` 이라 같은 거리면 앞선 후보(= CRAG 상위)가 남는다.
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          bestIndex = index;
-        }
-      });
-      ordered.push(...remaining.splice(bestIndex, 1));
-    }
-    return ordered;
+    return orderByProximity(candidates, attempt, origin);
   }
 
   /**

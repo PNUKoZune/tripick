@@ -1,7 +1,10 @@
 /// <reference types="jest" />
 
 import { PlannerService } from '../../src/planner/planner.service';
-import { ConstraintEngine } from '../../src/planner/constraint/constraint.engine';
+import {
+  ConstraintEngine,
+  type ValidationResult,
+} from '../../src/planner/constraint/constraint.engine';
 import { ScheduleConstraint } from '../../src/planner/helpers/schedule.constraint';
 import type { CandidatePlace } from '../../src/planner/retrieval/types';
 import type { CreateItineraryItemDto, ItineraryItemDto } from '@tripick/types';
@@ -282,21 +285,23 @@ function build(options: BuildOptions = {}) {
   const scheduleConstraint = new ScheduleConstraint();
   const constraintEngine = new ConstraintEngine(routeHelper as any, scheduleConstraint);
   const spyValidate = () => jest.spyOn(constraintEngine, 'validate');
+  const validationResult = (items: ItineraryItemDto[], issues: string[]): ValidationResult => ({
+    valid: issues.length === 0,
+    issues,
+    items,
+    normalizedItems: items,
+    normalizationChanges: [],
+    violations: issues.map((message) => ({ code: 'INSUFFICIENT_TRAVEL_TIME', message })),
+    unknownConstraints: [],
+    travelTimeMin: issues.length ? null : 0,
+  });
   const validate =
     options.stubValidation === 'failThenPass'
       ? spyValidate()
-          .mockResolvedValueOnce({ valid: false, issues: ['AI route gap'], items: [] })
-          .mockImplementation(async (items: ItineraryItemDto[]) => ({
-            valid: true,
-            issues: [],
-            items,
-          }))
+          .mockResolvedValueOnce(validationResult([], ['AI route gap']))
+          .mockImplementation(async (items: ItineraryItemDto[]) => validationResult(items, []))
       : options.stubValidation === 'alwaysFail'
-        ? spyValidate().mockResolvedValue({
-            valid: false,
-            issues: ['이동 시간 부족'],
-            items: [],
-          })
+        ? spyValidate().mockResolvedValue(validationResult([], ['이동 시간 부족']))
         : spyValidate();
 
   const service = new PlannerService(

@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-18",
+  "baselineCommit": "7b50fbea052c1539efb82933c79e3c06a420af95",
+  "runtime": {
+    "node": "23.10.0",
+    "redis": "8.0.1",
+    "repositoryNodeRequirement": ">=24.3.0"
+  },
+  "apiUnitTests": {
+    "command": "PLANNING_REDIS_TEST_PORT=<isolated-port> pnpm --filter @tripick/api exec jest --runInBand --silent --json",
+    "suites": 95,
+    "passed": 1208,
+    "failed": 0,
+    "skipped": 0,
+    "scope": "Whole API unit suite at the time of this run, including concurrent workspace changes; not all tests were authored by this task."
+  },
+  "pythonTests": {
+    "command": "PYTHONPATH=tools/planning-agent python3 -m unittest discover -s tools/planning-agent/tests -q",
+    "passed": 34,
+    "failed": 0,
+    "scope": "Fake model, bounded HTTP transport, real MCP stdio subprocess protocol; no live model or production API."
+  },
+  "realRedisTests": {
+    "passed": 3,
+    "failed": 0,
+    "isolated": true
+  },
+  "apiTypecheck": "passed",
+  "apiBuild": "passed",
+  "changedScopeEslint": "passed",
+  "offlineEvaluation": "optimization-offline-2026-10-18.json",
+  "liveModelComparison": "not_run",
+  "originalCommitFullReplay": "not_run",
+  "productionDatabaseSmoke": "not_run",
+  "externalRouteApiSmoke": "not_run",
+  "deployment": "not_performed",
+  "featureFlagsDefault": {
+    "PLANNING_TOOLS_ENABLED": false,
+    "PLANNING_LOCAL_SEARCH_ENABLED": false
+  },
+  "publicationValidation": {
+    "integrationBaseCommit": "01c71fd3bb77ecb01ae612771d626a2dd2e0b405",
+    "scope": "Isolated worktree with only planning changes on latest origin/main; excludes concurrent resource/generation/frontend work.",
+    "apiTests": {
+      "passed": 1199,
+      "failed": 0,
+      "skipped": 3,
+      "passedSuites": 90,
+      "skippedSuites": 1
+    },
+    "skippedReason": "Real isolated Redis opt-in tests; the three were separately executed successfully during original implementation.",
+    "pythonTestsPassed": 34,
+    "apiTypecheck": "passed",
+    "apiBuild": "passed",
+    "changedScopeEslint": "passed"
+  }
+}

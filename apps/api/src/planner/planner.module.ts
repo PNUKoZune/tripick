@@ -25,6 +25,9 @@ import { TripEntity } from '../trips/trip.entity';
 import { TripDayEntity } from '../trips/trip-day.entity';
 import { TripMemberEntity } from '../trip-members/trip-member.entity';
 import { GroupPreferenceService } from './retrieval/group-preference.service';
+import { PlanningToolsController } from './tools/planning-tools.controller';
+import { PlanningToolsService } from './tools/planning-tools.service';
+import { PlanningSnapshotStore } from './tools/planning-snapshot.store';
 
 @Module({
   imports: [
@@ -33,7 +36,10 @@ import { GroupPreferenceService } from './retrieval/group-preference.service';
     PreferencesModule,
     EmbeddingModule,
   ],
+  controllers: [PlanningToolsController],
   providers: [
+    PlanningToolsService,
+    PlanningSnapshotStore,
     PlannerService,
     PlannerAgentService,
     WeatherHelper,
